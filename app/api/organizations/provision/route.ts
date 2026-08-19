@@ -3,6 +3,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 import { exec } from "child_process";
 import path from "path";
+import fs from "fs";
 import util from "util";
 
 const execPromise = util.promisify(exec);
@@ -186,24 +187,39 @@ export async function POST(req: Request) {
     const deployKey = keyData.deployKey;
 
     // Step 3: Deploy Default App schema and functions to the new store deployment
-    const defaultAppPath = process.env.DEFAULT_APP_PATH 
+    let defaultAppPath = process.env.DEFAULT_APP_PATH 
       ? path.resolve(process.env.DEFAULT_APP_PATH)
       : path.resolve(process.cwd(), "../Default app");
 
+    if (!fs.existsSync(defaultAppPath)) {
+      defaultAppPath = path.resolve(process.cwd(), "../Default app");
+    }
+
     console.log(`Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`);
 
-  try {
-  const comspec = process.env.ComSpec || "C:\\Windows\\System32\\cmd.exe";
+    try {
+      const execOptions: any = {
+        cwd: defaultAppPath,
+        env: {
+          ...process.env,
+          CONVEX_DEPLOY_KEY: deployKey,
+        },
+      };
 
-  await execPromise("npx convex dev --once --tail-logs disable", {
-    cwd: defaultAppPath,
-    shell: comspec,
-    env: {
-      ...process.env,
-      CONVEX_DEPLOY_KEY: deployKey,
-    },
-  });
-} catch (deployErr: any) {
+      if (process.platform === "win32" && process.env.ComSpec) {
+        execOptions.shell = process.env.ComSpec;
+      }
+
+      // Ensure target deployment has CLERK_JWT_ISSUER_DOMAIN env variable set for auth.config.ts
+      const clerkIssuer = process.env.CLERK_JWT_ISSUER_DOMAIN || "https://neat-oyster-3072.clerk.accounts.dev";
+      try {
+        await execPromise(`npx convex env set CLERK_JWT_ISSUER_DOMAIN ${clerkIssuer}`, execOptions);
+      } catch (envErr: any) {
+        console.warn(`Warning: Failed to set CLERK_JWT_ISSUER_DOMAIN on ${deploymentName}:`, envErr.message);
+      }
+
+      await execPromise("npx convex dev --once --tail-logs disable", execOptions);
+    } catch (deployErr: any) {
   const errorMsg = `POS Code deployment failed: ${deployErr.stderr || deployErr.message}`;
   console.error(errorMsg);
   await convexClient.mutation(api.organizations.updateStatus, {
