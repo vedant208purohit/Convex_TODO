@@ -4,9 +4,245 @@
   padding: 0;
 }
 
+:root {
+  --background: #020617;
+  --foreground: #f8fafc;
+  --card-bg: #0f172a;
+  --card-border: #1e293b;
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+}
+
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
+  background-color: #020617;
+  color: #f8fafc;
   line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* Fallback Flex & Grid Utilities */
+.min-h-screen {
+  min-height: 100vh;
+}
+
+.flex {
+  display: flex;
+}
+
+.flex-col {
+  flex-direction: column;
+}
+
+.items-center {
+  align-items: center;
+}
+
+.justify-center {
+  justify-content: center;
+}
+
+.justify-between {
+  justify-content: space-between;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.max-w-md {
+  max-width: 28rem;
+}
+
+.max-w-6xl {
+  max-width: 72rem;
+}
+
+.mx-auto {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.p-4 {
+  padding: 1rem;
+}
+
+.p-6 {
+  padding: 1.5rem;
+}
+
+.p-8 {
+  padding: 2rem;
+}
+
+.space-y-2 > * + * {
+  margin-top: 0.5rem;
+}
+
+.space-y-4 > * + * {
+  margin-top: 1rem;
+}
+
+.space-y-6 > * + * {
+  margin-top: 1.5rem;
+}
+
+.space-y-8 > * + * {
+  margin-top: 2rem;
+}
+
+.text-center {
+  text-align: center;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-white {
+  color: #ffffff;
+}
+
+.text-slate-100 {
+  color: #f1f5f9;
+}
+
+.text-slate-300 {
+  color: #cbd5e1;
+}
+
+.text-slate-400 {
+  color: #94a3b8;
+}
+
+.text-slate-500 {
+  color: #64748b;
+}
+
+.text-indigo-400 {
+  color: #818cf8;
+}
+
+.bg-slate-950 {
+  background-color: #020617;
+}
+
+.bg-slate-900 {
+  background-color: #0f172a;
+}
+
+.border-slate-800 {
+  border-color: #1e293b;
+}
+
+/* High Contrast Input & Clerk Component Dark Theme Overrides */
+.cl-card {
+  background-color: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #ffffff !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+  border-radius: 0.75rem !important;
+  margin: 0 auto !important;
+}
+
+.cl-headerTitle {
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.cl-headerSubtitle {
+  color: #cbd5e1 !important;
+}
+
+.cl-formFieldLabel {
+  color: #f8fafc !important;
+  font-weight: 600 !important;
+  font-size: 0.875rem !important;
+  margin-bottom: 0.375rem !important;
+}
+
+/* High contrast inputs - Crisp Slate-800 background, pure white typed text */
+.cl-formFieldInput,
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  background-color: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-radius: 0.5rem !important;
+  font-size: 0.95rem !important;
+  padding: 0.625rem 0.875rem !important;
+}
+
+.cl-formFieldInput:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
+  border-color: #818cf8 !important;
+  background-color: #0f172a !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25) !important;
+}
+
+/* Crisp readable placeholder text */
+.cl-formFieldInput::placeholder,
+input::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+/* Chrome/Safari Autofill Dark Mode Fix */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+.cl-formFieldInput:-webkit-autofill {
+  -webkit-text-fill-color: #ffffff !important;
+  -webkit-box-shadow: 0 0 0px 1000px #1e293b inset !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* Primary Button Styling */
+.cl-formButtonPrimary {
+  background-color: #6366f1 !important;
+  color: #ffffff !important;
+  border-radius: 0.5rem !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem !important;
+  padding: 0.625rem 1rem !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4) !important;
+}
+
+.cl-formButtonPrimary:hover {
+  background-color: #4f46e5 !important;
+}
+
+.cl-identityPreviewText {
+  color: #ffffff !important;
+}
+
+.cl-identityPreviewEditButton {
+  color: #818cf8 !important;
+}
+
+.cl-footer,
+.cl-internal-b382ii {
+  display: none !important;
+}
+
+/* OTP code input boxes - same dark theme as normal inputs */
+.cl-otpCodeFieldInput {
+  background-color: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-radius: 0.5rem !important;
+}
+
+.cl-otpCodeFieldInput:focus {
+  border-color: #818cf8 !important;
+  background-color: #0f172a !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25) !important;
 }

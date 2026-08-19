@@ -3,8 +3,18 @@
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useState } from "react";
+import {
+  SignedIn,
+  SignedOut,
+  ClerkLoading,
+  ClerkLoaded,
+  RedirectToSignIn,
+  UserButton,
+  useUser,
+} from "@clerk/nextjs";
 
-export default function MasterDashboard() {
+function DashboardContent() {
+  const { user } = useUser();
   const organizations = useQuery(api.organizations.list);
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -58,8 +68,18 @@ export default function MasterDashboard() {
                 Control Plane & Isolated Store Project Provisioning Registry
               </p>
             </div>
-            <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-xs font-semibold">
-              Phase 1: Organization Domain
+            <div className="flex items-center gap-4">
+              {user && (
+                <div className="text-right hidden sm:block">
+                  <p className="text-xs text-white font-medium">
+                    {user.fullName || user.primaryEmailAddress?.emailAddress}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    System Admin
+                  </p>
+                </div>
+              )}
+              <UserButton afterSignOutUrl="/sign-in" />
             </div>
           </div>
         </header>
@@ -189,5 +209,32 @@ export default function MasterDashboard() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function MasterDashboard() {
+  return (
+    <>
+      <ClerkLoading>
+        <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center font-sans p-4">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+            <p className="text-sm font-medium text-slate-400 tracking-wide">
+              Verifying Authentication...
+            </p>
+          </div>
+        </main>
+      </ClerkLoading>
+
+      <ClerkLoaded>
+        <SignedIn>
+          <DashboardContent />
+        </SignedIn>
+
+        <SignedOut>
+          <RedirectToSignIn />
+        </SignedOut>
+      </ClerkLoaded>
+    </>
   );
 }

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
-import { exec } from "child_process";
+import { exec, spawn } from "child_process";
 import path from "path";
+import fs from "fs";
 import util from "util";
 
 const execPromise = util.promisify(exec);
@@ -193,23 +194,94 @@ export async function POST(req: Request) {
     console.log(`Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`);
 
     try {
-      await execPromise("npx convex dev --once --tail-logs disable", {
-        cwd: defaultAppPath,
-        env: {
-          ...process.env,
-          CONVEX_DEPLOY_KEY: deployKey,
-        },
-      });
+      console.log("=== DIAGNOSTIC LOGS FOR PROVISION ROUTE ===");
+      console.log("process.platform:", process.platform);
+      console.log("process.execPath:", process.execPath);
+      console.log("process.cwd():", process.cwd());
+      console.log("process.env.PATH:", process.env.PATH);
+      console.log("process.env.Path:", process.env.Path);
+      console.log("process.env.ComSpec:", process.env.ComSpec);
+      console.log("process.env.COMSPEC:", process.env.COMSPEC);
+      console.log("process.env.SystemRoot:", process.env.SystemRoot);
+      console.log("process.env.WINDIR:", process.env.WINDIR);
+      console.log("fs.existsSync(C:\\Windows\\System32\\cmd.exe):", fs.existsSync("C:\\Windows\\System32\\cmd.exe"));
+      console.log("fs.existsSync(ComSpec):", fs.existsSync(process.env.ComSpec || ""));
+      console.log("fs.existsSync(COMSPEC):", fs.existsSync(process.env.COMSPEC || ""));
+
+      const nodeDir = path.dirname(process.execPath);
+      const currentPath = process.env.PATH || process.env.Path || "";
+      const pathEnv = [nodeDir, currentPath].filter(Boolean).join(path.delimiter);
+      const systemRoot = process.env.SystemRoot || process.env.systemroot || "C:\\Windows";
+      const comspec = process.env.ComSpec || process.env.COMSPEC || `${systemRoot}\\System32\\cmd.exe`;
+
+      const env = {
+        ...process.env,
+        PATH: pathEnv,
+        Path: pathEnv,
+        SystemRoot: systemRoot,
+        WINDIR: systemRoot,
+        ComSpec: comspec,
+        COMSPEC: comspec,
+        CONVEX_DEPLOY_KEY: deployKey,
+      };
+
+      const candidates = [
+        path.resolve(defaultAppPath, "node_modules", "convex", "bin", "main.js"),
+        path.resolve(process.cwd(), "node_modules", "convex", "bin", "main.js"),
+      ];
+      const convexBinPath = candidates.find((p) => fs.existsSync(p));
+
+      if (convexBinPath) {
+        console.log("Executing Convex CLI directly using Node:", convexBinPath);
+        await new Promise<void>((resolve, reject) => {
+          const child = spawn(process.execPath, [convexBinPath, "dev", "--once", "--tail-logs", "disable"], {
+            cwd: defaultAppPath,
+            env,
+            shell: false,
+          });
+
+          let stderr = "";
+          let stdout = "";
+
+          child.stdout?.on("data", (chunk: any) => {
+            stdout += chunk.toString();
+          });
+
+          child.stderr?.on("data", (chunk: any) => {
+            stderr += chunk.toString();
+          });
+
+          child.on("error", (err: any) => reject(err));
+
+          child.on("close", (code: number | null) => {
+            if (code === 0) {
+              resolve();
+            } else {
+              reject(new Error(stderr || stdout || `Convex CLI exited with code ${code}`));
+            }
+          });
+        });
+      } else {
+        const npxBinary = process.platform === "win32" ? "npx.cmd" : "npx";
+        const npxPath = path.join(nodeDir, npxBinary);
+        const npxCmd = fs.existsSync(npxPath) ? `"${npxPath}"` : npxBinary;
+
+        await execPromise(`${npxCmd} convex dev --once --tail-logs disable`, {
+          cwd: defaultAppPath,
+          shell: comspec,
+          env,
+        });
+      }
     } catch (deployErr: any) {
-      const errorMsg = `POS Code deployment failed: ${deployErr.stderr || deployErr.message}`;
-      console.error(errorMsg);
-      await convexClient.mutation(api.organizations.updateStatus, {
-        id: orgId,
-        status: "failed",
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
+  const errorMsg = `POS Code deployment failed: ${deployErr.stderr || deployErr.message}`;
+  console.error(errorMsg);
+  await convexClient.mutation(api.organizations.updateStatus, {
+    id: orgId,
+    status: "failed",
+    errorMessage: errorMsg,
+  });
+  return NextResponse.json({ error: errorMsg }, { status: 500 });
+}
 
     // Step 4: Mark store organization active in Master DB
     await convexClient.mutation(api.organizations.updateStatus, {

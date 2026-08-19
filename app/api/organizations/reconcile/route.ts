@@ -1,9 +1,17 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
 export async function POST() {
   try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json(
+        { error: "Unauthorized access." },
+        { status: 401 }
+      );
+    }
     const managementToken = process.env.CONVEX_MANAGEMENT_API_KEY || process.env.CONVEX_MANAGEMENT_TOKEN;
     const teamId = process.env.CONVEX_TEAM_ID;
     const masterConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;

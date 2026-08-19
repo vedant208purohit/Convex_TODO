@@ -3,6 +3,10 @@ import { v } from "convex/values";
 
 export const list = query({
   handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
     return await ctx.db.query("organizations").order("desc").collect();
   },
 });
@@ -10,6 +14,10 @@ export const list = query({
 export const get = query({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
     return await ctx.db.get(args.id);
   },
 });
@@ -17,6 +25,10 @@ export const get = query({
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
     return await ctx.db
       .query("organizations")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -27,6 +39,10 @@ export const getBySlug = query({
 export const getByLegacyOrganizationId = query({
   args: { legacyOrganizationId: v.string() },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
     return await ctx.db
       .query("organizations")
       .withIndex("by_legacy_organization_id", (q) =>
@@ -43,6 +59,11 @@ export const create = mutation({
     legacyOrganizationId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
+
     // 1. Primary Identity Check by legacyOrganizationId
     if (args.legacyOrganizationId) {
       const existingByLegacy = await ctx.db
@@ -113,6 +134,11 @@ export const updateStatus = mutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
+
     const { id, ...updates } = args;
     await ctx.db.patch(id, {
       ...updates,
@@ -124,6 +150,11 @@ export const updateStatus = mutation({
 export const remove = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: Access denied.");
+    }
+
     await ctx.db.delete(args.id);
   },
 });
