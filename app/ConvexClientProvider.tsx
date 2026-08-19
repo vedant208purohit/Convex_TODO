@@ -1,6 +1,8 @@
 "use client";
 
-import { ConvexReactClient, ConvexProvider } from "convex/react";
+import { ConvexReactClient } from "convex/react";
+import { ConvexProviderWithClerk } from "convex/react-clerk";
+import { useAuth } from "@clerk/nextjs";
 import { ReactNode, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
@@ -25,7 +27,11 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+  return (
+    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+      {children}
+    </ConvexProviderWithClerk>
+  );
 }
 
 export default function ConvexClientProvider({

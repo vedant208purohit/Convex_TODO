@@ -1,5 +1,11 @@
 import "./globals.css";
 import ConvexClientProvider from "./ConvexClientProvider";
+import { ClerkProvider } from "@clerk/nextjs";
+
+export const metadata = {
+  title: "Store POS Application",
+  description: "Store POS with Clerk authentication",
+};
 
 export default function RootLayout({
   children,
@@ -7,12 +13,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body suppressHydrationWarning>
-        <ConvexClientProvider>
-          {children}
-        </ConvexClientProvider>
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" suppressHydrationWarning>
+        <body suppressHydrationWarning>
+          <ConvexClientProvider>{children}</ConvexClientProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

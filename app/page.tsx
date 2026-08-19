@@ -1,9 +1,33 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
+import {
+  ClerkLoaded,
+  ClerkLoading,
+  RedirectToSignIn,
+  SignedIn,
+  SignedOut,
+  UserButton,
+  useUser,
+} from "@clerk/nextjs";
 
-export default function StorePOSPage() {
+type FeatureKey =
+  | "isDineIn"
+  | "isTakeAway"
+  | "isDelivery"
+  | "isCashier"
+  | "isOrders"
+  | "isKds"
+  | "isInventory"
+  | "isWorkstation"
+  | "isQueue"
+  | "onlineStore"
+  | "isCaptain"
+  | "isReport";
+
+function DashboardContent() {
+  const { user } = useUser();
   const organizations = useQuery(api.organizations.list);
   const updateOrg = useMutation(api.organizations.update);
 
@@ -20,8 +44,7 @@ export default function StorePOSPage() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-8 font-sans">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Header */}
-        <header className="border-b border-slate-800 pb-6 flex items-center justify-between">
+        <header className="border-b border-slate-800 pb-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight">
               {primaryOrg ? primaryOrg.name : "Store POS Application"}
@@ -30,16 +53,17 @@ export default function StorePOSPage() {
               Isolated Store Database Deployment
             </p>
           </div>
-          {primaryOrg && (
-            <div className="text-right">
-              <span className="inline-block px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-full text-xs font-semibold">
-                STORE ACTIVE
-              </span>
-              <div className="text-[11px] text-slate-500 font-mono mt-1">
-                Legacy ID: {primaryOrg.legacyId}
+          <div className="flex items-center gap-4">
+            {user && (
+              <div className="text-right hidden sm:block">
+                <p className="text-xs text-white font-medium">
+                  {user.fullName || user.primaryEmailAddress?.emailAddress}
+                </p>
+                <p className="text-[11px] text-slate-400 font-mono">System Admin</p>
               </div>
-            </div>
-          )}
+            )}
+            <UserButton afterSignOutUrl="/sign-in" />
+          </div>
         </header>
 
         {!organizations ? (
@@ -55,10 +79,9 @@ export default function StorePOSPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Core Identity Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-4">
               <h2 className="text-base font-semibold text-white border-b border-slate-800 pb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                <span className="w-2 h-2 rounded-full bg-indigo-500" />
                 Core Store Identity
               </h2>
               <div className="space-y-3 text-sm">
@@ -85,10 +108,9 @@ export default function StorePOSPage() {
               </div>
             </div>
 
-            {/* Feature Modules Card */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-4 md:col-span-2">
               <h2 className="text-base font-semibold text-white border-b border-slate-800 pb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
                 POS Feature Flags & Service Types
               </h2>
 
@@ -107,11 +129,12 @@ export default function StorePOSPage() {
                   { key: "isCaptain", label: "Captain App" },
                   { key: "isReport", label: "Reports" },
                 ].map(({ key, label }) => {
-                  const val = (primaryOrg as any)[key] as boolean;
+                  const featureKey = key as FeatureKey;
+                  const val = primaryOrg[featureKey] as boolean;
                   return (
                     <button
-                      key={key}
-                      onClick={() => toggleFeature(key, val)}
+                      key={featureKey}
+                      onClick={() => toggleFeature(featureKey, val)}
                       className={`p-3 rounded-lg border text-left transition-all flex justify-between items-center ${
                         val
                           ? "bg-indigo-600/10 border-indigo-500/30 text-indigo-300"
@@ -126,10 +149,9 @@ export default function StorePOSPage() {
               </div>
             </div>
 
-            {/* Payment Configuration */}
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-4 md:col-span-3">
               <h2 className="text-base font-semibold text-white border-b border-slate-800 pb-3 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span className="w-2 h-2 rounded-full bg-amber-500" />
                 Payment & Fulfillment Modes
               </h2>
 
@@ -140,7 +162,6 @@ export default function StorePOSPage() {
                     {primaryOrg.dineinPrepaid ? "Prepaid" : primaryOrg.dineinPospaid ? "Postpaid" : "Not Set"}
                   </div>
                 </div>
-
                 <div className="bg-slate-950 p-3.5 rounded-lg border border-slate-800 space-y-1">
                   <div className="text-slate-400">Take-Away Modes</div>
                   <div className="font-semibold text-white">
@@ -150,7 +171,6 @@ export default function StorePOSPage() {
                     ].filter(Boolean).join(" + ") || "None"}
                   </div>
                 </div>
-
                 <div className="bg-slate-950 p-3.5 rounded-lg border border-slate-800 space-y-1">
                   <div className="text-slate-400">Delivery Modes</div>
                   <div className="font-semibold text-white">
@@ -160,7 +180,6 @@ export default function StorePOSPage() {
                     ].filter(Boolean).join(" + ") || "None"}
                   </div>
                 </div>
-
                 <div className="bg-slate-950 p-3.5 rounded-lg border border-slate-800 space-y-1">
                   <div className="text-slate-400">Scheduled Fulfillment</div>
                   <div className="font-semibold text-white">
@@ -173,5 +192,29 @@ export default function StorePOSPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function StorePOSPage() {
+  return (
+    <>
+      <ClerkLoading>
+        <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center font-sans p-4">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+            <p className="text-sm font-medium text-slate-400 tracking-wide">Verifying Authentication...</p>
+          </div>
+        </main>
+      </ClerkLoading>
+
+      <ClerkLoaded>
+        <SignedIn>
+          <DashboardContent />
+        </SignedIn>
+        <SignedOut>
+          <RedirectToSignIn />
+        </SignedOut>
+      </ClerkLoaded>
+    </>
   );
 }
