@@ -225,7 +225,7 @@ export async function POST(req: Request) {
     );
 
     try {
-      await execPromise("npx convex dev --once --tail-logs disable", {
+      await execPromise("npx convex dev --once --typecheck=disable --tail-logs disable", {
         cwd: defaultAppPath,
         env: {
           ...process.env,
