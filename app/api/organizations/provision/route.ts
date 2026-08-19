@@ -9,7 +9,19 @@ const execPromise = util.promisify(exec);
 
 export async function POST(req: Request) {
   try {
-    const { name, slug: providedSlug, legacyOrganizationId } = await req.json();
+    const {
+      name,
+      slug: providedSlug,
+      legacyOrganizationId,
+      phone,
+      addressLine1,
+      city,
+      state,
+      country,
+      zipCode,
+      latitude,
+      longitude,
+    } = await req.json();
 
     if (!name || typeof name !== "string" || !name.trim()) {
       return NextResponse.json(
@@ -29,13 +41,18 @@ export async function POST(req: Request) {
       slug = `org-${Date.now()}`;
     }
 
-    const managementToken = process.env.CONVEX_MANAGEMENT_API_KEY || process.env.CONVEX_MANAGEMENT_TOKEN;
+    const managementToken =
+      process.env.CONVEX_MANAGEMENT_API_KEY ||
+      process.env.CONVEX_MANAGEMENT_TOKEN;
     const teamId = process.env.CONVEX_TEAM_ID;
     const masterConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 
     if (!managementToken || !teamId || !masterConvexUrl) {
       return NextResponse.json(
-        { error: "Server configuration missing (CONVEX_MANAGEMENT_API_KEY, CONVEX_TEAM_ID, or NEXT_PUBLIC_CONVEX_URL)." },
+        {
+          error:
+            "Server configuration missing (CONVEX_MANAGEMENT_API_KEY, CONVEX_TEAM_ID, or NEXT_PUBLIC_CONVEX_URL).",
+        },
         { status: 500 }
       );
     }
@@ -44,9 +61,12 @@ export async function POST(req: Request) {
 
     // 1. Check if organization already exists in Master DB by legacyOrganizationId
     if (legacyOrganizationId) {
-      const existingByLegacy: any = await convexClient.query(api.organizations.getByLegacyOrganizationId, {
-        legacyOrganizationId,
-      });
+      const existingByLegacy: any = await convexClient.query(
+        api.organizations.getByLegacyOrganizationId,
+        {
+          legacyOrganizationId,
+        }
+      );
 
       if (existingByLegacy && existingByLegacy.status === "active") {
         return NextResponse.json({
@@ -67,10 +87,12 @@ export async function POST(req: Request) {
     }
 
     // 2. Check if organization already exists in Master DB by slug
-    const existingBySlug: any = await convexClient.query(api.organizations.getBySlug, { slug });
+    const existingBySlug: any = await convexClient.query(
+      api.organizations.getBySlug,
+      { slug }
+    );
 
     if (existingBySlug && existingBySlug.status === "active") {
-      // If legacy ID matches or no legacy ID, return active store
       return NextResponse.json({
         success: true,
         organization: {
@@ -95,7 +117,11 @@ export async function POST(req: Request) {
     }
 
     // Ensure slug uniqueness if collision with a non-legacy project
-    if (existingBySlug && legacyOrganizationId && existingBySlug.legacyOrganizationId !== legacyOrganizationId) {
+    if (
+      existingBySlug &&
+      legacyOrganizationId &&
+      existingBySlug.legacyOrganizationId !== legacyOrganizationId
+    ) {
       slug = `${slug}-${legacyOrganizationId.substring(0, 8)}`;
     }
 
@@ -106,7 +132,9 @@ export async function POST(req: Request) {
       legacyOrganizationId: legacyOrganizationId || undefined,
     });
 
-    console.log(`Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"})`);
+    console.log(
+      `Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"})`
+    );
 
     // Step 1: Create project & deployment in Convex via Management API
     const createProjectRes = await fetch(
@@ -127,7 +155,9 @@ export async function POST(req: Request) {
     const projectData = await createProjectRes.json();
 
     if (!createProjectRes.ok) {
-      const errorMsg = projectData.message || `Failed to create Convex project (${createProjectRes.status}).`;
+      const errorMsg =
+        projectData.message ||
+        `Failed to create Convex project (${createProjectRes.status}).`;
       await convexClient.mutation(api.organizations.updateStatus, {
         id: orgId,
         status: "failed",
@@ -140,7 +170,7 @@ export async function POST(req: Request) {
     const deploymentName = projectData.deploymentName;
     const deploymentUrl = projectData.deploymentUrl;
 
-    if (!deploymentName) {
+    if (!deploymentName || !deploymentUrl) {
       const errorMsg = "Convex project created, but no deployment was returned.";
       await convexClient.mutation(api.organizations.updateStatus, {
         id: orgId,
@@ -186,11 +216,13 @@ export async function POST(req: Request) {
     const deployKey = keyData.deployKey;
 
     // Step 3: Deploy Default App schema and functions to the new store deployment
-    const defaultAppPath = process.env.DEFAULT_APP_PATH 
+    const defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
       : path.resolve(process.cwd(), "../Default app");
 
-    console.log(`Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`);
+    console.log(
+      `Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`
+    );
 
     try {
       await execPromise("npx convex dev --once --tail-logs disable", {
@@ -206,12 +238,68 @@ export async function POST(req: Request) {
       await convexClient.mutation(api.organizations.updateStatus, {
         id: orgId,
         status: "failed",
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
         errorMessage: errorMsg,
       });
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // Step 4: Mark store organization active in Master DB
+    // Step 4: Create Default App Organization in store database
+    const storeClient = new ConvexHttpClient(deploymentUrl);
+    let storeOrgId: any;
+
+    try {
+      storeOrgId = await storeClient.mutation("organizations:create" as any, {
+        name: trimmedName,
+        slug: slug,
+        legacyId: legacyOrganizationId || undefined,
+        published: false,
+        isTest: false,
+        phone: phone || undefined,
+        addressLine1: addressLine1 || undefined,
+        city: city || undefined,
+        state: state || undefined,
+        country: country || undefined,
+        zipCode: zipCode || undefined,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
+      });
+    } catch (createErr: any) {
+      const errorMsg = `Store organization creation failed: ${createErr.message}`;
+      console.error(errorMsg);
+      await convexClient.mutation(api.organizations.updateStatus, {
+        id: orgId,
+        status: "failed",
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+        errorMessage: errorMsg,
+      });
+      return NextResponse.json({ error: errorMsg }, { status: 500 });
+    }
+
+    // Step 5: Initialize store defaults (order processes, station, payment modes, categories, operating hours)
+    try {
+      await storeClient.mutation("organizations:initializeStore" as any, {
+        id: storeOrgId,
+      });
+    } catch (initErr: any) {
+      const errorMsg = `Store organization initialization failed: ${initErr.message}`;
+      console.error(errorMsg);
+      await convexClient.mutation(api.organizations.updateStatus, {
+        id: orgId,
+        status: "failed",
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+        errorMessage: errorMsg,
+      });
+      return NextResponse.json({ error: errorMsg }, { status: 500 });
+    }
+
+    // Step 6: Mark store organization active in Master DB only after initialization succeeds
     await convexClient.mutation(api.organizations.updateStatus, {
       id: orgId,
       status: "active",
@@ -220,7 +308,9 @@ export async function POST(req: Request) {
       deploymentUrl,
     });
 
-    console.log(`Successfully provisioned store organization: ${trimmedName} (${deploymentUrl})`);
+    console.log(
+      `Successfully provisioned & initialized store organization: ${trimmedName} (${deploymentUrl})`
+    );
 
     return NextResponse.json({
       success: true,
@@ -232,13 +322,18 @@ export async function POST(req: Request) {
         projectId,
         deploymentId: deploymentName,
         deploymentUrl,
+        storeOrgId,
         status: "active",
       },
     });
   } catch (err: any) {
     console.error("Provisioning error:", err);
     return NextResponse.json(
-      { error: err.message || "Internal server error during organization provisioning." },
+      {
+        error:
+          err.message ||
+          "Internal server error during organization provisioning.",
+      },
       { status: 500 }
     );
   }
