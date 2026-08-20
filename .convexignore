@@ -1,0 +1,3 @@
+convex/**/*.test.ts
+convex/**/*.spec.ts
+vitest.config.ts

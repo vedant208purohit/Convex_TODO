@@ -5,7 +5,7 @@ import { api } from "../convex/_generated/api";
 import { useState } from "react";
 
 export default function MasterDashboard() {
-  const organizations = useQuery(api.organizations.list);
+  const organizations = useQuery(api.organizations.list, {});
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

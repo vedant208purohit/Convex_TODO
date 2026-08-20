@@ -13,12 +13,15 @@ export default defineSchema({
       v.literal("provisioning"),
       v.literal("active"),
       v.literal("failed"),
-      v.literal("deleting")
+      v.literal("deleting"),
+      v.literal("deleted")
     ),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_slug", ["slug"])
-    .index("by_legacy_organization_id", ["legacyOrganizationId"]),
+    .index("by_legacy_organization_id", ["legacyOrganizationId"])
+    .index("by_status", ["status"]),
 });
