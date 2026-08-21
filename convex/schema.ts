@@ -78,7 +78,7 @@ import { v } from "convex/values";
 export default defineSchema({
   organizations: defineTable({
     // Legacy PostgreSQL Identity
-    legacyId: v.optional(v.string()), // PostgreSQL Organization UUID
+    legacyId: v.optional(v.string()), // PostgreSQL Organization UUID (optional for Convex-native orgs)
 
     // Core Identity & Metadata
     name: v.string(),
@@ -89,6 +89,22 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
+
+    // Store Contact, Location & Compliance Details
+    phone: v.optional(v.string()),
+    addressLine1: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    country: v.optional(v.string()),
+    zipCode: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    operationTiming: v.optional(v.any()), // Weekly operating hours JSON grid
+
+    // Branding Configuration
+    primaryColor: v.optional(v.string()),
+    secondaryColor: v.optional(v.string()),
+    theme: v.optional(v.string()),
 
     // POS Feature & Module Configuration
     isDineIn: v.boolean(),
@@ -132,6 +148,7 @@ export default defineSchema({
     deliveryAggregator: v.boolean(),
     deliverPartner: v.optional(v.string()),
     porterLagTime: v.number(),
+    porterIntegration: v.optional(v.any()), // Porter logistics metadata JSON
 
     // Integration & External Reference Fields
     frenchyId: v.optional(v.string()),
@@ -139,8 +156,36 @@ export default defineSchema({
     whatsappIntegration: v.boolean(),
     prestWhatsappIntegration: v.boolean(),
     whatsappPhoneNumber: v.optional(v.string()),
-    whatsappAccessToken: v.optional(v.string()), // Security note: Requires secret storage review
+    whatsappAccessToken: v.optional(v.string()), // Sensitive credential
   })
     .index("by_legacy_id", ["legacyId"])
     .index("by_slug", ["slug"]),
+
+  // Phase 1 Seeded Support Entities
+  orderProcesses: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    stepOrder: v.number(),
+    createdAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+
+  stations: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    isMain: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+
+  paymentModes: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    active: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+
+  inventoryCategories: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    createdAt: v.number(),
+  }).index("by_org", ["organizationId"]),
 }, { schemaValidation: false });
