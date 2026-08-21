@@ -1,6 +1,9 @@
 import "./globals.css";
-import ConvexClientProvider from "./ConvexClientProvider";
-import { ClerkProvider } from "@clerk/nextjs";
+import dynamic from "next/dynamic";
+
+const AppProviders = dynamic(() => import("./AppProviders"), {
+  ssr: false,
+});
 
 export const metadata = {
   title: "Store POS Application",
@@ -13,12 +16,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body suppressHydrationWarning>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
+      </body>
+    </html>
   );
 }
