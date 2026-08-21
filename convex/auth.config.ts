@@ -1,25 +1,14 @@
-const customDomain = process.env.CLERK_JWT_ISSUER_DOMAIN?.trim();
+const issuerDomain = process.env.CLERK_JWT_ISSUER_DOMAIN?.trim();
 
-const providers = [
-  {
-    domain: "https://neat-oyster-3072.clerk.accounts.dev",
-    applicationID: "convex",
-  },
-  {
-    domain: "https://clerk.get-prest.com",
-    applicationID: "convex",
-  },
-];
-
-if (customDomain && !providers.some((p) => p.domain === customDomain)) {
-  providers.push({
-    domain: customDomain,
-    applicationID: "convex",
-  });
+if (!issuerDomain) {
+  throw new Error("CLERK_JWT_ISSUER_DOMAIN must be set for the Master Convex deployment.");
 }
 
 const authConfig = {
-  providers,
+  providers: [{
+    domain: issuerDomain,
+    applicationID: "convex",
+  }],
 };
 
 export default authConfig;

@@ -59,7 +59,7 @@ export default function SignInPage() {
               letterSpacing: "0.05em",
             }}
           >
-            POS CONTROL PLANE SYSTEM
+            POS MASTER CONTROL PLANE
           </div>
           <h1
             style={{
@@ -70,10 +70,10 @@ export default function SignInPage() {
               marginBottom: "0.5rem",
             }}
           >
-            Master Admin Login
+            Restaurant Owner / Admin Login
           </h1>
           <p style={{ fontSize: "0.9rem", color: "#cbd5e1" }}>
-            Sign in with your authorized admin credentials to access the control plane
+            Sign in with your authorized restaurant owner or administrator credentials to access the control plane
           </p>
         </div>
 

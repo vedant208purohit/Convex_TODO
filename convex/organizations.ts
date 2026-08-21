@@ -1,34 +1,41 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+async function requireIdentity(ctx: { auth: { getUserIdentity: () => Promise<unknown> } }) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Unauthenticated: Access denied.");
+  }
+}
+
 export const list = query({
-  handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
+  args: { includeDeleted: v.optional(v.boolean()) },
+  handler: async (ctx, args) => {
+    await requireIdentity(ctx);
+    const orgs = await ctx.db.query("organizations").order("desc").collect();
+    if (args.includeDeleted) {
+      return orgs;
     }
-    return await ctx.db.query("organizations").order("desc").collect();
+    return orgs.filter((org) => org.status !== "deleted" && org.deletedAt === undefined);
   },
 });
 
 export const get = query({
-  args: { id: v.id("organizations") },
+  args: { id: v.union(v.id("organizations"), v.string()) },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
-    }
-    return await ctx.db.get(args.id);
+    await requireIdentity(ctx);
+    if (!args.id || args.id.trim() === "") return null;
+    const normalizedId = ctx.db.normalizeId("organizations", args.id);
+    if (!normalizedId) return null;
+    return await ctx.db.get(normalizedId);
   },
 });
 
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
-    }
+    await requireIdentity(ctx);
+    if (!args.slug || !args.slug.trim()) return null;
     return await ctx.db
       .query("organizations")
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
@@ -39,10 +46,8 @@ export const getBySlug = query({
 export const getByLegacyOrganizationId = query({
   args: { legacyOrganizationId: v.string() },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
-    }
+    await requireIdentity(ctx);
+    if (!args.legacyOrganizationId || !args.legacyOrganizationId.trim()) return null;
     return await ctx.db
       .query("organizations")
       .withIndex("by_legacy_organization_id", (q) =>
@@ -59,17 +64,13 @@ export const create = mutation({
     legacyOrganizationId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
-    }
-
+    await requireIdentity(ctx);
     // 1. Primary Identity Check by legacyOrganizationId
     if (args.legacyOrganizationId) {
       const existingByLegacy = await ctx.db
         .query("organizations")
         .withIndex("by_legacy_organization_id", (q) =>
-          q.eq("legacyOrganizationId", args.legacyOrganizationId)
+          q.eq("legacyOrganizationId", args.legacyOrganizationId!)
         )
         .first();
 
@@ -94,7 +95,10 @@ export const create = mutation({
       .first();
 
     if (existingBySlug) {
-      if (args.legacyOrganizationId && existingBySlug.legacyOrganizationId !== args.legacyOrganizationId) {
+      if (
+        args.legacyOrganizationId &&
+        existingBySlug.legacyOrganizationId !== args.legacyOrganizationId
+      ) {
         // Disambiguate slug by appending unique legacy ID suffix
         targetSlug = `${args.slug}-${args.legacyOrganizationId.substring(0, 8)}`;
       } else if (existingBySlug.status === "failed") {
@@ -104,8 +108,10 @@ export const create = mutation({
           updatedAt: Date.now(),
         });
         return existingBySlug._id;
-      } else {
-        throw new Error(`Organization with slug "${args.slug}" already exists (status: ${existingBySlug.status}).`);
+      } else if (existingBySlug.status !== "deleted") {
+        throw new Error(
+          `Organization with slug "${args.slug}" already exists (status: ${existingBySlug.status}).`
+        );
       }
     }
 
@@ -126,7 +132,8 @@ export const updateStatus = mutation({
       v.literal("provisioning"),
       v.literal("active"),
       v.literal("failed"),
-      v.literal("deleting")
+      v.literal("deleting"),
+      v.literal("deleted")
     ),
     projectId: v.optional(v.string()),
     deploymentId: v.optional(v.string()),
@@ -134,11 +141,7 @@ export const updateStatus = mutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
-    }
-
+    await requireIdentity(ctx);
     const { id, ...updates } = args;
     await ctx.db.patch(id, {
       ...updates,
@@ -147,14 +150,39 @@ export const updateStatus = mutation({
   },
 });
 
+export const softDelete = mutation({
+  args: { id: v.id("organizations") },
+  handler: async (ctx, args) => {
+    await requireIdentity(ctx);
+    const org = await ctx.db.get(args.id);
+    if (!org) {
+      throw new Error("Organization not found");
+    }
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+    return { success: true };
+  },
+});
+
+// Backward compatibility alias for softDelete
 export const remove = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Unauthenticated: Access denied.");
+    await requireIdentity(ctx);
+    const org = await ctx.db.get(args.id);
+    if (!org) {
+      throw new Error("Organization not found");
     }
-
-    await ctx.db.delete(args.id);
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+    return { success: true };
   },
 });

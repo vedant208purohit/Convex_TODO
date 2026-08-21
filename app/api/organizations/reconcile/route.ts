@@ -5,14 +5,14 @@ import { api } from "@/convex/_generated/api";
 
 export async function POST() {
   try {
-    const { userId } = await auth();
+    const { userId, getToken } = await auth();
     if (!userId) {
-      return NextResponse.json(
-        { error: "Unauthorized access." },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
     }
-    const managementToken = process.env.CONVEX_MANAGEMENT_API_KEY || process.env.CONVEX_MANAGEMENT_TOKEN;
+
+    const managementToken =
+      process.env.CONVEX_MANAGEMENT_API_KEY ||
+      process.env.CONVEX_MANAGEMENT_TOKEN;
     const teamId = process.env.CONVEX_TEAM_ID;
     const masterConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 
@@ -23,12 +23,26 @@ export async function POST() {
       );
     }
 
+    const token = await getToken({ template: "convex" });
     const convexClient = new ConvexHttpClient(masterConvexUrl);
+    if (token) {
+      convexClient.setAuth(token);
+    }
 
-    // 1. Fetch active organizations from Master DB
-    const activeOrgs: any[] = await convexClient.query(api.organizations.list);
-    const activeProjectIds = new Set(
-      activeOrgs
+    // 1. Fetch all registered organizations from Master DB (including provisioning/active/deleting)
+    const allOrgs: any[] = await convexClient.query(api.organizations.list, {
+      includeDeleted: true,
+    });
+
+    // Protect project IDs for active, provisioning, and deleting orgs
+    const protectedProjectIds = new Set(
+      allOrgs
+        .filter(
+          (org: any) =>
+            org.status === "active" ||
+            org.status === "provisioning" ||
+            org.status === "deleting"
+        )
         .map((org: any) => org.projectId)
         .filter((id: any): id is string => Boolean(id))
     );
@@ -51,19 +65,22 @@ export async function POST() {
       );
     }
 
-    const projects: Array<{ id: number | string; name: string; slug: string }> = await projectsRes.json();
+    const projects: Array<{ id: number | string; name: string; slug: string }> =
+      await projectsRes.json();
 
-    // Infrastructure projects to protect from reconciliation deletion
+    // System infrastructure projects to protect from reconciliation deletion
     const protectedProjects = new Set([
       "convex-master-app",
       "convex-company-todos",
       "pos-master-app",
       "pos-default-app",
+      "master-app",
+      "default-app",
     ]);
 
     const deletedProjects: string[] = [];
 
-    // 3. Identify and delete orphaned store projects
+    // 3. Identify and delete genuinely orphaned store projects
     for (const project of projects) {
       const projIdStr = String(project.id);
       const projName = project.slug || project.name;
@@ -72,8 +89,10 @@ export async function POST() {
         continue;
       }
 
-      if (!activeProjectIds.has(projIdStr)) {
-        console.log(`Reconciling orphaned Convex project: ${projName} (ID: ${projIdStr})`);
+      if (!protectedProjectIds.has(projIdStr)) {
+        console.log(
+          `Reconciling orphaned Convex project: ${projName} (ID: ${projIdStr})`
+        );
 
         const deleteRes = await fetch(
           `https://api.convex.dev/v1/projects/${projIdStr}/delete`,
@@ -88,7 +107,10 @@ export async function POST() {
         if (deleteRes.ok) {
           deletedProjects.push(projName);
         } else {
-          console.error(`Failed to delete orphaned project ${projName}:`, await deleteRes.text());
+          console.error(
+            `Failed to delete orphaned project ${projName}:`,
+            await deleteRes.text()
+          );
         }
       }
     }
