@@ -178,6 +178,7 @@ export async function POST(req: Request) {
           name: org.name,
           slug: org.slug,
           legacyId: org.legacyOrganizationId || undefined,
+          ownerClerkId: org.ownerClerkId || undefined,
           published: false,
           isTest: false,
         });

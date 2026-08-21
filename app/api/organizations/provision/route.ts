@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 import { exec } from "child_process";
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
       name,
       slug: providedSlug,
       legacyOrganizationId,
+      ownerClerkId: providedOwnerClerkId,
       phone,
       addressLine1,
       city,
@@ -57,7 +59,31 @@ export async function POST(req: Request) {
       );
     }
 
+    const authResult = await auth();
+    const { getToken, userId: authenticatedUserId } = authResult;
+    let token: string | null = null;
+    try {
+      token = await getToken({ template: "convex" });
+    } catch {
+      token = await getToken();
+    }
+    if (!token) {
+      const authHeader = req.headers.get("authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.substring(7);
+      }
+    }
+
+    // Resolve ownerClerkId (provided explicit ID, or authenticated caller ID)
+    const ownerClerkId =
+      providedOwnerClerkId && typeof providedOwnerClerkId === "string" && providedOwnerClerkId.trim()
+        ? providedOwnerClerkId.trim()
+        : authenticatedUserId || undefined;
+
     const convexClient = new ConvexHttpClient(masterConvexUrl);
+    if (token) {
+      convexClient.setAuth(token);
+    }
 
     // 1. Check if organization already exists in Master DB by legacyOrganizationId
     if (legacyOrganizationId) {
@@ -76,6 +102,7 @@ export async function POST(req: Request) {
             name: existingByLegacy.name,
             slug: existingByLegacy.slug,
             legacyOrganizationId: existingByLegacy.legacyOrganizationId,
+            ownerClerkId: existingByLegacy.ownerClerkId,
             projectId: existingByLegacy.projectId,
             deploymentId: existingByLegacy.deploymentId,
             deploymentUrl: existingByLegacy.deploymentUrl,
@@ -100,6 +127,7 @@ export async function POST(req: Request) {
           name: existingBySlug.name,
           slug: existingBySlug.slug,
           legacyOrganizationId: existingBySlug.legacyOrganizationId,
+          ownerClerkId: existingBySlug.ownerClerkId,
           projectId: existingBySlug.projectId,
           deploymentId: existingBySlug.deploymentId,
           deploymentUrl: existingBySlug.deploymentUrl,
@@ -130,10 +158,11 @@ export async function POST(req: Request) {
       name: trimmedName,
       slug,
       legacyOrganizationId: legacyOrganizationId || undefined,
+      ownerClerkId: ownerClerkId || undefined,
     });
 
     console.log(
-      `Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"})`
+      `Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"}, ownerClerkId: ${ownerClerkId || "none"})`
     );
 
     // Step 1: Create project & deployment in Convex via Management API
@@ -255,6 +284,7 @@ export async function POST(req: Request) {
         name: trimmedName,
         slug: slug,
         legacyId: legacyOrganizationId || undefined,
+        ownerClerkId: ownerClerkId || undefined,
         published: false,
         isTest: false,
         phone: phone || undefined,

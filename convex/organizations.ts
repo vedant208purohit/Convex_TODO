@@ -51,6 +51,7 @@ export const create = mutation({
     name: v.string(),
     slug: v.string(),
     legacyOrganizationId: v.optional(v.string()),
+    ownerClerkId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     // 1. Primary Identity Check by legacyOrganizationId
@@ -66,10 +67,17 @@ export const create = mutation({
         if (existingByLegacy.status === "failed") {
           await ctx.db.patch(existingByLegacy._id, {
             status: "provisioning",
+            ownerClerkId: args.ownerClerkId || existingByLegacy.ownerClerkId,
             errorMessage: undefined,
             updatedAt: Date.now(),
           });
           return existingByLegacy._id;
+        }
+        if (args.ownerClerkId && !existingByLegacy.ownerClerkId) {
+          await ctx.db.patch(existingByLegacy._id, {
+            ownerClerkId: args.ownerClerkId,
+            updatedAt: Date.now(),
+          });
         }
         return existingByLegacy._id;
       }
@@ -92,6 +100,7 @@ export const create = mutation({
       } else if (existingBySlug.status === "failed") {
         await ctx.db.patch(existingBySlug._id, {
           status: "provisioning",
+          ownerClerkId: args.ownerClerkId || existingBySlug.ownerClerkId,
           errorMessage: undefined,
           updatedAt: Date.now(),
         });
@@ -107,6 +116,7 @@ export const create = mutation({
       name: args.name,
       slug: targetSlug,
       legacyOrganizationId: args.legacyOrganizationId,
+      ownerClerkId: args.ownerClerkId,
       status: "provisioning",
       createdAt: Date.now(),
     });
