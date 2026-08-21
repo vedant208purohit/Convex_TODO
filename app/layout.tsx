@@ -12,13 +12,14 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const publishableKey = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim();
+  const app = <ConvexClientProvider>{children}</ConvexClientProvider>;
+
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body suppressHydrationWarning>
-          <ConvexClientProvider>{children}</ConvexClientProvider>
-        </body>
-      </html>
-    </ClerkProvider>
+    <html lang="en">
+      <body suppressHydrationWarning>
+        {publishableKey ? <ClerkProvider publishableKey={publishableKey}>{app}</ClerkProvider> : app}
+      </body>
+    </html>
   );
 }
