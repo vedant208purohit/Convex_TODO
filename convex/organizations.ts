@@ -49,6 +49,15 @@ function stripSecrets(org: Doc<"organizations"> | null) {
   return safeOrg;
 }
 
+// Helper: Authentication Guard Enforcer
+async function requireAuth(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Unauthenticated");
+  }
+  return identity;
+}
+
 // Helper: Reusable Organization Business Rule Validation
 function validateOrganizationState(org: {
   isDineIn: boolean;
@@ -172,6 +181,7 @@ export const list = query({
 export const getWithSecrets = query({
   args: { id: v.union(v.id("organizations"), v.string()) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     if (!args.id || args.id.trim() === "") return null;
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
@@ -498,6 +508,7 @@ export const update = mutation({
     whatsappAccessToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
       throw new Error("Organization not found");
@@ -619,6 +630,7 @@ export const update = mutation({
 export const liveOrganization = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const org = await ctx.db.get(args.id);
     if (!org || org.deletedAt !== undefined) {
       throw new Error("Organization not found");
@@ -762,6 +774,7 @@ export const initializeStore = mutation({
 export const remove = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const org = await ctx.db.get(args.id);
     if (!org || org.deletedAt !== undefined) {
       throw new Error("Organization not found");

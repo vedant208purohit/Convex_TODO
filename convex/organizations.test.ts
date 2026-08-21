@@ -148,7 +148,7 @@ describe("Organization Domain Business Logic Tests", () => {
     expect(org?.dineinPospaid).toBe(false);
 
     // Update to postpaid
-    await t.mutation(api.organizations.update, {
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
       id: orgId,
       dineinPospaid: true,
     });
@@ -253,7 +253,7 @@ describe("Organization Domain Business Logic Tests", () => {
 
     // Modifying onlineStore on live published store throws support error
     await expect(
-      t.mutation(api.organizations.update, {
+      t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
         id: orgId,
         onlineStore: true,
       })
@@ -266,7 +266,7 @@ describe("Organization Domain Business Logic Tests", () => {
     });
 
     await expect(
-      t.mutation(api.organizations.liveOrganization, { id: orgId2 })
+      t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.liveOrganization, { id: orgId2 })
     ).rejects.toThrow("Please contact support");
   });
 
@@ -282,7 +282,7 @@ describe("Organization Domain Business Logic Tests", () => {
     const publicOrg = await t.query(api.organizations.get, { id: orgId });
     expect("whatsappAccessToken" in (publicOrg || {})).toBe(false);
 
-    const internalOrg = await t.query(api.organizations.getWithSecrets, {
+    const internalOrg = await t.withIdentity({ name: "Tester", subject: "user_test" }).query(api.organizations.getWithSecrets, {
       id: orgId,
     });
     expect(internalOrg?.whatsappAccessToken).toBe(
@@ -298,14 +298,14 @@ describe("Organization Domain Business Logic Tests", () => {
       name: "To Be Deleted Org",
     });
 
-    await t.mutation(api.organizations.remove, { id: orgId });
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.remove, { id: orgId });
 
     // Public get returns null for soft deleted org
     const getResult = await t.query(api.organizations.get, { id: orgId });
     expect(getResult).toBeNull();
 
     // Internal lookup shows deletedAt is set
-    const internalOrg = await t.query(api.organizations.getWithSecrets, {
+    const internalOrg = await t.withIdentity({ name: "Tester", subject: "user_test" }).query(api.organizations.getWithSecrets, {
       id: orgId,
     });
     expect(internalOrg?.deletedAt).toBeDefined();
