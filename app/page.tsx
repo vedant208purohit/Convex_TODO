@@ -214,6 +214,23 @@ function DashboardContent() {
 }
 
 export default function MasterDashboard() {
+  const hasClerkPublishableKey = Boolean(
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim(),
+  );
+
+  if (!hasClerkPublishableKey) {
+    return (
+      <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center font-sans p-4">
+        <div className="max-w-md rounded-xl border border-slate-800 bg-slate-900 p-8 text-center">
+          <h1 className="text-xl font-semibold text-white">Authentication is not configured</h1>
+          <p className="mt-3 text-sm text-slate-400">
+            Add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to the deployment environment and redeploy.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <>
       <ClerkLoading>
