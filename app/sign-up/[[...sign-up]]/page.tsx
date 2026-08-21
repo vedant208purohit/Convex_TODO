@@ -7,9 +7,9 @@ export default function SignUpPage() {
 
       <div className="auth-content">
         <div className="auth-heading">
-          <div className="auth-badge">POS CONTROL PLANE SYSTEM</div>
-          <h1>Create Admin Account</h1>
-          <p>Register an authorized account to access the control plane and POS tools.</p>
+          <div className="auth-badge">POS STORE APPLICATION</div>
+          <h1>Create Restaurant Account</h1>
+          <p>Register an account to access your restaurant workspace and POS tools.</p>
         </div>
 
         <div className="auth-card-wrap">
@@ -20,6 +20,15 @@ export default function SignUpPage() {
             fallbackRedirectUrl="/"
             forceRedirectUrl="/"
             appearance={{
+              variables: {
+                colorPrimary: "#6366f1",
+                colorBackground: "#0f172a",
+                colorInputBackground: "#1e293b",
+                colorInputText: "#ffffff",
+                colorText: "#f8fafc",
+                colorTextSecondary: "#cbd5e1",
+                borderRadius: "0.75rem",
+              },
               elements: {
                 rootBox: "w-full",
                 cardBox: "w-full shadow-2xl rounded-xl",
@@ -46,7 +55,7 @@ export default function SignUpPage() {
           />
         </div>
 
-        <p className="auth-footer">Protected system. Access restricted to authorized system administrators.</p>
+        <p className="auth-footer">Secure restaurant workspace for authorized users.</p>
       </div>
     </main>
   );

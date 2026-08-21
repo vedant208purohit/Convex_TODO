@@ -5,12 +5,12 @@ import { api } from "../convex/_generated/api";
 import {
   ClerkLoaded,
   ClerkLoading,
-  RedirectToSignIn,
   SignedIn,
   SignedOut,
   UserButton,
   useUser,
 } from "@clerk/nextjs";
+import { useEffect } from "react";
 
 type FeatureKey =
   | "isDineIn"
@@ -25,6 +25,19 @@ type FeatureKey =
   | "onlineStore"
   | "isCaptain"
   | "isReport";
+
+function RedirectToLocalSignIn() {
+  useEffect(() => {
+    const convexUrl = new URLSearchParams(window.location.search).get("convexUrl");
+    const signInUrl = convexUrl
+      ? `/sign-in?convexUrl=${encodeURIComponent(convexUrl)}`
+      : "/sign-in";
+
+    window.location.replace(signInUrl);
+  }, []);
+
+  return null;
+}
 
 function DashboardContent() {
   const { user } = useUser();
@@ -212,7 +225,7 @@ export default function StorePOSPage() {
           <DashboardContent />
         </SignedIn>
         <SignedOut>
-          <RedirectToSignIn />
+          <RedirectToLocalSignIn />
         </SignedOut>
       </ClerkLoaded>
     </>

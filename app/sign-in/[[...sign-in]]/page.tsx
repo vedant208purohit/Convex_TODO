@@ -8,9 +8,9 @@ export default function SignInPage() {
 
       <div className="auth-content">
         <div className="auth-heading">
-          <div className="auth-badge">POS CONTROL PLANE SYSTEM</div>
-          <h1>Master Admin Login</h1>
-          <p>Sign in with your authorized admin credentials to access the control plane.</p>
+          <div className="auth-badge">POS STORE APPLICATION</div>
+          <h1>Restaurant User Login</h1>
+          <p>Sign in to access your restaurant workspace and POS tools.</p>
         </div>
 
         <div className="auth-card-wrap">
@@ -46,6 +46,15 @@ export default function SignInPage() {
             // }}
 
             appearance={{
+  variables: {
+    colorPrimary: "#6366f1",
+    colorBackground: "#0f172a",
+    colorInputBackground: "#1e293b",
+    colorInputText: "#ffffff",
+    colorText: "#f8fafc",
+    colorTextSecondary: "#cbd5e1",
+    borderRadius: "0.75rem",
+  },
   elements: {
     rootBox: "w-full",
     cardBox: "w-full shadow-2xl rounded-xl",
@@ -75,7 +84,7 @@ export default function SignInPage() {
           />
         </div>
 
-        <p className="auth-footer">Protected system. Access restricted to authorized system administrators.</p>
+        <p className="auth-footer">Secure restaurant workspace for authorized users.</p>
       </div>
     </main>
   );
