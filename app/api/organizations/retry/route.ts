@@ -135,19 +135,57 @@ export async function POST(req: Request) {
 
     const deployKey = keyData.deployKey;
 
+async function generateHmacSha256(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
     // 3. Re-run CLI code deployment
     const defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
       : path.resolve(process.cwd(), "../Default app");
 
+    const provisioningSecret =
+      process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
+
     try {
-      await execPromise("npx convex dev --once --typecheck=disable --tail-logs disable", {
+      const execOptions: any = {
         cwd: defaultAppPath,
         env: {
           ...process.env,
           CONVEX_DEPLOY_KEY: deployKey,
         },
-      });
+      };
+
+      try {
+        await execPromise(
+          `npx convex env set PROVISIONING_SECRET ${provisioningSecret}`,
+          execOptions
+        );
+      } catch (envErr: any) {
+        console.warn(
+          `Warning: Could not set PROVISIONING_SECRET on target deployment ${deploymentName}:`,
+          envErr.message
+        );
+      }
+
+      await execPromise(
+        "npx convex dev --once --typecheck=disable --tail-logs disable",
+        execOptions
+      );
     } catch (deployErr: any) {
       const errorMsg = `POS Code deployment failed during retry: ${deployErr.stderr || deployErr.message}`;
       await masterClient.mutation(api.organizations.updateStatus, {
@@ -165,6 +203,12 @@ export async function POST(req: Request) {
     const storeClient = new ConvexHttpClient(deploymentUrl);
     let storeOrgId: any;
 
+    const timestamp = Date.now();
+    const provisioningToken = await generateHmacSha256(
+      provisioningSecret,
+      `${org.slug}:${timestamp}`
+    );
+
     try {
       const existingStoreOrg: any = await storeClient.query(
         "organizations:getBySlug" as any,
@@ -180,6 +224,8 @@ export async function POST(req: Request) {
           legacyId: org.legacyOrganizationId || undefined,
           published: false,
           isTest: false,
+          provisioningToken,
+          timestamp,
         });
       }
     } catch (createErr: any) {
@@ -199,6 +245,9 @@ export async function POST(req: Request) {
     try {
       await storeClient.mutation("organizations:initializeStore" as any, {
         id: storeOrgId,
+        slug: org.slug,
+        provisioningToken,
+        timestamp,
       });
     } catch (initErr: any) {
       const errorMsg = `Store organization initialization failed during retry: ${initErr.message}`;
