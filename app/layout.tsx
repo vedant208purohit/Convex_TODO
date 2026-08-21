@@ -1,9 +1,5 @@
 import "./globals.css";
-import dynamic from "next/dynamic";
-
-const AppProviders = dynamic(() => import("./AppProviders"), {
-  ssr: false,
-});
+import AppProviders from "./AppProviders";
 
 export const metadata = {
   title: "Store POS Application",
