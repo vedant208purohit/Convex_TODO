@@ -1,4 +1,4 @@
-/// <reference types="vite/client" />
+/// <reference path="./vitest-env.d.ts" />
 import { convexTest } from "convex-test";
 import { expect, test, describe, beforeEach } from "vitest";
 import schema from "./schema";
