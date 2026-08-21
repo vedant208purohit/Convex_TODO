@@ -262,6 +262,7 @@ export const create = mutation({
     prestWhatsappIntegration: v.optional(v.boolean()),
     whatsappPhoneNumber: v.optional(v.string()),
     whatsappAccessToken: v.optional(v.string()),
+    ownerClerkId: v.optional(v.string()), // Initial Owner/Admin Clerk User ID (for store provisioning)
   },
   handler: async (ctx, args) => {
     // 1. Validate Name Presence
@@ -419,9 +420,84 @@ export const create = mutation({
       whatsappAccessToken: args.whatsappAccessToken,
     });
 
+    // 6. Initial Owner Seeding during Provisioning (if ownerClerkId supplied)
+    if (args.ownerClerkId && args.ownerClerkId.trim()) {
+      const ownerId = args.ownerClerkId.trim();
+      const existingOwner = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", ownerId).eq("organizationId", orgId)
+        )
+        .first();
+
+      if (!existingOwner) {
+        await ctx.db.insert("organizationUsers", {
+          organizationId: orgId,
+          userId: ownerId,
+          userType: ["admin"],
+          userPermission: {
+            admin: { create: true, read: true, update: true, delete: true },
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
     return orgId;
   },
 });
+
+// Dedicated Provisioning Mutation for Initial Owner
+export const createInitialOwner = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    ownerClerkId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.organizationId);
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found");
+    }
+
+    const ownerId = args.ownerClerkId.trim();
+    if (!ownerId) {
+      throw new Error("Owner Clerk ID cannot be blank");
+    }
+
+    const existingOwner = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user_and_org", (q) =>
+        q.eq("userId", ownerId).eq("organizationId", args.organizationId)
+      )
+      .first();
+
+    const now = Date.now();
+    if (existingOwner) {
+      if (existingOwner.deletedAt !== undefined) {
+        await ctx.db.patch(existingOwner._id, {
+          deletedAt: undefined,
+          userType: Array.from(new Set([...existingOwner.userType, "admin"])),
+          updatedAt: now,
+        });
+        return existingOwner._id;
+      }
+      return existingOwner._id;
+    }
+
+    return await ctx.db.insert("organizationUsers", {
+      organizationId: args.organizationId,
+      userId: ownerId,
+      userType: ["admin"],
+      userPermission: {
+        admin: { create: true, read: true, update: true, delete: true },
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
 
 export const update = mutation({
   args: {
