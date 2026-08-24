@@ -80,7 +80,7 @@ function DashboardContent() {
                   </p>
                 </div>
               )}
-              <UserButton afterSignOutUrl="/sign-in" />
+              <UserButton />
             </div>
           </div>
         </header>

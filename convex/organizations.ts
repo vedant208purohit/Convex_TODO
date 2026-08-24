@@ -62,6 +62,7 @@ export const create = mutation({
     name: v.string(),
     slug: v.string(),
     legacyOrganizationId: v.optional(v.string()),
+    ownerClerkId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireIdentity(ctx);
@@ -119,6 +120,7 @@ export const create = mutation({
       name: args.name,
       slug: targetSlug,
       legacyOrganizationId: args.legacyOrganizationId,
+      ownerClerkId: args.ownerClerkId,
       status: "provisioning",
       createdAt: Date.now(),
     });
