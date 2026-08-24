@@ -247,7 +247,12 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
+<<<<<<< HEAD
 import { requireAuth } from "./organizationUsers";
+=======
+import { initializeDefaultsHelper } from "./organizationFeatures";
+
+>>>>>>> a28d5cc (feat: implement organization feature flags)
 
 // Helper: Slug Normalization
 function generateBaseSlug(name: string): string {
@@ -1468,6 +1473,10 @@ export const initializeStore = mutation({
       patches.updatedAt = now;
       await ctx.db.patch(args.id, patches);
     }
+
+    // 7. Default Organization Feature Flags Seeding (Idempotent)
+    await initializeDefaultsHelper(ctx);
+
 
     return { success: true };
   },
