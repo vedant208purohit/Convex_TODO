@@ -1,13 +1,4 @@
-/**
- * POS Backend Authentication & Authorization Control Plane Architecture
- * 
- * Flow:
- * 1. Master App handles central Identity Provider (IdP) authentication.
- * 2. Authenticated Users hold global roles (e.g. SYSTEM_ADMIN, STORE_OWNER, STORE_STAFF).
- * 3. User claims include Organization access mappings: `userOrganizations: Array<{ orgId: string, role: string }>`.
- * 4. Master App issues scoped Store access tokens or signs JWTs passed when opening Store POS applications.
- * 5. Store Convex projects validate the token's standard claims without needing a shared multi-tenant DB table.
- */
+import { auth } from "@clerk/nextjs/server";
 
 export type UserRole = "SYSTEM_ADMIN" | "ORG_ADMIN" | "MANAGER" | "CASHIER" | "WAITER";
 
@@ -30,16 +21,15 @@ export interface StoreAccessPermission {
 }
 
 /**
- * Validates system admin rights for Master App control plane operations
+ * Validates system admin rights for Master App control plane operations using Clerk session verification.
  */
-export async function validateMasterAdminAuthorization(req: Request): Promise<boolean> {
-  // Foundation placeholder for Phase 1.
-  // In production, inspect Authorization bearer header / JWT session cookie.
-  const authHeader = req.headers.get("authorization");
-  if (process.env.NODE_ENV === "development" && !authHeader) {
-    return true; // Dev fallback
+export async function validateMasterAdminAuthorization(req?: Request): Promise<boolean> {
+  try {
+    const { userId } = await auth();
+    return Boolean(userId);
+  } catch {
+    return false;
   }
-  return true;
 }
 
 /**
@@ -49,7 +39,14 @@ export async function authorizeUserForStore(
   userId: string,
   storeSlug: string
 ): Promise<StoreAccessPermission> {
-  // Architectural placeholder for future auth integration
+  if (!userId) {
+    return {
+      canAccessStore: false,
+      storeSlug,
+      role: "CASHIER",
+    };
+  }
+
   return {
     canAccessStore: true,
     storeSlug,

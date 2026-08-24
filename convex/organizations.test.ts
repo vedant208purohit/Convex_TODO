@@ -8,7 +8,10 @@ const modules = import.meta.glob("./**/*.*s");
 
 describe("Master App Organization Domain Tests", () => {
   test("1. Creates Master Organization starting in provisioning status", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "master-test-user",
+      tokenIdentifier: "master-test-user",
+    });
 
     const masterOrgId = await t.mutation(api.organizations.create, {
       name: "Saffron Kitchen",
@@ -26,7 +29,10 @@ describe("Master App Organization Domain Tests", () => {
   });
 
   test("2. Legacy ID lookup and duplicate protection", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "master-test-user",
+      tokenIdentifier: "master-test-user",
+    });
 
     const legacyId = "rails-uuid-12345";
     const masterOrgId = await t.mutation(api.organizations.create, {
@@ -52,7 +58,10 @@ describe("Master App Organization Domain Tests", () => {
   });
 
   test("3. Slug deduplication with legacy ID disambiguation", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "master-test-user",
+      tokenIdentifier: "master-test-user",
+    });
 
     const orgId1 = await t.mutation(api.organizations.create, {
       name: "Taco Haven",
@@ -78,7 +87,10 @@ describe("Master App Organization Domain Tests", () => {
   });
 
   test("4. Status update lifecycle transitions (active, failed, deleting, deleted)", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "master-test-user",
+      tokenIdentifier: "master-test-user",
+    });
 
     const orgId = await t.mutation(api.organizations.create, {
       name: "Lifecycle Store",
@@ -112,7 +124,10 @@ describe("Master App Organization Domain Tests", () => {
   });
 
   test("5. Soft deletion sets status=deleted and deletedAt", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "master-test-user",
+      tokenIdentifier: "master-test-user",
+    });
 
     const orgId = await t.mutation(api.organizations.create, {
       name: "Deleted Store",
@@ -135,7 +150,10 @@ describe("Master App Organization Domain Tests", () => {
   });
 
   test("6. Querying get with empty string or invalid ID returns null safely", async () => {
-    const t = convexTest(schema, modules);
+    const t = convexTest(schema, modules).withIdentity({
+      subject: "master-test-user",
+      tokenIdentifier: "master-test-user",
+    });
 
     const emptyRes = await t.query(api.organizations.get, { id: "" });
     expect(emptyRes).toBeNull();

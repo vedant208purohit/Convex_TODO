@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
 export async function POST(req: Request) {
   try {
+    const { userId, getToken } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
+    }
+
     const { masterOrgId } = await req.json();
 
     if (!masterOrgId || typeof masterOrgId !== "string") {
@@ -26,6 +32,10 @@ export async function POST(req: Request) {
     }
 
     const masterClient = new ConvexHttpClient(masterConvexUrl);
+    const token = await getToken({ template: "convex" });
+    if (token) {
+      masterClient.setAuth(token);
+    }
 
     const org: any = await masterClient.query(api.organizations.get, {
       id: masterOrgId as any,

@@ -1,9 +1,17 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 
+async function requireIdentity(ctx: { auth: { getUserIdentity: () => Promise<unknown> } }) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Unauthenticated: Access denied.");
+  }
+}
+
 export const list = query({
   args: { includeDeleted: v.optional(v.boolean()) },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     const orgs = await ctx.db.query("organizations").order("desc").collect();
     if (args.includeDeleted) {
       return orgs;
@@ -15,6 +23,7 @@ export const list = query({
 export const get = query({
   args: { id: v.union(v.id("organizations"), v.string()) },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     if (!args.id || args.id.trim() === "") return null;
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
@@ -25,6 +34,7 @@ export const get = query({
 export const getBySlug = query({
   args: { slug: v.string() },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     if (!args.slug || !args.slug.trim()) return null;
     return await ctx.db
       .query("organizations")
@@ -36,6 +46,7 @@ export const getBySlug = query({
 export const getByLegacyOrganizationId = query({
   args: { legacyOrganizationId: v.string() },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     if (!args.legacyOrganizationId || !args.legacyOrganizationId.trim()) return null;
     return await ctx.db
       .query("organizations")
@@ -54,6 +65,7 @@ export const create = mutation({
     ownerClerkId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     // 1. Primary Identity Check by legacyOrganizationId
     if (args.legacyOrganizationId) {
       const existingByLegacy = await ctx.db
@@ -139,6 +151,7 @@ export const updateStatus = mutation({
     errorMessage: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     const { id, ...updates } = args;
     await ctx.db.patch(id, {
       ...updates,
@@ -150,6 +163,7 @@ export const updateStatus = mutation({
 export const softDelete = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     const org = await ctx.db.get(args.id);
     if (!org) {
       throw new Error("Organization not found");
@@ -168,6 +182,7 @@ export const softDelete = mutation({
 export const remove = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    await requireIdentity(ctx);
     const org = await ctx.db.get(args.id);
     if (!org) {
       throw new Error("Organization not found");

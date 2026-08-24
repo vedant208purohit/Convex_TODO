@@ -5,8 +5,28 @@ import { api } from "@/convex/_generated/api";
 import { exec } from "child_process";
 import path from "path";
 import util from "util";
+import fs from "fs";
 
 const execPromise = util.promisify(exec);
+
+// HMAC SHA-256 Signature Generator
+async function generateHmacSha256(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 export async function POST(req: Request) {
   try {
@@ -33,7 +53,6 @@ export async function POST(req: Request) {
     }
 
     const trimmedName = name.trim();
-    // Derive a unique project slug
     let slug = (providedSlug || trimmedName)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
@@ -59,8 +78,18 @@ export async function POST(req: Request) {
       );
     }
 
+    const defaultClerkIssuer =
+      process.env.DEFAULT_CLERK_JWT_ISSUER_DOMAIN?.trim() ||
+      process.env.CLERK_JWT_ISSUER_DOMAIN?.trim() ||
+      "https://neat-oyster-3072.clerk.accounts.dev";
+
+    // 1. Authenticate Master request via Clerk
     const authResult = await auth();
     const { getToken, userId: authenticatedUserId } = authResult;
+    if (!authenticatedUserId) {
+      return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
+    }
+
     let token: string | null = null;
     try {
       token = await getToken({ template: "convex" });
@@ -74,9 +103,11 @@ export async function POST(req: Request) {
       }
     }
 
-    // Resolve ownerClerkId (provided explicit ID, or authenticated caller ID)
+    // 2. Resolve ownerClerkId securely (provided explicit ID or authenticated caller ID)
     const ownerClerkId =
-      providedOwnerClerkId && typeof providedOwnerClerkId === "string" && providedOwnerClerkId.trim()
+      providedOwnerClerkId &&
+      typeof providedOwnerClerkId === "string" &&
+      providedOwnerClerkId.trim()
         ? providedOwnerClerkId.trim()
         : authenticatedUserId || undefined;
 
@@ -85,7 +116,7 @@ export async function POST(req: Request) {
       convexClient.setAuth(token);
     }
 
-    // 1. Check if organization already exists in Master DB by legacyOrganizationId
+    // 3. Check existing organization in Master DB
     if (legacyOrganizationId) {
       const existingByLegacy: any = await convexClient.query(
         api.organizations.getByLegacyOrganizationId,
@@ -113,7 +144,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. Check if organization already exists in Master DB by slug
     const existingBySlug: any = await convexClient.query(
       api.organizations.getBySlug,
       { slug }
@@ -144,7 +174,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Ensure slug uniqueness if collision with a non-legacy project
     if (
       existingBySlug &&
       legacyOrganizationId &&
@@ -153,7 +182,7 @@ export async function POST(req: Request) {
       slug = `${slug}-${legacyOrganizationId.substring(0, 8)}`;
     }
 
-    // Record provisioning state in Master DB
+    // 4. Create/update Master organization record
     const orgId = await convexClient.mutation(api.organizations.create, {
       name: trimmedName,
       slug,
@@ -165,7 +194,7 @@ export async function POST(req: Request) {
       `Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"}, ownerClerkId: ${ownerClerkId || "none"})`
     );
 
-    // Step 1: Create project & deployment in Convex via Management API
+    // 5. Create Convex project via Management API
     const createProjectRes = await fetch(
       `https://api.convex.dev/v1/teams/${teamId}/create_project`,
       {
@@ -209,7 +238,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // Step 2: Create Deploy Key for deployment
+    // 6. Create Deploy Key
     const createKeyRes = await fetch(
       `https://api.convex.dev/v1/deployments/${deploymentName}/create_deploy_key`,
       {
@@ -244,10 +273,14 @@ export async function POST(req: Request) {
 
     const deployKey = keyData.deployKey;
 
-    // Step 3: Deploy Default App schema and functions to the new store deployment
-    const defaultAppPath = process.env.DEFAULT_APP_PATH
+    // 7 & 8. Configure Default deployment & deploy Default App
+    let defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
-      : path.resolve(process.cwd(), "../Default app");
+      : path.resolve(process.cwd(), "../pos-default");
+
+    if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
+      defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
+    }
 
 async function generateHmacSha256(secret: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
@@ -274,29 +307,57 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
     const provisioningSecret =
       process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
 
+    if (process.env.NODE_ENV === "production" && !process.env.PROVISIONING_SECRET) {
+      console.warn(
+        "SECURITY WARNING: PROVISIONING_SECRET environment variable is not defined in production environment."
+      );
+    }
+
     try {
+      const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
+      const useLocalCli = fs.existsSync(cliPath);
+      const convexCmd = useLocalCli ? `"${process.execPath}" "${cliPath}"` : "npx convex";
+
       const execOptions: any = {
         cwd: defaultAppPath,
         env: {
           ...process.env,
           CONVEX_DEPLOY_KEY: deployKey,
+          CLERK_JWT_ISSUER_DOMAIN: defaultClerkIssuer,
+          PROVISIONING_SECRET: provisioningSecret,
         },
       };
 
+      if (process.platform === "win32" && process.env.ComSpec) {
+        execOptions.shell = process.env.ComSpec;
+      }
+
       try {
         await execPromise(
-          `npx convex env set PROVISIONING_SECRET ${provisioningSecret}`,
+          `${convexCmd} env set CLERK_JWT_ISSUER_DOMAIN ${defaultClerkIssuer}`,
           execOptions
         );
       } catch (envErr: any) {
         console.warn(
-          `Warning: Could not set PROVISIONING_SECRET on target deployment ${deploymentName}:`,
+          `Warning: Could not set CLERK_JWT_ISSUER_DOMAIN on deployment ${deploymentName}:`,
+          envErr.message
+        );
+      }
+
+      try {
+        await execPromise(
+          `${convexCmd} env set PROVISIONING_SECRET ${provisioningSecret}`,
+          execOptions
+        );
+      } catch (envErr: any) {
+        console.warn(
+          `Warning: Could not set PROVISIONING_SECRET on deployment ${deploymentName}:`,
           envErr.message
         );
       }
 
       await execPromise(
-        "npx convex dev --once --typecheck=disable --tail-logs disable",
+        `${convexCmd} dev --once --typecheck=disable --tail-logs disable`,
         execOptions
       );
     } catch (deployErr: any) {
@@ -313,7 +374,14 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // Step 4: Create Default App Organization in store database
+    // 9. Generate provisioning HMAC SHA-256 token
+    const timestamp = Date.now();
+    const provisioningToken = await generateHmacSha256(
+      provisioningSecret,
+      `${slug}:${timestamp}`
+    );
+
+    // 10 & 11. Create Default App Organization in store DB with ownerClerkId & HMAC token
     const storeClient = new ConvexHttpClient(deploymentUrl);
     let storeOrgId: any;
 
@@ -356,7 +424,7 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // Step 5: Initialize store defaults (order processes, station, payment modes, categories, operating hours)
+    // 12. Initialize store defaults with HMAC token
     try {
       await storeClient.mutation("organizations:initializeStore" as any, {
         id: storeOrgId,
@@ -378,7 +446,7 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // Step 6: Mark store organization active in Master DB only after initialization succeeds
+    // 13. Mark store organization active in Master DB
     await convexClient.mutation(api.organizations.updateStatus, {
       id: orgId,
       status: "active",

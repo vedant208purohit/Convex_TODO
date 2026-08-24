@@ -3,8 +3,18 @@
 import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import { useState } from "react";
+import {
+  SignedIn,
+  SignedOut,
+  ClerkLoading,
+  ClerkLoaded,
+  RedirectToSignIn,
+  UserButton,
+  useUser,
+} from "@clerk/nextjs";
 
-export default function MasterDashboard() {
+function DashboardContent() {
+  const { user } = useUser();
   const organizations = useQuery(api.organizations.list, {});
   const [name, setName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -45,43 +55,54 @@ export default function MasterDashboard() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-8 font-sans">
-      <div className="max-w-6xl mx-auto space-y-8">
+    <main className="admin-shell">
+      <div className="admin-frame">
         {/* Header */}
-        <header className="border-b border-slate-800 pb-6">
-          <div className="flex items-center justify-between">
+        <header className="admin-header">
+          <div className="admin-header-row">
             <div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">
-                POS Master App
+              <p className="eyebrow">Restaurant operations</p>
+              <h1 className="admin-title">
+                Restaurant Admin Console
               </h1>
-              <p className="text-slate-400 text-sm mt-1">
-                Control Plane & Isolated Store Project Provisioning Registry
+              <p className="admin-subtitle">
+                Restaurant control plane and isolated Store POS provisioning registry
               </p>
             </div>
-            <div className="px-3 py-1 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-full text-xs font-semibold">
-              Phase 1: Organization Domain
+            <div className="admin-user">
+              {user && (
+                <div className="admin-user-copy">
+                  <p className="text-xs text-white font-medium">
+                    {user.fullName || user.primaryEmailAddress?.emailAddress}
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    Restaurant Owner / Admin
+                  </p>
+                </div>
+              )}
+              <UserButton />
             </div>
           </div>
         </header>
 
         {/* Provision Form */}
-        <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-          <h2 className="text-lg font-semibold text-white mb-4">
+        <section className="provision-card">
+          <h2 className="section-title">
             Provision New Store Organization
           </h2>
-          <form onSubmit={handleCreateOrg} className="flex gap-4">
+          <form onSubmit={handleCreateOrg} className="provision-form">
             <input
               type="text"
               placeholder="e.g. Restaurant ABC"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={loading}
-              className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              className="store-input"
             />
             <button
               type="submit"
               disabled={loading || !name.trim()}
-              className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-medium px-6 py-2.5 rounded-lg transition-colors flex items-center gap-2"
+              className="provision-button"
             >
               {loading ? (
                 <>
@@ -98,33 +119,33 @@ export default function MasterDashboard() {
           </form>
 
           {error && (
-            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-lg">
+            <div className="form-error">
               {error}
             </div>
           )}
         </section>
 
         {/* Organizations Registry Table */}
-        <section className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
-          <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-            <h2 className="text-lg font-semibold text-white">
+        <section className="registry-card">
+          <div className="registry-heading">
+            <h2 className="section-title">
               Provisioned Store Organizations & Convex Projects
             </h2>
-            <span className="text-xs text-slate-400">
+            <span className="store-count">
               {organizations ? `${organizations.length} stores` : "Loading..."}
             </span>
           </div>
 
           {!organizations ? (
-            <div className="p-12 text-center text-slate-500">Loading registry...</div>
+            <div className="empty-state">Loading registry...</div>
           ) : organizations.length === 0 ? (
-            <div className="p-12 text-center text-slate-500">
+            <div className="empty-state">
               No store organizations provisioned yet. Create one above.
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800 uppercase text-[11px] tracking-wider font-semibold">
+              <table className="registry-table">
+                <thead>
                   <tr>
                     <th className="py-3.5 px-6">Organization</th>
                     <th className="py-3.5 px-6">Slug</th>
@@ -136,7 +157,7 @@ export default function MasterDashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {organizations.map((org: any) => (
-                    <tr key={org._id} className="hover:bg-slate-800/40 transition-colors">
+                    <tr key={org._id}>
                       <td className="py-4 px-6 font-medium text-white">
                         {org.name}
                       </td>
@@ -145,17 +166,17 @@ export default function MasterDashboard() {
                       </td>
                       <td className="py-4 px-6">
                         {org.status === "active" && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          <span className="status-badge status-active">
                             ACTIVE
                           </span>
                         )}
                         {org.status === "provisioning" && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                          <span className="status-badge status-provisioning">
                             PROVISIONING
                           </span>
                         )}
                         {org.status === "failed" && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-500/10 text-rose-400 border border-rose-500/20" title={org.errorMessage}>
+                          <span className="status-badge status-failed" title={org.errorMessage}>
                             FAILED
                           </span>
                         )}
@@ -172,7 +193,7 @@ export default function MasterDashboard() {
                             href={getStoreAppUrl(org.deploymentUrl)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-medium text-xs bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 px-3 py-1.5 rounded-md transition-colors"
+                            className="store-link"
                           >
                             Open Store POS →
                           </a>
@@ -189,5 +210,49 @@ export default function MasterDashboard() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function MasterDashboard() {
+  const hasClerkPublishableKey = Boolean(
+    process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY?.trim(),
+  );
+
+  if (!hasClerkPublishableKey) {
+    return (
+      <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center font-sans p-4">
+        <div className="max-w-md rounded-xl border border-slate-800 bg-slate-900 p-8 text-center">
+          <h1 className="text-xl font-semibold text-white">Authentication is not configured</h1>
+          <p className="mt-3 text-sm text-slate-400">
+            Add NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY to the deployment environment and redeploy.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <>
+      <ClerkLoading>
+        <main className="min-h-screen bg-slate-950 flex flex-col items-center justify-center font-sans p-4">
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-12 h-12 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+            <p className="text-sm font-medium text-slate-400 tracking-wide">
+              Verifying Authentication...
+            </p>
+          </div>
+        </main>
+      </ClerkLoading>
+
+      <ClerkLoaded>
+        <SignedIn>
+          <DashboardContent />
+        </SignedIn>
+
+        <SignedOut>
+          <RedirectToSignIn />
+        </SignedOut>
+      </ClerkLoaded>
+    </>
   );
 }

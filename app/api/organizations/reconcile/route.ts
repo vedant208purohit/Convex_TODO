@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
 
 export async function POST() {
   try {
+    const { userId, getToken } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
+    }
+
     const managementToken =
       process.env.CONVEX_MANAGEMENT_API_KEY ||
       process.env.CONVEX_MANAGEMENT_TOKEN;
@@ -17,7 +23,11 @@ export async function POST() {
       );
     }
 
+    const token = await getToken({ template: "convex" });
     const convexClient = new ConvexHttpClient(masterConvexUrl);
+    if (token) {
+      convexClient.setAuth(token);
+    }
 
     // 1. Fetch all registered organizations from Master DB (including provisioning/active/deleting)
     const allOrgs: any[] = await convexClient.query(api.organizations.list, {
