@@ -93,13 +93,40 @@ export default defineSchema({
     // Store Contact, Location & Compliance Details
     phone: v.optional(v.string()),
     addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    landmark: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
     country: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    mobile: v.optional(v.string()),
+    email: v.optional(v.string()),
+    fax: v.optional(v.string()),
+    areaCode: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     operationTiming: v.optional(v.any()), // Weekly operating hours JSON grid
+
+    // GST Tax Compliance Configuration
+    isGst: v.boolean(),
+    inclusiveGst: v.boolean(),
+    separateGst: v.boolean(),
+    gstNumber: v.optional(v.string()),
+
+    // FSSAI Food Safety Compliance Configuration
+    isFssai: v.boolean(),
+    fssaiRegistrationNumber: v.optional(v.string()),
+    expiryDate: v.optional(v.number()),
+
+    // Currency & Regional Timezone Configuration
+    defaultCurrency: v.optional(v.string()),
+    defaultCurrencySymbol: v.optional(v.string()),
+    organizationTimeZone: v.optional(v.string()),
+
+    // Hardware & Printing Configuration
+    receiptPrintCount: v.number(),
+    menuBasedPrintToken: v.boolean(),
+    showQrCode: v.boolean(),
 
     // Branding Configuration
     primaryColor: v.optional(v.string()),
@@ -143,6 +170,12 @@ export default defineSchema({
     paymentSplitting: v.optional(v.any()), // JSON structure in PostgreSQL
     transferPercentage: v.number(),
     transferHoldTime: v.number(),
+
+    // Payment Gateway Credentials & Secrets
+    razorPayKeyId: v.optional(v.string()),
+    razorPayApiKey: v.optional(v.string()), // Sensitive credential
+    stripePublishableKey: v.optional(v.string()),
+    stripeSecretKey: v.optional(v.string()), // Sensitive credential
 
     // Delivery Configuration
     deliveryAggregator: v.boolean(),

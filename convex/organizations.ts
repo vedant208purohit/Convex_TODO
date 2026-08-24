@@ -339,17 +339,171 @@ async function resolveUniqueSlug(
 // Helper: Secret Stripping for Frontend Queries
 function stripSecrets(org: Doc<"organizations"> | null) {
   if (!org) return null;
-  const { whatsappAccessToken, ...safeOrg } = org;
+  const { whatsappAccessToken, razorPayApiKey, stripeSecretKey, ...safeOrg } = org;
   return safeOrg;
 }
 
-// Helper: Authentication Guard Enforcer
-async function requireAuth(ctx: QueryCtx | MutationCtx) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) {
-    throw new Error("Unauthenticated");
+// Helper: Country-Specific Phone Validation & Normalization
+function validatePhoneWithCountryCode(phone?: string, country?: string): string | undefined {
+  if (!phone || !phone.trim()) return undefined;
+
+  const raw = phone.trim();
+
+  // Check for invalid formatting characters (spaces, hyphens, slashes, alphabetic characters)
+  if (/[^0-9+]/.test(raw) || (raw.includes("+") && !raw.startsWith("+"))) {
+    throw new Error("Phone must contain only digits, with no spaces, hyphens, or slashes");
   }
-  return identity;
+
+  const digitsOnly = raw.replace(/\D/g, "");
+
+  const isUae =
+    country === "United Arab Emirates" ||
+    country === "UAE" ||
+    country === "+971" ||
+    raw.startsWith("+971");
+
+  if (isUae) {
+    let uaeDigits = digitsOnly;
+    if (uaeDigits.startsWith("971")) {
+      uaeDigits = uaeDigits.slice(3);
+    }
+
+    if (uaeDigits.length !== 9) {
+      throw new Error("Phone must be 9 digits long for UAE");
+    }
+
+    return `+971${uaeDigits}`;
+  } else {
+    let otherDigits = digitsOnly;
+    if (otherDigits.startsWith("91") && otherDigits.length === 12) {
+      otherDigits = otherDigits.slice(2);
+    }
+
+    if (otherDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for other countries");
+    }
+
+    if (raw.startsWith("+")) {
+      return raw;
+    }
+    return `+91${otherDigits}`;
+  }
+}
+
+// Helper: Normalize All-Day Operating Hours
+function normalizeAllDayHours(operationTiming: any): any {
+  if (!operationTiming || typeof operationTiming !== "object") return operationTiming;
+
+  const fullDayStart = "2023-05-08T00:00:00.000+05:30";
+  const fullDayEnd = "2023-05-08T23:59:59.000+05:30";
+
+  const updatedTiming = { ...operationTiming };
+  for (const day of Object.keys(updatedTiming)) {
+    const dayData = updatedTiming[day];
+    if (dayData && typeof dayData === "object" && dayData.is_open_all_day === true) {
+      updatedTiming[day] = {
+        ...dayData,
+        hours: [
+          {
+            start_time: fullDayStart,
+            end_time: fullDayEnd,
+          },
+        ],
+      };
+    }
+  }
+  return updatedTiming;
+}
+
+// Helper: Operating Hours Overlap Validation
+function validateOperatingHoursOverlap(operationTiming: any): void {
+  if (!operationTiming || typeof operationTiming !== "object") return;
+
+  for (const dayKey of Object.keys(operationTiming)) {
+    const dayConfig = operationTiming[dayKey];
+    if (!dayConfig || typeof dayConfig !== "object") continue;
+
+    const hours = dayConfig.hours;
+    if (!Array.isArray(hours) || hours.length <= 1) continue;
+
+    const parsedSlots: Array<{ start: number; end: number }> = [];
+
+    for (const hourObj of hours) {
+      if (!hourObj.start_time || !hourObj.end_time) continue;
+
+      let startMs: number;
+      let endMs: number;
+
+      if (
+        hourObj.start_time.includes("T") ||
+        hourObj.start_time.includes("GMT") ||
+        hourObj.start_time.includes(" ")
+      ) {
+        startMs = new Date(hourObj.start_time).getTime();
+        endMs = new Date(hourObj.end_time).getTime();
+      } else {
+        const [sh, sm] = hourObj.start_time.split(":").map(Number);
+        const [eh, em] = hourObj.end_time.split(":").map(Number);
+        startMs = sh * 60 + sm;
+        endMs = eh * 60 + em;
+      }
+
+      if (isNaN(startMs) || isNaN(endMs)) {
+        throw new Error("invalid time format detected");
+      }
+
+      parsedSlots.push({ start: startMs, end: endMs });
+    }
+
+    parsedSlots.sort((a, b) => a.start - b.start);
+
+    for (let i = 0; i < parsedSlots.length - 1; i++) {
+      if (parsedSlots[i + 1].start < parsedSlots[i].end) {
+        throw new Error(`overlapping time ranges found for ${dayKey}`);
+      }
+    }
+  }
+}
+
+// Helper: Resolve Default Currency & Symbol from Country Fallback
+function resolveCurrencyAndSymbol(
+  explicitCurrency?: string,
+  explicitSymbol?: string,
+  country?: string
+): { defaultCurrency?: string; defaultCurrencySymbol?: string } {
+  if (explicitCurrency && explicitSymbol) {
+    return {
+      defaultCurrency: explicitCurrency,
+      defaultCurrencySymbol: explicitSymbol,
+    };
+  }
+
+  if (country) {
+    const c = country.trim().toLowerCase();
+    if (c === "india" || c === "in" || c === "+91") {
+      return {
+        defaultCurrency: explicitCurrency || "INR",
+        defaultCurrencySymbol: explicitSymbol || "₹",
+      };
+    }
+    if (c === "united arab emirates" || c === "uae" || c === "+971") {
+      return {
+        defaultCurrency: explicitCurrency || "AED",
+        defaultCurrencySymbol: explicitSymbol || "AED",
+      };
+    }
+    if (c === "united states" || c === "us" || c === "usa" || c === "+1") {
+      return {
+        defaultCurrency: explicitCurrency || "USD",
+        defaultCurrencySymbol: explicitSymbol || "$",
+      };
+    }
+  }
+
+  return {
+    defaultCurrency: explicitCurrency || "INR",
+    defaultCurrencySymbol: explicitSymbol || "₹",
+  };
 }
 
 // Helper: Reusable Organization Business Rule Validation
@@ -367,6 +521,7 @@ function validateOrganizationState(org: {
   latitude?: number;
   longitude?: number;
   phone?: string;
+  receiptPrintCount?: number;
 }) {
   // RULE 1: At least one service type must be enabled
   if (!org.isDineIn && !org.isTakeAway && !org.isDelivery) {
@@ -415,6 +570,11 @@ function validateOrganizationState(org: {
         "Cannot enable delivery — please ensure latitude, longitude, and phone number are set in organization details."
       );
     }
+  }
+
+  // RULE 7: receiptPrintCount validation
+  if (org.receiptPrintCount !== undefined && org.receiptPrintCount < 1) {
+    throw new Error("receiptPrintCount must be at least 1");
   }
 }
 
@@ -499,16 +659,43 @@ export const create = mutation({
     updatedAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
 
-    // Contact & Location Fields
+    // Extended Contact & Location
     phone: v.optional(v.string()),
     addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    landmark: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
     country: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    mobile: v.optional(v.string()),
+    email: v.optional(v.string()),
+    fax: v.optional(v.string()),
+    areaCode: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     operationTiming: v.optional(v.any()),
+
+    // GST Compliance
+    isGst: v.optional(v.boolean()),
+    inclusiveGst: v.optional(v.boolean()),
+    separateGst: v.optional(v.boolean()),
+    gstNumber: v.optional(v.string()),
+
+    // FSSAI Compliance
+    isFssai: v.optional(v.boolean()),
+    fssaiRegistrationNumber: v.optional(v.string()),
+    expiryDate: v.optional(v.number()),
+
+    // Currency & Regional Timezone
+    defaultCurrency: v.optional(v.string()),
+    defaultCurrencySymbol: v.optional(v.string()),
+    organizationTimeZone: v.optional(v.string()),
+
+    // Printing
+    receiptPrintCount: v.optional(v.number()),
+    menuBasedPrintToken: v.optional(v.boolean()),
+    showQrCode: v.optional(v.boolean()),
 
     // Branding
     primaryColor: v.optional(v.string()),
@@ -552,6 +739,12 @@ export const create = mutation({
     paymentSplitting: v.optional(v.any()),
     transferPercentage: v.optional(v.number()),
     transferHoldTime: v.optional(v.number()),
+
+    // Payment Gateway Secrets
+    razorPayKeyId: v.optional(v.string()),
+    razorPayApiKey: v.optional(v.string()),
+    stripePublishableKey: v.optional(v.string()),
+    stripeSecretKey: v.optional(v.string()),
 
     // Delivery Config
     deliveryAggregator: v.optional(v.boolean()),
@@ -615,16 +808,42 @@ export const create = mutation({
 
     const now = Date.now();
 
-    // 4. Resolve Confirmed Creation Defaults from PRD
+    // 4. Resolve Phone Validation & Normalization
+    const validatedPhone = validatePhoneWithCountryCode(args.phone, args.country);
+
+    // 5. Resolve Operating Hours Normalization & Overlap Validation
+    let normalizedTiming = args.operationTiming;
+    if (normalizedTiming) {
+      normalizedTiming = normalizeAllDayHours(normalizedTiming);
+      validateOperatingHoursOverlap(normalizedTiming);
+    }
+
+    // 6. Resolve Currency Defaults
+    const { defaultCurrency, defaultCurrencySymbol } = resolveCurrencyAndSymbol(
+      args.defaultCurrency,
+      args.defaultCurrencySymbol,
+      args.country
+    );
+
+    // 7. Resolve Organization Profile & Compliance Defaults from PRD
+    const isGst = args.isGst ?? false;
+    const inclusiveGst = args.inclusiveGst ?? false;
+    const separateGst = args.separateGst ?? true;
+    const isFssai = args.isFssai ?? false;
+    const receiptPrintCount = args.receiptPrintCount ?? 1;
+    const menuBasedPrintToken = args.menuBasedPrintToken ?? false;
+    const showQrCode = args.showQrCode ?? false;
+    const organizationTimeZone = args.organizationTimeZone ?? "UTC";
+
+    // Service Mode Defaults
     const isDineIn = args.isDineIn ?? false;
     const isTakeAway = args.isTakeAway ?? true;
     const isDelivery = args.isDelivery ?? false;
 
-    // RULE 3: Dine-In Prepaid / Postpaid Exclusivity
+    // Dine-In Prepaid / Postpaid Exclusivity
     let dineinPrepaid = args.dineinPrepaid ?? false;
     let dineinPospaid = args.dineinPospaid ?? false;
     if (dineinPrepaid && dineinPospaid) {
-      // Default to prepaid if both supplied true
       dineinPospaid = false;
     }
 
@@ -634,7 +853,7 @@ export const create = mutation({
     const deliveryOnlinePayment = args.deliveryOnlinePayment ?? false;
     const deliveryAggregator = args.deliveryAggregator ?? false;
 
-    // 5. Evaluate Business Rule Validation
+    // 8. Evaluate Business Rule Validation
     validateOrganizationState({
       isDineIn,
       isTakeAway,
@@ -648,7 +867,8 @@ export const create = mutation({
       deliveryAggregator,
       latitude: args.latitude,
       longitude: args.longitude,
-      phone: args.phone,
+      phone: validatedPhone,
+      receiptPrintCount,
     });
 
     const orgId = await ctx.db.insert("organizations", {
@@ -663,22 +883,49 @@ export const create = mutation({
       deletedAt: args.deletedAt,
 
       // Contact & Location
-      phone: args.phone,
+      phone: validatedPhone,
       addressLine1: args.addressLine1,
+      addressLine2: args.addressLine2,
+      landmark: args.landmark,
       city: args.city,
       state: args.state,
       country: args.country,
       zipCode: args.zipCode,
+      mobile: args.mobile,
+      email: args.email,
+      fax: args.fax,
+      areaCode: args.areaCode,
       latitude: args.latitude,
       longitude: args.longitude,
-      operationTiming: args.operationTiming,
+      operationTiming: normalizedTiming,
+
+      // GST Compliance
+      isGst,
+      inclusiveGst,
+      separateGst,
+      gstNumber: args.gstNumber,
+
+      // FSSAI Compliance
+      isFssai,
+      fssaiRegistrationNumber: args.fssaiRegistrationNumber,
+      expiryDate: args.expiryDate,
+
+      // Currency & Regional Timezone
+      defaultCurrency,
+      defaultCurrencySymbol,
+      organizationTimeZone,
+
+      // Printing
+      receiptPrintCount,
+      menuBasedPrintToken,
+      showQrCode,
 
       // Branding
       primaryColor: args.primaryColor,
       secondaryColor: args.secondaryColor,
       theme: args.theme,
 
-      // POS Feature & Module Configuration Defaults
+      // POS Feature Flags Defaults
       isDineIn,
       isTakeAway,
       isDashboard: args.isDashboard ?? true,
@@ -690,7 +937,7 @@ export const create = mutation({
       onlineStore: args.onlineStore ?? false,
       isDelivery,
       isMenu: args.isMenu ?? false,
-      isQueue: args.isQueue ?? true, // API default is queue active
+      isQueue: args.isQueue ?? true,
       isKds: args.isKds ?? false,
       isSurveys: args.isSurveys ?? false,
       isCustomer: args.isCustomer ?? true,
@@ -713,8 +960,14 @@ export const create = mutation({
       scheduledPickupCashPayment: args.scheduledPickupCashPayment ?? false,
       scheduledDeliveryCashPayment: args.scheduledDeliveryCashPayment ?? false,
       paymentSplitting: args.paymentSplitting,
-      transferPercentage: args.transferPercentage ?? 0.03, // Confirmed PRD default 3%
-      transferHoldTime: args.transferHoldTime ?? 18000, // Confirmed PRD default 5h
+      transferPercentage: args.transferPercentage ?? 0.03,
+      transferHoldTime: args.transferHoldTime ?? 18000,
+
+      // Payment Secrets
+      razorPayKeyId: args.razorPayKeyId,
+      razorPayApiKey: args.razorPayApiKey,
+      stripePublishableKey: args.stripePublishableKey,
+      stripeSecretKey: args.stripeSecretKey,
 
       // Delivery Defaults
       deliveryAggregator,
@@ -821,13 +1074,40 @@ export const update = mutation({
     // Contact & Location
     phone: v.optional(v.string()),
     addressLine1: v.optional(v.string()),
+    addressLine2: v.optional(v.string()),
+    landmark: v.optional(v.string()),
     city: v.optional(v.string()),
     state: v.optional(v.string()),
     country: v.optional(v.string()),
     zipCode: v.optional(v.string()),
+    mobile: v.optional(v.string()),
+    email: v.optional(v.string()),
+    fax: v.optional(v.string()),
+    areaCode: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
     operationTiming: v.optional(v.any()),
+
+    // GST Compliance
+    isGst: v.optional(v.boolean()),
+    inclusiveGst: v.optional(v.boolean()),
+    separateGst: v.optional(v.boolean()),
+    gstNumber: v.optional(v.string()),
+
+    // FSSAI Compliance
+    isFssai: v.optional(v.boolean()),
+    fssaiRegistrationNumber: v.optional(v.string()),
+    expiryDate: v.optional(v.number()),
+
+    // Currency & Regional Timezone
+    defaultCurrency: v.optional(v.string()),
+    defaultCurrencySymbol: v.optional(v.string()),
+    organizationTimeZone: v.optional(v.string()),
+
+    // Printing
+    receiptPrintCount: v.optional(v.number()),
+    menuBasedPrintToken: v.optional(v.boolean()),
+    showQrCode: v.optional(v.boolean()),
 
     // Branding
     primaryColor: v.optional(v.string()),
@@ -872,6 +1152,12 @@ export const update = mutation({
     transferPercentage: v.optional(v.number()),
     transferHoldTime: v.optional(v.number()),
 
+    // Payment Gateway Secrets
+    razorPayKeyId: v.optional(v.string()),
+    razorPayApiKey: v.optional(v.string()),
+    stripePublishableKey: v.optional(v.string()),
+    stripeSecretKey: v.optional(v.string()),
+
     // Delivery Config
     deliveryAggregator: v.optional(v.boolean()),
     deliverPartner: v.optional(v.string()),
@@ -902,7 +1188,6 @@ export const update = mutation({
     }
 
     // 2. Online Store Lock Restriction
-    // If published == true AND isTest == false, Store Admins cannot directly modify onlineStore
     if (
       existing.published === true &&
       existing.isTest === false &&
@@ -912,7 +1197,19 @@ export const update = mutation({
       throw new Error("Please contact support");
     }
 
-    // 3. Payment Defaults Auto-Activation when Service Types are turned ON
+    // 3. Phone Validation if updated
+    if (updates.phone !== undefined) {
+      const targetCountry = updates.country ?? existing.country;
+      updates.phone = validatePhoneWithCountryCode(updates.phone, targetCountry);
+    }
+
+    // 4. Operating Hours Normalization & Overlap Validation if updated
+    if (updates.operationTiming !== undefined) {
+      updates.operationTiming = normalizeAllDayHours(updates.operationTiming);
+      validateOperatingHoursOverlap(updates.operationTiming);
+    }
+
+    // 5. Payment Defaults Auto-Activation when Service Types are turned ON
     let dineinPrepaid = updates.dineinPrepaid ?? existing.dineinPrepaid;
     let dineinPospaid = updates.dineinPospaid ?? existing.dineinPospaid;
 
@@ -925,7 +1222,6 @@ export const update = mutation({
 
     const isDineIn = updates.isDineIn ?? existing.isDineIn;
     if (isDineIn && !dineinPrepaid && !dineinPospaid) {
-      // Auto-enable prepaid default when dine-in enabled
       dineinPrepaid = true;
     }
 
@@ -969,7 +1265,7 @@ export const update = mutation({
       scheduledDeliveryOnlinePayment = true;
     }
 
-    // 4. Construct and Validate FINAL Resulting State
+    // 6. Construct and Validate FINAL Resulting State
     const finalState = {
       ...existing,
       ...updates,
@@ -1013,7 +1309,6 @@ export const liveOrganization = mutation({
       throw new Error("Organization not found");
     }
 
-    // Legacy publishing gate: Can only publish directly if onlineStore == false
     if (org.onlineStore === true) {
       throw new Error("Please contact support");
     }
@@ -1138,7 +1433,7 @@ export const initializeStore = mutation({
       }
     }
 
-    // 5. Operating Hours Seeding on Organization Document
+    // 5. Operating Hours Seeding on Organization Document (Idempotent)
     if (!org.operationTiming) {
       const defaultTimings = {
         monday: { open: "11:00", close: "23:59", active: true },
@@ -1154,6 +1449,21 @@ export const initializeStore = mutation({
         operationTiming: defaultTimings,
         updatedAt: now,
       });
+    }
+
+    // 6. Ensure Missing Profile Defaults for Existing partially-initialized Orgs
+    const patches: Record<string, any> = {};
+    if (org.isGst === undefined) patches.isGst = false;
+    if (org.inclusiveGst === undefined) patches.inclusiveGst = false;
+    if (org.separateGst === undefined) patches.separateGst = true;
+    if (org.isFssai === undefined) patches.isFssai = false;
+    if (org.receiptPrintCount === undefined) patches.receiptPrintCount = 1;
+    if (org.menuBasedPrintToken === undefined) patches.menuBasedPrintToken = false;
+    if (org.showQrCode === undefined) patches.showQrCode = false;
+
+    if (Object.keys(patches).length > 0) {
+      patches.updatedAt = now;
+      await ctx.db.patch(args.id, patches);
     }
 
     return { success: true };
