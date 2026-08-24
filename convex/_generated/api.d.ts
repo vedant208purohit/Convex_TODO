@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as features from "../features.js";
 import type * as organizations from "../organizations.js";
 
 import type {
@@ -17,6 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  features: typeof features;
   organizations: typeof organizations;
 }>;
 
