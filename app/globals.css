@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #020617;
+  --foreground: #f8fafc;
 }
 
 @theme inline {
@@ -12,15 +12,270 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--background);
 }
 
 body {
+  margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+}
+
+.auth-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(79, 70, 229, 0.18), transparent 32%),
+    linear-gradient(180deg, #020617 0%, #0f172a 100%);
+  color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.auth-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 600px;
+  height: 600px;
+  transform: translate(-50%, -50%);
+  background: rgba(99, 102, 241, 0.16);
+  filter: blur(140px);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+.auth-content {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+}
+
+.auth-heading {
+  margin-bottom: 1.5rem;
+}
+
+.auth-badge {
+  display: inline-block;
+  padding: 0.35rem 0.85rem;
+  margin-bottom: 0.75rem;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.auth-heading h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.025em;
+}
+
+.auth-heading p,
+.auth-footer {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #cbd5e1;
+}
+
+.auth-footer {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.auth-card-wrap {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.auth-clerk-card {
+  width: 100%;
+  background: #0f172a !important;
+  border: 1px solid #334155 !important;
+  color: #fff !important;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+  border-radius: 0.75rem !important;
+}
+
+/* ---------- General card text (specific, no wildcard) ---------- */
+.cl-card {
+  color: #f1f5f9;
+}
+
+.cl-headerTitle,
+.cl-identityPreviewText {
+  color: #ffffff !important;
+}
+
+.cl-headerSubtitle,
+.cl-formFieldLabel,
+.cl-formHeaderSubtitle {
+  color: #cbd5e1 !important;
+}
+
+.cl-identityPreviewEditButton {
+  color: #cbd5e1 !important;
+}
+
+/* ---------- Text inputs ---------- */
+.cl-formFieldInput,
+input[type="text"],
+input[type="email"],
+input[type="password"] {
+  background-color: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-radius: 0.5rem !important;
+}
+
+.cl-formFieldInput::placeholder,
+input::placeholder {
+  color: #94a3b8 !important;
+  -webkit-text-fill-color: #94a3b8 !important;
+  opacity: 1 !important;
+}
+
+.cl-formFieldInput:focus,
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus {
+  border-color: #818cf8 !important;
+  background-color: #0f172a !important;
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25) !important;
+}
+
+/* ---------- Autofill fix (email input light-blue issue) ---------- */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #1e293b inset !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border: 1.5px solid #475569 !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* ---------- OTP input boxes fix ---------- */
+.cl-otpCodeFieldInput,
+input[data-otp-input] {
+  background-color: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  caret-color: #ffffff !important;
+  border-radius: 0.5rem !important;
+}
+
+.cl-otpCodeFieldInput:focus {
+  border-color: #818cf8 !important;
+  box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.25) !important;
+}
+
+.cl-formResendCodeLink,
+.cl-footerActionLink,
+.cl-alternativeMethodsBlockButton {
+  color: #a5b4fc !important;
+}
+
+/* ---------- Primary button ---------- */
+.cl-formButtonPrimary {
+  background-color: #6366f1 !important;
+  color: #ffffff !important;
+  border-radius: 0.5rem !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4) !important;
+}
+
+.cl-formButtonPrimary:hover {
+  background-color: #4f46e5 !important;
+}
+
+/* ---------- Social (Google) button fix ---------- */
+.cl-socialButtonsBlockButton {
+  background-color: #1e293b !important;
+  border: 1.5px solid #475569 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.cl-socialButtonsBlockButton:hover {
+  background-color: #334155 !important;
+}
+
+.cl-socialButtonsBlockButtonText,
+.cl-socialButtonsBlockButtonText p,
+.cl-socialButtonsBlockButtonText span {
+  color: #ffffff !important;
+  opacity: 1 !important;
+}
+
+.cl-socialButtonsProviderIcon,
+.cl-socialButtonsProviderIcon svg,
+.cl-socialButtonsBlockButton img,
+.cl-socialButtonsBlockButton svg {
+  opacity: 1 !important;
+  filter: none !important;
+}
+
+.cl-socialButtonsBlockButton * {
+  opacity: 1 !important;
+}
+
+/* ---------- Divider (OR line) ---------- */
+.cl-dividerText,
+.cl-dividerRow p,
+.cl-dividerRow span {
+  color: #94a3b8 !important;
+}
+
+.cl-dividerLine {
+  background-color: #334155 !important;
+}
+
+/* ---------- Footer hide ---------- */
+.cl-footer,
+.cl-internal-b382ii {
+  display: none !important;
+}
+
+/* ---------- Back link fix ---------- */
+.cl-backLink,
+.cl-backRow button,
+.cl-backRow a,
+.cl-alternativeMethodsBlockButton {
+  color: #a5b4fc !important;
+  opacity: 1 !important;
+}
+
+.cl-backLink:hover,
+.cl-backRow button:hover {
+  color: #c7d2fe !important;
+}
+
+/* fallback: agar upar wale specific class match na ho */
+button:has(> svg + span) {
+  color: inherit;
 }
