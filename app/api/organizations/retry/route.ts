@@ -170,6 +170,24 @@ export async function POST(req: Request) {
 
     const deployKey = keyData.deployKey;
 
+async function generateHmacSha256(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
     // 3. Re-run CLI code deployment
     let defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
@@ -178,6 +196,9 @@ export async function POST(req: Request) {
     if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
       defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
     }
+
+    const provisioningSecret =
+      process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
 
     const provisioningSecret =
       process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
@@ -251,6 +272,12 @@ export async function POST(req: Request) {
 
     const storeClient = new ConvexHttpClient(deploymentUrl);
     let storeOrgId: any;
+
+    const timestamp = Date.now();
+    const provisioningToken = await generateHmacSha256(
+      provisioningSecret,
+      `${org.slug}:${timestamp}`
+    );
 
     try {
       const existingStoreOrg: any = await storeClient.query(

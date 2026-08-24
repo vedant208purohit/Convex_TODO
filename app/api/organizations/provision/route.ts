@@ -282,6 +282,24 @@ export async function POST(req: Request) {
       defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
     }
 
+async function generateHmacSha256(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
     console.log(
       `Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`
     );
@@ -366,6 +384,12 @@ export async function POST(req: Request) {
     // 10 & 11. Create Default App Organization in store DB with ownerClerkId & HMAC token
     const storeClient = new ConvexHttpClient(deploymentUrl);
     let storeOrgId: any;
+
+    const timestamp = Date.now();
+    const provisioningToken = await generateHmacSha256(
+      provisioningSecret,
+      `${slug}:${timestamp}`
+    );
 
     try {
       storeOrgId = await storeClient.mutation("organizations:create" as any, {

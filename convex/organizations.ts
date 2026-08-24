@@ -79,10 +79,17 @@ export const create = mutation({
         if (existingByLegacy.status === "failed") {
           await ctx.db.patch(existingByLegacy._id, {
             status: "provisioning",
+            ownerClerkId: args.ownerClerkId || existingByLegacy.ownerClerkId,
             errorMessage: undefined,
             updatedAt: Date.now(),
           });
           return existingByLegacy._id;
+        }
+        if (args.ownerClerkId && !existingByLegacy.ownerClerkId) {
+          await ctx.db.patch(existingByLegacy._id, {
+            ownerClerkId: args.ownerClerkId,
+            updatedAt: Date.now(),
+          });
         }
         return existingByLegacy._id;
       }
@@ -105,6 +112,7 @@ export const create = mutation({
       } else if (existingBySlug.status === "failed") {
         await ctx.db.patch(existingBySlug._id, {
           status: "provisioning",
+          ownerClerkId: args.ownerClerkId || existingBySlug.ownerClerkId,
           errorMessage: undefined,
           updatedAt: Date.now(),
         });
