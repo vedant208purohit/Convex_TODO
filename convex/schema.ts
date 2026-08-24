@@ -188,4 +188,19 @@ export default defineSchema({
     name: v.string(),
     createdAt: v.number(),
   }).index("by_org", ["organizationId"]),
-}, { schemaValidation: false });
+
+  // Organization Users Domain Table
+  organizationUsers: defineTable({
+    organizationId: v.id("organizations"),
+    userId: v.string(), // Clerk User ID (identity.subject)
+    userType: v.array(v.string()), // Array of string role/type tags (e.g. ["admin", "orders", "inventory"])
+    userPermission: v.optional(v.any()), // JSON object mapping role tags to CRUD boolean flags
+    createdAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()), // Soft-deletion timestamp
+  })
+    .index("by_user", ["userId"])
+    .index("by_org", ["organizationId"])
+    .index("by_user_and_org", ["userId", "organizationId"]),
+});
+
