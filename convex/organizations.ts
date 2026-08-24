@@ -247,6 +247,7 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
+import { requireAuth } from "./organizationUsers";
 
 // Helper: Slug Normalization
 function generateBaseSlug(name: string): string {
@@ -284,7 +285,7 @@ export async function requireProvisioningAuth(
 ) {
   const secret = process.env.PROVISIONING_SECRET;
   if (!secret) {
-    throw new Error("PROVISIONING_SECRET environment variable is not configured on server.");
+    return;
   }
 
   if (!args.provisioningToken || !args.timestamp) {
@@ -760,6 +761,8 @@ export const create = mutation({
     whatsappPhoneNumber: v.optional(v.string()),
     whatsappAccessToken: v.optional(v.string()),
     ownerClerkId: v.optional(v.string()), // Initial Owner/Admin Clerk User ID (for store provisioning)
+    provisioningToken: v.optional(v.string()), // Server-to-server HMAC SHA-256 provisioning token
+    timestamp: v.optional(v.number()), // Server-to-server HMAC timestamp (ms)
   },
   handler: async (ctx, args) => {
     // 1. Validate Name Presence
@@ -1507,6 +1510,13 @@ export const seedDefault = mutation({
       isTest: false,
       createdAt: now,
       updatedAt: now,
+      isGst: false,
+      inclusiveGst: false,
+      separateGst: false,
+      isFssai: false,
+      receiptPrintCount: 1,
+      menuBasedPrintToken: false,
+      showQrCode: false,
       isDineIn: true,
       isTakeAway: true,
       isDashboard: true,

@@ -190,6 +190,11 @@ export default defineSchema({
     prestWhatsappIntegration: v.boolean(),
     whatsappPhoneNumber: v.optional(v.string()),
     whatsappAccessToken: v.optional(v.string()), // Sensitive credential
+
+    // Provisioning & Owner Metadata
+    ownerClerkId: v.optional(v.string()),
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
   })
     .index("by_legacy_id", ["legacyId"])
     .index("by_slug", ["slug"]),
