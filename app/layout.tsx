@@ -1,5 +1,10 @@
 import "./globals.css";
-import ConvexClientProvider from "./ConvexClientProvider";
+import AppProviders from "./AppProviders";
+
+export const metadata = {
+  title: "Store POS Application",
+  description: "Store POS with Clerk authentication",
+};
 
 export default function RootLayout({
   children,
@@ -7,11 +12,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body>
-        <ConvexClientProvider>
-          {children}
-        </ConvexClientProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );
