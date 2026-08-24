@@ -143,4 +143,45 @@ describe("Master App Organization Domain Tests", () => {
     const invalidRes = await t.query(api.organizations.get, { id: "invalid-id-string" });
     expect(invalidRes).toBeNull();
   });
+
+  test("7. Owner Clerk ID is persisted on Master organization creation", async () => {
+    const t = convexTest(schema, modules);
+
+    const masterOrgId = await t.mutation(api.organizations.create, {
+      name: "Owner Test Kitchen",
+      slug: "owner-test-kitchen",
+      ownerClerkId: "user_clerk_owner_123",
+    });
+
+    const org = await t.query(api.organizations.get, { id: masterOrgId });
+    expect(org?.ownerClerkId).toBe("user_clerk_owner_123");
+  });
+
+  test("8. Re-provisioning or retry preserves the original ownerClerkId", async () => {
+    const t = convexTest(schema, modules);
+
+    const masterOrgId = await t.mutation(api.organizations.create, {
+      name: "Retry Owner Kitchen",
+      slug: "retry-owner-kitchen",
+      ownerClerkId: "user_original_owner_999",
+    });
+
+    // Mark failed
+    await t.mutation(api.organizations.updateStatus, {
+      id: masterOrgId,
+      status: "failed",
+      errorMessage: "Network error",
+    });
+
+    // Retry mutation with ownerClerkId specified or omitted preserves original ownerClerkId
+    const retryOrgId = await t.mutation(api.organizations.create, {
+      name: "Retry Owner Kitchen",
+      slug: "retry-owner-kitchen",
+    });
+
+    expect(retryOrgId).toBe(masterOrgId);
+    const org = await t.query(api.organizations.get, { id: masterOrgId });
+    expect(org?.ownerClerkId).toBe("user_original_owner_999");
+    expect(org?.status).toBe("provisioning");
+  });
 });

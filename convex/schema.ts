@@ -6,6 +6,7 @@ export default defineSchema({
     name: v.string(),
     slug: v.string(),
     legacyOrganizationId: v.optional(v.string()), // PostgreSQL Organization UUID
+    ownerClerkId: v.optional(v.string()), // Clerk User ID of restaurant owner/admin
     projectId: v.optional(v.string()),
     deploymentId: v.optional(v.string()),
     deploymentUrl: v.optional(v.string()),
