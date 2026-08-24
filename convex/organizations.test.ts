@@ -184,7 +184,7 @@ describe("Organization Domain Business Logic Tests", () => {
     expect(org?.dineinPrepaid).toBe(true);
     expect(org?.dineinPospaid).toBe(false);
 
-    // Update to postpaid (Interactive Auth)
+    // Update to postpaid
     await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
       id: orgId,
       dineinPospaid: true,
