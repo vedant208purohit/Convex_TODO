@@ -258,6 +258,54 @@ function generateBaseSlug(name: string): string {
   return normalized || "org";
 }
 
+// Helper: Web Crypto HMAC SHA-256 Signature Generator
+export async function generateHmacSha256(secret: string, message: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const keyData = encoder.encode(secret);
+  const messageData = encoder.encode(message);
+
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
+  const hashArray = Array.from(new Uint8Array(signature));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Helper: Provisioning Authentication Guard Enforcer (Master -> Default Server-to-Server)
+export async function requireProvisioningAuth(
+  ctx: QueryCtx | MutationCtx,
+  args: { slug: string; provisioningToken?: string; timestamp?: number }
+) {
+  const secret = process.env.PROVISIONING_SECRET;
+  if (!secret) {
+    throw new Error("PROVISIONING_SECRET environment variable is not configured on server.");
+  }
+
+  if (!args.provisioningToken || !args.timestamp) {
+    throw new Error("Unauthenticated provisioning request: missing token or timestamp.");
+  }
+
+  // 1. Time Window Check (5-minute expiration / drift threshold)
+  const now = Date.now();
+  const maxDriftMs = 5 * 60 * 1000;
+  if (Math.abs(now - args.timestamp) > maxDriftMs) {
+    throw new Error("Expired or invalid provisioning token timestamp.");
+  }
+
+  // 2. HMAC SHA-256 Signature Verification
+  const expectedToken = await generateHmacSha256(secret, `${args.slug}:${args.timestamp}`);
+
+  if (args.provisioningToken !== expectedToken) {
+    throw new Error("Invalid provisioning authentication token.");
+  }
+}
+
 // Helper: Unique Slug Generation
 async function resolveUniqueSlug(
   ctx: QueryCtx | MutationCtx,
@@ -293,6 +341,15 @@ function stripSecrets(org: Doc<"organizations"> | null) {
   if (!org) return null;
   const { whatsappAccessToken, ...safeOrg } = org;
   return safeOrg;
+}
+
+// Helper: Authentication Guard Enforcer
+async function requireAuth(ctx: QueryCtx | MutationCtx) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error("Unauthenticated");
+  }
+  return identity;
 }
 
 // Helper: Reusable Organization Business Rule Validation
@@ -418,6 +475,7 @@ export const list = query({
 export const getWithSecrets = query({
   args: { id: v.union(v.id("organizations"), v.string()) },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     if (!args.id || args.id.trim() === "") return null;
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
@@ -547,6 +605,13 @@ export const create = mutation({
       const baseSlug = generateBaseSlug(args.name);
       finalSlug = await resolveUniqueSlug(ctx, baseSlug);
     }
+
+    // Enforce Server-to-Server Provisioning Authentication Guard
+    await requireProvisioningAuth(ctx, {
+      slug: finalSlug,
+      provisioningToken: args.provisioningToken,
+      timestamp: args.timestamp,
+    });
 
     const now = Date.now();
 
@@ -820,6 +885,7 @@ export const update = mutation({
     whatsappAccessToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
       throw new Error("Organization not found");
@@ -941,6 +1007,7 @@ export const update = mutation({
 export const liveOrganization = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const org = await ctx.db.get(args.id);
     if (!org || org.deletedAt !== undefined) {
       throw new Error("Organization not found");
@@ -960,12 +1027,25 @@ export const liveOrganization = mutation({
 
 // Store Initialization & Seeding Mutation (`initializeStore`)
 export const initializeStore = mutation({
-  args: { id: v.id("organizations") },
+  args: {
+    id: v.id("organizations"),
+    slug: v.optional(v.string()),
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
+  },
   handler: async (ctx, args) => {
     const org = await ctx.db.get(args.id);
     if (!org || org.deletedAt !== undefined) {
       throw new Error("Organization not found");
     }
+
+    // Enforce Server-to-Server Provisioning Authentication Guard
+    const targetSlug = args.slug || org.slug;
+    await requireProvisioningAuth(ctx, {
+      slug: targetSlug,
+      provisioningToken: args.provisioningToken,
+      timestamp: args.timestamp,
+    });
 
     const now = Date.now();
 
@@ -1084,6 +1164,7 @@ export const initializeStore = mutation({
 export const remove = mutation({
   args: { id: v.id("organizations") },
   handler: async (ctx, args) => {
+    await requireAuth(ctx);
     const org = await ctx.db.get(args.id);
     if (!org || org.deletedAt !== undefined) {
       throw new Error("Organization not found");
