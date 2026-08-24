@@ -170,35 +170,35 @@ export async function POST(req: Request) {
 
     const deployKey = keyData.deployKey;
 
-async function generateHmacSha256(secret: string, message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(message);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
     // 3. Re-run CLI code deployment
     let defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
       : path.resolve(process.cwd(), "../pos-default");
 
     if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
-      defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
+      const defaultAppAltPath = path.resolve(process.cwd(), "../Default app");
+      if (fs.existsSync(defaultAppAltPath) && fs.existsSync(path.join(defaultAppAltPath, "convex"))) {
+        defaultAppPath = defaultAppAltPath;
+      } else {
+        defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
+      }
     }
 
-    const provisioningSecret =
-      process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
+    if (fs.existsSync(defaultAppPath) && !fs.existsSync(path.join(defaultAppPath, "package.json"))) {
+      fs.writeFileSync(
+        path.join(defaultAppPath, "package.json"),
+        JSON.stringify(
+          {
+            name: "default-app-convex",
+            version: "0.1.0",
+            private: true,
+            dependencies: { convex: "^1.18.0" },
+          },
+          null,
+          2
+        )
+      );
+    }
 
     const provisioningSecret =
       process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
@@ -272,12 +272,6 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
 
     const storeClient = new ConvexHttpClient(deploymentUrl);
     let storeOrgId: any;
-
-    const timestamp = Date.now();
-    const provisioningToken = await generateHmacSha256(
-      provisioningSecret,
-      `${org.slug}:${timestamp}`
-    );
 
     try {
       const existingStoreOrg: any = await storeClient.query(

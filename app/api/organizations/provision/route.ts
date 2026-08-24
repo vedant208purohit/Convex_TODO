@@ -103,7 +103,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. Resolve ownerClerkId securely (provided explicit ID or authenticated caller ID)
+    // 2. Resolve ownerClerkId securely
     const ownerClerkId =
       providedOwnerClerkId &&
       typeof providedOwnerClerkId === "string" &&
@@ -279,26 +279,29 @@ export async function POST(req: Request) {
       : path.resolve(process.cwd(), "../pos-default");
 
     if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
-      defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
+      const defaultAppAltPath = path.resolve(process.cwd(), "../Default app");
+      if (fs.existsSync(defaultAppAltPath) && fs.existsSync(path.join(defaultAppAltPath, "convex"))) {
+        defaultAppPath = defaultAppAltPath;
+      } else {
+        defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
+      }
     }
 
-async function generateHmacSha256(secret: string, message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(message);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+    if (fs.existsSync(defaultAppPath) && !fs.existsSync(path.join(defaultAppPath, "package.json"))) {
+      fs.writeFileSync(
+        path.join(defaultAppPath, "package.json"),
+        JSON.stringify(
+          {
+            name: "default-app-convex",
+            version: "0.1.0",
+            private: true,
+            dependencies: { convex: "^1.18.0" },
+          },
+          null,
+          2
+        )
+      );
+    }
 
     console.log(
       `Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`
@@ -384,12 +387,6 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
     // 10 & 11. Create Default App Organization in store DB with ownerClerkId & HMAC token
     const storeClient = new ConvexHttpClient(deploymentUrl);
     let storeOrgId: any;
-
-    const timestamp = Date.now();
-    const provisioningToken = await generateHmacSha256(
-      provisioningSecret,
-      `${slug}:${timestamp}`
-    );
 
     try {
       storeOrgId = await storeClient.mutation("organizations:create" as any, {
