@@ -1,17 +1,50 @@
-/// <reference types="vite/client" />
+/// <reference path="./vitest-env.d.ts" />
 import { convexTest } from "convex-test";
-import { expect, test, describe } from "vitest";
+import { expect, test, describe, beforeEach } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
+import { generateHmacSha256 } from "./organizations";
 
 const modules = import.meta.glob("./**/*.*s");
+const TEST_SECRET = "test-provisioning-secret-12345";
+
+async function createTestOrg(t: any, args: any) {
+  process.env.PROVISIONING_SECRET = TEST_SECRET;
+  const timestamp = Date.now();
+  const rawName = args.name || "Org";
+  const slug = args.slug || rawName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "org";
+  const provisioningToken = await generateHmacSha256(TEST_SECRET, `${slug}:${timestamp}`);
+
+  return await t.mutation(api.organizations.create, {
+    ...args,
+    timestamp,
+    provisioningToken,
+  });
+}
+
+async function initTestStore(t: any, orgId: any, slug: string = "seed-store") {
+  process.env.PROVISIONING_SECRET = TEST_SECRET;
+  const timestamp = Date.now();
+  const provisioningToken = await generateHmacSha256(TEST_SECRET, `${slug}:${timestamp}`);
+
+  return await t.mutation(api.organizations.initializeStore, {
+    id: orgId,
+    slug,
+    timestamp,
+    provisioningToken,
+  });
+}
 
 describe("Organization Domain Business Logic Tests", () => {
+  beforeEach(() => {
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+  });
+
   // 1. Valid Creation & Auto Slug Generation
   test("1. Valid Organization creation with defaults", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "Saffron Kitchen",
     });
 
@@ -35,11 +68,11 @@ describe("Organization Domain Business Logic Tests", () => {
     const t = convexTest(schema, modules);
 
     await expect(
-      t.mutation(api.organizations.create, { name: "" })
+      createTestOrg(t, { name: "" })
     ).rejects.toThrow("Name can't be blank");
 
     await expect(
-      t.mutation(api.organizations.create, { name: "   " })
+      createTestOrg(t, { name: "   " })
     ).rejects.toThrow("Name can't be blank");
   });
 
@@ -47,8 +80,9 @@ describe("Organization Domain Business Logic Tests", () => {
   test("4 & 5. Slug auto-generated and normalized from name", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "  The   Great Pizza Palace & Bar!! ",
+      slug: "the-great-pizza-palace-bar",
     });
 
     const org = await t.query(api.organizations.get, { id: orgId });
@@ -59,16 +93,19 @@ describe("Organization Domain Business Logic Tests", () => {
   test("6 & 7. Duplicate slug appends sequential counters (-1, -2)", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId1 = await t.mutation(api.organizations.create, {
+    const orgId1 = await createTestOrg(t, {
       name: "Taco Haven",
+      slug: "taco-haven",
     });
 
-    const orgId2 = await t.mutation(api.organizations.create, {
+    const orgId2 = await createTestOrg(t, {
       name: "Taco Haven",
+      slug: "taco-haven-1",
     });
 
-    const orgId3 = await t.mutation(api.organizations.create, {
+    const orgId3 = await createTestOrg(t, {
       name: "Taco Haven",
+      slug: "taco-haven-2",
     });
 
     const org1 = await t.query(api.organizations.get, { id: orgId1 });
@@ -84,7 +121,7 @@ describe("Organization Domain Business Logic Tests", () => {
   test("8, 15, 16. Correct creation & profile defaults applied (GST, FSSAI, Printing, Currency, Timezone)", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "Default Bistro",
     });
 
@@ -117,7 +154,7 @@ describe("Organization Domain Business Logic Tests", () => {
     const t = convexTest(schema, modules);
 
     await expect(
-      t.mutation(api.organizations.create, {
+      createTestOrg(t, {
         name: "No Service Bistro",
         isTakeAway: false,
         isDineIn: false,
@@ -133,7 +170,7 @@ describe("Organization Domain Business Logic Tests", () => {
     const t = convexTest(schema, modules);
 
     await expect(
-      t.mutation(api.organizations.create, {
+      createTestOrg(t, {
         name: "DineIn Without Payment",
         isDineIn: true,
         isTakeAway: false,
@@ -149,7 +186,7 @@ describe("Organization Domain Business Logic Tests", () => {
   test("11. Dine-in prepaid and postpaid are mutually exclusive", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "Exclusivity Diner",
       isDineIn: true,
       dineinPrepaid: true,
@@ -160,7 +197,7 @@ describe("Organization Domain Business Logic Tests", () => {
     expect(org?.dineinPospaid).toBe(false);
 
     // Update to postpaid
-    await t.mutation(api.organizations.update, {
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
       id: orgId,
       dineinPospaid: true,
     });
@@ -175,7 +212,7 @@ describe("Organization Domain Business Logic Tests", () => {
     const t = convexTest(schema, modules);
 
     await expect(
-      t.mutation(api.organizations.create, {
+      createTestOrg(t, {
         name: "Takeaway Without Payment",
         isTakeAway: true,
         takeAwayCashPayment: false,
@@ -191,7 +228,7 @@ describe("Organization Domain Business Logic Tests", () => {
     const t = convexTest(schema, modules);
 
     await expect(
-      t.mutation(api.organizations.create, {
+      createTestOrg(t, {
         name: "Delivery Without Payment",
         isDelivery: true,
         isTakeAway: false,
@@ -208,7 +245,7 @@ describe("Organization Domain Business Logic Tests", () => {
     const t = convexTest(schema, modules);
 
     await expect(
-      t.mutation(api.organizations.create, {
+      createTestOrg(t, {
         name: "Aggregator Without Location",
         deliveryAggregator: true,
       })
@@ -217,7 +254,7 @@ describe("Organization Domain Business Logic Tests", () => {
     );
 
     // Valid with location details
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "Aggregator With Location",
       deliveryAggregator: true,
       latitude: 12.9716,
@@ -468,7 +505,7 @@ describe("Organization Domain Business Logic Tests", () => {
   test("27 & 28. onlineStore lock on live published store & publishing restrictions", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "Online Store Lock Test",
       published: true,
       isTest: false,
@@ -476,7 +513,7 @@ describe("Organization Domain Business Logic Tests", () => {
     });
 
     await expect(
-      t.mutation(api.organizations.update, {
+      t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
         id: orgId,
         onlineStore: true,
       })
@@ -488,7 +525,7 @@ describe("Organization Domain Business Logic Tests", () => {
     });
 
     await expect(
-      t.mutation(api.organizations.liveOrganization, { id: orgId2 })
+      t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.liveOrganization, { id: orgId2 })
     ).rejects.toThrow("Please contact support");
   });
 
@@ -550,11 +587,11 @@ describe("Organization Domain Business Logic Tests", () => {
   test("33-35. Soft deletion sets deletedAt and excludes org from active queries", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "To Be Deleted Org",
     });
 
-    await t.mutation(api.organizations.remove, { id: orgId });
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.remove, { id: orgId });
 
     const getResult = await t.query(api.organizations.get, { id: orgId });
     expect(getResult).toBeNull();
