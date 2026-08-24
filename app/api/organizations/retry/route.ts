@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { exec } from "child_process";
 import path from "path";
 import util from "util";
+import fs from "fs";
 
 const execPromise = util.promisify(exec);
 
@@ -154,11 +155,20 @@ export async function POST(req: Request) {
     const deployKey = keyData.deployKey;
 
     // 3. Re-run CLI code deployment
-    const defaultAppPath = process.env.DEFAULT_APP_PATH
+    let defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
-      : path.resolve(process.cwd(), "../Default app");
+      : path.resolve(process.cwd(), "../pos-default");
+
+    // If local directory doesn't exist (e.g. on Vercel production), fallback to the bundled copy
+    if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
+      defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
+    }
 
     try {
+      const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
+      const useLocalCli = fs.existsSync(cliPath);
+      const convexCmd = useLocalCli ? `"${process.execPath}" "${cliPath}"` : "npx convex";
+
       const execOptions: any = {
         cwd: defaultAppPath,
         env: {
@@ -172,8 +182,8 @@ export async function POST(req: Request) {
         execOptions.shell = process.env.ComSpec;
       }
 
-      await execPromise(`npx convex env set CLERK_JWT_ISSUER_DOMAIN ${defaultClerkIssuer}`, execOptions);
-      await execPromise("npx convex dev --once --typecheck=disable --tail-logs disable", {
+      await execPromise(`${convexCmd} env set CLERK_JWT_ISSUER_DOMAIN ${defaultClerkIssuer}`, execOptions);
+      await execPromise(`${convexCmd} dev --once --typecheck=disable --tail-logs disable`, {
         ...execOptions,
       });
     } catch (deployErr: any) {
