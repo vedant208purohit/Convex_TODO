@@ -241,6 +241,16 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
 
+  organizationFeatures: defineTable({
+    featureKey: v.string(),
+    active: v.boolean(),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_feature_key", ["featureKey"])
+    .index("by_active", ["active"]),
+  
   // Organization Languages Domain Table
   organizationLanguages: defineTable({
     legacyId: v.optional(v.string()),
@@ -254,4 +264,5 @@ export default defineSchema({
     .index("by_code", ["code"])
     .index("by_legacy_id", ["legacyId"]),
 });
+
 
