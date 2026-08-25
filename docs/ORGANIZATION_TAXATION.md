@@ -70,3 +70,46 @@ npx vitest run
 2. **USA (US)**: $100.00 item ➔ 8.5% Exclusive Sales Tax ($8.50 tax, final price $108.50). Currency: `USD` (`$`).
 3. **UK**: £12.00 item ➔ 20% Inclusive VAT (£2.00 tax, final price £12.00). Currency: `GBP` (`£`).
 4. **Item `isGst = false`**: $50.00 tax-exempt item ➔ 0 tax, final price $50.00.
+
+---
+
+## 🎨 Frontend AI Implementation Tasks & Assignments
+
+This section outlines the exact React/Next.js tasks assigned to Frontend AI agents or UI engineers when building store taxation interfaces:
+
+### 🎯 Task 1: Store Country Onboarding & Tax Setup Wizard
+* **Goal**: Build a store onboarding widget allowing admins to select their store country and auto-provision taxation & currency settings.
+* **Convex API Directives**:
+  * Get settings: `useQuery(api.taxation.getStoreTaxSettings, { organizationId })`
+  * Run auto setup: `useMutation(api.taxation.autoSetupStoreTaxation)` (`{ organizationId, countryCode: "IN" | "US" | "CA" | "AU" | "UK", stateCode }`)
+* **UI Deliverables**:
+  * Country Selector Dropdown ("India 🇮🇳", "USA 🇺🇸", "Canada 🇨🇦", "Australia 🇦🇺", "United Kingdom 🇬🇧").
+  * ISO Currency Indicator (`₹ INR`, `$ USD`, `£ GBP`, `$ CAD`, `$ AUD`).
+  * "Auto-Configure Country Taxes" action button with success notification.
+
+---
+
+### 🎯 Task 2: Tax Group Management Admin Panel
+* **Goal**: Build an admin screen to manage tax groups, toggle `inclusive` vs `exclusive` modes, and view split component lines.
+* **Convex API Directives**:
+  * List tax groups: `useQuery(api.taxation.listTaxGroups, { organizationId })`
+  * Create tax group: `useMutation(api.taxation.createTaxGroup)` (`{ organizationId, name, taxMode: "inclusive" | "exclusive", componentIds }`)
+  * Set default group: `useMutation(api.taxation.setDefaultTaxGroup)` (`{ id: groupId }`)
+* **UI Deliverables**:
+  * Tax Group Cards showing mode badge (`Tax Inclusive` vs `Tax Exclusive`) and component list (e.g. `CGST: 2.5%`, `SGST: 2.5%`).
+  * Tax Group Creation Form with mode toggle switch.
+
+---
+
+### 🎯 Task 3: POS Cart & Printed Receipt Tax Breakdown
+* **Goal**: Display accurate tax calculations on checkout screens, cart line items, and printed receipts.
+* **Convex API Directives**:
+  * Query tax calculation: `useQuery(api.taxation.calculateItemTax, { organizationId, price, isGst, taxGroupId })`
+  * Use `tax_info` summary object returned in `getOrganizationMenu` query.
+* **UI Deliverables**:
+  * Cart Line Item: Badge indicating `(Tax Included)` for inclusive mode or `+ Tax` for exclusive mode.
+  * Checkout & Printed Receipt Summary Box:
+    * Subtotal
+    * Split Tax Component Lines (e.g., `CGST (2.5%): ₹6.25`, `SGST (2.5%): ₹6.25`, or `State Sales Tax (6.0%): $6.00`)
+    * Final Amount Payable
+

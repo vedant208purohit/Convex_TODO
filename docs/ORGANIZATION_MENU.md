@@ -254,3 +254,46 @@ export function RestaurantMenu({ organizationId }: { organizationId: string }) {
   );
 }
 ```
+
+---
+
+## 🎨 Frontend AI Implementation Tasks & Assignments
+
+This section outlines the exact React/Next.js tasks assigned to Frontend AI agents or UI engineers when building the store menu interface:
+
+### 🎯 Task 1: Store Multi-Menu Switcher & Management UI
+* **Goal**: Build an admin interface to view all store menus, switch default active menus, and create new menus.
+* **Convex API Directives**:
+  * Read menus: `useQuery(api.menu.listMenus, { organizationId })`
+  * Create menu: `useMutation(api.menu.createMenu)` (`{ organizationId, name, description, isDefault }`)
+  * Switch default: `useMutation(api.menu.setDefaultMenu)` (`{ id: menuId }`)
+* **UI Deliverables**:
+  * Top navigation tabs / dropdown selector listing all available store menus ("Breakfast", "Main Menu", "Bar Menu").
+  * Active Default Menu badge indicator (`Default Active`).
+  * "Create New Menu" modal dialog with name, description, and "Set as Default" toggle.
+
+---
+
+### 🎯 Task 2: Store POS & Digital Customer Menu Screen
+* **Goal**: Render the complete nested category and item menu tree with search and dietary attribute filters.
+* **Convex API Directives**:
+  * Query menu tree: `useQuery(api.menu.getOrganizationMenu, { organizationId, menuId, search, isVeg, isSpicy })`
+* **UI Deliverables**:
+  * Category navigation bar (sticky sidebar or horizontal tabs).
+  * Search input bar (live filtering by item name or description substring).
+  * Dietary Filter Toggles (`Is Veg Only`, `Is Spicy Only`).
+  * Item Cards displaying:
+    * `name`, `display_price` (e.g. `₹250.00`), `description`.
+    * Dietary badges (`Veg` green icon, `Spicy` red flame icon, `Bestseller` star).
+    * `item_image_url` thumbnail.
+    * Tax indicator badge (`Tax Included` vs `+ Tax`).
+
+---
+
+### 🎯 Task 3: Item Add-Ons & Customizations Modal
+* **Goal**: Display customization groups when an item is selected for the cart.
+* **UI Deliverables**:
+  * Modal drawer displaying customization groups (`Add-Ons` vs `Preparations`).
+  * Enforce group rules: `required: true` (must pick at least 1 option) and `max_selected` (checkbox/radio input bounds).
+  * Display option extra price (`+ ₹30.00`).
+
