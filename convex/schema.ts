@@ -240,5 +240,18 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
+
+  // Organization Languages Domain Table
+  organizationLanguages: defineTable({
+    legacyId: v.optional(v.string()),
+    name: v.string(),
+    code: v.string(),
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_code", ["code"])
+    .index("by_legacy_id", ["legacyId"]),
 });
 
