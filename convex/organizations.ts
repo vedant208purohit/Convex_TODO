@@ -1475,6 +1475,19 @@ export const initializeStore = mutation({
     // 7. Default Organization Feature Flags Seeding (Idempotent)
     await initializeDefaultsHelper(ctx);
 
+    // 8. Default Organization Layout Seeding (Idempotent)
+    const existingLayouts = await ctx.db.query("organizationLayouts").collect();
+    const activeIndoorDineIn = existingLayouts.find(
+      (l) => l.deletedAt === undefined && l.name.toLowerCase() === "indoor-dinein"
+    );
+
+    if (!activeIndoorDineIn) {
+      await ctx.db.insert("organizationLayouts", {
+        name: "Indoor-DineIn",
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     return { success: true };
   },

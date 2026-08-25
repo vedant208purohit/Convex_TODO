@@ -9,6 +9,8 @@
  */
 
 import type * as organizationFeatures from "../organizationFeatures.js";
+import type * as organizationLanguages from "../organizationLanguages.js";
+import type * as organizationLayouts from "../organizationLayouts.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizations from "../organizations.js";
 
@@ -20,6 +22,8 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   organizationFeatures: typeof organizationFeatures;
+  organizationLanguages: typeof organizationLanguages;
+  organizationLayouts: typeof organizationLayouts;
   organizationUsers: typeof organizationUsers;
   organizations: typeof organizations;
 }>;

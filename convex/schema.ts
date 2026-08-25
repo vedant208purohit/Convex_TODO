@@ -263,6 +263,18 @@ export default defineSchema({
   })
     .index("by_code", ["code"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Layouts Domain Table
+  organizationLayouts: defineTable({
+    legacyId: v.optional(v.string()),
+    name: v.string(),
+    displayOrder: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_name", ["name"])
+    .index("by_legacy_id", ["legacyId"]),
 });
 
 
