@@ -6,8 +6,11 @@ import { exec } from "child_process";
 import path from "path";
 import util from "util";
 import fs from "fs";
+import { validateServerProvisioningConfig } from "@/lib/provisioningConfig";
 
 const execPromise = util.promisify(exec);
+
+export const maxDuration = 60;
 
 // HMAC SHA-256 Signature Generator
 async function generateHmacSha256(secret: string, message: string): Promise<string> {
@@ -30,6 +33,26 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
 
 export async function POST(req: Request) {
   try {
+    // 1. Validate required server environment variables upfront before processing
+    const configValidation = validateServerProvisioningConfig();
+    if (!configValidation.valid || !configValidation.config) {
+      return NextResponse.json(
+        {
+          error: "Server configuration missing.",
+          missing: configValidation.missing,
+        },
+        { status: 500 }
+      );
+    }
+
+    const {
+      managementToken,
+      teamId,
+      masterConvexUrl,
+      defaultClerkIssuer,
+      provisioningSecret,
+    } = configValidation.config;
+
     const {
       name,
       slug: providedSlug,
@@ -62,28 +85,7 @@ export async function POST(req: Request) {
       slug = `org-${Date.now()}`;
     }
 
-    const managementToken =
-      process.env.CONVEX_MANAGEMENT_API_KEY ||
-      process.env.CONVEX_MANAGEMENT_TOKEN;
-    const teamId = process.env.CONVEX_TEAM_ID;
-    const masterConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-
-    if (!managementToken || !teamId || !masterConvexUrl) {
-      return NextResponse.json(
-        {
-          error:
-            "Server configuration missing (CONVEX_MANAGEMENT_API_KEY, CONVEX_TEAM_ID, or NEXT_PUBLIC_CONVEX_URL).",
-        },
-        { status: 500 }
-      );
-    }
-
-    const defaultClerkIssuer =
-      process.env.DEFAULT_CLERK_JWT_ISSUER_DOMAIN?.trim() ||
-      process.env.CLERK_JWT_ISSUER_DOMAIN?.trim() ||
-      "https://neat-oyster-3072.clerk.accounts.dev";
-
-    // 1. Authenticate Master request via Clerk
+    // 2. Authenticate Master request via Clerk
     const authResult = await auth();
     const { getToken, userId: authenticatedUserId } = authResult;
     if (!authenticatedUserId) {
@@ -103,7 +105,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 2. Resolve ownerClerkId securely
+    // 3. Resolve ownerClerkId securely
     const ownerClerkId =
       providedOwnerClerkId &&
       typeof providedOwnerClerkId === "string" &&
@@ -116,7 +118,7 @@ export async function POST(req: Request) {
       convexClient.setAuth(token);
     }
 
-    // 3. Check existing organization in Master DB
+    // 4. Check existing organization in Master DB
     if (legacyOrganizationId) {
       const existingByLegacy: any = await convexClient.query(
         api.organizations.getByLegacyOrganizationId,
@@ -182,7 +184,7 @@ export async function POST(req: Request) {
       slug = `${slug}-${legacyOrganizationId.substring(0, 8)}`;
     }
 
-    // 4. Create/update Master organization record
+    // 5. Create/update Master organization record
     const orgId = await convexClient.mutation(api.organizations.create, {
       name: trimmedName,
       slug,
@@ -194,7 +196,7 @@ export async function POST(req: Request) {
       `Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"}, ownerClerkId: ${ownerClerkId || "none"})`
     );
 
-    // 5. Create Convex project via Management API
+    // 6. Create Convex project via Management API
     const createProjectRes = await fetch(
       `https://api.convex.dev/v1/teams/${teamId}/create_project`,
       {
@@ -238,7 +240,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // 6. Create Deploy Key
+    // 7. Create Deploy Key
     const createKeyRes = await fetch(
       `https://api.convex.dev/v1/deployments/${deploymentName}/create_deploy_key`,
       {
@@ -273,7 +275,7 @@ export async function POST(req: Request) {
 
     const deployKey = keyData.deployKey;
 
-    // 7 & 8. Configure Default deployment & deploy Default App
+    // 8. Configure Default deployment & deploy Default App
     let defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
       : path.resolve(process.cwd(), "../pos-default");
@@ -306,15 +308,6 @@ export async function POST(req: Request) {
     console.log(
       `Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`
     );
-
-    const provisioningSecret =
-      process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
-
-    if (process.env.NODE_ENV === "production" && !process.env.PROVISIONING_SECRET) {
-      console.warn(
-        "SECURITY WARNING: PROVISIONING_SECRET environment variable is not defined in production environment."
-      );
-    }
 
     try {
       const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
