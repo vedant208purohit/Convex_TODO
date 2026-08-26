@@ -164,7 +164,7 @@ export const updateStatus = mutation({
 
 export const updateStatusFromCallback = mutation({
   args: {
-    id: v.id("organizations"),
+    id: v.union(v.id("organizations"), v.string()),
     status: v.union(
       v.literal("provisioning"),
       v.literal("deploying"),
@@ -184,8 +184,12 @@ export const updateStatusFromCallback = mutation({
     if (args.secret !== expectedSecret && process.env.NODE_ENV !== "test") {
       throw new Error("Unauthorized: Invalid callback secret.");
     }
+    const normalizedId = ctx.db.normalizeId("organizations", args.id);
+    if (!normalizedId) {
+      throw new Error(`Invalid organization ID: ${args.id}`);
+    }
     const { id, secret, ...updates } = args;
-    await ctx.db.patch(id, {
+    await ctx.db.patch(normalizedId, {
       ...updates,
       updatedAt: Date.now(),
     });

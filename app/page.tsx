@@ -20,6 +20,28 @@ function DashboardContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [retryingOrgId, setRetryingOrgId] = useState<string | null>(null);
+
+  const handleRetry = async (masterOrgId: string) => {
+    setRetryingOrgId(masterOrgId);
+    setError(null);
+    try {
+      const res = await fetch("/api/organizations/retry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ masterOrgId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to retry provisioning");
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setRetryingOrgId(null);
+    }
+  };
+
   const handleCreateOrg = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
@@ -175,6 +197,11 @@ function DashboardContent() {
                             PROVISIONING
                           </span>
                         )}
+                        {org.status === "deploying" && (
+                          <span className="status-badge bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 text-[11px] font-semibold rounded">
+                            DEPLOYING
+                          </span>
+                        )}
                         {org.status === "failed" && (
                           <span className="status-badge status-failed" title={org.errorMessage}>
                             FAILED
@@ -197,8 +224,16 @@ function DashboardContent() {
                           >
                             Open Store POS →
                           </a>
+                        ) : org.status === "failed" ? (
+                          <button
+                            onClick={() => handleRetry(org._id)}
+                            disabled={retryingOrgId === org._id}
+                            className="text-xs px-2.5 py-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                          >
+                            {retryingOrgId === org._id ? "Retrying..." : "Retry Provisioning"}
+                          </button>
                         ) : (
-                          <span className="text-slate-600 text-xs">—</span>
+                          <span className="text-slate-500 text-xs animate-pulse">In Progress...</span>
                         )}
                       </td>
                     </tr>
