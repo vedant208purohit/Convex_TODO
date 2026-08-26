@@ -6,8 +6,11 @@ import { exec } from "child_process";
 import path from "path";
 import util from "util";
 import fs from "fs";
+import { validateServerProvisioningConfig } from "@/lib/provisioningConfig";
 
 const execPromise = util.promisify(exec);
+
+export const maxDuration = 60;
 
 // HMAC SHA-256 Signature Generator
 async function generateHmacSha256(secret: string, message: string): Promise<string> {
