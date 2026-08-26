@@ -63,6 +63,10 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log(
+      `[Retry Route] Starting retry for masterOrgId: ${masterOrgId} (name: "${org.name}", slug: "${org.slug}")`
+    );
+
     // Set status to provisioning during retry
     await masterClient.mutation(api.organizations.updateStatus, {
       id: org._id,
@@ -97,6 +101,7 @@ export async function POST(req: Request) {
         const errorMsg =
           projectData.message ||
           `Failed to create Convex project during retry (${createProjectRes.status}).`;
+        console.error(`[Retry Project Error] masterOrgId: ${org._id}, error: ${errorMsg}`);
         await masterClient.mutation(api.organizations.updateStatus, {
           id: org._id,
           status: "failed",
@@ -119,16 +124,30 @@ export async function POST(req: Request) {
     }
 
     // 3. Dispatch asynchronous deployment job
-    await triggerStoreDeployment({
-      masterOrgId: org._id,
-      name: org.name,
-      slug: org.slug,
-      legacyOrganizationId: org.legacyOrganizationId || undefined,
-      ownerClerkId: org.ownerClerkId || undefined,
-      projectId,
-      deploymentId: deploymentName,
-      deploymentUrl,
-    });
+    try {
+      await triggerStoreDeployment({
+        masterOrgId: org._id,
+        name: org.name,
+        slug: org.slug,
+        legacyOrganizationId: org.legacyOrganizationId || undefined,
+        ownerClerkId: org.ownerClerkId || undefined,
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+      });
+    } catch (dispatchErr: any) {
+      const errorMsg = `Retry deployment trigger failed: ${dispatchErr.message || "Unknown trigger error"}`;
+      console.error(`[Retry Dispatch Exception] masterOrgId: ${org._id}, error: ${errorMsg}`);
+      await masterClient.mutation(api.organizations.updateStatus, {
+        id: org._id,
+        status: "failed",
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+        errorMessage: errorMsg,
+      });
+      return NextResponse.json({ error: errorMsg }, { status: 500 });
+    }
 
     return NextResponse.json(
       {
@@ -148,7 +167,7 @@ export async function POST(req: Request) {
       { status: 202 }
     );
   } catch (err: any) {
-    console.error("Retry route error:", err);
+    console.error("[Retry Route Error]", err);
     return NextResponse.json(
       { error: err.message || "Internal server error during retry." },
       { status: 500 }

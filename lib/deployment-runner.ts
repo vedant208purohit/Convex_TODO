@@ -59,8 +59,14 @@ export async function runStoreDeployment(
     process.env.CLERK_JWT_ISSUER_DOMAIN?.trim() ||
     "https://neat-oyster-3072.clerk.accounts.dev";
 
+  console.log(
+    `[Runner Start] orgId: ${params.masterOrgId}, slug: "${params.slug}", deploymentId: "${params.deploymentId}"`
+  );
+
   if (!masterConvexUrl) {
-    throw new Error("NEXT_PUBLIC_CONVEX_URL is required.");
+    const errorMsg = "NEXT_PUBLIC_CONVEX_URL environment variable is required.";
+    console.error(`[Runner Config Error] ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   const masterClient = new ConvexHttpClient(masterConvexUrl);
@@ -70,6 +76,7 @@ export async function runStoreDeployment(
     errorMsg?: string
   ) => {
     try {
+      console.log(`[Runner Callback] Updating master orgId ${params.masterOrgId} status to: "${status}"`);
       await masterClient.mutation(api.organizations.updateStatusFromCallback, {
         id: params.masterOrgId as any,
         status,
@@ -79,8 +86,9 @@ export async function runStoreDeployment(
         errorMessage: errorMsg,
         secret: provisioningSecret,
       });
+      console.log(`[Runner Callback Success] Updated master orgId ${params.masterOrgId} status to: "${status}"`);
     } catch (err: any) {
-      console.error(`Failed to update master status to ${status}:`, err.message);
+      console.error(`[Runner Callback Error] Failed to update master status to ${status}:`, err.message || err);
     }
   };
 
@@ -91,6 +99,7 @@ export async function runStoreDeployment(
     // 2. Resolve or create deploy key
     let deployKey = process.env.CONVEX_DEPLOY_KEY;
     if (!deployKey && managementToken) {
+      console.log(`[Runner Deploy Key] Creating deployment key for ${params.deploymentId}...`);
       const createKeyRes = await fetch(
         `https://api.convex.dev/v1/deployments/${params.deploymentId}/create_deploy_key`,
         {
@@ -116,6 +125,7 @@ export async function runStoreDeployment(
         throw new Error(keyData.message || "Failed to generate deploy key for deployment.");
       }
       deployKey = keyData.deployKey;
+      console.log(`[Runner Deploy Key Success] Acquired deployment key.`);
     }
 
     if (!deployKey) {
@@ -135,6 +145,8 @@ export async function runStoreDeployment(
         defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
       }
     }
+
+    console.log(`[Runner Code Path] Deploying backend code from path: ${defaultAppPath}`);
 
     // 4. Run Convex CLI deployment
     const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
@@ -161,7 +173,7 @@ export async function runStoreDeployment(
         execOptions
       );
     } catch (envErr: any) {
-      console.warn(`Could not set CLERK_JWT_ISSUER_DOMAIN on deployment: ${envErr.message}`);
+      console.warn(`[Runner Env Warning] Could not set CLERK_JWT_ISSUER_DOMAIN: ${envErr.message}`);
     }
 
     try {
@@ -170,13 +182,15 @@ export async function runStoreDeployment(
         execOptions
       );
     } catch (envErr: any) {
-      console.warn(`Could not set PROVISIONING_SECRET on deployment: ${envErr.message}`);
+      console.warn(`[Runner Env Warning] Could not set PROVISIONING_SECRET: ${envErr.message}`);
     }
 
+    console.log(`[Runner CLI Deploy] Executing Convex CLI deployment for ${params.deploymentId}...`);
     await execPromise(
       `${convexCmd} dev --once --typecheck=disable --tail-logs disable`,
       execOptions
     );
+    console.log(`[Runner CLI Deploy Success] Convex deployment complete.`);
 
     // 5. Generate provisioning HMAC SHA-256 token
     const timestamp = Date.now();
@@ -186,6 +200,7 @@ export async function runStoreDeployment(
     );
 
     // 6. Connect Store Convex Client
+    console.log(`[Runner Store Init] Connecting store client to ${params.deploymentUrl}...`);
     const storeClient = new ConvexHttpClient(params.deploymentUrl);
     let storeOrgId: any;
 
@@ -197,6 +212,7 @@ export async function runStoreDeployment(
 
       if (existingStoreOrg) {
         storeOrgId = existingStoreOrg._id;
+        console.log(`[Runner Store Init] Found existing store orgId: ${storeOrgId}`);
       } else {
         storeOrgId = await storeClient.mutation("organizations:create" as any, {
           name: params.name,
@@ -216,6 +232,7 @@ export async function runStoreDeployment(
           provisioningToken,
           timestamp,
         });
+        console.log(`[Runner Store Init] Created new store orgId: ${storeOrgId}`);
       }
     } catch (createErr: any) {
       throw new Error(`Store organization creation failed: ${createErr.message}`);
@@ -229,17 +246,19 @@ export async function runStoreDeployment(
         provisioningToken,
         timestamp,
       });
+      console.log(`[Runner Store Init Success] Initialized store defaults.`);
     } catch (initErr: any) {
       throw new Error(`Store organization initialization failed: ${initErr.message}`);
     }
 
     // 8. Mark active
     await updateMasterStatus("active");
+    console.log(`[Runner Complete] Store provisioning fully active for orgId: ${params.masterOrgId}`);
     return { success: true };
   } catch (err: any) {
     const errorMsg = err.stderr || err.message || "Store deployment failed";
     const sanitizedError = errorMsg.replace(/prod:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+/g, "[REDACTED_DEPLOY_KEY]");
-    console.error("Store deployment runner error:", sanitizedError);
+    console.error(`[Runner Failure] orgId: ${params.masterOrgId}, error: ${sanitizedError}`);
     await updateMasterStatus("failed", sanitizedError);
     return { success: false, error: sanitizedError };
   }

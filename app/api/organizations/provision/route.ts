@@ -170,7 +170,7 @@ export async function POST(req: Request) {
     });
 
     console.log(
-      `Starting asynchronous provisioning for store organization: ${trimmedName} (slug: ${slug}, orgId: ${orgId})`
+      `[Provision Route] Starting asynchronous provisioning for orgId: ${orgId} (name: "${trimmedName}", slug: "${slug}")`
     );
 
     // 6. Create Convex project via Management API
@@ -195,6 +195,7 @@ export async function POST(req: Request) {
       const errorMsg =
         projectData.message ||
         `Failed to create Convex project (${createProjectRes.status}).`;
+      console.error(`[Provision Project Error] orgId: ${orgId}, error: ${errorMsg}`);
       await convexClient.mutation(api.organizations.updateStatus, {
         id: orgId,
         status: "failed",
@@ -209,6 +210,7 @@ export async function POST(req: Request) {
 
     if (!deploymentName || !deploymentUrl) {
       const errorMsg = "Convex project created, but no deployment was returned.";
+      console.error(`[Provision Metadata Error] orgId: ${orgId}, error: ${errorMsg}`);
       await convexClient.mutation(api.organizations.updateStatus, {
         id: orgId,
         status: "failed",
@@ -227,24 +229,38 @@ export async function POST(req: Request) {
     });
 
     // 8. Dispatch asynchronous deployment job (GitHub Actions / runner)
-    await triggerStoreDeployment({
-      masterOrgId: orgId,
-      name: trimmedName,
-      slug,
-      legacyOrganizationId: legacyOrganizationId || undefined,
-      ownerClerkId: ownerClerkId || undefined,
-      projectId,
-      deploymentId: deploymentName,
-      deploymentUrl,
-      phone,
-      addressLine1,
-      city,
-      state,
-      country,
-      zipCode,
-      latitude,
-      longitude,
-    });
+    try {
+      await triggerStoreDeployment({
+        masterOrgId: orgId,
+        name: trimmedName,
+        slug,
+        legacyOrganizationId: legacyOrganizationId || undefined,
+        ownerClerkId: ownerClerkId || undefined,
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+        phone,
+        addressLine1,
+        city,
+        state,
+        country,
+        zipCode,
+        latitude,
+        longitude,
+      });
+    } catch (dispatchErr: any) {
+      const errorMsg = `Deployment trigger failed: ${dispatchErr.message || "Unknown trigger error"}`;
+      console.error(`[Provision Dispatch Exception] orgId: ${orgId}, error: ${errorMsg}`);
+      await convexClient.mutation(api.organizations.updateStatus, {
+        id: orgId,
+        status: "failed",
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+        errorMessage: errorMsg,
+      });
+      return NextResponse.json({ error: errorMsg }, { status: 500 });
+    }
 
     // 9. Return immediate asynchronous provisioning response
     return NextResponse.json(
@@ -266,7 +282,7 @@ export async function POST(req: Request) {
       { status: 202 }
     );
   } catch (err: any) {
-    console.error("Provisioning route error:", err);
+    console.error("[Provision Route Error]", err);
     return NextResponse.json(
       {
         error:

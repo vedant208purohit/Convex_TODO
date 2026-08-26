@@ -49,7 +49,6 @@ describe("POS Master Store Provisioning Refactor Tests", () => {
     mockQuery.mockResolvedValue(null); // No existing org by slug/legacyId
     mockMutation.mockResolvedValue("master_org_id_1");
 
-    // Mock Convex Management API fetch
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
       if (url.toString().includes("create_project")) {
         return new Response(
@@ -82,7 +81,6 @@ describe("POS Master Store Provisioning Refactor Tests", () => {
     expect(data.organization.deploymentId).toBe("dev-taco-kitchen");
     expect(data.organization.deploymentUrl).toBe("https://dev-taco-kitchen.convex.cloud");
 
-    // Verify fetch was called once for create_project
     expect(fetchSpy).toHaveBeenCalledWith(
       expect.stringContaining("create_project"),
       expect.any(Object)
@@ -168,7 +166,6 @@ describe("POS Master Store Provisioning Refactor Tests", () => {
     expect(data.status).toBe("provisioning");
     expect(data.organization.projectId).toBe("proj_existing_failed");
 
-    // Must NOT call create_project because project metadata already exists
     expect(fetchSpy.mock.calls.length).toBe(0);
   });
 
@@ -250,9 +247,10 @@ describe("POS Master Store Provisioning Refactor Tests", () => {
     expect(responseStr.includes("deployKey")).toBe(false);
   });
 
-  test("8. triggerStoreDeployment dispatches to GitHub when GITHUB_TOKEN is present", async () => {
+  test("8. triggerStoreDeployment uses workflow_dispatch with target ref and correct repo", async () => {
     process.env.GITHUB_TOKEN = "ghp_mock_token_12345";
-    process.env.GITHUB_REPOSITORY = "owner/repo";
+    delete process.env.GITHUB_REPOSITORY;
+    process.env.VERCEL_GIT_COMMIT_REF = "feature/async-store-deployment";
 
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, { status: 204 })
@@ -270,12 +268,60 @@ describe("POS Master Store Provisioning Refactor Tests", () => {
     expect(result.dispatched).toBe(true);
     expect(result.target).toBe("github");
     expect(fetchSpy).toHaveBeenCalledWith(
-      "https://api.github.com/repos/owner/repo/dispatches",
+      "https://api.github.com/repos/joshidhruv/pos-master/actions/workflows/deploy-store-backend.yml/dispatches",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
           Authorization: "Bearer ghp_mock_token_12345",
         }),
+        body: expect.stringContaining('"ref":"feature/async-store-deployment"'),
+      })
+    );
+  });
+
+  test("9. Provision route marks org failed when dispatch throws exception", async () => {
+    mockQuery.mockResolvedValue(null);
+    mockMutation.mockResolvedValue("master_org_fail_1");
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      if (url.toString().includes("create_project")) {
+        return new Response(
+          JSON.stringify({
+            id: "proj_fail",
+            deploymentName: "dev-fail-store",
+            deploymentUrl: "https://dev-fail-store.convex.cloud",
+          }),
+          { status: 200 }
+        );
+      }
+      if (url.toString().includes("dispatches")) {
+        return new Response(JSON.stringify({ message: "Bad credentials" }), { status: 401 });
+      }
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+
+    process.env.GITHUB_TOKEN = "invalid_token";
+
+    const req = new Request("http://localhost:3000/api/organizations/provision", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "Fail Store",
+        slug: "fail-store",
+      }),
+    });
+
+    const res = await provisionHandler(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(data.error).toContain("Deployment trigger failed");
+
+    // Verify status was updated to failed on Master DB
+    expect(mockMutation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        id: "master_org_fail_1",
+        status: "failed",
       })
     );
   });
