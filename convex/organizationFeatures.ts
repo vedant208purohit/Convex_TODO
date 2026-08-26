@@ -1,5 +1,6 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { requireAdmin } from "./organizationUsers";
 
 /**
  * Audited Store Default Feature Catalog Keys & Initial States
@@ -113,33 +114,9 @@ export const toggle = mutation({
     active: v.boolean(),
   },
   handler: async (ctx, args) => {
-    // 1. Trusted Server-Side Identity & Authorization Guard
-    const identity = await ctx.auth.getUserIdentity();
-    let isAuthorizedAdmin = false;
-
-    if (identity) {
-      const role =
-        (identity as any).role ||
-        (identity as any).userType ||
-        (identity as any).globalRole;
-      if (
-        role === "admin" ||
-        role === "STORE_ADMIN" ||
-        role === "ORG_ADMIN" ||
-        role === "super_admin"
-      ) {
-        isAuthorizedAdmin = true;
-      }
-    } else if (process.env.NODE_ENV === "test") {
-      // Unauthenticated unit test fallback (when t.withIdentity is omitted)
-      isAuthorizedAdmin = true;
-    }
-
-    if (!isAuthorizedAdmin) {
-      throw new Error(
-        "Unauthorized: Only Store Admin users can toggle feature flags."
-      );
-    }
+    // Use the same membership-based admin guard as the rest of the store admin APIs.
+    // This keeps feature flag toggles aligned with the app's organizationUsers role model.
+    await requireAdmin(ctx);
 
     // 2. Feature Key Lookup
     const key = args.featureKey.trim();
