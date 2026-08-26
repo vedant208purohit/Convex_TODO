@@ -6,8 +6,11 @@ import { exec } from "child_process";
 import path from "path";
 import util from "util";
 import fs from "fs";
+import { validateServerProvisioningConfig } from "@/lib/provisioningConfig";
 
 const execPromise = util.promisify(exec);
+
+export const maxDuration = 60;
 
 // HMAC SHA-256 Signature Generator
 async function generateHmacSha256(secret: string, message: string): Promise<string> {
@@ -30,6 +33,26 @@ async function generateHmacSha256(secret: string, message: string): Promise<stri
 
 export async function POST(req: Request) {
   try {
+    // 1. Validate required server environment variables upfront before processing
+    const configValidation = validateServerProvisioningConfig();
+    if (!configValidation.valid || !configValidation.config) {
+      return NextResponse.json(
+        {
+          error: "Server configuration missing.",
+          missing: configValidation.missing,
+        },
+        { status: 500 }
+      );
+    }
+
+    const {
+      managementToken,
+      teamId,
+      masterConvexUrl,
+      defaultClerkIssuer,
+      provisioningSecret,
+    } = configValidation.config;
+
     const { userId, getToken } = await auth();
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized access." }, { status: 401 });
@@ -43,24 +66,6 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-
-    const managementToken =
-      process.env.CONVEX_MANAGEMENT_API_KEY ||
-      process.env.CONVEX_MANAGEMENT_TOKEN;
-    const teamId = process.env.CONVEX_TEAM_ID;
-    const masterConvexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
-
-    if (!managementToken || !teamId || !masterConvexUrl) {
-      return NextResponse.json(
-        { error: "Server configuration missing." },
-        { status: 500 }
-      );
-    }
-
-    const defaultClerkIssuer =
-      process.env.DEFAULT_CLERK_JWT_ISSUER_DOMAIN?.trim() ||
-      process.env.CLERK_JWT_ISSUER_DOMAIN?.trim() ||
-      "https://neat-oyster-3072.clerk.accounts.dev";
 
     const masterClient = new ConvexHttpClient(masterConvexUrl);
     const token = await getToken({ template: "convex" });
@@ -97,7 +102,7 @@ export async function POST(req: Request) {
     let deploymentName = org.deploymentId;
     let deploymentUrl = org.deploymentUrl;
 
-    // 1. Create project if missing
+    // 2. Create project if missing
     if (!projectId || !deploymentName || !deploymentUrl) {
       const createProjectRes = await fetch(
         `https://api.convex.dev/v1/teams/${teamId}/create_project`,
@@ -133,7 +138,7 @@ export async function POST(req: Request) {
       deploymentUrl = projectData.deploymentUrl;
     }
 
-    // 2. Generate deploy key
+    // 3. Generate deploy key
     const createKeyRes = await fetch(
       `https://api.convex.dev/v1/deployments/${deploymentName}/create_deploy_key`,
       {
@@ -170,7 +175,7 @@ export async function POST(req: Request) {
 
     const deployKey = keyData.deployKey;
 
-    // 3. Re-run CLI code deployment
+    // 4. Re-run CLI code deployment
     let defaultAppPath = process.env.DEFAULT_APP_PATH
       ? path.resolve(process.env.DEFAULT_APP_PATH)
       : path.resolve(process.cwd(), "../pos-default");
@@ -199,9 +204,6 @@ export async function POST(req: Request) {
         )
       );
     }
-
-    const provisioningSecret =
-      process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
 
     try {
       const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
@@ -263,7 +265,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // 4. Generate HMAC token & connect store client
+    // 5. Generate HMAC token & connect store client
     const timestamp = Date.now();
     const provisioningToken = await generateHmacSha256(
       provisioningSecret,
@@ -307,7 +309,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // 5. Initialize store defaults with HMAC token (Idempotent)
+    // 6. Initialize store defaults with HMAC token (Idempotent)
     try {
       await storeClient.mutation("organizations:initializeStore" as any, {
         id: storeOrgId,
@@ -328,7 +330,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // 6. Mark active
+    // 7. Mark active
     await masterClient.mutation(api.organizations.updateStatus, {
       id: org._id,
       status: "active",
