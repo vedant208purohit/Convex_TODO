@@ -1,0 +1,62 @@
+name: Deploy Store Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      masterOrgId:
+        description: 'Master Organization ID'
+        required: true
+      name:
+        description: 'Store Name'
+        required: true
+      slug:
+        description: 'Store Slug'
+        required: true
+      projectId:
+        description: 'Convex Project ID'
+        required: true
+      deploymentId:
+        description: 'Convex Deployment ID/Name'
+        required: true
+      deploymentUrl:
+        description: 'Convex Deployment URL'
+        required: true
+      legacyOrganizationId:
+        description: 'Legacy Organization ID'
+        required: false
+      ownerClerkId:
+        description: 'Owner Clerk ID'
+        required: false
+
+  repository_dispatch:
+    types: [deploy_store_backend]
+
+jobs:
+  deploy-store:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          npm ci
+
+      - name: Run Store Deployment Runner
+        env:
+          CONVEX_MANAGEMENT_API_KEY: ${{ secrets.CONVEX_MANAGEMENT_API_KEY }}
+          CONVEX_MANAGEMENT_TOKEN: ${{ secrets.CONVEX_MANAGEMENT_TOKEN }}
+          CONVEX_TEAM_ID: ${{ secrets.CONVEX_TEAM_ID }}
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
+          DEFAULT_CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.DEFAULT_CLERK_JWT_ISSUER_DOMAIN }}
+          PROVISIONING_SECRET: ${{ secrets.PROVISIONING_SECRET }}
+          PAYLOAD: ${{ toJson(github.event.client_payload || inputs) }}
+        run: |
+          npx tsx scripts/deploy-store-backend.ts "$PAYLOAD"

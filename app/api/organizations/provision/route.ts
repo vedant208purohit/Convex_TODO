@@ -2,34 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
-import { exec } from "child_process";
-import path from "path";
-import util from "util";
-import fs from "fs";
 import { validateServerProvisioningConfig } from "@/lib/provisioningConfig";
-
-const execPromise = util.promisify(exec);
-
-export const maxDuration = 60;
-
-// HMAC SHA-256 Signature Generator
-async function generateHmacSha256(secret: string, message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(message);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { triggerStoreDeployment } from "@/lib/deployment-trigger";
 
 export async function POST(req: Request) {
   try {
@@ -49,8 +23,6 @@ export async function POST(req: Request) {
       managementToken,
       teamId,
       masterConvexUrl,
-      defaultClerkIssuer,
-      provisioningSecret,
     } = configValidation.config;
 
     const {
@@ -130,6 +102,7 @@ export async function POST(req: Request) {
       if (existingByLegacy && existingByLegacy.status === "active") {
         return NextResponse.json({
           success: true,
+          status: "active",
           organization: {
             id: existingByLegacy._id,
             name: existingByLegacy.name,
@@ -154,6 +127,7 @@ export async function POST(req: Request) {
     if (existingBySlug && existingBySlug.status === "active") {
       return NextResponse.json({
         success: true,
+        status: "active",
         organization: {
           id: existingBySlug._id,
           name: existingBySlug.name,
@@ -169,7 +143,10 @@ export async function POST(req: Request) {
       });
     }
 
-    if (existingBySlug && existingBySlug.status === "provisioning") {
+    if (
+      existingBySlug &&
+      (existingBySlug.status === "provisioning" || existingBySlug.status === "deploying")
+    ) {
       return NextResponse.json(
         { error: `Organization "${trimmedName}" is currently being provisioned.` },
         { status: 409 }
@@ -193,7 +170,7 @@ export async function POST(req: Request) {
     });
 
     console.log(
-      `Starting provisioning for store organization: ${trimmedName} (slug: ${slug}, legacyId: ${legacyOrganizationId || "none"}, ownerClerkId: ${ownerClerkId || "none"})`
+      `Starting asynchronous provisioning for store organization: ${trimmedName} (slug: ${slug}, orgId: ${orgId})`
     );
 
     // 6. Create Convex project via Management API
@@ -240,231 +217,56 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    // 7. Create Deploy Key
-    const createKeyRes = await fetch(
-      `https://api.convex.dev/v1/deployments/${deploymentName}/create_deploy_key`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${managementToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: `provision-key-${Date.now()}`,
-          allowedActions: [
-            "deployment:deploy",
-            "deployment:logs:view",
-            "deployment:env:view",
-            "deployment:env:write",
-          ],
-        }),
-      }
-    );
-
-    const keyData = await createKeyRes.json();
-
-    if (!createKeyRes.ok || !keyData.deployKey) {
-      const errorMsg = keyData.message || "Failed to create deploy key for deployment.";
-      await convexClient.mutation(api.organizations.updateStatus, {
-        id: orgId,
-        status: "failed",
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    const deployKey = keyData.deployKey;
-
-    // 8. Configure Default deployment & deploy Default App
-    let defaultAppPath = process.env.DEFAULT_APP_PATH
-      ? path.resolve(process.env.DEFAULT_APP_PATH)
-      : path.resolve(process.cwd(), "../pos-default");
-
-    if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
-      const defaultAppAltPath = path.resolve(process.cwd(), "../Default app");
-      if (fs.existsSync(defaultAppAltPath) && fs.existsSync(path.join(defaultAppAltPath, "convex"))) {
-        defaultAppPath = defaultAppAltPath;
-      } else {
-        defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
-      }
-    }
-
-    if (fs.existsSync(defaultAppPath) && !fs.existsSync(path.join(defaultAppPath, "package.json"))) {
-      fs.writeFileSync(
-        path.join(defaultAppPath, "package.json"),
-        JSON.stringify(
-          {
-            name: "default-app-convex",
-            version: "0.1.0",
-            private: true,
-            dependencies: { convex: "^1.18.0" },
-          },
-          null,
-          2
-        )
-      );
-    }
-
-    console.log(
-      `Deploying Default POS app code to ${deploymentName} at path: ${defaultAppPath}`
-    );
-
-    try {
-      const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
-      const useLocalCli = fs.existsSync(cliPath);
-      const convexCmd = useLocalCli ? `"${process.execPath}" "${cliPath}"` : "npx convex";
-
-      const execOptions: any = {
-        cwd: defaultAppPath,
-        env: {
-          ...process.env,
-          CONVEX_DEPLOY_KEY: deployKey,
-          CLERK_JWT_ISSUER_DOMAIN: defaultClerkIssuer,
-          PROVISIONING_SECRET: provisioningSecret,
-        },
-      };
-
-      if (process.platform === "win32" && process.env.ComSpec) {
-        execOptions.shell = process.env.ComSpec;
-      }
-
-      try {
-        await execPromise(
-          `${convexCmd} env set CLERK_JWT_ISSUER_DOMAIN ${defaultClerkIssuer}`,
-          execOptions
-        );
-      } catch (envErr: any) {
-        console.warn(
-          `Warning: Could not set CLERK_JWT_ISSUER_DOMAIN on deployment ${deploymentName}:`,
-          envErr.message
-        );
-      }
-
-      try {
-        await execPromise(
-          `${convexCmd} env set PROVISIONING_SECRET ${provisioningSecret}`,
-          execOptions
-        );
-      } catch (envErr: any) {
-        console.warn(
-          `Warning: Could not set PROVISIONING_SECRET on deployment ${deploymentName}:`,
-          envErr.message
-        );
-      }
-
-      await execPromise(
-        `${convexCmd} dev --once --typecheck=disable --tail-logs disable`,
-        execOptions
-      );
-    } catch (deployErr: any) {
-      const errorMsg = `POS Code deployment failed: ${deployErr.stderr || deployErr.message}`;
-      console.error(errorMsg);
-      await convexClient.mutation(api.organizations.updateStatus, {
-        id: orgId,
-        status: "failed",
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    // 9. Generate provisioning HMAC SHA-256 token
-    const timestamp = Date.now();
-    const provisioningToken = await generateHmacSha256(
-      provisioningSecret,
-      `${slug}:${timestamp}`
-    );
-
-    // 10 & 11. Create Default App Organization in store DB with ownerClerkId & HMAC token
-    const storeClient = new ConvexHttpClient(deploymentUrl);
-    let storeOrgId: any;
-
-    try {
-      storeOrgId = await storeClient.mutation("organizations:create" as any, {
-        name: trimmedName,
-        slug: slug,
-        legacyId: legacyOrganizationId || undefined,
-        ownerClerkId: ownerClerkId || undefined,
-        published: false,
-        isTest: false,
-        phone: phone || undefined,
-        addressLine1: addressLine1 || undefined,
-        city: city || undefined,
-        state: state || undefined,
-        country: country || undefined,
-        zipCode: zipCode || undefined,
-        latitude: latitude || undefined,
-        longitude: longitude || undefined,
-        provisioningToken,
-        timestamp,
-      });
-    } catch (createErr: any) {
-      const errorMsg = `Store organization creation failed: ${createErr.message}`;
-      console.error(errorMsg);
-      await convexClient.mutation(api.organizations.updateStatus, {
-        id: orgId,
-        status: "failed",
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    // 12. Initialize store defaults with HMAC token
-    try {
-      await storeClient.mutation("organizations:initializeStore" as any, {
-        id: storeOrgId,
-        slug,
-        provisioningToken,
-        timestamp,
-      });
-    } catch (initErr: any) {
-      const errorMsg = `Store organization initialization failed: ${initErr.message}`;
-      console.error(errorMsg);
-      await convexClient.mutation(api.organizations.updateStatus, {
-        id: orgId,
-        status: "failed",
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    // 13. Mark store organization active in Master DB
+    // 7. Record metadata on Master organization
     await convexClient.mutation(api.organizations.updateStatus, {
       id: orgId,
-      status: "active",
+      status: "provisioning",
       projectId,
       deploymentId: deploymentName,
       deploymentUrl,
     });
 
-    console.log(
-      `Successfully provisioned & initialized store organization: ${trimmedName} (${deploymentUrl})`
-    );
-
-    return NextResponse.json({
-      success: true,
-      organization: {
-        id: orgId,
-        name: trimmedName,
-        slug,
-        legacyOrganizationId,
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        storeOrgId,
-        status: "active",
-      },
+    // 8. Dispatch asynchronous deployment job (GitHub Actions / runner)
+    await triggerStoreDeployment({
+      masterOrgId: orgId,
+      name: trimmedName,
+      slug,
+      legacyOrganizationId: legacyOrganizationId || undefined,
+      ownerClerkId: ownerClerkId || undefined,
+      projectId,
+      deploymentId: deploymentName,
+      deploymentUrl,
+      phone,
+      addressLine1,
+      city,
+      state,
+      country,
+      zipCode,
+      latitude,
+      longitude,
     });
+
+    // 9. Return immediate asynchronous provisioning response
+    return NextResponse.json(
+      {
+        success: true,
+        status: "provisioning",
+        organization: {
+          id: orgId,
+          name: trimmedName,
+          slug,
+          legacyOrganizationId,
+          projectId,
+          deploymentId: deploymentName,
+          deploymentUrl,
+          status: "provisioning",
+        },
+        message: "Store provisioning started.",
+      },
+      { status: 202 }
+    );
   } catch (err: any) {
-    console.error("Provisioning error:", err);
+    console.error("Provisioning route error:", err);
     return NextResponse.json(
       {
         error:

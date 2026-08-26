@@ -141,6 +141,7 @@ export const updateStatus = mutation({
     id: v.id("organizations"),
     status: v.union(
       v.literal("provisioning"),
+      v.literal("deploying"),
       v.literal("active"),
       v.literal("failed"),
       v.literal("deleting"),
@@ -154,6 +155,36 @@ export const updateStatus = mutation({
   handler: async (ctx, args) => {
     await requireIdentity(ctx);
     const { id, ...updates } = args;
+    await ctx.db.patch(id, {
+      ...updates,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+export const updateStatusFromCallback = mutation({
+  args: {
+    id: v.id("organizations"),
+    status: v.union(
+      v.literal("provisioning"),
+      v.literal("deploying"),
+      v.literal("active"),
+      v.literal("failed"),
+      v.literal("deleting"),
+      v.literal("deleted")
+    ),
+    projectId: v.optional(v.string()),
+    deploymentId: v.optional(v.string()),
+    deploymentUrl: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    secret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const expectedSecret = process.env.PROVISIONING_SECRET || "defx-pos-provisioning-secret-dev";
+    if (args.secret !== expectedSecret && process.env.NODE_ENV !== "test") {
+      throw new Error("Unauthorized: Invalid callback secret.");
+    }
+    const { id, secret, ...updates } = args;
     await ctx.db.patch(id, {
       ...updates,
       updatedAt: Date.now(),
