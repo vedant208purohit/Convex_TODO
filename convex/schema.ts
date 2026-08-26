@@ -240,7 +240,6 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
-
   organizationFeatures: defineTable({
     featureKey: v.string(),
     active: v.boolean(),
@@ -250,7 +249,116 @@ export default defineSchema({
   })
     .index("by_feature_key", ["featureKey"])
     .index("by_active", ["active"]),
-  
+
+  // Multi-Menu Domain Entities
+  menus: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    isDefault: v.boolean(),
+    isActive: v.boolean(),
+    position: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_default", ["organizationId", "isDefault"]),
+
+  categories: defineTable({
+    organizationId: v.id("organizations"),
+    menuId: v.id("menus"),
+    name: v.string(),
+    position: v.number(),
+    published: v.boolean(),
+    name_hi: v.optional(v.string()),
+    name_gu: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_menu", ["menuId"])
+    .index("by_org", ["organizationId"]),
+
+  items: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    price: v.number(), // Minor units (e.g. cents / paise)
+    description: v.optional(v.string()),
+    published: v.boolean(),
+    isAvailable: v.boolean(),
+    isGst: v.boolean(),
+    isVeg: v.boolean(),
+    isSpicy: v.boolean(),
+    showQuantity: v.boolean(),
+    quantity: v.optional(v.number()),
+    quantityUnit: v.optional(v.string()),
+    skuNumber: v.optional(v.string()),
+    markAsBestseller: v.boolean(),
+    favouriteItem: v.optional(v.boolean()),
+    showCalorie: v.boolean(),
+    calorie: v.optional(v.string()),
+    calorieMetric: v.optional(v.string()),
+    daysOfUnavailable: v.optional(v.number()),
+    servingSize: v.optional(v.string()),
+    serving: v.optional(v.number()),
+    caloriesPerServing: v.optional(v.string()),
+    itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
+    imageStorageId: v.optional(v.id("_storage")),
+    threeDModelStorageId: v.optional(v.id("_storage")),
+    threeDModelIosStorageId: v.optional(v.id("_storage")),
+    videoStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+
+  categoryItems: defineTable({
+    organizationId: v.id("organizations"),
+    categoryId: v.id("categories"),
+    itemId: v.id("items"),
+    position: v.number(),
+    published: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_category", ["categoryId"]),
+
+  itemTypes: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    icon: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+
+  customizations: defineTable({
+    organizationId: v.id("organizations"),
+    itemId: v.id("items"),
+    name: v.string(),
+    customizationType: v.union(v.literal("AddOns"), v.literal("Preparations")),
+    required: v.boolean(),
+    maxSelected: v.number(),
+    position: v.number(),
+    published: v.boolean(),
+    createdAt: v.number(),
+  }).index("by_item", ["itemId"]),
+
+  customizationItems: defineTable({
+    organizationId: v.id("organizations"),
+    customizationId: v.id("customizations"),
+    name: v.string(),
+    price: v.number(),
+    isGst: v.optional(v.boolean()),
+    showQuantity: v.optional(v.boolean()),
+    quantity: v.optional(v.number()),
+    quantityUnit: v.optional(v.string()),
+    description: v.optional(v.string()),
+    showCalorie: v.optional(v.boolean()),
+    calorie: v.optional(v.string()),
+    calorieMetric: v.optional(v.string()),
+    daysOfUnavailable: v.optional(v.number()),
+    isAvailable: v.boolean(),
+    position: v.number(),
+    itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
+    imageStorageId: v.optional(v.id("_storage")),
+    createdAt: v.number(),
+  }).index("by_customization", ["customizationId"]),
+
   // Organization Languages Domain Table
   organizationLanguages: defineTable({
     legacyId: v.optional(v.string()),
@@ -275,6 +383,35 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_legacy_id", ["legacyId"]),
-});
 
+  // International Taxation Domain Entities
+  taxComponents: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    rate: v.number(), // Percentage e.g. 2.5, 6.0, 5.0, 10.0, 20.0
+    code: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_org", ["organizationId"]),
 
+  taxGroups: defineTable({
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    taxMode: v.union(v.literal("inclusive"), v.literal("exclusive")),
+    componentIds: v.array(v.id("taxComponents")),
+    isDefault: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_default", ["organizationId", "isDefault"]),
+
+  storeTaxSettings: defineTable({
+    organizationId: v.id("organizations"),
+    countryCode: v.string(), // "IN", "US", "CA", "AU", "UK"
+    stateCode: v.optional(v.string()),
+    currencyCode: v.string(), // "INR", "USD", "CAD", "AUD", "GBP"
+    currencySymbol: v.string(), // "₹", "$", "£"
+    defaultTaxGroupId: v.optional(v.id("taxGroups")),
+    updatedAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+}, { schemaValidation: false });
