@@ -1,6 +1,27 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+// Strongly Typed Weekly Operating Schedule Validator for Queue Configurations
+const hourIntervalValidator = v.object({
+  start_time: v.string(),
+  end_time: v.string(),
+});
+
+const dayScheduleValidator = v.object({
+  is_open: v.boolean(),
+  hours: v.array(hourIntervalValidator),
+});
+
+export const weeklyScheduleValidator = v.object({
+  Monday: dayScheduleValidator,
+  Tuesday: dayScheduleValidator,
+  Wednesday: dayScheduleValidator,
+  Thursday: dayScheduleValidator,
+  Friday: dayScheduleValidator,
+  Saturday: dayScheduleValidator,
+  Sunday: dayScheduleValidator,
+});
+
 export default defineSchema({
   organizations: defineTable({
     // Legacy PostgreSQL Identity
@@ -327,7 +348,6 @@ export default defineSchema({
     .index("by_position", ["isSequence", "position"])
     .index("by_published", ["published"])
     .index("by_legacy_id", ["legacyId"]),
-});
 
   // International Taxation Domain Entities
   taxComponents: defineTable({
@@ -393,4 +413,37 @@ export default defineSchema({
     .index("by_layout", ["layoutId"])
     .index("by_table_number", ["tableNumber"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Queue Configurations Domain Table
+  organizationQueueConfigurations: defineTable({
+    legacyId: v.optional(v.string()),
+
+    waitlistHours: v.optional(weeklyScheduleValidator),
+    reservationHours: v.optional(weeklyScheduleValidator),
+
+    defaultWaitTime: v.optional(v.string()),
+    defaultPartySize: v.optional(v.number()),
+
+    customerViewWaitlist: v.optional(v.boolean()),
+    onlineWaitlist: v.optional(v.boolean()),
+    onlineReservation: v.optional(v.boolean()),
+    bookingApproval: v.optional(v.boolean()),
+
+    geoFence: v.optional(v.boolean()),
+    geoFenceRadius: v.optional(v.string()),
+    geoFenceLatitude: v.optional(v.number()),
+    geoFenceLongitude: v.optional(v.number()),
+
+    maxBookingPerCustomer: v.optional(v.string()),
+    maxBookingPerCustomerTime: v.optional(v.string()),
+
+    reservationSlotSize: v.optional(v.string()),
+    reservationPerTimeSlot: v.optional(v.string()),
+
+    queueTimeFormat: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  }).index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
