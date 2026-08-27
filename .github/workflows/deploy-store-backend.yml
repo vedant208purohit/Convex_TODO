@@ -1,0 +1,118 @@
+name: Deploy Store Backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      masterOrgId:
+        description: 'Master Organization ID'
+        required: true
+      name:
+        description: 'Store Name'
+        required: true
+      slug:
+        description: 'Store Slug'
+        required: true
+      projectId:
+        description: 'Convex Project ID'
+        required: true
+      deploymentId:
+        description: 'Convex Deployment ID/Name'
+        required: true
+      deploymentUrl:
+        description: 'Convex Deployment URL'
+        required: true
+      legacyOrganizationId:
+        description: 'Legacy Organization ID'
+        required: false
+      ownerClerkId:
+        description: 'Owner Clerk ID'
+        required: false
+      phone:
+        description: 'Store Phone'
+        required: false
+      addressLine1:
+        description: 'Address Line 1'
+        required: false
+      city:
+        description: 'City'
+        required: false
+      state:
+        description: 'State'
+        required: false
+      country:
+        description: 'Country'
+        required: false
+      zipCode:
+        description: 'Zip Code'
+        required: false
+      latitude:
+        description: 'Latitude'
+        required: false
+      longitude:
+        description: 'Longitude'
+        required: false
+
+  repository_dispatch:
+    types: [deploy_store_backend]
+
+jobs:
+  deploy-store:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: |
+          cd "Master app"
+          npm ci
+
+      - name: Run Store Deployment Runner
+        env:
+          CONVEX_MANAGEMENT_API_KEY: ${{ secrets.CONVEX_MANAGEMENT_API_KEY }}
+          CONVEX_MANAGEMENT_TOKEN: ${{ secrets.CONVEX_MANAGEMENT_TOKEN }}
+          CONVEX_TEAM_ID: ${{ secrets.CONVEX_TEAM_ID }}
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
+          DEFAULT_CLERK_JWT_ISSUER_DOMAIN: ${{ secrets.DEFAULT_CLERK_JWT_ISSUER_DOMAIN }}
+          PROVISIONING_SECRET: ${{ secrets.PROVISIONING_SECRET }}
+          PAYLOAD: ${{ toJson(github.event.client_payload || inputs) }}
+        run: |
+          cd "Master app"
+          npx tsx scripts/deploy-store-backend.ts "$PAYLOAD"
+
+      - name: Report Workflow Failure Callback
+        if: failure()
+        env:
+          NEXT_PUBLIC_CONVEX_URL: ${{ secrets.NEXT_PUBLIC_CONVEX_URL }}
+          PROVISIONING_SECRET: ${{ secrets.PROVISIONING_SECRET }}
+          PAYLOAD: ${{ toJson(github.event.client_payload || inputs) }}
+        run: |
+          npx tsx -e '
+            const payload = JSON.parse(process.env.PAYLOAD || "{}");
+            const orgId = payload.masterOrgId;
+            const secret = process.env.PROVISIONING_SECRET;
+            const masterUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+            if (orgId && secret && masterUrl) {
+              console.log("Sending failure callback to Master for orgId:", orgId);
+              fetch(`${masterUrl}/api/organizations/callback`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${secret}`,
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                  masterOrgId: orgId,
+                  status: "failed",
+                  errorMessage: "GitHub Actions workflow execution failed prior to store runner completion."
+                })
+              }).then(res => console.log("Failure callback response:", res.status))
+                .catch(err => console.error("Failure callback error:", err.message));
+            }
+          '
