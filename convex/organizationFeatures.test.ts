@@ -17,6 +17,16 @@ describe("Default App Store Organization Features Domain Tests", () => {
     "auto_accept",
   ];
 
+  async function setupStoreWithAdmin(adminSubject = "user_admin_123", adminRole = "admin") {
+    const t = convexTest(schema, modules);
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Test POS Store",
+      ownerClerkId: adminSubject,
+    });
+    const admin = t.withIdentity({ role: adminRole, subject: adminSubject });
+    return { t, orgId, admin };
+  }
+
   test("1 & 2. Feature initialization creates all seven audited feature keys with active = false", async () => {
     const t = convexTest(schema, modules);
 
@@ -37,11 +47,9 @@ describe("Default App Store Organization Features Domain Tests", () => {
   });
 
   test("3, 4 & 5. Initialization is idempotent and preserves existing active state on re-initialization", async () => {
-    const t = convexTest(schema, modules);
+    const { t, admin } = await setupStoreWithAdmin();
 
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
-
-    const admin = t.withIdentity({ role: "admin", subject: "user_admin_123" });
 
     // Store Admin toggles auto_accept to true
     await admin.mutation(api.organizationFeatures.toggle, {
@@ -69,11 +77,9 @@ describe("Default App Store Organization Features Domain Tests", () => {
   });
 
   test("6. Store Admin can toggle feature flag active status", async () => {
-    const t = convexTest(schema, modules);
+    const { t, admin } = await setupStoreWithAdmin();
 
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
-
-    const admin = t.withIdentity({ role: "admin", subject: "user_admin_123" });
 
     await admin.mutation(api.organizationFeatures.toggle, {
       featureKey: "skip_phone_number_required",
@@ -97,10 +103,59 @@ describe("Default App Store Organization Features Domain Tests", () => {
     expect(flagDisabled?.active).toBe(false);
   });
 
+  test("6b. Admin role aliases (store_admin, org_admin, super_admin) can toggle feature flags", async () => {
+    const { t } = await setupStoreWithAdmin();
+    await t.mutation(api.organizationFeatures.initializeDefaults, {});
+
+    // store_admin JWT claim caller
+    const storeAdmin = t.withIdentity({ role: "store_admin", subject: "user_store_admin_1" });
+    await storeAdmin.mutation(api.organizationFeatures.toggle, {
+      featureKey: "auto_accept",
+      active: true,
+    });
+    let flag = await t.query(api.organizationFeatures.get, { featureKey: "auto_accept" });
+    expect(flag?.active).toBe(true);
+
+    // org_admin JWT claim caller
+    const orgAdmin = t.withIdentity({ role: "org_admin", subject: "user_org_admin_1" });
+    await orgAdmin.mutation(api.organizationFeatures.toggle, {
+      featureKey: "auto_accept",
+      active: false,
+    });
+    flag = await t.query(api.organizationFeatures.get, { featureKey: "auto_accept" });
+    expect(flag?.active).toBe(false);
+
+    // super_admin JWT claim caller
+    const superAdmin = t.withIdentity({ role: "super_admin", subject: "user_super_admin_1" });
+    await superAdmin.mutation(api.organizationFeatures.toggle, {
+      featureKey: "auto_accept",
+      active: true,
+    });
+    flag = await t.query(api.organizationFeatures.get, { featureKey: "auto_accept" });
+    expect(flag?.active).toBe(true);
+  });
+
   test("7. Non-admin users (cashier, waiter, customer) cannot toggle feature flags", async () => {
-    const t = convexTest(schema, modules);
+    const { t, orgId, admin } = await setupStoreWithAdmin();
 
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
+
+    // Create cashier, waiter, customer staff records
+    await admin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "user_cashier_1",
+      userType: ["cashier"],
+    });
+    await admin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "user_waiter_1",
+      userType: ["waiter"],
+    });
+    await admin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "user_customer_1",
+      userType: ["customer"],
+    });
 
     const cashier = t.withIdentity({ role: "cashier", subject: "user_cashier_1" });
     const waiter = t.withIdentity({ role: "waiter", subject: "user_waiter_1" });
@@ -112,7 +167,7 @@ describe("Default App Store Organization Features Domain Tests", () => {
         featureKey: "auto_accept",
         active: true,
       })
-    ).rejects.toThrow(/Unauthorized/i);
+    ).rejects.toThrow(/Forbidden|Unauthorized/i);
 
     // Waiter attempt fails
     await expect(
@@ -120,7 +175,7 @@ describe("Default App Store Organization Features Domain Tests", () => {
         featureKey: "auto_accept",
         active: true,
       })
-    ).rejects.toThrow(/Unauthorized/i);
+    ).rejects.toThrow(/Forbidden|Unauthorized/i);
 
     // Customer attempt fails
     await expect(
@@ -128,13 +183,71 @@ describe("Default App Store Organization Features Domain Tests", () => {
         featureKey: "auto_accept",
         active: true,
       })
-    ).rejects.toThrow(/Unauthorized/i);
+    ).rejects.toThrow(/Forbidden|Unauthorized/i);
 
     // Verify flag remained false
     const flag = await t.query(api.organizationFeatures.get, {
       featureKey: "auto_accept",
     });
     expect(flag?.active).toBe(false);
+  });
+
+  test("7b. Unauthenticated user cannot toggle feature flags", async () => {
+    const { t } = await setupStoreWithAdmin();
+    await t.mutation(api.organizationFeatures.initializeDefaults, {});
+
+    await expect(
+      t.mutation(api.organizationFeatures.toggle, {
+        featureKey: "auto_accept",
+        active: true,
+      })
+    ).rejects.toThrow(/Unauthenticated/i);
+  });
+
+  test("7c. Admin from Org A cannot toggle feature flag scoped to Org B", async () => {
+    const t = convexTest(schema, modules);
+
+    // Seed defaults
+    await t.mutation(api.organizationFeatures.initializeDefaults, {});
+
+    // Create Organization A and B
+    await t.mutation(api.organizations.create, {
+      name: "Org A",
+      ownerClerkId: "admin_a",
+    });
+    const orgBId = await t.mutation(api.organizations.create, {
+      name: "Org B",
+      ownerClerkId: "admin_b",
+    });
+
+    const adminA = t.withIdentity({ subject: "admin_a" });
+
+    // Attempting to invoke toggle with Org B explicitly when Admin A only belongs to Org A throws Forbidden
+    await expect(
+      adminA.mutation(api.organizationFeatures.toggle, {
+        organizationId: orgBId,
+        featureKey: "auto_accept",
+        active: true,
+      })
+    ).rejects.toThrow(/Forbidden/i);
+  });
+
+  test("7d. Non-admin user cannot soft delete feature flag", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+    await t.mutation(api.organizationFeatures.initializeDefaults, {});
+
+    await admin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "user_cashier_2",
+      userType: ["cashier"],
+    });
+    const cashier = t.withIdentity({ role: "cashier", subject: "user_cashier_2" });
+
+    await expect(
+      cashier.mutation(api.organizationFeatures.softDelete, {
+        featureKey: "auto_accept",
+      })
+    ).rejects.toThrow(/Forbidden|Unauthorized/i);
   });
 
   test("8. `get` query returns feature flag state by featureKey", async () => {
@@ -161,12 +274,12 @@ describe("Default App Store Organization Features Domain Tests", () => {
   });
 
   test("10. Deleted flags are excluded from normal queries and not resurrected by initializeDefaults", async () => {
-    const t = convexTest(schema, modules);
+    const { t, admin } = await setupStoreWithAdmin();
 
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
 
     // Soft delete auto_accept
-    await t.mutation(api.organizationFeatures.softDelete, {
+    await admin.mutation(api.organizationFeatures.softDelete, {
       featureKey: "auto_accept",
     });
 
@@ -192,14 +305,13 @@ describe("Default App Store Organization Features Domain Tests", () => {
   });
 
   test("11. Unknown feature key returns null for get and throws error for toggle", async () => {
-    const t = convexTest(schema, modules);
+    const { t, admin } = await setupStoreWithAdmin();
 
     const unknownGet = await t.query(api.organizationFeatures.get, {
       featureKey: "unknown_non_existent_key",
     });
     expect(unknownGet).toBeNull();
 
-    const admin = t.withIdentity({ role: "admin" });
     await expect(
       admin.mutation(api.organizationFeatures.toggle, {
         featureKey: "unknown_non_existent_key",

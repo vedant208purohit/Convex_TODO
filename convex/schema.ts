@@ -1,84 +1,10 @@
-// import { defineSchema, defineTable } from "convex/server";
-// import { v } from "convex/values";
-
-// export default defineSchema({
-//   organizations: defineTable({
-//     // Legacy PostgreSQL Identity
-//     legacyId: v.string(), // PostgreSQL Organization UUID
-
-//     // Core Identity & Metadata
-//     name: v.string(),
-//     slug: v.string(),
-//     legalEntityName: v.optional(v.string()),
-//     published: v.boolean(),
-//     isTest: v.boolean(),
-//     createdAt: v.number(),
-//     updatedAt: v.number(),
-//     deletedAt: v.optional(v.number()),
-
-//     // POS Feature & Module Configuration
-//     isDineIn: v.boolean(),
-//     isTakeAway: v.boolean(),
-//     isDashboard: v.boolean(),
-//     isInventory: v.boolean(),
-//     isOrders: v.boolean(),
-//     isWorkstation: v.boolean(),
-//     isCashier: v.boolean(),
-//     isSettings: v.boolean(),
-//     onlineStore: v.boolean(),
-//     isDelivery: v.boolean(),
-//     isMenu: v.boolean(),
-//     isQueue: v.boolean(),
-//     isKds: v.boolean(),
-//     isSurveys: v.boolean(),
-//     isCustomer: v.boolean(),
-//     isCaptain: v.boolean(),
-//     isReport: v.boolean(),
-//     isVeg: v.boolean(),
-//     digitalStoreStatus: v.boolean(),
-
-//     // Payment Configuration
-//     deliveryCashOnDelivery: v.boolean(),
-//     dineinPrepaid: v.boolean(),
-//     dineinPospaid: v.boolean(),
-//     takeAwayOnlinePayment: v.boolean(),
-//     takeAwayCashPayment: v.boolean(),
-//     deliveryOnlinePayment: v.boolean(),
-//     scheduledPickup: v.boolean(),
-//     scheduledPickupOnlinePayment: v.boolean(),
-//     scheduledDeliveryOnlinePayment: v.boolean(),
-//     scheduledDelivery: v.boolean(),
-//     scheduledPickupCashPayment: v.boolean(),
-//     scheduledDeliveryCashPayment: v.boolean(),
-//     paymentSplitting: v.optional(v.any()), // JSON structure in PostgreSQL
-//     transferPercentage: v.number(),
-//     transferHoldTime: v.number(),
-
-//     // Delivery Configuration
-//     deliveryAggregator: v.boolean(),
-//     deliverPartner: v.optional(v.string()),
-//     porterLagTime: v.number(),
-
-//     // Integration & External Reference Fields
-//     frenchyId: v.optional(v.string()),
-//     chargebeeCustomerId: v.optional(v.string()),
-//     whatsappIntegration: v.boolean(),
-//     prestWhatsappIntegration: v.boolean(),
-//     whatsappPhoneNumber: v.optional(v.string()),
-//     whatsappAccessToken: v.optional(v.string()), // Security note: Requires secret storage review
-//   })
-//     .index("by_legacy_id", ["legacyId"])
-//     .index("by_slug", ["slug"]),
-// });
-
-
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
 export default defineSchema({
   organizations: defineTable({
     // Legacy PostgreSQL Identity
-    legacyId: v.optional(v.string()), // PostgreSQL Organization UUID (optional for Convex-native orgs)
+    legacyId: v.optional(v.string()),
 
     // Core Identity & Metadata
     name: v.string(),
@@ -105,7 +31,7 @@ export default defineSchema({
     areaCode: v.optional(v.string()),
     latitude: v.optional(v.number()),
     longitude: v.optional(v.number()),
-    operationTiming: v.optional(v.any()), // Weekly operating hours JSON grid
+    operationTiming: v.optional(v.any()),
 
     // GST Tax Compliance Configuration
     isGst: v.boolean(),
@@ -167,21 +93,21 @@ export default defineSchema({
     scheduledDelivery: v.boolean(),
     scheduledPickupCashPayment: v.boolean(),
     scheduledDeliveryCashPayment: v.boolean(),
-    paymentSplitting: v.optional(v.any()), // JSON structure in PostgreSQL
+    paymentSplitting: v.optional(v.any()),
     transferPercentage: v.number(),
     transferHoldTime: v.number(),
 
     // Payment Gateway Credentials & Secrets
     razorPayKeyId: v.optional(v.string()),
-    razorPayApiKey: v.optional(v.string()), // Sensitive credential
+    razorPayApiKey: v.optional(v.string()),
     stripePublishableKey: v.optional(v.string()),
-    stripeSecretKey: v.optional(v.string()), // Sensitive credential
+    stripeSecretKey: v.optional(v.string()),
 
     // Delivery Configuration
     deliveryAggregator: v.boolean(),
     deliverPartner: v.optional(v.string()),
     porterLagTime: v.number(),
-    porterIntegration: v.optional(v.any()), // Porter logistics metadata JSON
+    porterIntegration: v.optional(v.any()),
 
     // Integration & External Reference Fields
     frenchyId: v.optional(v.string()),
@@ -189,7 +115,7 @@ export default defineSchema({
     whatsappIntegration: v.boolean(),
     prestWhatsappIntegration: v.boolean(),
     whatsappPhoneNumber: v.optional(v.string()),
-    whatsappAccessToken: v.optional(v.string()), // Sensitive credential
+    whatsappAccessToken: v.optional(v.string()),
 
     // Provisioning & Owner Metadata
     ownerClerkId: v.optional(v.string()),
@@ -230,17 +156,20 @@ export default defineSchema({
   // Organization Users Domain Table
   organizationUsers: defineTable({
     organizationId: v.id("organizations"),
-    userId: v.string(), // Clerk User ID (identity.subject)
-    userType: v.array(v.string()), // Array of string role/type tags (e.g. ["admin", "orders", "inventory"])
-    userPermission: v.optional(v.any()), // JSON object mapping role tags to CRUD boolean flags
+    userId: v.string(),
+    userType: v.array(v.string()),
+    userPermission: v.optional(v.any()),
     createdAt: v.optional(v.number()),
     updatedAt: v.number(),
-    deletedAt: v.optional(v.number()), // Soft-deletion timestamp
+    deletedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
+
+  // Organization Feature Flags
   organizationFeatures: defineTable({
+    organizationId: v.optional(v.id("organizations")),
     featureKey: v.string(),
     active: v.boolean(),
     createdAt: v.optional(v.number()),
@@ -248,7 +177,8 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_feature_key", ["featureKey"])
-    .index("by_active", ["active"]),
+    .index("by_active", ["active"])
+    .index("by_org", ["organizationId"]),
 
   // Multi-Menu Domain Entities
   menus: defineTable({
@@ -281,7 +211,7 @@ export default defineSchema({
   items: defineTable({
     organizationId: v.id("organizations"),
     name: v.string(),
-    price: v.number(), // Minor units (e.g. cents / paise)
+    price: v.number(),
     description: v.optional(v.string()),
     published: v.boolean(),
     isAvailable: v.boolean(),
@@ -330,7 +260,10 @@ export default defineSchema({
     organizationId: v.id("organizations"),
     itemId: v.id("items"),
     name: v.string(),
-    customizationType: v.union(v.literal("AddOns"), v.literal("Preparations")),
+    customizationType: v.union(
+      v.literal("AddOns"),
+      v.literal("Preparations")
+    ),
     required: v.boolean(),
     maxSelected: v.number(),
     position: v.number(),
@@ -388,7 +321,7 @@ export default defineSchema({
   taxComponents: defineTable({
     organizationId: v.id("organizations"),
     name: v.string(),
-    rate: v.number(), // Percentage e.g. 2.5, 6.0, 5.0, 10.0, 20.0
+    rate: v.number(),
     code: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_org", ["organizationId"]),
@@ -396,7 +329,10 @@ export default defineSchema({
   taxGroups: defineTable({
     organizationId: v.id("organizations"),
     name: v.string(),
-    taxMode: v.union(v.literal("inclusive"), v.literal("exclusive")),
+    taxMode: v.union(
+      v.literal("inclusive"),
+      v.literal("exclusive")
+    ),
     componentIds: v.array(v.id("taxComponents")),
     isDefault: v.boolean(),
     createdAt: v.number(),
@@ -407,10 +343,10 @@ export default defineSchema({
 
   storeTaxSettings: defineTable({
     organizationId: v.id("organizations"),
-    countryCode: v.string(), // "IN", "US", "CA", "AU", "UK"
+    countryCode: v.string(),
     stateCode: v.optional(v.string()),
-    currencyCode: v.string(), // "INR", "USD", "CAD", "AUD", "GBP"
-    currencySymbol: v.string(), // "₹", "$", "£"
+    currencyCode: v.string(),
+    currencySymbol: v.string(),
     defaultTaxGroupId: v.optional(v.id("taxGroups")),
     updatedAt: v.number(),
   }).index("by_org", ["organizationId"]),

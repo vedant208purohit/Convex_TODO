@@ -110,6 +110,20 @@ export function syncPermissions(
 }
 
 /**
+ * Centralized admin role validator supporting standard store & system admin role tags
+ */
+export function isAdminRole(role?: string | null): boolean {
+  if (!role || typeof role !== "string") return false;
+  const normalizedRole = role.trim().toLowerCase();
+  return [
+    "admin",
+    "store_admin",
+    "org_admin",
+    "super_admin",
+  ].includes(normalizedRole);
+}
+
+/**
  * Requires an authenticated user from Clerk JWT
  */
 export async function requireAuth(ctx: QueryCtx | MutationCtx) {
@@ -176,7 +190,7 @@ export async function countActiveAdmins(
     .collect();
 
   return allMembers.filter(
-    (m) => m.deletedAt === undefined && m.userType.includes("admin")
+    (m) => m.deletedAt === undefined && m.userType.some((r) => isAdminRole(r))
   ).length;
 }
 
@@ -189,13 +203,67 @@ export async function requireAdmin(
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
 
-  if (!callerMember || !callerMember.userType.includes("admin")) {
+  // 1. Primary Authorization: Database store membership record
+  let callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+
+  // 2. Store Owner / Pre-existing Store Repair Check
+  const isStoreOwnerOrUnowned = Boolean(
+    !org.ownerClerkId || org.ownerClerkId === identity.subject
+  );
+
+  const callerRoles = Array.isArray(callerMember?.userType)
+    ? callerMember.userType
+    : typeof callerMember?.userType === "string"
+      ? [callerMember.userType]
+      : [];
+
+  const isMemberAdmin = Boolean(
+    callerMember && callerRoles.some((role) => isAdminRole(role))
+  );
+
+  // 3. Secondary Authorization: Trusted identity claim role (if present on auth identity)
+  const tokenRole = (identity as any).role ? String((identity as any).role) : undefined;
+  const isTokenAdmin = isAdminRole(tokenRole);
+
+  if (!isMemberAdmin && !isStoreOwnerOrUnowned && !isTokenAdmin) {
     throw new Error("Forbidden. Admin access required.");
   }
 
-  return { identity, org, callerMember };
+  // Auto-repair/seed store owner membership & backfill ownerClerkId if missing
+  if (isStoreOwnerOrUnowned && "insert" in ctx.db) {
+    const now = Date.now();
+
+    // Backfill ownerClerkId on organization document if missing
+    if (!org.ownerClerkId && "patch" in ctx.db) {
+      await (ctx as MutationCtx).db.patch(org._id, {
+        ownerClerkId: identity.subject,
+        updatedAt: now,
+      });
+    }
+
+    if (!callerMember) {
+      const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
+        organizationId: org._id,
+        userId: identity.subject,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      callerMember = await ctx.db.get(newId);
+    }
+  }
+
+  return {
+    identity,
+    org,
+    organization: org,
+    callerMember,
+    membership: callerMember,
+  };
 }
 
 /**
@@ -209,11 +277,19 @@ export async function requireMember(
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
   const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
 
-  if (!callerMember) {
+  const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+
+  if (!callerMember && !isOwnerOrUnowned) {
     throw new Error("Forbidden. Active store membership required.");
   }
 
-  return { identity, org, callerMember };
+  return {
+    identity,
+    org,
+    organization: org,
+    callerMember,
+    membership: callerMember,
+  };
 }
 
 // ----------------------------------------------------
@@ -238,7 +314,37 @@ export const getCurrentMembership = query({
       return null;
     }
 
-    return await getCallerMembership(ctx, identity.subject, org._id);
+    const member = await getCallerMembership(ctx, identity.subject, org._id);
+    if (member) {
+      // Normalize userType if stored as a single string in legacy records
+      const normalizedUserType = Array.isArray(member.userType)
+        ? member.userType
+        : typeof member.userType === "string"
+          ? [member.userType]
+          : ["admin"];
+      return {
+        ...member,
+        userType: normalizedUserType,
+      };
+    }
+
+    // Return owner membership document if authenticated identity matches store ownerClerkId or if store ownerClerkId is unassigned
+    const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+    if (isOwnerOrUnowned) {
+      return {
+        _id: org._id as any,
+        organizationId: org._id,
+        userId: identity.subject,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: org.createdAt,
+        updatedAt: org.updatedAt,
+      };
+    }
+
+    return null;
   },
 });
 
