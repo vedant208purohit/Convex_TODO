@@ -988,22 +988,27 @@ export const create = mutation({
       prestWhatsappIntegration: args.prestWhatsappIntegration ?? false,
       whatsappPhoneNumber: args.whatsappPhoneNumber,
       whatsappAccessToken: args.whatsappAccessToken,
+
+      // Provisioning Owner Metadata
+      ownerClerkId: args.ownerClerkId?.trim() || (await ctx.auth.getUserIdentity())?.subject,
     });
 
-    // 6. Initial Owner Seeding during Provisioning (if ownerClerkId supplied)
-    if (args.ownerClerkId && args.ownerClerkId.trim()) {
-      const ownerId = args.ownerClerkId.trim();
+    // 6. Initial Owner Seeding during Provisioning / Creation
+    const effectiveOwnerId =
+      args.ownerClerkId?.trim() || (await ctx.auth.getUserIdentity())?.subject;
+
+    if (effectiveOwnerId) {
       const existingOwner = await ctx.db
         .query("organizationUsers")
         .withIndex("by_user_and_org", (q) =>
-          q.eq("userId", ownerId).eq("organizationId", orgId)
+          q.eq("userId", effectiveOwnerId).eq("organizationId", orgId)
         )
         .first();
 
       if (!existingOwner) {
         await ctx.db.insert("organizationUsers", {
           organizationId: orgId,
-          userId: ownerId,
+          userId: effectiveOwnerId,
           userType: ["admin"],
           userPermission: {
             admin: { create: true, read: true, update: true, delete: true },
@@ -1065,6 +1070,104 @@ export const createInitialOwner = mutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/**
+ * Idempotent Repair Mutation: Safely backfill ownerClerkId and admin membership for pre-existing store organization
+ */
+export const repairStoreOwnerAdmin = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireAuth(ctx);
+
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg || firstOrg.deletedAt !== undefined) {
+        throw new Error("Store organization not initialized");
+      }
+      orgId = firstOrg._id;
+    }
+
+    const org = await ctx.db.get(orgId);
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found");
+    }
+
+    // Ownership Takeover Guard: If organization already has an owner assigned to another user
+    if (org.ownerClerkId && org.ownerClerkId !== identity.subject) {
+      const existingCallerMember = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", identity.subject).eq("organizationId", org._id)
+        )
+        .first();
+
+      const isAlreadyAdmin = Boolean(
+        existingCallerMember &&
+          existingCallerMember.deletedAt === undefined &&
+          existingCallerMember.userType.some((t: string) =>
+            ["admin", "store_admin", "org_admin", "super_admin"].includes(
+              (t || "").trim().toLowerCase()
+            )
+          )
+      );
+      if (!isAlreadyAdmin) {
+        throw new Error("Forbidden. Organization owner is assigned to another user.");
+      }
+      return { success: true, repaired: false };
+    }
+
+    const now = Date.now();
+
+    // Safe Backfill: Only set ownerClerkId if org.ownerClerkId is unassigned
+    if (!org.ownerClerkId) {
+      await ctx.db.patch(org._id, {
+        ownerClerkId: identity.subject,
+        updatedAt: now,
+      });
+    }
+
+    // Ensure organizationUsers admin membership record exists
+    const existingMember = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user_and_org", (q) =>
+        q.eq("userId", identity.subject).eq("organizationId", org._id)
+      )
+      .first();
+
+    if (!existingMember) {
+      const newMemberId = await ctx.db.insert("organizationUsers", {
+        organizationId: org._id,
+        userId: identity.subject,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { success: true, repaired: true, membershipId: newMemberId };
+    } else {
+      const hasAdmin = existingMember.userType.some((t) =>
+        ["admin", "store_admin", "org_admin", "super_admin"].includes(
+          (t || "").trim().toLowerCase()
+        )
+      );
+      if (!hasAdmin || existingMember.deletedAt !== undefined) {
+        await ctx.db.patch(existingMember._id, {
+          userType: Array.from(new Set([...existingMember.userType, "admin"])),
+          deletedAt: undefined,
+          updatedAt: now,
+        });
+        return { success: true, repaired: true, membershipId: existingMember._id };
+      }
+    }
+
+    return { success: true, repaired: false };
   },
 });
 

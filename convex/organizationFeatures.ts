@@ -106,17 +106,17 @@ export const list = query({
 
 /**
  * Store Admin Mutation: Toggle Feature Flag
- * Server-side authorization: verified via ctx.auth.getUserIdentity()
+ * Server-side authorization: verified via requireAdmin helper
  */
 export const toggle = mutation({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     featureKey: v.string(),
     active: v.boolean(),
   },
   handler: async (ctx, args) => {
-    // Use the same membership-based admin guard as the rest of the store admin APIs.
-    // This keeps feature flag toggles aligned with the app's organizationUsers role model.
-    await requireAdmin(ctx);
+    // 1. Authenticate & Authorize Admin for target organization
+    const auth = await requireAdmin(ctx, args.organizationId);
 
     // 2. Feature Key Lookup
     const key = args.featureKey.trim();
@@ -129,7 +129,12 @@ export const toggle = mutation({
       throw new Error(`Feature flag "${key}" not found.`);
     }
 
-    // 3. Update Flag State
+    // 3. Organization boundary validation
+    if (existing.organizationId && existing.organizationId !== auth.organization._id) {
+      throw new Error("Forbidden. Feature flag belongs to another organization.");
+    }
+
+    // 4. Update Flag State
     const now = Date.now();
     await ctx.db.patch(existing._id, {
       active: args.active,
@@ -144,7 +149,9 @@ export const toggle = mutation({
  * Store Provisioning Mutation: Seed Default Feature Flags
  */
 export const initializeDefaults = mutation({
-  args: {},
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
   handler: async (ctx) => {
     await initializeDefaultsHelper(ctx);
     return { success: true };
@@ -155,8 +162,13 @@ export const initializeDefaults = mutation({
  * Soft Delete Feature Flag
  */
 export const softDelete = mutation({
-  args: { featureKey: v.string() },
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    featureKey: v.string(),
+  },
   handler: async (ctx, args) => {
+    const auth = await requireAdmin(ctx, args.organizationId);
+
     const key = args.featureKey.trim();
     const existing = await ctx.db
       .query("organizationFeatures")
@@ -165,6 +177,10 @@ export const softDelete = mutation({
 
     if (!existing || existing.deletedAt !== undefined) {
       throw new Error(`Feature flag "${key}" not found.`);
+    }
+
+    if (existing.organizationId && existing.organizationId !== auth.organization._id) {
+      throw new Error("Forbidden. Feature flag belongs to another organization.");
     }
 
     const now = Date.now();

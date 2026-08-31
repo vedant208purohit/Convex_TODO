@@ -242,6 +242,7 @@ export default defineSchema({
     .index("by_user_and_org", ["userId", "organizationId"]),
 
   organizationFeatures: defineTable({
+    organizationId: v.optional(v.id("organizations")),
     featureKey: v.string(),
     active: v.boolean(),
     createdAt: v.optional(v.number()),
@@ -249,7 +250,8 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_feature_key", ["featureKey"])
-    .index("by_active", ["active"]),
+    .index("by_active", ["active"])
+    .index("by_org", ["organizationId"]),
   
   // Organization Languages Domain Table
   organizationLanguages: defineTable({
