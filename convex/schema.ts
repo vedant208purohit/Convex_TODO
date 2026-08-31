@@ -362,4 +362,35 @@ export default defineSchema({
     defaultTaxGroupId: v.optional(v.id("taxGroups")),
     updatedAt: v.number(),
   }).index("by_org", ["organizationId"]),
+
+  // Organization Tables Domain Table
+  organizationTables: defineTable({
+    legacyId: v.optional(v.string()),
+
+    tableNumber: v.string(),
+    seatingCapacity: v.number(),
+
+    placement: v.optional(v.string()),
+
+    xPosition: v.optional(v.string()),
+    yPosition: v.optional(v.string()),
+
+    kidsSeatAvailability: v.optional(v.boolean()),
+    disabledSeatAvailability: v.optional(v.boolean()),
+    barbequeGrillAvailability: v.optional(v.boolean()),
+
+    isBlock: v.optional(v.boolean()),
+    isRequested: v.optional(v.boolean()),
+
+    currentOrderId: v.optional(v.string()),
+
+    layoutId: v.optional(v.id("organizationLayouts")),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_layout", ["layoutId"])
+    .index("by_table_number", ["tableNumber"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

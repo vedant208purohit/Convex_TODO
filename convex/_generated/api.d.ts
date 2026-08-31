@@ -12,6 +12,7 @@ import type * as menu from "../menu.js";
 import type * as organizationFeatures from "../organizationFeatures.js";
 import type * as organizationLanguages from "../organizationLanguages.js";
 import type * as organizationLayouts from "../organizationLayouts.js";
+import type * as organizationTables from "../organizationTables.js";
 import type * as organizationOrderProcesses from "../organizationOrderProcesses.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizations from "../organizations.js";
@@ -28,6 +29,7 @@ declare const fullApi: ApiFromModules<{
   organizationFeatures: typeof organizationFeatures;
   organizationLanguages: typeof organizationLanguages;
   organizationLayouts: typeof organizationLayouts;
+  organizationTables: typeof organizationTables;
   organizationOrderProcesses: typeof organizationOrderProcesses;
   organizationUsers: typeof organizationUsers;
   organizations: typeof organizations;
