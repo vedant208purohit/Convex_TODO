@@ -1453,34 +1453,7 @@ export const initializeStore = mutation({
 
     const now = Date.now();
 
-    // 1. Order Processes Seeding (Idempotent)
-    const existingProcesses = await ctx.db
-      .query("orderProcesses")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.id))
-      .collect();
-
-    if (existingProcesses.length === 0) {
-      const defaultProcesses = [
-        { name: "Accepted", stepOrder: 1 },
-        { name: "In progress", stepOrder: 2 },
-        { name: "Ready to deliver", stepOrder: 3 },
-        { name: "Delivered", stepOrder: 4 },
-        { name: "Created", stepOrder: 5 },
-        { name: "Modify", stepOrder: 6 },
-        { name: "Reject", stepOrder: 7 },
-      ];
-
-      for (const proc of defaultProcesses) {
-        await ctx.db.insert("orderProcesses", {
-          organizationId: args.id,
-          name: proc.name,
-          stepOrder: proc.stepOrder,
-          createdAt: now,
-        });
-      }
-    }
-
-    // 2. Prep Stations Seeding (Idempotent)
+    // 1. Prep Stations Seeding (Idempotent)
     const existingStations = await ctx.db
       .query("stations")
       .withIndex("by_org", (q) => q.eq("organizationId", args.id))
@@ -1590,6 +1563,37 @@ export const initializeStore = mutation({
         createdAt: now,
         updatedAt: now,
       });
+    }
+
+    // 9. Default Organization Order Processes Seeding (Idempotent)
+    const existingOrderProcesses = await ctx.db.query("organizationOrderProcesses").collect();
+    const activeOrderProcesses = existingOrderProcesses.filter((proc) => proc.deletedAt === undefined);
+
+    const defaultProcessesToSeed = [
+      { name: "Accepted", position: 1, published: true, isSequence: true, processColor: "#262626" },
+      { name: "In progress", position: 2, published: true, isSequence: true, processColor: "#EA9C1B" },
+      { name: "Ready to deliver", position: 3, published: true, isSequence: true, processColor: "#FC8019" },
+      { name: "Delivered", position: 4, published: true, isSequence: true, processColor: "#219653" },
+      { name: "Created", position: 1, published: true, isSequence: false, processColor: undefined },
+      { name: "Modify", position: 2, published: true, isSequence: false, processColor: undefined },
+      { name: "Reject", position: 3, published: true, isSequence: false, processColor: undefined },
+    ];
+
+    for (const procSeed of defaultProcessesToSeed) {
+      const exists = activeOrderProcesses.some(
+        (p) => p.name.trim().toLowerCase() === procSeed.name.toLowerCase()
+      );
+      if (!exists) {
+        await ctx.db.insert("organizationOrderProcesses", {
+          name: procSeed.name,
+          position: procSeed.position,
+          published: procSeed.published,
+          isSequence: procSeed.isSequence,
+          processColor: procSeed.processColor,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
     }
 
     return { success: true };

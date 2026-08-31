@@ -126,13 +126,6 @@ export default defineSchema({
     .index("by_slug", ["slug"]),
 
   // Phase 1 Seeded Support Entities
-  orderProcesses: defineTable({
-    organizationId: v.id("organizations"),
-    name: v.string(),
-    stepOrder: v.number(),
-    createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
-
   stations: defineTable({
     organizationId: v.id("organizations"),
     name: v.string(),
@@ -316,6 +309,25 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Order Processes Domain Table
+  organizationOrderProcesses: defineTable({
+    legacyId: v.optional(v.string()),
+
+    name: v.string(),
+    position: v.number(),
+    published: v.boolean(),
+    isSequence: v.boolean(),
+    processColor: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_position", ["isSequence", "position"])
+    .index("by_published", ["published"])
+    .index("by_legacy_id", ["legacyId"]),
+});
 
   // International Taxation Domain Entities
   taxComponents: defineTable({
