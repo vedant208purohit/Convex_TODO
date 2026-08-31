@@ -327,7 +327,6 @@ export default defineSchema({
     .index("by_position", ["isSequence", "position"])
     .index("by_published", ["published"])
     .index("by_legacy_id", ["legacyId"]),
-});
 
   // International Taxation Domain Entities
   taxComponents: defineTable({
@@ -392,5 +391,33 @@ export default defineSchema({
   })
     .index("by_layout", ["layoutId"])
     .index("by_table_number", ["tableNumber"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization QR Codes Domain Table
+  organizationQrCodes: defineTable({
+    legacyId: v.optional(v.string()),
+
+    name: v.string(),
+    description: v.optional(v.string()),
+
+    qrType: v.union(
+      v.literal("DineIn"),
+      v.literal("TakeAway"),
+      v.literal("Queue")
+    ),
+
+    qrUrl: v.optional(v.string()),
+    counter: v.number(),
+
+    tableNumber: v.optional(v.string()),
+    tableId: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_name", ["name"])
+    .index("by_table", ["tableId"])
+    .index("by_qr_type", ["qrType"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
