@@ -30,8 +30,8 @@ describe("International Taxation Engine & isGst Integration", () => {
       organizationId: orgId,
     });
     expect(components).toHaveLength(2);
-    expect(components.map((c) => c.name)).toContain("CGST");
-    expect(components.map((c) => c.name)).toContain("SGST");
+    expect(components.map((c: any) => c.name)).toContain("CGST");
+    expect(components.map((c: any) => c.name)).toContain("SGST");
 
     // Test Item Tax Calculation for ₹250.00 Paneer Tikka (isGst = true)
     const taxCalc = await t.query(api.taxation.calculateItemTax, {

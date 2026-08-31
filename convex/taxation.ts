@@ -298,9 +298,9 @@ export const calculateItemTax = query({
 
     for (const compId of targetGroup.componentIds) {
       const comp = await ctx.db.get(compId);
-      if (comp) {
+      if (comp && "rate" in comp) {
         components.push(comp);
-        totalTaxRate += comp.rate;
+        totalTaxRate += (comp as any).rate;
       }
     }
 
