@@ -422,6 +422,7 @@ export default defineSchema({
     .index("by_layout", ["layoutId"])
     .index("by_table_number", ["tableNumber"])
     .index("by_legacy_id", ["legacyId"]),
+
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({
     legacyId: v.optional(v.string()),
@@ -565,5 +566,22 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_position", ["position"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Waiters Domain Table
+  organizationWaiters: defineTable({
+    legacyId: v.optional(v.string()),
+
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+
+    waiterCode: v.optional(v.string()),
+    normalizedWaiterCode: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_waiter_code", ["normalizedWaiterCode"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

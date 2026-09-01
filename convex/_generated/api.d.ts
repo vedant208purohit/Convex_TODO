@@ -20,6 +20,7 @@ import type * as organizationQueueConfigurations from "../organizationQueueConfi
 import type * as organizationQueues from "../organizationQueues.js";
 import type * as organizationTables from "../organizationTables.js";
 import type * as organizationUsers from "../organizationUsers.js";
+import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
 import type * as taxation from "../taxation.js";
 
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   organizationQueues: typeof organizationQueues;
   organizationTables: typeof organizationTables;
   organizationUsers: typeof organizationUsers;
+  organizationWaiters: typeof organizationWaiters;
   organizations: typeof organizations;
   taxation: typeof taxation;
 }>;
