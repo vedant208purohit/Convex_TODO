@@ -9,6 +9,7 @@
  */
 
 import type * as menu from "../menu.js";
+import type * as organizationCarouselScreens from "../organizationCarouselScreens.js";
 import type * as organizationFeatures from "../organizationFeatures.js";
 import type * as organizationLanguages from "../organizationLanguages.js";
 import type * as organizationLayouts from "../organizationLayouts.js";
@@ -31,6 +32,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   menu: typeof menu;
+  organizationCarouselScreens: typeof organizationCarouselScreens;
   organizationFeatures: typeof organizationFeatures;
   organizationLanguages: typeof organizationLanguages;
   organizationLayouts: typeof organizationLayouts;
