@@ -2,34 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "@/convex/_generated/api";
-import { exec } from "child_process";
-import path from "path";
-import util from "util";
-import fs from "fs";
 import { validateServerProvisioningConfig } from "@/lib/provisioningConfig";
-
-const execPromise = util.promisify(exec);
-
-export const maxDuration = 60;
-
-// HMAC SHA-256 Signature Generator
-async function generateHmacSha256(secret: string, message: string): Promise<string> {
-  const encoder = new TextEncoder();
-  const keyData = encoder.encode(secret);
-  const messageData = encoder.encode(message);
-
-  const cryptoKey = await crypto.subtle.importKey(
-    "raw",
-    keyData,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-
-  const signature = await crypto.subtle.sign("HMAC", cryptoKey, messageData);
-  const hashArray = Array.from(new Uint8Array(signature));
-  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
+import { triggerStoreDeployment } from "@/lib/deployment-trigger";
 
 export async function POST(req: Request) {
   try {
@@ -49,8 +23,6 @@ export async function POST(req: Request) {
       managementToken,
       teamId,
       masterConvexUrl,
-      defaultClerkIssuer,
-      provisioningSecret,
     } = configValidation.config;
 
     const { userId, getToken } = await auth();
@@ -91,6 +63,10 @@ export async function POST(req: Request) {
       );
     }
 
+    console.log(
+      `[Retry Route] Starting retry for masterOrgId: ${masterOrgId} (name: "${org.name}", slug: "${org.slug}")`
+    );
+
     // Set status to provisioning during retry
     await masterClient.mutation(api.organizations.updateStatus, {
       id: org._id,
@@ -102,7 +78,7 @@ export async function POST(req: Request) {
     let deploymentName = org.deploymentId;
     let deploymentUrl = org.deploymentUrl;
 
-    // 2. Create project if missing
+    // 2. Create project ONLY if metadata is missing (never duplicate an existing project)
     if (!projectId || !deploymentName || !deploymentUrl) {
       const createProjectRes = await fetch(
         `https://api.convex.dev/v1/teams/${teamId}/create_project`,
@@ -125,6 +101,7 @@ export async function POST(req: Request) {
         const errorMsg =
           projectData.message ||
           `Failed to create Convex project during retry (${createProjectRes.status}).`;
+        console.error(`[Retry Project Error] masterOrgId: ${org._id}, error: ${errorMsg}`);
         await masterClient.mutation(api.organizations.updateStatus, {
           id: org._id,
           status: "failed",
@@ -136,223 +113,61 @@ export async function POST(req: Request) {
       projectId = String(projectData.id || projectData.projectId);
       deploymentName = projectData.deploymentName;
       deploymentUrl = projectData.deploymentUrl;
-    }
 
-    // 3. Generate deploy key
-    const createKeyRes = await fetch(
-      `https://api.convex.dev/v1/deployments/${deploymentName}/create_deploy_key`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${managementToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: `retry-key-${Date.now()}`,
-          allowedActions: [
-            "deployment:deploy",
-            "deployment:logs:view",
-            "deployment:env:view",
-            "deployment:env:write",
-          ],
-        }),
-      }
-    );
-
-    const keyData = await createKeyRes.json();
-    if (!createKeyRes.ok || !keyData.deployKey) {
-      const errorMsg = keyData.message || "Failed to create deploy key during retry.";
       await masterClient.mutation(api.organizations.updateStatus, {
         id: org._id,
-        status: "failed",
+        status: "provisioning",
         projectId,
         deploymentId: deploymentName,
         deploymentUrl,
-        errorMessage: errorMsg,
       });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
     }
 
-    const deployKey = keyData.deployKey;
-
-    // 4. Re-run CLI code deployment
-    let defaultAppPath = process.env.DEFAULT_APP_PATH
-      ? path.resolve(process.env.DEFAULT_APP_PATH)
-      : path.resolve(process.cwd(), "../pos-default");
-
-    if (!fs.existsSync(defaultAppPath) || !fs.existsSync(path.join(defaultAppPath, "convex"))) {
-      const defaultAppAltPath = path.resolve(process.cwd(), "../Default app");
-      if (fs.existsSync(defaultAppAltPath) && fs.existsSync(path.join(defaultAppAltPath, "convex"))) {
-        defaultAppPath = defaultAppAltPath;
-      } else {
-        defaultAppPath = path.resolve(process.cwd(), "default-app-convex");
-      }
-    }
-
-    if (fs.existsSync(defaultAppPath) && !fs.existsSync(path.join(defaultAppPath, "package.json"))) {
-      fs.writeFileSync(
-        path.join(defaultAppPath, "package.json"),
-        JSON.stringify(
-          {
-            name: "default-app-convex",
-            version: "0.1.0",
-            private: true,
-            dependencies: { convex: "^1.18.0" },
-          },
-          null,
-          2
-        )
-      );
-    }
-
+    // 3. Dispatch asynchronous deployment job
     try {
-      const cliPath = path.resolve(process.cwd(), "node_modules/convex/bin/main.js");
-      const useLocalCli = fs.existsSync(cliPath);
-      const convexCmd = useLocalCli ? `"${process.execPath}" "${cliPath}"` : "npx convex";
-
-      const execOptions: any = {
-        cwd: defaultAppPath,
-        env: {
-          ...process.env,
-          CONVEX_DEPLOY_KEY: deployKey,
-          CLERK_JWT_ISSUER_DOMAIN: defaultClerkIssuer,
-          PROVISIONING_SECRET: provisioningSecret,
-        },
-      };
-
-      if (process.platform === "win32" && process.env.ComSpec) {
-        execOptions.shell = process.env.ComSpec;
-      }
-
-      try {
-        await execPromise(
-          `${convexCmd} env set CLERK_JWT_ISSUER_DOMAIN ${defaultClerkIssuer}`,
-          execOptions
-        );
-      } catch (envErr: any) {
-        console.warn(
-          `Warning: Could not set CLERK_JWT_ISSUER_DOMAIN on deployment ${deploymentName}:`,
-          envErr.message
-        );
-      }
-
-      try {
-        await execPromise(
-          `${convexCmd} env set PROVISIONING_SECRET ${provisioningSecret}`,
-          execOptions
-        );
-      } catch (envErr: any) {
-        console.warn(
-          `Warning: Could not set PROVISIONING_SECRET on deployment ${deploymentName}:`,
-          envErr.message
-        );
-      }
-
-      await execPromise(
-        `${convexCmd} dev --once --typecheck=disable --tail-logs disable`,
-        execOptions
-      );
-    } catch (deployErr: any) {
-      const errorMsg = `POS Code deployment failed during retry: ${deployErr.stderr || deployErr.message}`;
-      await masterClient.mutation(api.organizations.updateStatus, {
-        id: org._id,
-        status: "failed",
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    // 5. Generate HMAC token & connect store client
-    const timestamp = Date.now();
-    const provisioningToken = await generateHmacSha256(
-      provisioningSecret,
-      `${org.slug}:${timestamp}`
-    );
-
-    const storeClient = new ConvexHttpClient(deploymentUrl);
-    let storeOrgId: any;
-
-    try {
-      const existingStoreOrg: any = await storeClient.query(
-        "organizations:getBySlug" as any,
-        { slug: org.slug }
-      );
-
-      if (existingStoreOrg) {
-        storeOrgId = existingStoreOrg._id;
-      } else {
-        // Preserves original org.ownerClerkId during retry
-        storeOrgId = await storeClient.mutation("organizations:create" as any, {
-          name: org.name,
-          slug: org.slug,
-          legacyId: org.legacyOrganizationId || undefined,
-          ownerClerkId: org.ownerClerkId || undefined,
-          published: false,
-          isTest: false,
-          provisioningToken,
-          timestamp,
-        });
-      }
-    } catch (createErr: any) {
-      const errorMsg = `Store organization creation/verification failed during retry: ${createErr.message}`;
-      await masterClient.mutation(api.organizations.updateStatus, {
-        id: org._id,
-        status: "failed",
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    // 6. Initialize store defaults with HMAC token (Idempotent)
-    try {
-      await storeClient.mutation("organizations:initializeStore" as any, {
-        id: storeOrgId,
-        slug: org.slug,
-        provisioningToken,
-        timestamp,
-      });
-    } catch (initErr: any) {
-      const errorMsg = `Store organization initialization failed during retry: ${initErr.message}`;
-      await masterClient.mutation(api.organizations.updateStatus, {
-        id: org._id,
-        status: "failed",
-        projectId,
-        deploymentId: deploymentName,
-        deploymentUrl,
-        errorMessage: errorMsg,
-      });
-      return NextResponse.json({ error: errorMsg }, { status: 500 });
-    }
-
-    // 7. Mark active
-    await masterClient.mutation(api.organizations.updateStatus, {
-      id: org._id,
-      status: "active",
-      projectId,
-      deploymentId: deploymentName,
-      deploymentUrl,
-    });
-
-    return NextResponse.json({
-      success: true,
-      organization: {
-        id: org._id,
+      await triggerStoreDeployment({
+        masterOrgId: org._id,
         name: org.name,
         slug: org.slug,
+        legacyOrganizationId: org.legacyOrganizationId || undefined,
+        ownerClerkId: org.ownerClerkId || undefined,
         projectId,
         deploymentId: deploymentName,
         deploymentUrl,
-        status: "active",
+      });
+    } catch (dispatchErr: any) {
+      const errorMsg = `Retry deployment trigger failed: ${dispatchErr.message || "Unknown trigger error"}`;
+      console.error(`[Retry Dispatch Exception] masterOrgId: ${org._id}, error: ${errorMsg}`);
+      await masterClient.mutation(api.organizations.updateStatus, {
+        id: org._id,
+        status: "failed",
+        projectId,
+        deploymentId: deploymentName,
+        deploymentUrl,
+        errorMessage: errorMsg,
+      });
+      return NextResponse.json({ error: errorMsg }, { status: 500 });
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        status: "provisioning",
+        organization: {
+          id: org._id,
+          name: org.name,
+          slug: org.slug,
+          projectId,
+          deploymentId: deploymentName,
+          deploymentUrl,
+          status: "provisioning",
+        },
+        message: "Store retry provisioning started.",
       },
-    });
+      { status: 202 }
+    );
   } catch (err: any) {
-    console.error("Retry error:", err);
+    console.error("[Retry Route Error]", err);
     return NextResponse.json(
       { error: err.message || "Internal server error during retry." },
       { status: 500 }

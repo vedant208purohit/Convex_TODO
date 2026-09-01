@@ -12,6 +12,7 @@ export default defineSchema({
     deploymentUrl: v.optional(v.string()),
     status: v.union(
       v.literal("provisioning"),
+      v.literal("deploying"),
       v.literal("active"),
       v.literal("failed"),
       v.literal("deleting"),
