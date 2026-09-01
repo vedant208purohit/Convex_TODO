@@ -584,4 +584,213 @@ export default defineSchema({
   })
     .index("by_waiter_code", ["normalizedWaiterCode"])
     .index("by_legacy_id", ["legacyId"]),
+  // Orders & Order Items Domain Entities
+  orders: defineTable({
+    organizationId: v.id("organizations"),
+    orderNumber: v.string(),
+    tokenNumber: v.string(),
+    orderType: v.union(
+      v.literal("DineIn"),
+      v.literal("TakeAway"),
+      v.literal("Delivery"),
+      v.literal("ScheduledPickup"),
+      v.literal("ScheduledDelivery")
+    ),
+    orderSource: v.string(),
+
+    // Status Tracking
+    orderStatusId: v.optional(v.id("organizationOrderProcesses")),
+    orderStatusName: v.string(),
+    isCompleted: v.boolean(),
+    isRejected: v.boolean(),
+    isModify: v.boolean(),
+
+    // Table & Staff Associations
+    tableId: v.optional(v.id("organizationTables")),
+    waiterUserId: v.optional(v.string()),
+    cashierUserId: v.optional(v.string()),
+    membersOnTable: v.optional(v.number()),
+
+    // Customer Information (from Frontend POS / Online)
+    customerName: v.optional(v.string()),
+    customerPhone: v.optional(v.string()),
+    customerEmail: v.optional(v.string()),
+
+    // Financial Totals (minor units / paise / cents)
+    subTotal: v.number(),
+    taxTotal: v.number(),
+    discountAmount: v.optional(v.number()),
+    deliveryCharge: v.optional(v.number()),
+    totalAmount: v.number(),
+
+    // Delivery Address Details
+    deliveryAddress: v.optional(
+      v.object({
+        addressLine1: v.string(),
+        addressLine2: v.optional(v.string()),
+        landmark: v.optional(v.string()),
+        city: v.optional(v.string()),
+        zipCode: v.optional(v.string()),
+        addressType: v.optional(v.string()),
+      })
+    ),
+
+    paymentMode: v.string(),
+    paymentStatus: v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed")),
+
+    specialNotes: v.optional(v.string()),
+    taxInfoSnapshot: v.optional(v.any()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_status", ["organizationId", "orderStatusId"])
+    .index("by_org_table", ["organizationId", "tableId"])
+    .index("by_created_at", ["organizationId", "createdAt"]),
+
+  orderItems: defineTable({
+    organizationId: v.id("organizations"),
+    orderId: v.id("orders"),
+    itemId: v.id("items"),
+    itemName: v.string(),
+    itemPrice: v.number(),
+    quantity: v.number(),
+    totalPrice: v.number(),
+    customizations: v.optional(
+      v.array(
+        v.object({
+          customizationId: v.id("customizations"),
+          customizationName: v.string(),
+          optionId: v.id("customizationItems"),
+          optionName: v.string(),
+          price: v.number(),
+        })
+      )
+    ),
+    isReady: v.boolean(),
+    stationId: v.optional(v.id("stations")),
+    createdAt: v.number(),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_org", ["organizationId"]),
+
+  orderActivities: defineTable({
+    organizationId: v.id("organizations"),
+    orderId: v.id("orders"),
+    processId: v.optional(v.id("organizationOrderProcesses")),
+    processName: v.string(),
+    position: v.number(),
+    createdAt: v.number(),
+  }).index("by_order", ["orderId"]),
+
+  orderPayments: defineTable({
+    organizationId: v.id("organizations"),
+    orderId: v.id("orders"),
+    paymentModeId: v.optional(v.id("paymentModes")),
+    paymentModeName: v.string(),
+    amount: v.number(),
+    transactionReference: v.optional(v.string()),
+    createdAt: v.number(),
+  }).index("by_order", ["orderId"]),
+
+  // Inventory, Suppliers, Recipes & Purchase Orders Domain Entities
+  suppliers: defineTable({
+    organizationId: v.id("organizations"),
+    supplierName: v.string(),
+    companyName: v.optional(v.string()),
+    phoneNumber: v.optional(v.string()),
+    whatsappNumber: v.optional(v.string()),
+    email: v.optional(v.string()),
+    gstNumber: v.optional(v.string()),
+    fssaiLicNumber: v.optional(v.string()),
+    address: v.optional(v.string()),
+    city: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_org", ["organizationId"]),
+
+  inventoryItems: defineTable({
+    organizationId: v.id("organizations"),
+    categoryId: v.optional(v.id("inventoryCategories")),
+    name: v.string(),
+    description: v.optional(v.string()),
+    skuNumber: v.optional(v.string()),
+    buyingUnit: v.string(),
+    servingUnit: v.string(),
+    minimumStockRefillLevel: v.number(),
+    baselineStockLevel: v.optional(v.number()),
+    availableStock: v.number(),
+    unitCost: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_category", ["organizationId", "categoryId"]),
+
+  recipes: defineTable({
+    organizationId: v.id("organizations"),
+    itemId: v.optional(v.id("items")),
+    customizationItemId: v.optional(v.id("customizationItems")),
+    inventoryItemId: v.id("inventoryItems"),
+    quantity: v.number(),
+    unit: v.string(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_item", ["itemId"])
+    .index("by_customization", ["customizationItemId"])
+    .index("by_inventory_item", ["inventoryItemId"]),
+
+  purchaseOrders: defineTable({
+    organizationId: v.id("organizations"),
+    supplierId: v.id("suppliers"),
+    poNumber: v.string(),
+    purchasePriority: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
+    status: v.union(
+      v.literal("drafted"),
+      v.literal("sent"),
+      v.literal("settled"),
+      v.literal("cancelled")
+    ),
+    totalAmount: v.number(),
+    notes: v.optional(v.string()),
+    settledAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_supplier", ["supplierId"])
+    .index("by_status", ["organizationId", "status"]),
+
+  purchaseOrderItems: defineTable({
+    organizationId: v.id("organizations"),
+    purchaseOrderId: v.id("purchaseOrders"),
+    inventoryItemId: v.id("inventoryItems"),
+    unit: v.string(),
+    orderedQuantity: v.number(),
+    receivedQuantity: v.optional(v.number()),
+    unitCost: v.number(),
+    totalCost: v.number(),
+    createdAt: v.number(),
+  }).index("by_po", ["purchaseOrderId"]),
+
+  inventoryItemStocks: defineTable({
+    organizationId: v.id("organizations"),
+    inventoryItemId: v.id("inventoryItems"),
+    stockType: v.union(v.literal("credit"), v.literal("debit")),
+    quantity: v.number(),
+    unit: v.string(),
+    sourceType: v.string(), // "PurchaseOrder", "OrderSale", "ManualAdjustment", "DeadStock"
+    purchaseOrderId: v.optional(v.id("purchaseOrders")),
+    supplierId: v.optional(v.id("suppliers")),
+    orderId: v.optional(v.id("orders")),
+    isDeadStock: v.optional(v.boolean()),
+    reasonForDeadStock: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_inventory_item", ["inventoryItemId"])
+    .index("by_org", ["organizationId"])
+    .index("by_po", ["purchaseOrderId"])
+    .index("by_order", ["orderId"]),
 }, { schemaValidation: false });
