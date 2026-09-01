@@ -330,17 +330,37 @@ export default defineSchema({
   })
     .index("by_name", ["name"])
     .index("by_legacy_id", ["legacyId"]),
-
+  // Organization Printers Domain Table
+  organizationPrinters: defineTable({
+    legacyId: v.optional(v.string()),
+    printerUrl: v.string(),
+    printerPort: v.optional(v.string()),
+    printerType: v.union(
+      v.literal("Lan"),
+      v.literal("Bluetooth"),
+      v.literal("Usb")
+    ),
+    printerUseFor: v.union(
+      v.literal("Cashier"),
+      v.literal("Station"),
+      v.literal("WorkStation")
+    ),
+    stationId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_use_for", ["printerUseFor"])
+    .index("by_station", ["stationId"])
+    .index("by_legacy_id", ["legacyId"]),
   // Organization Order Processes Domain Table
   organizationOrderProcesses: defineTable({
     legacyId: v.optional(v.string()),
-
     name: v.string(),
     position: v.number(),
     published: v.boolean(),
     isSequence: v.boolean(),
     processColor: v.optional(v.string()),
-
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
@@ -357,7 +377,6 @@ export default defineSchema({
     code: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_org", ["organizationId"]),
-
   taxGroups: defineTable({
     organizationId: v.id("organizations"),
     name: v.string(),
@@ -372,7 +391,6 @@ export default defineSchema({
   })
     .index("by_org", ["organizationId"])
     .index("by_org_default", ["organizationId", "isDefault"]),
-
   storeTaxSettings: defineTable({
     organizationId: v.id("organizations"),
     countryCode: v.string(),
@@ -382,30 +400,21 @@ export default defineSchema({
     defaultTaxGroupId: v.optional(v.id("taxGroups")),
     updatedAt: v.number(),
   }).index("by_org", ["organizationId"]),
-
   // Organization Tables Domain Table
   organizationTables: defineTable({
     legacyId: v.optional(v.string()),
-
     tableNumber: v.string(),
     seatingCapacity: v.number(),
-
     placement: v.optional(v.string()),
-
     xPosition: v.optional(v.string()),
     yPosition: v.optional(v.string()),
-
     kidsSeatAvailability: v.optional(v.boolean()),
     disabledSeatAvailability: v.optional(v.boolean()),
     barbequeGrillAvailability: v.optional(v.boolean()),
-
     isBlock: v.optional(v.boolean()),
     isRequested: v.optional(v.boolean()),
-
     currentOrderId: v.optional(v.string()),
-
     layoutId: v.optional(v.id("organizationLayouts")),
-
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
