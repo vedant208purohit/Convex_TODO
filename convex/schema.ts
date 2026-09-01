@@ -440,6 +440,10 @@ export default defineSchema({
 
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_name", ["name"])
     .index("by_table", ["tableId"])
@@ -544,5 +548,22 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_queue", ["queueId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Carousel Screens Domain Table
+  organizationCarouselScreens: defineTable({
+    legacyId: v.optional(v.string()),
+
+    position: v.number(),
+
+    storageId: v.optional(v.id("_storage")),
+    imageUrl: v.optional(v.string()),
+    fileName: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_position", ["position"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
