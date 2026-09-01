@@ -249,6 +249,7 @@ import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./organizationUsers";
 import { initializeDefaultsHelper } from "./organizationFeatures";
+import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
 
 
 
@@ -1593,6 +1594,15 @@ export const initializeStore = mutation({
           createdAt: now,
           updatedAt: now,
         });
+      }
+    }
+
+    // 10. Default Organization Queue Configurations Seeding (Idempotent)
+    if (org.isQueue) {
+      const allConfigs = await ctx.db.query("organizationQueueConfigurations").collect();
+      const activeConfig = allConfigs.find((c) => c.deletedAt === undefined);
+      if (!activeConfig) {
+        await getOrInitializeActiveConfig(ctx);
       }
     }
 
