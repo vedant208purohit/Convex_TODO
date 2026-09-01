@@ -347,6 +347,7 @@ export default defineSchema({
     .index("by_position", ["isSequence", "position"])
     .index("by_published", ["published"])
     .index("by_legacy_id", ["legacyId"]),
+
   // International Taxation Domain Entities
   taxComponents: defineTable({
     organizationId: v.id("organizations"),
@@ -399,5 +400,72 @@ export default defineSchema({
   })
     .index("by_layout", ["layoutId"])
     .index("by_table_number", ["tableNumber"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Queues Domain Table
+  organizationQueues: defineTable({
+    legacyId: v.optional(v.string()),
+
+    queueType: v.union(
+      v.literal("waitlist"),
+      v.literal("reservation"),
+      v.literal("waitlist_off"),
+      v.literal("reservation_off")
+    ),
+
+    queueStatus: v.union(
+      v.literal("booked"),
+      v.literal("pending"),
+      v.literal("arrived"),
+      v.literal("running_late"),
+      v.literal("completed"),
+      v.literal("rejected"),
+      v.literal("close"),
+      v.literal("cancelled_by_user"),
+      v.literal("cancelled_by_admin")
+    ),
+
+    queueNumber: v.optional(v.string()),
+    totalGuests: v.optional(v.number()),
+
+    kidsSeat: v.optional(v.boolean()),
+    disabledSeat: v.optional(v.boolean()),
+    barbequeSeat: v.optional(v.boolean()),
+
+    reservationDate: v.optional(v.string()),
+    reservationTime: v.optional(v.number()),
+
+    notes: v.optional(v.string()),
+    reason: v.optional(v.string()),
+
+    layoutId: v.optional(v.id("organizationLayouts")),
+    tableId: v.optional(v.id("organizationTables")),
+    orderId: v.optional(v.string()),
+    userId: v.optional(v.string()),
+
+    cancellationTime: v.optional(v.number()),
+    completionTime: v.optional(v.number()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_reservation_date", ["reservationDate", "queueType"])
+    .index("by_status", ["queueStatus"])
+    .index("by_table", ["tableId"])
+    .index("by_user", ["userId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Queue Activities Audit Log Domain Table
+  queueActivities: defineTable({
+    legacyId: v.optional(v.string()),
+    queueId: v.id("organizationQueues"),
+    activityType: v.string(),
+    actorId: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_queue", ["queueId"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
