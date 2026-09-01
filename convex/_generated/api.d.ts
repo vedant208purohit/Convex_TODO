@@ -16,6 +16,7 @@ import type * as organizationPrinters from "../organizationPrinters.js";
 import type * as organizationTables from "../organizationTables.js";
 import type * as organizationOrderProcesses from "../organizationOrderProcesses.js";
 import type * as organizationQrCodes from "../organizationQrCodes.js";
+import type * as organizationQueueConfigurations from "../organizationQueueConfigurations.js";
 import type * as organizationQueues from "../organizationQueues.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizations from "../organizations.js";
@@ -36,6 +37,7 @@ declare const fullApi: ApiFromModules<{
   organizationTables: typeof organizationTables;
   organizationOrderProcesses: typeof organizationOrderProcesses;
   organizationQrCodes: typeof organizationQrCodes;
+  organizationQueueConfigurations: typeof organizationQueueConfigurations;
   organizationQueues: typeof organizationQueues;
   organizationUsers: typeof organizationUsers;
   organizations: typeof organizations;
