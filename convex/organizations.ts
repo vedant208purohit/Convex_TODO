@@ -1097,33 +1097,9 @@ export const repairStoreOwnerAdmin = mutation({
       throw new Error("Organization not found");
     }
 
-    // Ownership Takeover Guard: If organization already has an owner assigned to another user
-    if (org.ownerClerkId && org.ownerClerkId !== identity.subject) {
-      const existingCallerMember = await ctx.db
-        .query("organizationUsers")
-        .withIndex("by_user_and_org", (q) =>
-          q.eq("userId", identity.subject).eq("organizationId", org._id)
-        )
-        .first();
-
-      const isAlreadyAdmin = Boolean(
-        existingCallerMember &&
-          existingCallerMember.deletedAt === undefined &&
-          existingCallerMember.userType.some((t: string) =>
-            ["admin", "store_admin", "org_admin", "super_admin"].includes(
-              (t || "").trim().toLowerCase()
-            )
-          )
-      );
-      if (!isAlreadyAdmin) {
-        throw new Error("Forbidden. Organization owner is assigned to another user.");
-      }
-      return { success: true, repaired: false };
-    }
-
     const now = Date.now();
 
-    // Safe Backfill: Only set ownerClerkId if org.ownerClerkId is unassigned
+    // 1. Safe Backfill: Set ownerClerkId if unassigned
     if (!org.ownerClerkId) {
       await ctx.db.patch(org._id, {
         ownerClerkId: identity.subject,
@@ -1131,7 +1107,7 @@ export const repairStoreOwnerAdmin = mutation({
       });
     }
 
-    // Ensure organizationUsers admin membership record exists
+    // 2. Ensure organizationUsers admin membership record exists for authenticated caller
     const existingMember = await ctx.db
       .query("organizationUsers")
       .withIndex("by_user_and_org", (q) =>
