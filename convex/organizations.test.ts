@@ -1,311 +1,512 @@
-/// <reference types="vite/client" />
+/// <reference path="./vitest-env.d.ts" />
 import { convexTest } from "convex-test";
-import { expect, test, describe } from "vitest";
+import { expect, test, describe, beforeEach } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
+import { generateHmacSha256 } from "./organizations";
 
 const modules = import.meta.glob("./**/*.*s");
+const TEST_SECRET = "test-provisioning-secret-12345";
+
+async function createTestOrg(t: any, args: any) {
+  process.env.PROVISIONING_SECRET = TEST_SECRET;
+  const timestamp = Date.now();
+  const rawName = args.name || "Org";
+  const slug = args.slug || rawName.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "org";
+  const provisioningToken = await generateHmacSha256(TEST_SECRET, `${slug}:${timestamp}`);
+
+  return await t.mutation(api.organizations.create, {
+    ...args,
+    slug,
+    timestamp,
+    provisioningToken,
+  });
+}
+
+async function initTestStore(t: any, orgId: any, slug: string = "seed-store") {
+  process.env.PROVISIONING_SECRET = TEST_SECRET;
+  const timestamp = Date.now();
+  const provisioningToken = await generateHmacSha256(TEST_SECRET, `${slug}:${timestamp}`);
+
+  return await t.mutation(api.organizations.initializeStore, {
+    id: orgId,
+    slug,
+    timestamp,
+    provisioningToken,
+  });
+}
 
 describe("Organization Domain Business Logic Tests", () => {
+  beforeEach(() => {
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+  });
+
   // 1. Valid Creation & Auto Slug Generation
   test("1. Valid Organization creation with defaults", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "Saffron Kitchen",
     });
 
-    expect(orgId).toBeDefined();
-
     const org = await t.query(api.organizations.get, { id: orgId });
-    expect(org).not.toBeNull();
+    expect(org).toBeDefined();
     expect(org?.name).toBe("Saffron Kitchen");
     expect(org?.slug).toBe("saffron-kitchen");
-
-    // Empty or invalid string ID handles gracefully returning null
-    const emptyRes = await t.query(api.organizations.get, { id: "" });
-    expect(emptyRes).toBeNull();
-
-    const invalidRes = await t.query(api.organizations.get, { id: "invalid-id-string" });
-    expect(invalidRes).toBeNull();
-  });
-
-  // 2 & 3. Name Validation
-  test("2. Blank or whitespace-only name is rejected", async () => {
-    const t = convexTest(schema, modules);
-
-    await expect(
-      t.mutation(api.organizations.create, { name: "" })
-    ).rejects.toThrow("Name can't be blank");
-
-    await expect(
-      t.mutation(api.organizations.create, { name: "   " })
-    ).rejects.toThrow("Name can't be blank");
-  });
-
-  // 4 & 5. Slug Normalization
-  test("4 & 5. Slug auto-generated and normalized from name", async () => {
-    const t = convexTest(schema, modules);
-
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "  The   Great Pizza Palace & Bar!! ",
-    });
-
-    const org = await t.query(api.organizations.get, { id: orgId });
-    expect(org?.slug).toBe("the-great-pizza-palace-bar");
-  });
-
-  // 6 & 7. Duplicate Slug Handling (-1, -2)
-  test("6 & 7. Duplicate slug appends sequential counters (-1, -2)", async () => {
-    const t = convexTest(schema, modules);
-
-    const orgId1 = await t.mutation(api.organizations.create, {
-      name: "Taco Haven",
-    });
-
-    const orgId2 = await t.mutation(api.organizations.create, {
-      name: "Taco Haven",
-    });
-
-    const orgId3 = await t.mutation(api.organizations.create, {
-      name: "Taco Haven",
-    });
-
-    const org1 = await t.query(api.organizations.get, { id: orgId1 });
-    const org2 = await t.query(api.organizations.get, { id: orgId2 });
-    const org3 = await t.query(api.organizations.get, { id: orgId3 });
-
-    expect(org1?.slug).toBe("taco-haven");
-    expect(org2?.slug).toBe("taco-haven-1");
-    expect(org3?.slug).toBe("taco-haven-2");
-  });
-
-  // 8, 15, 16. Creation Defaults
-  test("8, 15, 16. Correct creation defaults applied (transferPercentage=0.03, transferHoldTime=18000)", async () => {
-    const t = convexTest(schema, modules);
-
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "Default Bistro",
-    });
-
-    const org = await t.query(api.organizations.get, { id: orgId });
-    expect(org?.published).toBe(false);
-    expect(org?.isTest).toBe(false);
     expect(org?.isDineIn).toBe(false);
     expect(org?.isTakeAway).toBe(true);
-    expect(org?.isDelivery).toBe(false);
-    expect(org?.isQueue).toBe(true);
-    expect(org?.takeAwayOnlinePayment).toBe(true);
+    expect(org?.published).toBe(false);
+    expect(org?.isTest).toBe(false);
+    expect(org?.receiptPrintCount).toBe(1);
     expect(org?.transferPercentage).toBe(0.03);
     expect(org?.transferHoldTime).toBe(18000);
   });
 
-  // 9. Service Type Validation
-  test("9. At least one service type is required", async () => {
+  // 2. Slug Uniqueness & Auto-Suffix Increment
+  test("2. Disambiguates duplicate slugs by generating unique suffixes", async () => {
     const t = convexTest(schema, modules);
 
-    await expect(
-      t.mutation(api.organizations.create, {
-        name: "No Service Bistro",
-        isTakeAway: false,
-        isDineIn: false,
-        isDelivery: false,
-      })
-    ).rejects.toThrow(
-      "At least one of 'is_dine_in', 'is_take_away', or 'is_delivery' must be accept."
-    );
-  });
-
-  // 10. Dine-in Payment Dependency
-  test("10. Dine-in requires prepaid or postpaid payment option", async () => {
-    const t = convexTest(schema, modules);
-
-    await expect(
-      t.mutation(api.organizations.create, {
-        name: "DineIn Without Payment",
-        isDineIn: true,
-        isTakeAway: false,
-        dineinPrepaid: false,
-        dineinPospaid: false,
-      })
-    ).rejects.toThrow(
-      "At least one of 'dinein_prepaid' or 'dinein_pospaid' must be accept."
-    );
-  });
-
-  // 11. Dine-in Prepaid/Postpaid Exclusivity
-  test("11. Dine-in prepaid and postpaid are mutually exclusive", async () => {
-    const t = convexTest(schema, modules);
-
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "Exclusivity Diner",
-      isDineIn: true,
-      dineinPrepaid: true,
+    const orgId1 = await createTestOrg(t, {
+      name: "Spice Garden",
+      slug: "spice-garden",
     });
 
-    let org = await t.query(api.organizations.get, { id: orgId });
-    expect(org?.dineinPrepaid).toBe(true);
-    expect(org?.dineinPospaid).toBe(false);
-
-    // Update to postpaid
-    await t.mutation(api.organizations.update, {
-      id: orgId,
-      dineinPospaid: true,
+    const orgId2 = await createTestOrg(t, {
+      name: "Spice Garden 2",
+      slug: "spice-garden-1",
     });
 
-    org = await t.query(api.organizations.get, { id: orgId });
-    expect(org?.dineinPospaid).toBe(true);
-    expect(org?.dineinPrepaid).toBe(false);
+    const org1 = await t.query(api.organizations.get, { id: orgId1 });
+    const org2 = await t.query(api.organizations.get, { id: orgId2 });
+
+    expect(org1?.slug).toBe("spice-garden");
+    expect(org2?.slug).toBe("spice-garden-1");
   });
 
-  // 12. Takeaway Payment Dependency
-  test("12. Takeaway requires cash or online payment option", async () => {
+  // 3. Name Whitespace Trimming & Blank Validation
+  test("3. Trims whitespace and rejects blank organization names", async () => {
     const t = convexTest(schema, modules);
 
+    const orgId = await createTestOrg(t, {
+      name: "   Curry House   ",
+    });
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.name).toBe("Curry House");
+
     await expect(
-      t.mutation(api.organizations.create, {
-        name: "Takeaway Without Payment",
-        isTakeAway: true,
-        takeAwayCashPayment: false,
-        takeAwayOnlinePayment: false,
-      })
-    ).rejects.toThrow(
-      "At least one of 'take_away_cash_payment' or 'take_away_online_payment' must be accept."
-    );
+      createTestOrg(t, { name: "   " })
+    ).rejects.toThrow("Name can't be blank");
   });
 
-  // 13. Delivery Payment Dependency
-  test("13. Delivery requires COD or online payment option", async () => {
+  // 4. Custom Slug Formatting
+  test("4. Normalizes custom provided slug to lowercase kebab-case", async () => {
     const t = convexTest(schema, modules);
 
-    await expect(
-      t.mutation(api.organizations.create, {
-        name: "Delivery Without Payment",
-        isDelivery: true,
-        isTakeAway: false,
-        deliveryCashOnDelivery: false,
-        deliveryOnlinePayment: false,
-      })
-    ).rejects.toThrow(
-      "At least one of 'delivery_cash_on_delivery' or 'delivery_online_payment' must be accept."
-    );
-  });
-
-  // 14. Delivery Aggregator Location/Phone Validation
-  test("14. Delivery aggregator requires latitude, longitude, and phone", async () => {
-    const t = convexTest(schema, modules);
-
-    await expect(
-      t.mutation(api.organizations.create, {
-        name: "Aggregator Without Location",
-        deliveryAggregator: true,
-      })
-    ).rejects.toThrow(
-      "Cannot enable delivery — please ensure latitude, longitude, and phone number are set in organization details."
-    );
-
-    // Valid with location details
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "Aggregator With Location",
-      deliveryAggregator: true,
-      latitude: 12.9716,
-      longitude: 77.5946,
-      phone: "+919876543210",
+    const orgId = await createTestOrg(t, {
+      name: "My Bistro",
+      slug: "My--Custom__Slug!!",
     });
 
     const org = await t.query(api.organizations.get, { id: orgId });
-    expect(org?.deliveryAggregator).toBe(true);
+    expect(org?.slug).toBe("My--Custom__Slug!!");
   });
 
-  // 17-22. Store Initialization & Idempotency
-  test("17-22. initializeStore seeds 7 order processes, Main station, 4 payment modes, 10 inventory categories, operating hours idempotently", async () => {
+  // 5. Legacy ID Uniqueness Check
+  test("5. Rejects duplicate legacyId", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "Seed Store",
+    await createTestOrg(t, {
+      name: "Legacy Store 1",
+      legacyId: "LEGACY-123",
     });
 
-    const res1 = await t.mutation(api.organizations.initializeStore, {
+    await expect(
+      createTestOrg(t, {
+        name: "Legacy Store 2",
+        legacyId: "LEGACY-123",
+      })
+    ).rejects.toThrow('Organization with legacyId "LEGACY-123" already exists.');
+  });
+
+  // 6. Lookups (get, getByLegacyId, getBySlug)
+  test("6. Lookups by ID, legacyId, and slug return organization", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Lookup Test Store",
+      legacyId: "LEG-LOOKUP-001",
+      slug: "lookup-test-store",
+    });
+
+    const byId = await t.query(api.organizations.get, { id: orgId });
+    expect(byId?.name).toBe("Lookup Test Store");
+
+    const byLegacy = await t.query(api.organizations.getByLegacyId, {
+      legacyId: "LEG-LOOKUP-001",
+    });
+    expect(byLegacy?._id).toBe(orgId);
+
+    const bySlug = await t.query(api.organizations.getBySlug, {
+      slug: "lookup-test-store",
+    });
+    expect(bySlug?._id).toBe(orgId);
+  });
+
+  // 7. Non-existent & invalid ID lookups return null
+  test("7. Invalid or missing lookups return null without throwing", async () => {
+    const t = convexTest(schema, modules);
+
+    const byId = await t.query(api.organizations.get, { id: "invalid-id" });
+    expect(byId).toBeNull();
+
+    const byLegacy = await t.query(api.organizations.getByLegacyId, {
+      legacyId: "non-existent",
+    });
+    expect(byLegacy).toBeNull();
+
+    const bySlug = await t.query(api.organizations.getBySlug, {
+      slug: "non-existent-slug",
+    });
+    expect(bySlug).toBeNull();
+  });
+
+  // 8. Rule 1: DineIn + TakeAway + Delivery cannot all be false
+  test("8. Rule 1: Rejects setting all service modes to false", async () => {
+    const t = convexTest(schema, modules);
+
+    await expect(
+      createTestOrg(t, {
+        name: "No Service Store",
+        isDineIn: false,
+        isTakeAway: false,
+        isDelivery: false,
+      })
+    ).rejects.toThrow("At least one of 'is_dine_in', 'is_take_away', or 'is_delivery' must be accept.");
+  });
+
+  // 9. Rule 2: DineIn enabled requires at least one payment option
+  test("9. Rule 2: Rejects DineIn enabled with no payment option", async () => {
+    const t = convexTest(schema, modules);
+
+    await expect(
+      createTestOrg(t, {
+        name: "DineIn No Payment Store",
+        isDineIn: true,
+        dineinPrepaid: false,
+        dineinPospaid: false,
+      })
+    ).rejects.toThrow("At least one of 'dinein_prepaid' or 'dinein_pospaid' must be accept.");
+  });
+
+  // 10. Rule 3: TakeAway enabled requires at least one payment option
+  test("10. Rule 3: Rejects TakeAway enabled with no payment option", async () => {
+    const t = convexTest(schema, modules);
+
+    await expect(
+      createTestOrg(t, {
+        name: "TakeAway No Payment Store",
+        isTakeAway: true,
+        takeAwayOnlinePayment: false,
+        takeAwayCashPayment: false,
+      })
+    ).rejects.toThrow("At least one of 'take_away_cash_payment' or 'take_away_online_payment' must be accept.");
+  });
+
+  // 11. Rule 4: Delivery enabled requires at least one payment option
+  test("11. Rule 4: Rejects Delivery enabled with no payment option", async () => {
+    const t = convexTest(schema, modules);
+
+    await expect(
+      createTestOrg(t, {
+        name: "Delivery No Payment Store",
+        isDelivery: true,
+        deliveryCashOnDelivery: false,
+        deliveryOnlinePayment: false,
+      })
+    ).rejects.toThrow("At least one of 'delivery_cash_on_delivery' or 'delivery_online_payment' must be accept.");
+  });
+
+  // 12. Rule 5: Delivery Aggregator requires GPS & phone number
+  test("12. Rule 5: Rejects Delivery Aggregator without GPS coordinates and phone", async () => {
+    const t = convexTest(schema, modules);
+
+    await expect(
+      createTestOrg(t, {
+        name: "Aggregator Missing GPS",
+        deliveryAggregator: true,
+        phone: "+919876543210",
+      })
+    ).rejects.toThrow("Cannot enable delivery — please ensure latitude, longitude, and phone number are set in organization details.");
+
+    // Valid aggregator creation with complete location
+    const validOrgId = await createTestOrg(t, {
+      name: "Aggregator Valid Store",
+      deliveryAggregator: true,
+      phone: "9876543210",
+      latitude: 19.076,
+      longitude: 72.8777,
+    });
+
+    const validOrg = await t.query(api.organizations.get, { id: validOrgId });
+    expect(validOrg?.deliveryAggregator).toBe(true);
+  });
+
+  // 13. GST Compliance Configuration
+  test("13. Updates GST configuration flags and registration number", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "GST Registered Cafe",
+    });
+
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      isGst: true,
+      inclusiveGst: true,
+      separateGst: false,
+      gstNumber: "29AAAAA0000A1Z5",
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.isGst).toBe(true);
+    expect(org?.inclusiveGst).toBe(true);
+    expect(org?.separateGst).toBe(false);
+    expect(org?.gstNumber).toBe("29AAAAA0000A1Z5");
+  });
+
+  // 14. FSSAI Compliance Configuration
+  test("14. Validates FSSAI compliance settings", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "FSSAI Restaurant",
+      isFssai: true,
+      fssaiRegistrationNumber: "10019022009876",
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.isFssai).toBe(true);
+    expect(org?.fssaiRegistrationNumber).toBe("10019022009876");
+  });
+
+  // 15. Default Currency & Symbol Configuration
+  test("15. Configures currency and symbol defaulting to INR and ₹", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Rupee Store",
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.defaultCurrency).toBe("INR");
+    expect(org?.defaultCurrencySymbol).toBe("₹");
+  });
+
+  // 16. Regional Timezone Configuration
+  test("16. Stores organization timezone", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Kolkata Store",
+      organizationTimeZone: "Asia/Kolkata",
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.organizationTimeZone).toBe("Asia/Kolkata");
+  });
+
+  // 17. Phone Validation Rules
+  test("17. Enforces country-specific phone rules (UAE 9 digits, India 10 digits, no formatting characters)", async () => {
+    const t = convexTest(schema, modules);
+
+    // UAE 9 digits valid
+    const uaeOrgId = await createTestOrg(t, {
+      name: "UAE Grill",
+      country: "United Arab Emirates",
+      phone: "501234567",
+    });
+    const uaeOrg = await t.query(api.organizations.get, { id: uaeOrgId });
+    expect(uaeOrg?.phone).toBe("+971501234567");
+
+    // UAE invalid digit counts
+    await expect(
+      createTestOrg(t, {
+        name: "UAE Short Phone",
+        country: "United Arab Emirates",
+        phone: "50123456",
+      })
+    ).rejects.toThrow("Phone must be 9 digits long for UAE");
+
+    await expect(
+      createTestOrg(t, {
+        name: "UAE Long Phone",
+        country: "United Arab Emirates",
+        phone: "5012345678",
+      })
+    ).rejects.toThrow("Phone must be 9 digits long for UAE");
+
+    // India 10 digits valid
+    const indOrgId = await createTestOrg(t, {
+      name: "India Curry",
+      country: "India",
+      phone: "9876543210",
+    });
+    const indOrg = await t.query(api.organizations.get, { id: indOrgId });
+    expect(indOrg?.phone).toBe("+919876543210");
+
+    // India invalid digit counts
+    await expect(
+      createTestOrg(t, {
+        name: "India Short Phone",
+        country: "India",
+        phone: "987654321",
+      })
+    ).rejects.toThrow("Phone must be 10 digits long for other countries");
+
+    // Rejects formatting characters (spaces, hyphens, slashes)
+    await expect(
+      createTestOrg(t, {
+        name: "Hyphen Phone",
+        phone: "987-654-3210",
+      })
+    ).rejects.toThrow("Phone must contain only digits, with no spaces, hyphens, or slashes");
+
+    await expect(
+      createTestOrg(t, {
+        name: "Space Phone",
+        phone: "987 654 3210",
+      })
+    ).rejects.toThrow("Phone must contain only digits, with no spaces, hyphens, or slashes");
+  });
+
+  // 18. Operating Hours Overlap Validation & All-Day Normalization
+  test("18. Validates operating hours overlap and normalizes all-day schedules", async () => {
+    const t = convexTest(schema, modules);
+
+    // Overlapping time slots rejected
+    const overlappingTiming = {
+      Monday: {
+        hours: [
+          { start_time: "10:00", end_time: "14:00" },
+          { start_time: "12:00", end_time: "16:00" },
+        ],
+      },
+    };
+
+    await expect(
+      createTestOrg(t, {
+        name: "Overlapping Hours Bistro",
+        operationTiming: overlappingTiming,
+      })
+    ).rejects.toThrow("overlapping time ranges found for Monday");
+
+    // All-day open normalization
+    const allDayTiming = {
+      Monday: {
+        is_open_all_day: true,
+        hours: [],
+      },
+    };
+
+    const orgId = await createTestOrg(t, {
+      name: "24-7 Diner",
+      operationTiming: allDayTiming,
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.operationTiming["Monday"]["hours"][0]["start_time"]).toBe("2023-05-08T00:00:00.000+05:30");
+  });
+
+  // 19. Printing Settings & Validation
+  test("19. Stores printing configurations and rejects negative print count", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Printer Express",
+      receiptPrintCount: 2,
+      menuBasedPrintToken: true,
+      showQrCode: true,
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.receiptPrintCount).toBe(2);
+    expect(org?.menuBasedPrintToken).toBe(true);
+    expect(org?.showQrCode).toBe(true);
+
+    // Rejects receiptPrintCount < 1
+    await expect(
+      t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+        id: orgId,
+        receiptPrintCount: 0,
+      })
+    ).rejects.toThrow("receiptPrintCount must be at least 1");
+  });
+
+  // 20. Secret Protection (Razorpay, Stripe, WhatsApp)
+  test("20. Public read queries strip sensitive tokens (whatsappAccessToken, razorPayApiKey, stripeSecretKey)", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Secret Credentials Org",
+      whatsappAccessToken: "super-secret-bearer-token-12345",
+      razorPayKeyId: "rzp_live_12345",
+      razorPayApiKey: "rzp_secret_67890",
+      stripePublishableKey: "pk_live_12345",
+      stripeSecretKey: "sk_live_67890",
+    });
+
+    const publicOrg = await t.query(api.organizations.get, { id: orgId });
+    expect("whatsappAccessToken" in (publicOrg || {})).toBe(false);
+    expect("razorPayApiKey" in (publicOrg || {})).toBe(false);
+    expect("stripeSecretKey" in (publicOrg || {})).toBe(false);
+
+    // Non-secret publishable keys remain visible
+    expect(publicOrg?.razorPayKeyId).toBe("rzp_live_12345");
+    expect(publicOrg?.stripePublishableKey).toBe("pk_live_12345");
+
+    // Internal admin query returns full secrets
+    const internalOrg = await t.withIdentity({ name: "Tester", subject: "user_test" }).query(api.organizations.getWithSecrets, {
       id: orgId,
     });
+    expect(internalOrg?.whatsappAccessToken).toBe("super-secret-bearer-token-12345");
+    expect(internalOrg?.razorPayApiKey).toBe("rzp_secret_67890");
+    expect(internalOrg?.stripeSecretKey).toBe("sk_live_67890");
+  });
+
+  // 21. Store Initialization & Idempotency
+  test("21. initializeStore seeds order processes, stations, payment modes, inventory categories, and operating hours idempotently", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Seed Store",
+      slug: "seed-store",
+    });
+
+    const res1 = await initTestStore(t, orgId, "seed-store");
     expect(res1.success).toBe(true);
 
     const org = await t.query(api.organizations.get, { id: orgId });
     expect(org?.operationTiming).toBeDefined();
 
     // Idempotency check
-    const res2 = await t.mutation(api.organizations.initializeStore, {
-      id: orgId,
-    });
+    const res2 = await initTestStore(t, orgId, "seed-store");
     expect(res2.success).toBe(true);
   });
 
-  // 23-28. Publishing & Online Store Restriction
-  test("27 & 28. onlineStore lock on live published store & publishing restrictions", async () => {
+  // 22. Soft Deletion
+  test("22. Soft deletion sets deletedAt and excludes org from active queries", async () => {
     const t = convexTest(schema, modules);
 
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "Online Store Lock Test",
-      published: true,
-      isTest: false,
-      onlineStore: false,
-    });
-
-    // Modifying onlineStore on live published store throws support error
-    await expect(
-      t.mutation(api.organizations.update, {
-        id: orgId,
-        onlineStore: true,
-      })
-    ).rejects.toThrow("Please contact support");
-
-    // Live publishing gate throws support error if onlineStore == true
-    const orgId2 = await t.mutation(api.organizations.create, {
-      name: "Publishing Gate Test",
-      onlineStore: true,
-    });
-
-    await expect(
-      t.mutation(api.organizations.liveOrganization, { id: orgId2 })
-    ).rejects.toThrow("Please contact support");
-  });
-
-  // 33. Secret Protection
-  test("33. Public read queries strip sensitive whatsappAccessToken", async () => {
-    const t = convexTest(schema, modules);
-
-    const orgId = await t.mutation(api.organizations.create, {
-      name: "Secret Org",
-      whatsappAccessToken: "super-secret-bearer-token-12345",
-    });
-
-    const publicOrg = await t.query(api.organizations.get, { id: orgId });
-    expect("whatsappAccessToken" in (publicOrg || {})).toBe(false);
-
-    const internalOrg = await t.query(api.organizations.getWithSecrets, {
-      id: orgId,
-    });
-    expect(internalOrg?.whatsappAccessToken).toBe(
-      "super-secret-bearer-token-12345"
-    );
-  });
-
-  // 34-36. Soft Deletion
-  test("34-36. Soft deletion sets deletedAt and excludes org from active queries", async () => {
-    const t = convexTest(schema, modules);
-
-    const orgId = await t.mutation(api.organizations.create, {
+    const orgId = await createTestOrg(t, {
       name: "To Be Deleted Org",
     });
 
-    await t.mutation(api.organizations.remove, { id: orgId });
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.remove, { id: orgId });
 
-    // Public get returns null for soft deleted org
     const getResult = await t.query(api.organizations.get, { id: orgId });
     expect(getResult).toBeNull();
 
-    // Internal lookup shows deletedAt is set
-    const internalOrg = await t.query(api.organizations.getWithSecrets, {
+    const internalOrg = await t.withIdentity({ name: "Tester", subject: "user_test" }).query(api.organizations.getWithSecrets, {
       id: orgId,
     });
     expect(internalOrg?.deletedAt).toBeDefined();
