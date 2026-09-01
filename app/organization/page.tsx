@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
 
@@ -53,6 +54,7 @@ function Field({
 }
 
 export default function OrganizationPage() {
+  const { isSignedIn } = useAuth();
   const organizations = useQuery(api.organizations.list);
   const organization = organizations?.[0] ?? null;
   const isLoading = organizations === undefined;
@@ -73,6 +75,367 @@ export default function OrganizationPage() {
   const initializeFeatureDefaults = useMutation(api.organizationFeatures.initializeDefaults);
   const softDeleteFeature = useMutation(api.organizationFeatures.softDelete);
   const repairStoreOwnerAdmin = useMutation(api.organizations.repairStoreOwnerAdmin);
+
+  // Organization Languages Hooks & Mutations
+  const languages = useQuery(
+    api.organizationLanguages.list,
+    isSignedIn && currentMembership ? {} : "skip"
+  );
+  const createLanguage = useMutation(api.organizationLanguages.create);
+  const updateLanguage = useMutation(api.organizationLanguages.update);
+  const setDefaultLanguage = useMutation(api.organizationLanguages.setDefault);
+  const removeLanguage = useMutation(api.organizationLanguages.remove);
+
+  // Organization Layouts Hooks & Mutations
+  const layouts = useQuery(
+    api.organizationLayouts.list,
+    isSignedIn && currentMembership ? {} : "skip"
+  );
+  const createLayout = useMutation(api.organizationLayouts.create);
+  const updateLayout = useMutation(api.organizationLayouts.update);
+  const removeLayout = useMutation(api.organizationLayouts.remove);
+
+  const [layoutName, setLayoutName] = useState("");
+  const [layoutDisplayOrder, setLayoutDisplayOrder] = useState<string>("");
+  const [layoutActionError, setLayoutActionError] = useState<string | null>(null);
+  const [layoutActionSuccess, setLayoutActionSuccess] = useState<string | null>(null);
+  const [isCreatingLayout, setIsCreatingLayout] = useState(false);
+
+  // Edit layout state
+  const [editingLayoutId, setEditingLayoutId] = useState<string | null>(null);
+  const [editLayoutName, setEditLayoutName] = useState("");
+  const [editLayoutDisplayOrder, setEditLayoutDisplayOrder] = useState<string>("");
+  const [isUpdatingLayout, setIsUpdatingLayout] = useState(false);
+  const [isDeletingLayoutId, setIsDeletingLayoutId] = useState<string | null>(null);
+
+  const formatLayoutErrorMessage = (err: unknown): string => {
+    const message = err instanceof Error ? err.message : String(err ?? "An error occurred");
+    if (message.includes("already taken") || message.includes("already exists")) {
+      return "Layout name already exists.";
+    }
+    if (message.includes("Name can't be blank")) {
+      return "Layout name can't be blank.";
+    }
+    if (message.includes("Layout not found")) {
+      return "Layout section not found.";
+    }
+    if (message.includes("Unauthenticated")) {
+      return "Unauthenticated. Please sign in again.";
+    }
+    if (message.includes("Active store membership required")) {
+      return "Forbidden. Active store membership required.";
+    }
+    if (message.includes("Admin access required")) {
+      return "Forbidden. Admin access required.";
+    }
+    return message;
+  };
+
+  const handleCreateLayout = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLayoutActionError(null);
+    setLayoutActionSuccess(null);
+
+    const trimmedName = layoutName.trim();
+    if (!trimmedName) {
+      setLayoutActionError("Layout name can't be blank.");
+      return;
+    }
+
+    if (layouts) {
+      const dupName = layouts.some(
+        (l) => l.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      if (dupName) {
+        setLayoutActionError("Layout name already exists.");
+        return;
+      }
+    }
+
+    const orderNum = layoutDisplayOrder.trim() !== "" ? parseInt(layoutDisplayOrder.trim(), 10) : undefined;
+    if (orderNum !== undefined && isNaN(orderNum)) {
+      setLayoutActionError("Display order must be a valid number.");
+      return;
+    }
+
+    setIsCreatingLayout(true);
+    try {
+      await createLayout({
+        name: trimmedName,
+        ...(orderNum !== undefined ? { displayOrder: orderNum } : {}),
+      });
+      setLayoutActionSuccess(`Layout section "${trimmedName}" created successfully.`);
+      setLayoutName("");
+      setLayoutDisplayOrder("");
+    } catch (err) {
+      setLayoutActionError(formatLayoutErrorMessage(err));
+    } finally {
+      setIsCreatingLayout(false);
+    }
+  };
+
+  const startEditingLayout = (layout: { _id: string; name: string; displayOrder?: number }) => {
+    setEditingLayoutId(layout._id);
+    setEditLayoutName(layout.name);
+    setEditLayoutDisplayOrder(layout.displayOrder !== undefined ? String(layout.displayOrder) : "");
+    setLayoutActionError(null);
+    setLayoutActionSuccess(null);
+  };
+
+  const handleUpdateLayout = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingLayoutId) return;
+    setLayoutActionError(null);
+    setLayoutActionSuccess(null);
+
+    const trimmedName = editLayoutName.trim();
+    if (!trimmedName) {
+      setLayoutActionError("Layout name can't be blank.");
+      return;
+    }
+
+    if (layouts) {
+      const dupName = layouts.some(
+        (l) => l._id !== editingLayoutId && l.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      if (dupName) {
+        setLayoutActionError("Layout name already exists.");
+        return;
+      }
+    }
+
+    const orderNum = editLayoutDisplayOrder.trim() !== "" ? parseInt(editLayoutDisplayOrder.trim(), 10) : undefined;
+    if (orderNum !== undefined && isNaN(orderNum)) {
+      setLayoutActionError("Display order must be a valid number.");
+      return;
+    }
+
+    setIsUpdatingLayout(true);
+    try {
+      await updateLayout({
+        id: editingLayoutId as any,
+        name: trimmedName,
+        ...(orderNum !== undefined ? { displayOrder: orderNum } : {}),
+      });
+      setLayoutActionSuccess(`Layout section "${trimmedName}" updated successfully.`);
+      setEditingLayoutId(null);
+    } catch (err) {
+      setLayoutActionError(formatLayoutErrorMessage(err));
+    } finally {
+      setIsUpdatingLayout(false);
+    }
+  };
+
+  const handleRemoveLayout = async (id: string, name: string) => {
+    const confirmed = window.confirm(`Are you sure you want to remove the layout section "${name}"?`);
+    if (!confirmed) return;
+
+    setLayoutActionError(null);
+    setLayoutActionSuccess(null);
+    setIsDeletingLayoutId(id);
+    try {
+      await removeLayout({ id: id as any });
+      setLayoutActionSuccess(`Layout section "${name}" was deleted successfully.`);
+      if (editingLayoutId === id) {
+        setEditingLayoutId(null);
+      }
+    } catch (err) {
+      setLayoutActionError(formatLayoutErrorMessage(err));
+    } finally {
+      setIsDeletingLayoutId(null);
+    }
+  };
+
+  const [langName, setLangName] = useState("");
+  const [langCode, setLangCode] = useState("");
+  const [langIsDefault, setLangIsDefault] = useState(false);
+  const [langActionError, setLangActionError] = useState<string | null>(null);
+  const [langActionSuccess, setLangActionSuccess] = useState<string | null>(null);
+  const [isCreatingLang, setIsCreatingLang] = useState(false);
+
+  // Edit language state
+  const [editingLangId, setEditingLangId] = useState<string | null>(null);
+  const [editLangName, setEditLangName] = useState("");
+  const [editLangCode, setEditLangCode] = useState("");
+  const [editLangIsDefault, setEditLangIsDefault] = useState(false);
+  const [isUpdatingLang, setIsUpdatingLang] = useState(false);
+
+  // Action loading indicators
+  const [isSettingDefaultLangId, setIsSettingDefaultLangId] = useState<string | null>(null);
+  const [isDeletingLangId, setIsDeletingLangId] = useState<string | null>(null);
+
+  const formatLanguageErrorMessage = (err: unknown): string => {
+    const message = err instanceof Error ? err.message : String(err ?? "An error occurred");
+    if (message.includes("already taken") || message.includes("already exists")) {
+      return "Language name or ISO code already exists.";
+    }
+    if (message.includes("Name can't be blank")) {
+      return "Name can't be blank";
+    }
+    if (message.includes("Code can't be blank")) {
+      return "Code can't be blank";
+    }
+    if (message.includes("Language not found")) {
+      return "Language not found.";
+    }
+    if (message.includes("Unauthenticated")) {
+      return "Unauthenticated. Please sign in again.";
+    }
+    if (message.includes("Active store membership required")) {
+      return "Forbidden. Active store membership required.";
+    }
+    if (message.includes("Admin access required")) {
+      return "Forbidden. Admin access required.";
+    }
+    return message;
+  };
+
+  const handleCreateLanguage = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLangActionError(null);
+    setLangActionSuccess(null);
+
+    const trimmedName = langName.trim();
+    const trimmedCode = langCode.trim();
+
+    if (!trimmedName) {
+      setLangActionError("Name can't be blank");
+      return;
+    }
+    if (!trimmedCode) {
+      setLangActionError("Code can't be blank");
+      return;
+    }
+
+    if (languages) {
+      const dupName = languages.some(
+        (l) => l.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      if (dupName) {
+        setLangActionError("Language name or ISO code already exists.");
+        return;
+      }
+      const dupCode = languages.some(
+        (l) => l.code.trim().toLowerCase() === trimmedCode.toLowerCase()
+      );
+      if (dupCode) {
+        setLangActionError("Language name or ISO code already exists.");
+        return;
+      }
+    }
+
+    setIsCreatingLang(true);
+    try {
+      await createLanguage({
+        name: trimmedName,
+        code: trimmedCode,
+        isDefault: langIsDefault,
+      });
+      setLangActionSuccess(`Language "${trimmedName}" (${trimmedCode.toUpperCase()}) created successfully.`);
+      setLangName("");
+      setLangCode("");
+      setLangIsDefault(false);
+    } catch (err) {
+      setLangActionError(formatLanguageErrorMessage(err));
+    } finally {
+      setIsCreatingLang(false);
+    }
+  };
+
+  const startEditingLang = (lang: { _id: string; name: string; code: string; isDefault: boolean }) => {
+    setEditingLangId(lang._id);
+    setEditLangName(lang.name);
+    setEditLangCode(lang.code);
+    setEditLangIsDefault(lang.isDefault);
+    setLangActionError(null);
+    setLangActionSuccess(null);
+  };
+
+  const handleUpdateLanguage = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!editingLangId) return;
+    setLangActionError(null);
+    setLangActionSuccess(null);
+
+    const trimmedName = editLangName.trim();
+    const trimmedCode = editLangCode.trim();
+
+    if (!trimmedName) {
+      setLangActionError("Name can't be blank");
+      return;
+    }
+    if (!trimmedCode) {
+      setLangActionError("Code can't be blank");
+      return;
+    }
+
+    if (languages) {
+      const dupName = languages.some(
+        (l) => l._id !== editingLangId && l.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+      if (dupName) {
+        setLangActionError("Language name or ISO code already exists.");
+        return;
+      }
+      const dupCode = languages.some(
+        (l) => l._id !== editingLangId && l.code.trim().toLowerCase() === trimmedCode.toLowerCase()
+      );
+      if (dupCode) {
+        setLangActionError("Language name or ISO code already exists.");
+        return;
+      }
+    }
+
+    setIsUpdatingLang(true);
+    try {
+      await updateLanguage({
+        id: editingLangId as any,
+        name: trimmedName,
+        code: trimmedCode,
+        isDefault: editLangIsDefault,
+      });
+      setLangActionSuccess(`Language "${trimmedName}" updated successfully.`);
+      setEditingLangId(null);
+    } catch (err) {
+      setLangActionError(formatLanguageErrorMessage(err));
+    } finally {
+      setIsUpdatingLang(false);
+    }
+  };
+
+  const handleSetDefaultLanguage = async (id: string, name: string) => {
+    setLangActionError(null);
+    setLangActionSuccess(null);
+    setIsSettingDefaultLangId(id);
+    try {
+      await setDefaultLanguage({ id: id as any });
+      setLangActionSuccess(`"${name}" is now the default store language.`);
+    } catch (err) {
+      setLangActionError(formatLanguageErrorMessage(err));
+    } finally {
+      setIsSettingDefaultLangId(null);
+    }
+  };
+
+  const handleRemoveLanguage = async (id: string, name: string) => {
+    const confirmed = window.confirm(`Are you sure you want to remove the language "${name}"?`);
+    if (!confirmed) return;
+
+    setLangActionError(null);
+    setLangActionSuccess(null);
+    setIsDeletingLangId(id);
+    try {
+      await removeLanguage({ id: id as any });
+      setLangActionSuccess(`Language "${name}" was removed.`);
+      if (editingLangId === id) {
+        setEditingLangId(null);
+      }
+    } catch (err) {
+      setLangActionError(formatLanguageErrorMessage(err));
+    } finally {
+      setIsDeletingLangId(null);
+    }
+  };
 
   const [roleFilter, setRoleFilter] = useState("");
   const [selectedMemberUserId, setSelectedMemberUserId] = useState<string | null>(null);
@@ -143,15 +506,20 @@ export default function OrganizationPage() {
       )
   );
 
+  const { user } = useUser();
   const [hasAttemptedRepair, setHasAttemptedRepair] = useState(false);
 
   useEffect(() => {
-    // Auto-repair pre-existing store owner admin membership ONCE if loaded and membership is null
-    if (organization?._id && currentMembership === null && !hasAttemptedRepair) {
+    // Auto-repair pre-existing store owner admin membership ONCE if loaded, membership is null,
+    // AND the store is either unowned or the current user is the recorded store owner.
+    const isOwnerOrUnowned =
+      !organization?.ownerClerkId || (user?.id && organization?.ownerClerkId === user.id);
+
+    if (organization?._id && currentMembership === null && isOwnerOrUnowned && !hasAttemptedRepair) {
       setHasAttemptedRepair(true);
       repairStoreOwnerAdmin({ organizationId: organization._id }).catch(() => {});
     }
-  }, [organization, currentMembership, hasAttemptedRepair, repairStoreOwnerAdmin]);
+  }, [organization, currentMembership, user?.id, hasAttemptedRepair, repairStoreOwnerAdmin]);
 
   useEffect(() => {
     console.log("AUTH DEBUG", {
@@ -541,6 +909,499 @@ export default function OrganizationPage() {
                 <Field label="User ID" value={currentMembership?.userId ?? "-"} />
                 <Field label="Roles" value={currentMembership?.userType.join(", ") || "-"} />
               </div>
+            </section>
+
+            {/* Organization Languages Section */}
+            <section className="rounded-3xl border border-[#eadfd6] bg-[#fbf7f4] p-6 xl:col-span-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-medium">Organization Languages</h2>
+                  <p className="mt-1 text-sm text-[#6f655e]">
+                    Manage store catalog languages and designate the active default language.
+                  </p>
+                </div>
+                {isAdmin ? (
+                  <span className="rounded-full bg-[#f5efe9] px-3 py-1 text-xs text-[#6f655e]">
+                    Store Admin
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Feedback messages */}
+              {langActionSuccess ? (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">
+                  {langActionSuccess}
+                </div>
+              ) : null}
+              {langActionError ? (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+                  {langActionError}
+                </div>
+              ) : null}
+
+              {/* Add Language Form Card */}
+              <div className="mt-5 rounded-2xl border border-[#eadfd6] bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-4 border-b border-[#eadfd6] pb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#1f1a17]">Add New Language</h3>
+                    <p className="mt-0.5 text-xs text-[#6f655e]">
+                      Add an ISO language code and language name to the store catalog.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-[#f5efe9] px-3 py-1 text-xs font-medium text-[#6f655e]">
+                    Store Admin only
+                  </span>
+                </div>
+
+                {isAdmin ? (
+                  <form onSubmit={handleCreateLanguage} className="mt-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">Language Name</label>
+                        <input
+                          type="text"
+                          value={langName}
+                          onChange={(e) => setLangName(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none transition-all focus:border-[#1f1a17]"
+                          placeholder="e.g. English, Hindi, Arabic"
+                          disabled={isCreatingLang}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">ISO Language Code</label>
+                        <input
+                          type="text"
+                          value={langCode}
+                          onChange={(e) => setLangCode(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none transition-all focus:border-[#1f1a17]"
+                          placeholder="e.g. en, hi, ar"
+                          disabled={isCreatingLang}
+                        />
+                      </div>
+                      <div className="flex items-center pt-6 sm:pt-4">
+                        <label className="flex items-center gap-2 text-sm font-medium text-[#1f1a17] cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={langIsDefault}
+                            onChange={(e) => setLangIsDefault(e.target.checked)}
+                            className="h-4 w-4 rounded border-[#eadfd6] accent-[#1f1a17]"
+                            disabled={isCreatingLang}
+                          />
+                          <span>Set as default language</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <button
+                        type="submit"
+                        disabled={isCreatingLang}
+                        className="rounded-xl bg-[#1f1a17] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black transition-all disabled:opacity-50"
+                      >
+                        {isCreatingLang ? "Adding..." : "Add Language"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLangName("");
+                          setLangCode("");
+                          setLangIsDefault(false);
+                          setLangActionError(null);
+                        }}
+                        disabled={isCreatingLang}
+                        className="rounded-xl border border-[#eadfd6] bg-white px-5 py-2.5 text-sm text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-[#eadfd6] bg-[#fbf7f4] px-4 py-3 text-sm text-[#6f655e]">
+                    You need admin access to add organization languages.
+                  </div>
+                )}
+              </div>
+
+              {/* Edit Language Form Card */}
+              {editingLangId && isAdmin ? (
+                <div className="mt-5 rounded-2xl border border-[#1f1a17] bg-white p-5 shadow-md">
+                  <div className="flex items-center justify-between gap-4 border-b border-[#eadfd6] pb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#1f1a17]">Edit Language</h3>
+                      <p className="mt-0.5 text-xs text-[#6f655e]">Update language name, code, or default status.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingLangId(null)}
+                      className="text-xs font-medium text-[#6f655e] hover:text-[#1f1a17]"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleUpdateLanguage} className="mt-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">Language Name</label>
+                        <input
+                          type="text"
+                          value={editLangName}
+                          onChange={(e) => setEditLangName(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none focus:border-[#1f1a17]"
+                          disabled={isUpdatingLang}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">ISO Code</label>
+                        <input
+                          type="text"
+                          value={editLangCode}
+                          onChange={(e) => setEditLangCode(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none focus:border-[#1f1a17]"
+                          disabled={isUpdatingLang}
+                        />
+                      </div>
+                      <div className="flex items-center pt-6 sm:pt-4">
+                        <label className="flex items-center gap-2 text-sm font-medium text-[#1f1a17] cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={editLangIsDefault}
+                            onChange={(e) => setEditLangIsDefault(e.target.checked)}
+                            className="h-4 w-4 rounded border-[#eadfd6] accent-[#1f1a17]"
+                            disabled={isUpdatingLang}
+                          />
+                          <span>Set as default language</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <button
+                        type="submit"
+                        disabled={isUpdatingLang}
+                        className="rounded-xl bg-[#1f1a17] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black transition-all disabled:opacity-50"
+                      >
+                        {isUpdatingLang ? "Saving..." : "Save Changes"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingLangId(null)}
+                        disabled={isUpdatingLang}
+                        className="rounded-xl border border-[#eadfd6] bg-white px-5 py-2.5 text-sm text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : null}
+
+              {/* Languages Table */}
+              {languages === undefined ? (
+                <div className="mt-5 rounded-2xl border border-[#eadfd6] bg-white px-4 py-3 text-sm text-[#6f655e]">
+                  Loading organization languages...
+                </div>
+              ) : languages.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-[#eadfd6] bg-white px-4 py-3 text-sm text-[#6f655e]">
+                  No active organization languages found.
+                </div>
+              ) : (
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-[#eadfd6] bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[#f5efe9] text-[#6f655e]">
+                      <tr>
+                        <th className="px-4 py-3">Language Name</th>
+                        <th className="px-4 py-3">ISO Code</th>
+                        <th className="px-4 py-3">Default Status</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {languages.map((lang) => (
+                        <tr key={lang._id} className="border-t border-[#eadfd6] hover:bg-[#fbf7f4]/50">
+                          <td className="px-4 py-3 font-medium text-[#1f1a17]">{lang.name}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-[#6f655e]">
+                            {lang.code.toUpperCase()}
+                          </td>
+                          <td className="px-4 py-3">
+                            {lang.isDefault ? (
+                              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                                ★ Default
+                              </span>
+                            ) : (
+                              <span className="text-xs text-[#8a7e75]">Standard</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {!lang.isDefault ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSetDefaultLanguage(lang._id, lang.name)}
+                                  disabled={
+                                    isSettingDefaultLangId === lang._id || isMembershipLoading || !isAdmin
+                                  }
+                                  title={!isAdmin ? "Store Admin only" : "Make this the default language"}
+                                  className="rounded-lg border border-[#eadfd6] bg-white px-3 py-1 text-xs font-medium text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                                >
+                                  {isSettingDefaultLangId === lang._id ? "Setting..." : "Set Default"}
+                                </button>
+                              ) : null}
+                              <button
+                                type="button"
+                                onClick={() => startEditingLang(lang)}
+                                disabled={isMembershipLoading || !isAdmin}
+                                title={!isAdmin ? "Store Admin only" : "Edit language details"}
+                                className="rounded-lg border border-[#eadfd6] bg-white px-3 py-1 text-xs font-medium text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLanguage(lang._id, lang.name)}
+                                disabled={isDeletingLangId === lang._id || isMembershipLoading || !isAdmin}
+                                title={!isAdmin ? "Store Admin only" : "Delete this language"}
+                                className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 transition-all disabled:opacity-50"
+                              >
+                                {isDeletingLangId === lang._id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+
+            {/* Organization Layouts / Floor Plan Sections Section */}
+            <section className="rounded-3xl border border-[#eadfd6] bg-[#fbf7f4] p-6 xl:col-span-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-medium">Organization Layouts (Floor Plan Sections)</h2>
+                  <p className="mt-1 text-sm text-[#6f655e]">
+                    Manage store seating areas, dining rooms, and floor layout sections.
+                  </p>
+                </div>
+                {isAdmin ? (
+                  <span className="rounded-full bg-[#f5efe9] px-3 py-1 text-xs text-[#6f655e]">
+                    Store Admin
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Feedback messages */}
+              {layoutActionSuccess ? (
+                <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-700">
+                  {layoutActionSuccess}
+                </div>
+              ) : null}
+              {layoutActionError ? (
+                <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+                  {layoutActionError}
+                </div>
+              ) : null}
+
+              {/* Add Layout Form Card */}
+              <div className="mt-5 rounded-2xl border border-[#eadfd6] bg-white p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-4 border-b border-[#eadfd6] pb-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#1f1a17]">Add Layout Section</h3>
+                    <p className="mt-0.5 text-xs text-[#6f655e]">
+                      Create a new floor plan section (e.g. Main Dining, Patio, Bar, Rooftop).
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-[#f5efe9] px-3 py-1 text-xs font-medium text-[#6f655e]">
+                    Store Admin only
+                  </span>
+                </div>
+
+                {isAdmin ? (
+                  <form onSubmit={handleCreateLayout} className="mt-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">Section Name</label>
+                        <input
+                          type="text"
+                          value={layoutName}
+                          onChange={(e) => setLayoutName(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none transition-all focus:border-[#1f1a17]"
+                          placeholder="e.g. Main Dining, Patio, Bar"
+                          disabled={isCreatingLayout}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">Display Order (Optional)</label>
+                        <input
+                          type="number"
+                          value={layoutDisplayOrder}
+                          onChange={(e) => setLayoutDisplayOrder(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none transition-all focus:border-[#1f1a17]"
+                          placeholder="e.g. 1, 2, 3"
+                          disabled={isCreatingLayout}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <button
+                        type="submit"
+                        disabled={isCreatingLayout}
+                        className="rounded-xl bg-[#1f1a17] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black transition-all disabled:opacity-50"
+                      >
+                        {isCreatingLayout ? "Adding..." : "Add Layout"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLayoutName("");
+                          setLayoutDisplayOrder("");
+                          setLayoutActionError(null);
+                        }}
+                        disabled={isCreatingLayout}
+                        className="rounded-xl border border-[#eadfd6] bg-white px-5 py-2.5 text-sm text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="mt-4 rounded-xl border border-[#eadfd6] bg-[#fbf7f4] px-4 py-3 text-sm text-[#6f655e]">
+                    You need admin access to add floor plan layout sections.
+                  </div>
+                )}
+              </div>
+
+              {/* Edit Layout Form Card */}
+              {editingLayoutId && isAdmin ? (
+                <div className="mt-5 rounded-2xl border border-[#1f1a17] bg-white p-5 shadow-md">
+                  <div className="flex items-center justify-between gap-4 border-b border-[#eadfd6] pb-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-[#1f1a17]">Edit Layout Section</h3>
+                      <p className="mt-0.5 text-xs text-[#6f655e]">Update layout section name or display order.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setEditingLayoutId(null)}
+                      className="text-xs font-medium text-[#6f655e] hover:text-[#1f1a17]"
+                    >
+                      ✕ Close
+                    </button>
+                  </div>
+
+                  <form onSubmit={handleUpdateLayout} className="mt-4 space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">Section Name</label>
+                        <input
+                          type="text"
+                          value={editLayoutName}
+                          onChange={(e) => setEditLayoutName(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none focus:border-[#1f1a17]"
+                          disabled={isUpdatingLayout}
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs uppercase tracking-wide text-[#8a7e75]">Display Order (Optional)</label>
+                        <input
+                          type="number"
+                          value={editLayoutDisplayOrder}
+                          onChange={(e) => setEditLayoutDisplayOrder(e.target.value)}
+                          className="mt-1.5 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-2 text-sm outline-none focus:border-[#1f1a17]"
+                          disabled={isUpdatingLayout}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-3 pt-2">
+                      <button
+                        type="submit"
+                        disabled={isUpdatingLayout}
+                        className="rounded-xl bg-[#1f1a17] px-6 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-black transition-all disabled:opacity-50"
+                      >
+                        {isUpdatingLayout ? "Saving..." : "Save Changes"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingLayoutId(null)}
+                        disabled={isUpdatingLayout}
+                        className="rounded-xl border border-[#eadfd6] bg-white px-5 py-2.5 text-sm text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              ) : null}
+
+              {/* Layouts Table */}
+              {layouts === undefined ? (
+                <div className="mt-5 rounded-2xl border border-[#eadfd6] bg-white px-4 py-3 text-sm text-[#6f655e]">
+                  Loading organization layouts...
+                </div>
+              ) : layouts.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-[#eadfd6] bg-white px-4 py-3 text-sm text-[#6f655e]">
+                  No active organization layouts found.
+                </div>
+              ) : (
+                <div className="mt-5 overflow-x-auto rounded-2xl border border-[#eadfd6] bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-[#f5efe9] text-[#6f655e]">
+                      <tr>
+                        <th className="px-4 py-3">Section Name</th>
+                        <th className="px-4 py-3">Display Order</th>
+                        <th className="px-4 py-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {([...layouts].sort((a, b) => {
+                        if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+                          return a.displayOrder - b.displayOrder;
+                        }
+                        if (a.displayOrder !== undefined) return -1;
+                        if (b.displayOrder !== undefined) return 1;
+                        return a.name.localeCompare(b.name);
+                      })).map((layout) => (
+                        <tr key={layout._id} className="border-t border-[#eadfd6] hover:bg-[#fbf7f4]/50">
+                          <td className="px-4 py-3 font-medium text-[#1f1a17]">{layout.name}</td>
+                          <td className="px-4 py-3 text-[#6f655e]">
+                            {layout.displayOrder !== undefined ? (
+                              <span className="inline-flex items-center rounded-full bg-[#f5efe9] px-2.5 py-0.5 text-xs font-medium text-[#1f1a17]">
+                                #{layout.displayOrder}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-[#8a7e75]">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEditingLayout(layout)}
+                                disabled={isMembershipLoading || !isAdmin}
+                                title={!isAdmin ? "Store Admin only" : "Edit layout details"}
+                                className="rounded-lg border border-[#eadfd6] bg-white px-3 py-1 text-xs font-medium text-[#1f1a17] hover:bg-[#f5efe9] transition-all disabled:opacity-50"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveLayout(layout._id, layout.name)}
+                                disabled={isDeletingLayoutId === layout._id || isMembershipLoading || !isAdmin}
+                                title={!isAdmin ? "Store Admin only" : "Delete this layout section"}
+                                className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-medium text-red-700 hover:bg-red-50 transition-all disabled:opacity-50"
+                              >
+                                {isDeletingLayoutId === layout._id ? "Deleting..." : "Delete"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
 
             <section className="rounded-3xl border border-[#eadfd6] bg-[#fbf7f4] p-6 xl:col-span-3">

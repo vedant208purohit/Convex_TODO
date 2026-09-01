@@ -1106,6 +1106,8 @@ export const repairStoreOwnerAdmin = mutation({
         ownerClerkId: identity.subject,
         updatedAt: now,
       });
+    } else if (org.ownerClerkId !== identity.subject) {
+      return { success: false, reason: "Forbidden. Organization owner is assigned to another user." };
     }
 
     // 2. Ensure organizationUsers admin membership record exists for authenticated caller

@@ -5,6 +5,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import { ReactNode } from "react";
 
+import { LanguageSelector } from "./LanguageSelector";
+
 type NavItem = {
   href: string;
   label: string;
@@ -115,6 +117,7 @@ export function PosShell({
               </div>
 
               <div className="flex items-center gap-3">
+                <LanguageSelector />
                 <div className="hidden items-center gap-2 rounded-full bg-[#f0ebe6] px-4 py-2 text-[#7b7169] md:flex">
                   <span>⌕</span>
                   <span className="text-[14px]">Search...</span>

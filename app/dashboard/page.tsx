@@ -1,6 +1,7 @@
 "use client";
 
 import { PosShell } from "../components/PosShell";
+import { DigitalMenuCatalog } from "../components/DigitalMenuCatalog";
 
 const stats = [
   { title: "Total Sales", value: "$4,285.50", delta: "+12.5% from yesterday", icon: "▣" },
@@ -37,6 +38,10 @@ export default function DashboardPage() {
               </div>
             </article>
           ))}
+        </section>
+
+        <section>
+          <DigitalMenuCatalog />
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.9fr_1fr]">
