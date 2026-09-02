@@ -1,8 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  color-scheme: light !important;
+  --background: #faf6f3;
+  --foreground: #1f1a17;
 }
 
 @theme inline {
@@ -17,15 +18,47 @@
 }
 
 html {
+  color-scheme: light !important;
   background: var(--background);
+  color: var(--foreground);
 }
 
 body {
+  color-scheme: light !important;
   margin: 0;
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
   min-height: 100vh;
+}
+
+/* Standard input styling for clean light theme form inputs */
+input,
+select,
+textarea {
+  color-scheme: light !important;
+  background-color: #fdf8f7;
+  color: #1f1a17;
+  caret-color: #1f1a17;
+}
+
+input::placeholder,
+select::placeholder,
+textarea::placeholder {
+  color: #8a7e75;
+  opacity: 1;
+}
+
+/* Chrome Autofill override - prevents dark navy background while keeping text readable */
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active,
+select:-webkit-autofill,
+select:-webkit-autofill:hover,
+select:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0px 1000px #fdf8f7 inset !important;
+  -webkit-text-fill-color: #1f1a17 !important;
 }
 
 .auth-shell {
@@ -138,10 +171,10 @@ body {
 }
 
 /* ---------- Text inputs ---------- */
-.cl-formFieldInput,
-input[type="text"],
-input[type="email"],
-input[type="password"] {
+.auth-shell .cl-formFieldInput,
+.auth-shell input[type="text"],
+.auth-shell input[type="email"],
+.auth-shell input[type="password"] {
   background-color: #1e293b !important;
   border: 1.5px solid #475569 !important;
   color: #ffffff !important;
@@ -149,17 +182,17 @@ input[type="password"] {
   border-radius: 0.5rem !important;
 }
 
-.cl-formFieldInput::placeholder,
-input::placeholder {
+.auth-shell .cl-formFieldInput::placeholder,
+.auth-shell input::placeholder {
   color: #94a3b8 !important;
   -webkit-text-fill-color: #94a3b8 !important;
   opacity: 1 !important;
 }
 
-.cl-formFieldInput:focus,
-input[type="text"]:focus,
-input[type="email"]:focus,
-input[type="password"]:focus {
+.auth-shell .cl-formFieldInput:focus,
+.auth-shell input[type="text"]:focus,
+.auth-shell input[type="email"]:focus,
+.auth-shell input[type="password"]:focus {
   border-color: #818cf8 !important;
   background-color: #0f172a !important;
   outline: none !important;
@@ -167,10 +200,10 @@ input[type="password"]:focus {
 }
 
 /* ---------- Autofill fix (email input light-blue issue) ---------- */
-input:-webkit-autofill,
-input:-webkit-autofill:hover,
-input:-webkit-autofill:focus,
-input:-webkit-autofill:active {
+.auth-shell input:-webkit-autofill,
+.auth-shell input:-webkit-autofill:hover,
+.auth-shell input:-webkit-autofill:focus,
+.auth-shell input:-webkit-autofill:active {
   -webkit-box-shadow: 0 0 0 1000px #1e293b inset !important;
   -webkit-text-fill-color: #ffffff !important;
   caret-color: #ffffff !important;
@@ -179,8 +212,8 @@ input:-webkit-autofill:active {
 }
 
 /* ---------- OTP input boxes fix ---------- */
-.cl-otpCodeFieldInput,
-input[data-otp-input] {
+.auth-shell .cl-otpCodeFieldInput,
+.auth-shell input[data-otp-input] {
   background-color: #1e293b !important;
   border: 1.5px solid #475569 !important;
   color: #ffffff !important;

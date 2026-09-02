@@ -1201,6 +1201,8 @@ export const update = mutation({
     primaryColor: v.optional(v.string()),
     secondaryColor: v.optional(v.string()),
     theme: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+    logoStorageId: v.optional(v.id("_storage")),
 
     // Module & Feature Flags
     isDineIn: v.optional(v.boolean()),
@@ -1372,18 +1374,25 @@ export const update = mutation({
 
     validateOrganizationState(finalState);
 
-    await ctx.db.patch(id, {
-      ...updates,
-      dineinPrepaid,
-      dineinPospaid,
-      takeAwayOnlinePayment,
-      takeAwayCashPayment,
-      deliveryOnlinePayment,
-      deliveryCashOnDelivery,
-      scheduledPickupOnlinePayment,
-      scheduledDeliveryOnlinePayment,
-      updatedAt: Date.now(),
-    });
+    if (updates.logoUrl === "") {
+      const docToReplace = { ...existing, ...finalState, updatedAt: Date.now() };
+      delete (docToReplace as any).logoUrl;
+      delete (docToReplace as any).logoStorageId;
+      await ctx.db.replace(id, docToReplace as any);
+    } else {
+      await ctx.db.patch(id, {
+        ...updates,
+        dineinPrepaid,
+        dineinPospaid,
+        takeAwayOnlinePayment,
+        takeAwayCashPayment,
+        deliveryOnlinePayment,
+        deliveryCashOnDelivery,
+        scheduledPickupOnlinePayment,
+        scheduledDeliveryOnlinePayment,
+        updatedAt: Date.now(),
+      });
+    }
   },
 });
 
@@ -1672,3 +1681,16 @@ export const seedDefault = mutation({
     });
   },
 });
+
+export const generateUploadUrl = mutation({
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const getStorageUrl = query({
+  args: { storageId: v.id("_storage") },
+  handler: async (ctx, args) => {
+    return await ctx.storage.getUrl(args.storageId);
+  },
+});

@@ -79,6 +79,8 @@ export default defineSchema({
     primaryColor: v.optional(v.string()),
     secondaryColor: v.optional(v.string()),
     theme: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+    logoStorageId: v.optional(v.id("_storage")),
 
     // POS Feature & Module Configuration
     isDineIn: v.boolean(),
