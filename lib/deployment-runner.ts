@@ -218,7 +218,8 @@ export async function runStoreDeployment(
           name: params.name,
           slug: params.slug,
           legacyId: params.legacyOrganizationId || undefined,
-          ownerClerkId: params.ownerClerkId || undefined,
+          // Do not pass Master Clerk ID to Default store backend because Master & Default use separate Clerk instances
+          ownerClerkId: undefined,
           published: false,
           isTest: false,
           phone: params.phone || undefined,
