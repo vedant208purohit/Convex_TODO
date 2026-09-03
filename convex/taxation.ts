@@ -1,5 +1,33 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
+
+// Helper: Organization Ownership Guard Enforcer
+async function verifyOrgOwnership(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<"organizations">
+) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (identity) {
+    const org = await ctx.db.get(organizationId);
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found");
+    }
+    const isOwner = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+    if (isOwner) return;
+
+    const membership = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user_and_org", (q) =>
+        q.eq("userId", identity.subject).eq("organizationId", organizationId)
+      )
+      .first();
+
+    if (!membership || membership.deletedAt !== undefined) {
+      throw new Error("Forbidden. Cross-organization access denied.");
+    }
+  }
+}
 
 // ==========================================
 // TAX COMPONENTS & TAX GROUPS CRUD
@@ -30,6 +58,69 @@ export const createTaxComponent = mutation({
       code: args.code,
       createdAt: Date.now(),
     });
+  },
+});
+
+export const updateTaxComponent = mutation({
+  args: {
+    id: v.id("taxComponents"),
+    name: v.optional(v.string()),
+    rate: v.optional(v.number()),
+    code: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const component = await ctx.db.get(args.id);
+    if (!component) throw new Error("Tax component not found");
+
+    await verifyOrgOwnership(ctx, component.organizationId);
+
+    const { id, ...updates } = args;
+    const patchData: Record<string, any> = {};
+
+    if (updates.name !== undefined) {
+      if (!updates.name || !updates.name.trim()) {
+        throw new Error("Tax component name cannot be blank");
+      }
+      patchData.name = updates.name.trim();
+    }
+
+    if (updates.rate !== undefined) {
+      if (typeof updates.rate !== "number" || updates.rate < 0) {
+        throw new Error("Tax rate must be a non-negative number");
+      }
+      patchData.rate = updates.rate;
+    }
+
+    if (updates.code !== undefined) {
+      patchData.code = updates.code;
+    }
+
+    await ctx.db.patch(id, patchData);
+    return { success: true };
+  },
+});
+
+export const removeTaxComponent = mutation({
+  args: { id: v.id("taxComponents") },
+  handler: async (ctx, args) => {
+    const component = await ctx.db.get(args.id);
+    if (!component) throw new Error("Tax component not found");
+
+    await verifyOrgOwnership(ctx, component.organizationId);
+
+    // Inspect whether component is referenced by any tax group in the organization
+    const taxGroups = await ctx.db
+      .query("taxGroups")
+      .withIndex("by_org", (q) => q.eq("organizationId", component.organizationId))
+      .collect();
+
+    const isReferenced = taxGroups.some((g) => g.componentIds.includes(args.id));
+    if (isReferenced) {
+      throw new Error("Cannot delete tax component because it is referenced by one or more tax groups");
+    }
+
+    await ctx.db.delete(args.id);
+    return { success: true };
   },
 });
 
@@ -81,11 +172,96 @@ export const createTaxGroup = mutation({
   },
 });
 
+export const updateTaxGroup = mutation({
+  args: {
+    id: v.id("taxGroups"),
+    name: v.optional(v.string()),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
+    componentIds: v.optional(v.array(v.id("taxComponents"))),
+    isDefault: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const group = await ctx.db.get(args.id);
+    if (!group) throw new Error("Tax group not found");
+
+    await verifyOrgOwnership(ctx, group.organizationId);
+
+    const { id, ...updates } = args;
+    const now = Date.now();
+    const patchData: Record<string, any> = { updatedAt: now };
+
+    if (updates.name !== undefined) {
+      if (!updates.name || !updates.name.trim()) {
+        throw new Error("Tax group name cannot be blank");
+      }
+      patchData.name = updates.name.trim();
+    }
+
+    if (updates.taxMode !== undefined) {
+      patchData.taxMode = updates.taxMode;
+    }
+
+    if (updates.componentIds !== undefined) {
+      for (const compId of updates.componentIds) {
+        const comp = await ctx.db.get(compId);
+        if (!comp || comp.organizationId !== group.organizationId) {
+          throw new Error(`Tax component ${compId} not found in organization`);
+        }
+      }
+      patchData.componentIds = updates.componentIds;
+    }
+
+    if (updates.isDefault === true) {
+      const existingGroups = await ctx.db
+        .query("taxGroups")
+        .withIndex("by_org", (q) => q.eq("organizationId", group.organizationId))
+        .collect();
+
+      for (const g of existingGroups) {
+        if (g._id !== group._id && g.isDefault) {
+          await ctx.db.patch(g._id, { isDefault: false, updatedAt: now });
+        }
+      }
+      patchData.isDefault = true;
+    } else if (updates.isDefault === false) {
+      patchData.isDefault = false;
+    }
+
+    await ctx.db.patch(id, patchData);
+    return { success: true };
+  },
+});
+
+export const removeTaxGroup = mutation({
+  args: { id: v.id("taxGroups") },
+  handler: async (ctx, args) => {
+    const group = await ctx.db.get(args.id);
+    if (!group) throw new Error("Tax group not found");
+
+    await verifyOrgOwnership(ctx, group.organizationId);
+
+    // Protect group if referenced in storeTaxSettings as defaultTaxGroupId
+    const storeSettings = await ctx.db
+      .query("storeTaxSettings")
+      .withIndex("by_org", (q) => q.eq("organizationId", group.organizationId))
+      .first();
+
+    if (storeSettings && storeSettings.defaultTaxGroupId === group._id) {
+      throw new Error("Cannot delete tax group referenced as default in store tax settings");
+    }
+
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});
+
 export const setDefaultTaxGroup = mutation({
   args: { id: v.id("taxGroups") },
   handler: async (ctx, args) => {
     const group = await ctx.db.get(args.id);
     if (!group) throw new Error("Tax group not found");
+
+    await verifyOrgOwnership(ctx, group.organizationId);
 
     const existingGroups = await ctx.db
       .query("taxGroups")

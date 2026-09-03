@@ -132,4 +132,225 @@ describe("International Taxation Engine & isGst Integration", () => {
     expect(taxCalc.tax_amount).toBe("0.00");
     expect(taxCalc.final_price).toBe("50.00");
   });
+
+  test("5. Tax Component Update and Delete Operations", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Tax Component Test Store",
+    });
+
+    // 1. Create component
+    const compId = await t.mutation(api.taxation.createTaxComponent, {
+      organizationId: orgId,
+      name: "State Tax",
+      rate: 5.0,
+      code: "STAX",
+    });
+
+    // 2. Update component name, rate, code
+    const updateRes = await t.mutation(api.taxation.updateTaxComponent, {
+      id: compId,
+      name: "Updated State Tax",
+      rate: 6.5,
+      code: "STAX_NEW",
+    });
+    expect(updateRes.success).toBe(true);
+
+    const components = await t.query(api.taxation.listTaxComponents, {
+      organizationId: orgId,
+    });
+    expect(components).toHaveLength(1);
+    expect(components[0].name).toBe("Updated State Tax");
+    expect(components[0].rate).toBe(6.5);
+    expect(components[0].code).toBe("STAX_NEW");
+
+    // 3. Delete component (not referenced by any group)
+    const deleteRes = await t.mutation(api.taxation.removeTaxComponent, {
+      id: compId,
+    });
+    expect(deleteRes.success).toBe(true);
+
+    const afterDelete = await t.query(api.taxation.listTaxComponents, {
+      organizationId: orgId,
+    });
+    expect(afterDelete).toHaveLength(0);
+  });
+
+  test("6. Prevent Deletion of Tax Component Referenced in Tax Group", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Referenced Component Store",
+    });
+
+    const compId = await t.mutation(api.taxation.createTaxComponent, {
+      organizationId: orgId,
+      name: "CGST",
+      rate: 2.5,
+    });
+
+    await t.mutation(api.taxation.createTaxGroup, {
+      organizationId: orgId,
+      name: "GST 5%",
+      taxMode: "inclusive",
+      componentIds: [compId],
+    });
+
+    // Attempting to delete referenced component throws error
+    await expect(
+      t.mutation(api.taxation.removeTaxComponent, { id: compId })
+    ).rejects.toThrow("Cannot delete tax component because it is referenced by one or more tax groups");
+  });
+
+  test("7. Tax Group Update & Default Flag Exclusivity", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Tax Group Exclusivity Store",
+    });
+
+    const compId = await t.mutation(api.taxation.createTaxComponent, {
+      organizationId: orgId,
+      name: "VAT",
+      rate: 10.0,
+    });
+
+    // Create Group 1 (isDefault = true)
+    const group1Id = await t.mutation(api.taxation.createTaxGroup, {
+      organizationId: orgId,
+      name: "Group 1",
+      taxMode: "inclusive",
+      componentIds: [compId],
+      isDefault: true,
+    });
+
+    // Create Group 2 (isDefault = false)
+    const group2Id = await t.mutation(api.taxation.createTaxGroup, {
+      organizationId: orgId,
+      name: "Group 2",
+      taxMode: "exclusive",
+      componentIds: [compId],
+      isDefault: false,
+    });
+
+    let groups = await t.query(api.taxation.listTaxGroups, { organizationId: orgId });
+    expect(groups.find((g: any) => g._id === group1Id)?.isDefault).toBe(true);
+    expect(groups.find((g: any) => g._id === group2Id)?.isDefault).toBe(false);
+
+    // Update Group 2: name, taxMode, and set isDefault = true
+    await t.mutation(api.taxation.updateTaxGroup, {
+      id: group2Id,
+      name: "Updated Group 2",
+      taxMode: "inclusive",
+      isDefault: true,
+    });
+
+    groups = await t.query(api.taxation.listTaxGroups, { organizationId: orgId });
+    const g1 = groups.find((g: any) => g._id === group1Id);
+    const g2 = groups.find((g: any) => g._id === group2Id);
+
+    expect(g2?.name).toBe("Updated Group 2");
+    expect(g2?.taxMode).toBe("inclusive");
+    expect(g2?.isDefault).toBe(true);
+    // Group 1 should be unset from default
+    expect(g1?.isDefault).toBe(false);
+  });
+
+  test("8. Tax Group Removal and Protection of Default Store Tax Settings Reference", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Store Tax Settings Protection Store",
+    });
+
+    const setupResult = await t.mutation(api.taxation.autoSetupStoreTaxation, {
+      organizationId: orgId,
+      countryCode: "US",
+    });
+
+    // Default tax group created by autoSetupStoreTaxation is referenced in storeTaxSettings
+    await expect(
+      t.mutation(api.taxation.removeTaxGroup, { id: setupResult.taxGroupId })
+    ).rejects.toThrow("Cannot delete tax group referenced as default in store tax settings");
+
+    // Non-referenced group can be deleted
+    const compId = await t.mutation(api.taxation.createTaxComponent, {
+      organizationId: orgId,
+      name: "Extra Tax",
+      rate: 1.0,
+    });
+
+    const standaloneGroupId = await t.mutation(api.taxation.createTaxGroup, {
+      organizationId: orgId,
+      name: "Standalone Group",
+      taxMode: "exclusive",
+      componentIds: [compId],
+      isDefault: false,
+    });
+
+    const deleteRes = await t.mutation(api.taxation.removeTaxGroup, {
+      id: standaloneGroupId,
+    });
+    expect(deleteRes.success).toBe(true);
+  });
+
+  test("9. Cross-Organization Security Guard Rejects Unauthorized Access", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgAId = await t.mutation(api.organizations.create, {
+      name: "Org A",
+      ownerClerkId: "user_owner_a",
+    });
+
+    const orgBId = await t.mutation(api.organizations.create, {
+      name: "Org B",
+      ownerClerkId: "user_owner_b",
+    });
+
+    const compBId = await t.mutation(api.taxation.createTaxComponent, {
+      organizationId: orgBId,
+      name: "Org B Component",
+      rate: 5.0,
+    });
+
+    const groupBId = await t.mutation(api.taxation.createTaxGroup, {
+      organizationId: orgBId,
+      name: "Org B Group",
+      taxMode: "exclusive",
+      componentIds: [compBId],
+    });
+
+    // Caller authenticated as User Owner A attempting to modify Org B's tax records
+    const callerOrgA = t.withIdentity({
+      name: "User Owner A",
+      subject: "user_owner_a",
+    });
+
+    await expect(
+      callerOrgA.mutation(api.taxation.updateTaxGroup, {
+        id: groupBId,
+        name: "Hacked Group",
+      })
+    ).rejects.toThrow("Forbidden. Cross-organization access denied.");
+
+    await expect(
+      callerOrgA.mutation(api.taxation.removeTaxGroup, {
+        id: groupBId,
+      })
+    ).rejects.toThrow("Forbidden. Cross-organization access denied.");
+
+    await expect(
+      callerOrgA.mutation(api.taxation.updateTaxComponent, {
+        id: compBId,
+        rate: 99.0,
+      })
+    ).rejects.toThrow("Forbidden. Cross-organization access denied.");
+
+    await expect(
+      callerOrgA.mutation(api.taxation.removeTaxComponent, {
+        id: compBId,
+      })
+    ).rejects.toThrow("Forbidden. Cross-organization access denied.");
+  });
 });
