@@ -1693,4 +1693,4 @@ export const getStorageUrl = query({
   handler: async (ctx, args) => {
     return await ctx.storage.getUrl(args.storageId);
   },
-});
+});
