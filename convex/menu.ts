@@ -645,3 +645,452 @@ export const getOrganizationMenu = query({
     return resultMenu;
   },
 });
+
+// ==========================================
+// CATEGORY & ITEM MANAGEMENT HANDLERS
+// ==========================================
+
+export const listCategories = query({
+  args: { menuId: v.id("menus") },
+  handler: async (ctx, args) => {
+    const categories = await ctx.db
+      .query("categories")
+      .withIndex("by_menu", (q) => q.eq("menuId", args.menuId))
+      .collect();
+
+    return categories.sort((a, b) => a.position - b.position);
+  },
+});
+
+export const reorderCategories = mutation({
+  args: {
+    categoryIds: v.array(v.id("categories")),
+  },
+  handler: async (ctx, args) => {
+    for (let i = 0; i < args.categoryIds.length; i++) {
+      await ctx.db.patch(args.categoryIds[i], {
+        position: i,
+        updatedAt: Date.now(),
+      });
+    }
+    return { success: true };
+  },
+});
+
+export const reorderCategoryItems = mutation({
+  args: {
+    categoryItemIds: v.array(v.id("categoryItems")),
+  },
+  handler: async (ctx, args) => {
+    for (let i = 0; i < args.categoryItemIds.length; i++) {
+      await ctx.db.patch(args.categoryItemIds[i], {
+        position: i,
+      });
+    }
+    return { success: true };
+  },
+});
+
+export const updateCategory = mutation({
+  args: {
+    id: v.id("categories"),
+    name: v.optional(v.string()),
+    position: v.optional(v.number()),
+    published: v.optional(v.boolean()),
+    name_hi: v.optional(v.string()),
+    name_gu: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    const cat = await ctx.db.get(id);
+    if (!cat) throw new Error("Category not found");
+
+    await ctx.db.patch(id, {
+      ...updates,
+      updatedAt: Date.now(),
+    });
+    return await ctx.db.get(id);
+  },
+});
+
+export const toggleCategoryPublished = mutation({
+  args: {
+    id: v.id("categories"),
+    published: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const cat = await ctx.db.get(args.id);
+    if (!cat) throw new Error("Category not found");
+
+    await ctx.db.patch(args.id, {
+      published: args.published,
+      updatedAt: Date.now(),
+    });
+    return { success: true, published: args.published };
+  },
+});
+
+export const deleteCategory = mutation({
+  args: { id: v.id("categories") },
+  handler: async (ctx, args) => {
+    const cat = await ctx.db.get(args.id);
+    if (!cat) throw new Error("Category not found");
+
+    // Remove category items associations
+    const catItems = await ctx.db
+      .query("categoryItems")
+      .withIndex("by_category", (q) => q.eq("categoryId", args.id))
+      .collect();
+
+    for (const ci of catItems) {
+      await ctx.db.delete(ci._id);
+    }
+
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});
+
+export const listCategoryItems = query({
+  args: { categoryId: v.id("categories") },
+  handler: async (ctx, args) => {
+    const catItems = await ctx.db
+      .query("categoryItems")
+      .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .collect();
+
+    const sortedCatItems = catItems.sort((a, b) => a.position - b.position);
+    const results: Array<any> = [];
+
+    for (const ci of sortedCatItems) {
+      const item = await ctx.db.get(ci.itemId);
+      if (!item) continue;
+
+      const imageUrl = item.imageStorageId
+        ? await ctx.storage.getUrl(item.imageStorageId)
+        : null;
+
+      results.push({
+        categoryItemId: ci._id,
+        position: ci.position,
+        published: ci.published,
+        item: {
+          _id: item._id,
+          name: item.name,
+          price: item.price,
+          displayPrice: (item.price / 100).toFixed(2),
+          description: item.description,
+          published: item.published,
+          isAvailable: item.isAvailable,
+          isVeg: item.isVeg,
+          isSpicy: item.isSpicy,
+          markAsBestseller: item.markAsBestseller,
+          imageUrl,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        },
+      });
+    }
+
+    return results;
+  },
+});
+
+export const listAllItems = query({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    const items = await ctx.db
+      .query("items")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    const results: Array<any> = [];
+    for (const item of items) {
+      const catItem = await ctx.db
+        .query("categoryItems")
+        .filter((q) => q.eq(q.field("itemId"), item._id))
+        .first();
+
+      let categoryName: string | null = null;
+      if (catItem) {
+        const cat = await ctx.db.get(catItem.categoryId);
+        categoryName = cat?.name ?? null;
+      }
+
+      const imageUrl = item.imageStorageId
+        ? await ctx.storage.getUrl(item.imageStorageId)
+        : null;
+
+      results.push({
+        _id: item._id,
+        name: item.name,
+        price: item.price,
+        displayPrice: (item.price / 100).toFixed(2),
+        description: item.description,
+        published: item.published,
+        isAvailable: item.isAvailable,
+        isVeg: item.isVeg,
+        isSpicy: item.isSpicy,
+        imageUrl,
+        categoryName,
+      });
+    }
+
+    return results;
+  },
+});
+
+export const addExistingItemToCategory = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    categoryId: v.id("categories"),
+    itemId: v.id("items"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("categoryItems")
+      .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .filter((q) => q.eq(q.field("itemId"), args.itemId))
+      .first();
+
+    if (existing) {
+      return { success: true, categoryItemId: existing._id };
+    }
+
+    const currentItems = await ctx.db
+      .query("categoryItems")
+      .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .collect();
+
+    const categoryItemId = await ctx.db.insert("categoryItems", {
+      organizationId: args.organizationId,
+      categoryId: args.categoryId,
+      itemId: args.itemId,
+      position: currentItems.length,
+      published: true,
+      createdAt: Date.now(),
+    });
+
+    return { success: true, categoryItemId };
+  },
+});
+
+export const toggleItemAvailability = mutation({
+  args: {
+    id: v.id("items"),
+    isAvailable: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item) throw new Error("Item not found");
+
+    await ctx.db.patch(args.id, {
+      isAvailable: args.isAvailable,
+      updatedAt: Date.now(),
+    });
+    return { success: true, isAvailable: args.isAvailable };
+  },
+});
+
+export const updateItem = mutation({
+  args: {
+    id: v.id("items"),
+    name: v.optional(v.string()),
+    price: v.optional(v.number()),
+    description: v.optional(v.string()),
+    published: v.optional(v.boolean()),
+    isAvailable: v.optional(v.boolean()),
+    isVeg: v.optional(v.boolean()),
+    isSpicy: v.optional(v.boolean()),
+    markAsBestseller: v.optional(v.boolean()),
+    imageStorageId: v.optional(v.id("_storage")),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    const item = await ctx.db.get(id);
+    if (!item) throw new Error("Item not found");
+
+    await ctx.db.patch(id, {
+      ...updates,
+      updatedAt: Date.now(),
+    });
+    return await ctx.db.get(id);
+  },
+});
+
+export const deleteItem = mutation({
+  args: {
+    id: v.id("items"),
+    categoryId: v.optional(v.id("categories")),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item) throw new Error("Item not found");
+
+    if (args.categoryId) {
+      const catItems = await ctx.db
+        .query("categoryItems")
+        .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId!))
+        .collect();
+
+      for (const ci of catItems) {
+        if (ci.itemId === args.id) {
+          await ctx.db.delete(ci._id);
+        }
+      }
+    } else {
+      // Remove all category associations
+      const allCatItems = await ctx.db.query("categoryItems").collect();
+      for (const ci of allCatItems) {
+        if (ci.itemId === args.id) {
+          await ctx.db.delete(ci._id);
+        }
+      }
+      await ctx.db.delete(args.id);
+    }
+
+    return { success: true };
+  },
+});
+
+export const seedSampleMenu = mutation({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    const existingMenus = await ctx.db
+      .query("menus")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    if (existingMenus.length > 0) {
+      return existingMenus[0]._id;
+    }
+
+    const now = Date.now();
+    const menuId = await ctx.db.insert("menus", {
+      organizationId: args.organizationId,
+      name: "Main Menu",
+      description: "Default restaurant dining & bar menu",
+      isDefault: true,
+      isActive: true,
+      position: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Seed sample categories
+    const viralFoodId = await ctx.db.insert("categories", {
+      organizationId: args.organizationId,
+      menuId,
+      name: "Viral Food",
+      position: 0,
+      published: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const startersId = await ctx.db.insert("categories", {
+      organizationId: args.organizationId,
+      menuId,
+      name: "Starters",
+      position: 1,
+      published: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const mainsId = await ctx.db.insert("categories", {
+      organizationId: args.organizationId,
+      menuId,
+      name: "Mains",
+      position: 2,
+      published: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Seed sample items for Viral Food
+    const item1Id = await ctx.db.insert("items", {
+      organizationId: args.organizationId,
+      name: "Truffle Umami Burger",
+      price: 2400, // $24.00
+      description: "Wagyu beef, black truffle aioli, aged cheddar, brioche bun",
+      published: true,
+      isAvailable: true,
+      isVeg: false,
+      isSpicy: false,
+      isGst: false,
+      showQuantity: false,
+      showCalorie: false,
+      daysOfUnavailable: 0,
+      markAsBestseller: true,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const item2Id = await ctx.db.insert("items", {
+      organizationId: args.organizationId,
+      name: "Spicy Tuna Crispy Rice",
+      price: 1850, // $18.50
+      description: "Sushi grade tuna, jalapeño, sweet soy glaze, scallions",
+      published: true,
+      isAvailable: true,
+      isVeg: false,
+      isSpicy: true,
+      isGst: false,
+      showQuantity: false,
+      showCalorie: false,
+      daysOfUnavailable: 0,
+      markAsBestseller: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const item3Id = await ctx.db.insert("items", {
+      organizationId: args.organizationId,
+      name: "Matcha Lava Cake",
+      price: 1400, // $14.00
+      description: "Warm matcha green tea cake, molten center, vanilla bean gelato",
+      published: true,
+      isAvailable: false, // SOLD OUT
+      isVeg: true,
+      isSpicy: false,
+      isGst: false,
+      showQuantity: false,
+      showCalorie: false,
+      daysOfUnavailable: 0,
+      markAsBestseller: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Link items to Viral Food category
+    await ctx.db.insert("categoryItems", {
+      organizationId: args.organizationId,
+      categoryId: viralFoodId,
+      itemId: item1Id,
+      position: 0,
+      published: true,
+      createdAt: now,
+    });
+
+    await ctx.db.insert("categoryItems", {
+      organizationId: args.organizationId,
+      categoryId: viralFoodId,
+      itemId: item2Id,
+      position: 1,
+      published: true,
+      createdAt: now,
+    });
+
+    await ctx.db.insert("categoryItems", {
+      organizationId: args.organizationId,
+      categoryId: viralFoodId,
+      itemId: item3Id,
+      position: 2,
+      published: true,
+      createdAt: now,
+    });
+
+    return menuId;
+  },
+});
