@@ -799,4 +799,33 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_po", ["purchaseOrderId"])
     .index("by_order", ["orderId"]),
+
+  // Organization Schedule Pickups Domain Table
+  organizationSchedulePickups: defineTable({
+    legacyId: v.optional(v.string()),
+
+    advanceOrderTimeLimit: v.optional(v.string()),
+    advancePickupLimit: v.optional(v.number()),
+    advancePickupLimitType: v.optional(v.string()),
+    pickupTimings: v.optional(weeklyScheduleValidator),
+    pickupTimeSlotSize: v.optional(v.string()),
+
+    pickupAddressLine1: v.optional(v.string()),
+    pickupAddressLine2: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    country: v.optional(v.string()),
+    zipcode: v.optional(v.string()),
+
+    advanceScheduleDeliveryOrderTimeLimit: v.optional(v.string()),
+    advanceDeliveryLimit: v.optional(v.number()),
+    advanceDeliveryLimitType: v.optional(v.string()),
+    deliveryTimings: v.optional(weeklyScheduleValidator),
+    deliveryTimeSlotSize: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
