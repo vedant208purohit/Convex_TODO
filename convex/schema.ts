@@ -59,11 +59,15 @@ export default defineSchema({
     inclusiveGst: v.boolean(),
     separateGst: v.boolean(),
     gstNumber: v.optional(v.string()),
+    gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Food Safety Compliance Configuration
     isFssai: v.boolean(),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
+    fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone Configuration
     defaultCurrency: v.optional(v.string()),

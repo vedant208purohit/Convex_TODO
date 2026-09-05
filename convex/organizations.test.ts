@@ -511,4 +511,42 @@ describe("Organization Domain Business Logic Tests", () => {
     });
     expect(internalOrg?.deletedAt).toBeDefined();
   });
+
+  // 23. FSSAI & GST Compliance Document Storage & URL Fields
+  test("23. Saves, updates, and clears FSSAI and GST document storage IDs and URLs", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Document Compliance Store",
+    });
+
+    // Store blob to generate valid storage ID via t.run
+    const fssaiStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["fssai doc"])));
+    const gstStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["gst doc"])));
+
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentStorageId: fssaiStorageId,
+      fssaiDocumentUrl: "https://example.com/fssai.pdf",
+      gstDocumentStorageId: gstStorageId,
+      gstDocumentUrl: "https://example.com/gst.pdf",
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.fssaiDocumentStorageId).toBe(fssaiStorageId);
+    expect(org?.fssaiDocumentUrl).toBe("https://example.com/fssai.pdf");
+    expect(org?.gstDocumentStorageId).toBe(gstStorageId);
+    expect(org?.gstDocumentUrl).toBe("https://example.com/gst.pdf");
+
+    // Clear document fields by updating URL to empty string or replacing
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentUrl: "",
+      gstDocumentUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.fssaiDocumentUrl).toBe("");
+    expect(clearedOrg?.gstDocumentUrl).toBe("");
+  });
 });

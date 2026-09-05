@@ -686,11 +686,15 @@ export const create = mutation({
     inclusiveGst: v.optional(v.boolean()),
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
+    gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
     isFssai: v.optional(v.boolean()),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
+    fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
     defaultCurrency: v.optional(v.string()),
@@ -911,11 +915,15 @@ export const create = mutation({
       inclusiveGst,
       separateGst,
       gstNumber: args.gstNumber,
+      gstDocumentStorageId: args.gstDocumentStorageId,
+      gstDocumentUrl: args.gstDocumentUrl,
 
       // FSSAI Compliance
       isFssai,
       fssaiRegistrationNumber: args.fssaiRegistrationNumber,
       expiryDate: args.expiryDate,
+      fssaiDocumentStorageId: args.fssaiDocumentStorageId,
+      fssaiDocumentUrl: args.fssaiDocumentUrl,
 
       // Currency & Regional Timezone
       defaultCurrency,
@@ -1181,11 +1189,15 @@ export const update = mutation({
     inclusiveGst: v.optional(v.boolean()),
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
+    gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
     isFssai: v.optional(v.boolean()),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
+    fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
     defaultCurrency: v.optional(v.string()),
