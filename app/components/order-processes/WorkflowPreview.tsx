@@ -7,26 +7,86 @@ interface WorkflowPreviewProps {
   processes: OrderProcessDoc[];
 }
 
-function getStageSubtitle(process: OrderProcessDoc): string {
-  const nameLower = process.name.toLowerCase().trim();
-  if (nameLower.includes("accept")) return "Initial acceptance";
-  if (nameLower.includes("progress") || nameLower.includes("cook") || nameLower.includes("prep"))
-    return "Kitchen prep";
-  if (nameLower.includes("ready") || nameLower.includes("deliver"))
-    return "Ready for handoff";
-  if (nameLower.includes("deliver") || nameLower.includes("complete") || nameLower.includes("done"))
-    return "Order completed";
-  if (nameLower.includes("check") || nameLower.includes("quality"))
-    return "Quality check";
-  if (nameLower.includes("pack")) return "Packaging";
-  return "Workflow stage";
+interface MainStageTemplate {
+  key: string;
+  name: string;
+  subtitle: string;
+  defaultColor: string;
+  matches: (proc: OrderProcessDoc) => boolean;
 }
 
+const MAIN_STAGE_TEMPLATES: MainStageTemplate[] = [
+  {
+    key: "accepted",
+    name: "Accepted",
+    subtitle: "Initial acceptance",
+    defaultColor: "#141010",
+    matches: (p) => {
+      const n = p.name.trim().toLowerCase();
+      return n === "accepted" || n.startsWith("accept");
+    },
+  },
+  {
+    key: "in_progress",
+    name: "In progress",
+    subtitle: "Kitchen prep",
+    defaultColor: "#f59e0b",
+    matches: (p) => {
+      const n = p.name.trim().toLowerCase();
+      return (
+        n === "in progress" ||
+        n.includes("progress") ||
+        n.includes("kitchen") ||
+        n.includes("prep")
+      );
+    },
+  },
+  {
+    key: "ready_to_deliver",
+    name: "Ready to deliver",
+    subtitle: "Ready for handoff",
+    defaultColor: "#f97316",
+    matches: (p) => {
+      const n = p.name.trim().toLowerCase();
+      return (
+        n === "ready to deliver" ||
+        (n.includes("ready") && !n.includes("deliver"))
+      );
+    },
+  },
+  {
+    key: "delivered",
+    name: "Delivered",
+    subtitle: "Order completed",
+    defaultColor: "#22c55e",
+    matches: (p) => {
+      const n = p.name.trim().toLowerCase();
+      return (
+        n === "delivered" ||
+        (n.includes("deliver") && !n.includes("ready")) ||
+        n.includes("complete") ||
+        n.includes("done")
+      );
+    },
+  },
+];
+
 export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
-  // Published sequential stages appear in the live visual chain
-  const activeStages = processes.filter(
-    (p) => p.published !== false && p.isSequence !== false
-  );
+  // Show only the 4 main/default processes in this specific order
+  const visualStages = MAIN_STAGE_TEMPLATES.map((template) => {
+    const matched = processes.find((p) => template.matches(p));
+    return {
+      id: matched?._id || template.key,
+      name: matched?.name || template.name,
+      subtitle: template.subtitle,
+      color: matched?.processColor || template.defaultColor,
+      isActive: matched
+        ? matched.published !== false && matched.isSequence !== false
+        : true,
+    };
+  });
+
+  const activeStages = visualStages.filter((stage) => stage.isActive);
 
   return (
     <div className="bg-[#f7f3f2] rounded-2xl p-6 lg:p-8 mb-8 shadow-sm relative overflow-hidden border border-[#e7e5e4]">
@@ -39,7 +99,7 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
           ORDER FLOW — LIVE VISUAL CHAIN
         </span>
         <span className="text-[12px] font-semibold text-[#141010] tracking-[0.96px] uppercase font-sans">
-          {activeStages.length} {activeStages.length === 1 ? "active stage" : "active stages"}
+          {activeStages.length} {activeStages.length === 1 ? "ACTIVE STAGE" : "ACTIVE STAGES"}
         </span>
       </div>
 
@@ -48,19 +108,19 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
         <div className="overflow-x-auto pb-2 pt-1 relative z-10 scrollbar-thin">
           <div className="flex items-center gap-4 min-w-full">
             {activeStages.map((stage, index) => (
-              <React.Fragment key={stage._id}>
+              <React.Fragment key={stage.id}>
                 {/* Stage Card */}
                 <div className="flex-1 min-w-[200px] bg-[#ffffff] p-4 rounded-xl flex items-center gap-3 shadow-[0_1px_3px_rgba(0,0,0,0.03)] border border-[#e7e5e4] shrink-0">
                   <div
                     className="w-3 h-3 rounded-full shrink-0 shadow-sm"
-                    style={{ backgroundColor: stage.processColor || "#262626" }}
+                    style={{ backgroundColor: stage.color }}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="font-medium text-[#141010] text-[15px] leading-tight truncate">
                       {stage.name}
                     </div>
-                    <div className="text-[11px] font-semibold text-[#4e4543] tracking-[0.5px] uppercase mt-0.5 truncate">
-                      {getStageSubtitle(stage)}
+                    <div className="text-[11px] font-semibold text-[#4e4543] tracking-[0.5px] uppercase mt-0.5 truncate font-sans">
+                      {stage.subtitle}
                     </div>
                   </div>
                 </div>
@@ -92,3 +152,4 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
     </div>
   );
 }
+

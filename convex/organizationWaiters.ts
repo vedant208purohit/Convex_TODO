@@ -14,15 +14,26 @@ export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
   explicitOrgId?: Id<"organizations">
 ) {
-  const identity = await requireAuth(ctx);
-  const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  const { identity, org, callerMember } = await requireMember(ctx, explicitOrgId);
 
-  if (
-    !callerMember ||
-    (!callerMember.userType.includes("admin") &&
-      !callerMember.userType.includes("cashier"))
-  ) {
+  const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+  if (isOwnerOrUnowned) {
+    return { identity, org, callerMember };
+  }
+
+  const roles = Array.isArray(callerMember?.userType)
+    ? callerMember!.userType
+    : typeof callerMember?.userType === "string"
+      ? [callerMember!.userType]
+      : [];
+
+  const hasAuthorizedRole = roles.some((role) =>
+    ["admin", "store_admin", "org_admin", "super_admin", "cashier"].includes(
+      (role || "").trim().toLowerCase()
+    )
+  );
+
+  if (!hasAuthorizedRole) {
     throw new Error("Forbidden. Admin or Cashier access required.");
   }
 

@@ -43,7 +43,7 @@ export function OrderProcessesHeader({
 
           {/* Info Tooltip */}
           <div
-            className="relative flex items-center"
+            className="relative inline-flex items-center justify-center cursor-pointer"
             onMouseEnter={() => setShowTooltip(true)}
             onMouseLeave={() => setShowTooltip(false)}
             onFocus={() => setShowTooltip(true)}
@@ -53,7 +53,7 @@ export function OrderProcessesHeader({
             aria-label="Order processes info"
           >
             <svg
-              className="w-5 h-5 text-[#4e4543] hover:text-[#141010] transition-colors cursor-pointer"
+              className="w-5 h-5 text-[#4e4543] hover:text-[#141010] transition-colors"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -69,11 +69,14 @@ export function OrderProcessesHeader({
             {showTooltip && (
               <div
                 role="tooltip"
-                className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-[#141010] text-[#ffffff] text-[13px] leading-snug rounded-xl shadow-xl z-50 text-center font-normal pointer-events-none"
+                className="absolute top-full left-1/2 -translate-x-1/2 mt-2.5 w-72 p-3.5 bg-[#ffffff] text-[#4e4543] text-[13px] leading-relaxed rounded-xl shadow-lg border border-[#e7e5e4] z-50 text-left font-normal font-sans pointer-events-none"
               >
-                Order processes define the workflow stages used to track orders
-                from acceptance to completion.
-                <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#141010]" />
+                {/* Arrow pointing up towards the info icon */}
+                <div className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-[#ffffff] border-t border-l border-[#e7e5e4] rotate-45" />
+                <span className="relative z-10 block">
+                  Order processes define the workflow stages used to track orders
+                  from acceptance to completion.
+                </span>
               </div>
             )}
           </div>
