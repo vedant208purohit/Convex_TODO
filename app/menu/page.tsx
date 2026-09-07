@@ -1,5 +1,23 @@
 "use client";
 
+interface CustomizationOption {
+  _id: string;
+  name: string;
+  price: number;
+  isAvailable: boolean;
+}
+
+interface ItemCustomization {
+  _id: string;
+  name: string;
+  customizationType: "AddOns" | "Preparations";
+  required: boolean;
+  maxSelected: number;
+  items: CustomizationOption[];
+}
+
+
+
 import { useState, useEffect, useMemo, type FormEvent } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
@@ -12,15 +30,7 @@ import { Id } from "../../convex/_generated/dataModel";
 
 function EditPencilIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
       <path d="m15 5 4 4" />
     </svg>
@@ -29,15 +39,7 @@ function EditPencilIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
@@ -46,15 +48,7 @@ function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
@@ -62,15 +56,7 @@ function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="9 18 15 12 9 6" />
     </svg>
   );
@@ -91,15 +77,7 @@ function DragHandleIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -108,15 +86,7 @@ function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <polyline points="21 15 16 10 5 21" />
@@ -124,22 +94,36 @@ function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
-function TrashIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+function SparklesIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
     </svg>
   );
 }
+
+// Quantity Metric Options from defx-pos-frontend
+const QUANTITY_UNITS = [
+  { value: "g", label: "Grams (g)" },
+  { value: "kg", label: "Kilograms (kg)" },
+  { value: "ml", label: "Milliliters (ml)" },
+  { value: "l", label: "Liters (L)" },
+  { value: "pc", label: "Piece (pc)" },
+  { value: "pcs", label: "Pieces (pcs)" },
+  { value: "portion", label: "Portion" },
+  { value: "can", label: "Can" },
+  { value: "bottle", label: "Bottle" },
+  { value: "box", label: "Box" },
+];
+
+// Dietary Item Types from defx-pos-frontend
+const DIETARY_TYPES = [
+  { id: "veg", label: "Vegetarian", icon: "🟢" },
+  { id: "non_veg", label: "Non-Veg", icon: "🔴" },
+  { id: "vegan", label: "Vegan", icon: "🌿" },
+  { id: "jain", label: "Jain", icon: "🟡" },
+  { id: "egg", label: "Contains Egg", icon: "🥚" },
+];
 
 // ==========================================
 // MAIN MENU COMPONENT
@@ -148,6 +132,13 @@ function TrashIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
 export default function MenuPage() {
   const organizations = useQuery(api.organizations.list);
   const organization = organizations?.[0] ?? null;
+
+  // Tax & Currency Configuration
+  const taxSettings = useQuery(
+    api.taxation.getStoreTaxSettings,
+    organization?._id ? { organizationId: organization._id } : "skip"
+  );
+  const currencySymbol = taxSettings?.currencySymbol || organization?.defaultCurrencySymbol || "₹";
 
   // Multi-Menu Queries & Mutations
   const menus = useQuery(
@@ -176,7 +167,14 @@ export default function MenuPage() {
   const reorderCategoryItemsMutation = useMutation(api.menu.reorderCategoryItems);
   const addExistingItemToCategoryMutation = useMutation(api.menu.addExistingItemToCategory);
 
-  // All Existing Items Query (for Add Existing Item drawer)
+  // Customization Mutations
+  const createCustomizationMutation = useMutation(api.menu.createCustomization);
+  const updateCustomizationMutation = useMutation(api.menu.updateCustomization);
+  const deleteCustomizationMutation = useMutation(api.menu.deleteCustomization);
+  const createCustomizationItemMutation = useMutation(api.menu.createCustomizationItem);
+  const deleteCustomizationItemMutation = useMutation(api.menu.deleteCustomizationItem);
+
+  // All Existing Items Query
   const allExistingItems = useQuery(
     api.menu.listAllItems,
     organization?._id ? { organizationId: organization._id } : "skip"
@@ -189,6 +187,10 @@ export default function MenuPage() {
   // Active Category State
   const [selectedCategoryId, setSelectedCategoryId] = useState<Id<"categories"> | null>(null);
 
+  // Active Item State (Level 2 Customization Drilldown)
+  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(null);
+  const [selectedCustId, setSelectedCustId] = useState<string | null>(null);
+
   // Modal / Drawer States
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
   const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
@@ -196,6 +198,8 @@ export default function MenuPage() {
   const [isAddItemDropdownOpen, setIsAddItemDropdownOpen] = useState(false);
   const [isAddExistingItemOpen, setIsAddExistingItemOpen] = useState(false);
   const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+  const [isAddCustomizationOpen, setIsAddCustomizationOpen] = useState(false);
+
   const [editingItem, setEditingItem] = useState<any | null>(null);
   const [editingCategory, setEditingCategory] = useState<any | null>(null);
 
@@ -230,21 +234,34 @@ export default function MenuPage() {
   const [itemPrice, setItemPrice] = useState("");
   const [itemDescription, setItemDescription] = useState("");
   const [itemIsVeg, setItemIsVeg] = useState(true);
+  const [selectedDietaryType, setSelectedDietaryType] = useState<string>("veg");
   const [itemIsSpicy, setItemIsSpicy] = useState(false);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
   const [itemShowQuantity, setItemShowQuantity] = useState(false);
-  const [itemShowItemType, setItemShowItemType] = useState(false);
+  const [itemQuantity, setItemQuantity] = useState("");
+  const [itemQuantityUnit, setItemQuantityUnit] = useState("g");
   const [itemIsGst, setItemIsGst] = useState(false);
   const [itemMarkAsBestseller, setItemMarkAsBestseller] = useState(false);
   const [itemSkuNumber, setItemSkuNumber] = useState("");
-  const [itemAdd3dAndroid, setItemAdd3dAndroid] = useState(false);
-  const [itemAdd3dIos, setItemAdd3dIos] = useState(false);
-  const [itemAddVideo, setItemAddVideo] = useState(false);
-  const [itemDrawerTab, setItemDrawerTab] = useState<"general" | "nutrition">("general");
   const [itemSelectedCategoryId, setItemSelectedCategoryId] = useState<string>("");
-  const [itemImageUrl, setItemImageUrl] = useState("");
+
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
+
+  // Form States - Add Customization
+  const [custName, setCustName] = useState("");
+  const [custType, setCustType] = useState<"AddOns" | "Preparations">("AddOns");
+  const [custRequired, setCustRequired] = useState(false);
+  const [custMaxSelected, setCustMaxSelected] = useState("1");
+  const [custOptions, setCustOptions] = useState<Array<{ name: string; price: string }>>([
+    { name: "", price: "0.00" },
+  ]);
+  const [isSavingCustomization, setIsSavingCustomization] = useState(false);
+
+  // Form State - Inline Choice / Option Addition
+  const [newChoiceName, setNewChoiceName] = useState("");
+  const [newChoicePrice, setNewChoicePrice] = useState("0.00");
+  const [isAddingChoice, setIsAddingChoice] = useState(false);
 
   // Auto-select active/default menu
   useEffect(() => {
@@ -285,6 +302,67 @@ export default function MenuPage() {
     api.menu.listCategoryItems,
     activeCategory?._id ? { categoryId: activeCategory._id } : "skip"
   );
+
+  // Active Item for Customization View
+  const activeItem = useMemo(() => {
+    if (!selectedItemId || !categoryItems) return null;
+    const found = categoryItems.find((ci) => ci.item._id === selectedItemId);
+    return found ? found.item : null;
+  }, [categoryItems, selectedItemId]);
+
+  // Full Menu Data Query (Includes nested items & customizations)
+  const fullMenuData = useQuery(
+    api.menu.getOrganizationMenu,
+    organization?._id
+      ? {
+          organizationId: organization._id,
+          menuId: activeMenu?._id,
+        }
+      : "skip"
+  );
+
+  // Derive Active Item Customizations
+  const activeItemCustomizations: ItemCustomization[] = useMemo(() => {
+    if (!fullMenuData || !selectedItemId) return [];
+    for (const catWrapper of fullMenuData) {
+      const itemsList = catWrapper.category?.items || [];
+      const found = itemsList.find(
+        (it: any) => it.item?.id === selectedItemId || it.item?._id === selectedItemId
+      );
+      if (found && found.customizations) {
+        return found.customizations.map((cust: any) => ({
+          _id: cust.id || cust._id,
+          name: cust.name,
+          customizationType: cust.type === "Add-Ons" || cust.customizationType === "AddOns" ? "AddOns" : "Preparations",
+          required: cust.required ?? false,
+          maxSelected: cust.max_selected ?? cust.maxSelected ?? 1,
+          items: (cust.customization_items || cust.items || []).map((ci: any) => ({
+            _id: ci.id || ci._id,
+            name: ci.name,
+            price: ci.price ?? 0,
+            isAvailable: ci.is_available ?? ci.isAvailable ?? true,
+          })),
+        }));
+      }
+    }
+    return [];
+  }, [fullMenuData, selectedItemId]);
+
+  // Auto-select first customization
+  useEffect(() => {
+    if (activeItemCustomizations && activeItemCustomizations.length > 0) {
+      const exists = activeItemCustomizations.some((c) => c._id === selectedCustId);
+      if (!exists || !selectedCustId) {
+        setSelectedCustId(activeItemCustomizations[0]._id);
+      }
+    } else if (activeItemCustomizations && activeItemCustomizations.length === 0) {
+      setSelectedCustId(null);
+    }
+  }, [activeItemCustomizations, selectedCustId]);
+
+  const activeCustomization = useMemo(() => {
+    return activeItemCustomizations?.find((c) => c._id === selectedCustId) || activeItemCustomizations?.[0] || null;
+  }, [activeItemCustomizations, selectedCustId]);
 
   // Seed sample menu if none exists
   const handleSeedSample = async () => {
@@ -348,53 +426,37 @@ export default function MenuPage() {
   // Handle Create Menu Submit
   const handleCreateMenuSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!organization?._id) return;
-    const trimmed = menuName.trim();
-    if (!trimmed) {
-      setCreateMenuError("Menu name is required");
-      return;
-    }
+    if (!organization?._id || !menuName.trim()) return;
 
     setIsCreatingMenu(true);
     setCreateMenuError(null);
     try {
-      const newMenuId = await createMenuMutation({
+      const newId = await createMenuMutation({
         organizationId: organization._id,
-        name: trimmed,
+        name: menuName.trim(),
         description: menuDescription.trim() || undefined,
-        isActive: true,
       });
-      setSelectedMenuId(newMenuId);
+      setSelectedMenuId(newId);
+      setIsCreateMenuOpen(false);
       setMenuName("");
       setMenuDescription("");
-      setIsCreateMenuOpen(false);
-    } catch (err) {
-      setCreateMenuError(err instanceof Error ? err.message : "Failed to create menu");
+    } catch (err: any) {
+      setCreateMenuError(err.message || "Failed to create menu");
     } finally {
       setIsCreatingMenu(false);
     }
   };
 
-  // Open Edit Menu Drawer
-  const openEditMenuDrawer = () => {
-    if (!activeMenu) return;
-    setEditMenuName(activeMenu.name);
-    setEditMenuDescription(activeMenu.description || "");
-    setIsEditMenuOpen(true);
-  };
-
   // Handle Edit Menu Submit
   const handleEditMenuSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!activeMenu) return;
-    const trimmed = editMenuName.trim();
-    if (!trimmed) return;
+    if (!activeMenu?._id || !editMenuName.trim()) return;
 
     setIsUpdatingMenu(true);
     try {
       await updateMenuMutation({
         id: activeMenu._id,
-        name: trimmed,
+        name: editMenuName.trim(),
         description: editMenuDescription.trim() || undefined,
       });
       setIsEditMenuOpen(false);
@@ -405,66 +467,33 @@ export default function MenuPage() {
     }
   };
 
-  // Handle Set Default Menu
-  const handleSetDefaultMenu = async (menuId: Id<"menus">) => {
-    try {
-      await setDefaultMenuMutation({ id: menuId });
-      setSelectedMenuId(menuId);
-      setIsMenuDropdownOpen(false);
-    } catch (err) {
-      console.error("Failed to set default menu:", err);
-    }
-  };
-
-  // Handle Delete Menu
-  const handleDeleteMenu = async () => {
+  const openEditMenuDrawer = () => {
     if (!activeMenu) return;
-    if (!window.confirm(`Are you sure you want to delete menu "${activeMenu.name}"?`)) return;
-
-    try {
-      await deleteMenuMutation({ id: activeMenu._id });
-      setSelectedMenuId(null);
-      setIsEditMenuOpen(false);
-    } catch (err) {
-      console.error("Failed to delete menu:", err);
-    }
+    setEditMenuName(activeMenu.name);
+    setEditMenuDescription(activeMenu.description || "");
+    setIsEditMenuOpen(true);
+    setIsMenuDropdownOpen(false);
   };
 
-  // Handle Category Toggle (Published)
-  const handleToggleCategory = async (e: React.MouseEvent, categoryId: Id<"categories">, currentPublished: boolean) => {
-    e.stopPropagation();
-    try {
-      await toggleCategoryPublishedMutation({
-        id: categoryId,
-        published: !currentPublished,
-      });
-    } catch (err) {
-      console.error("Failed to toggle category status:", err);
-    }
-  };
-
-  // Handle Save Category
+  // Handle Add/Edit Category Submit
   const handleSaveCategorySubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!organization?._id || !activeMenu?._id) return;
-    const trimmed = categoryName.trim();
-    if (!trimmed) return;
+    if (!categoryName.trim()) return;
 
     setIsSavingCategory(true);
     try {
       if (editingCategory) {
         await updateCategoryMutation({
           id: editingCategory._id,
-          name: trimmed,
+          name: categoryName.trim(),
           published: categoryPublished,
         });
       } else {
+        if (!organization?._id || !activeMenu?._id) return;
         const newCatId = await createCategoryMutation({
           organizationId: organization._id,
           menuId: activeMenu._id,
-          name: trimmed,
-          published: categoryPublished,
-          position: (categories?.length || 0),
+          name: categoryName.trim(),
         });
         setSelectedCategoryId(newCatId);
       }
@@ -479,115 +508,110 @@ export default function MenuPage() {
     }
   };
 
-  // Handle Delete Category
+  const handleToggleCategory = async (e: React.MouseEvent, catId: Id<"categories">, currentPublished: boolean) => {
+    e.stopPropagation();
+    try {
+      await toggleCategoryPublishedMutation({
+        id: catId,
+        published: !currentPublished,
+      });
+    } catch (err) {
+      console.error("Failed to toggle category published status:", err);
+    }
+  };
+
   const handleDeleteCategory = async (e: React.MouseEvent, catId: Id<"categories">, name: string) => {
     e.stopPropagation();
-    if (!window.confirm(`Delete category "${name}" and unassign all its items?`)) return;
-
+    if (!confirm(`Are you sure you want to delete category "${name}"?`)) return;
     try {
       await deleteCategoryMutation({ id: catId });
       if (selectedCategoryId === catId) {
         setSelectedCategoryId(null);
+        setSelectedItemId(null);
       }
     } catch (err) {
       console.error("Failed to delete category:", err);
     }
   };
 
-  // Handle Item Status Toggle (Availability)
-  const handleToggleItemAvailability = async (itemId: Id<"items">, currentAvailable: boolean) => {
-    try {
-      await toggleItemAvailabilityMutation({
-        id: itemId,
-        isAvailable: !currentAvailable,
-      });
-    } catch (err) {
-      console.error("Failed to toggle item availability:", err);
-    }
-  };
-
-  // Open Add Item Modal
-  const openAddItemDrawer = () => {
+  // Open Add Item Mode
+  const handleOpenAddNewItem = () => {
     setEditingItem(null);
     setItemName("");
     setItemPrice("");
     setItemDescription("");
     setItemIsVeg(true);
+    setSelectedDietaryType("veg");
     setItemIsSpicy(false);
     setItemIsAvailable(true);
     setItemShowQuantity(false);
-    setItemShowItemType(false);
+    setItemQuantity("");
+    setItemQuantityUnit("g");
     setItemIsGst(false);
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
-    setItemAdd3dAndroid(false);
-    setItemAdd3dIos(false);
-    setItemAddVideo(false);
-    setItemDrawerTab("general");
     setItemSelectedCategoryId(activeCategory?._id || "");
-    setItemImageUrl("");
     setItemError(null);
     setIsAddItemOpen(true);
+    setIsAddItemDropdownOpen(false);
   };
 
-  // Open Edit Item Modal
-  const openEditItemDrawer = (item: any) => {
+  // Open Edit Item Mode
+  const handleOpenEditItem = (item: any) => {
     setEditingItem(item);
-    setItemName(item.name || "");
+    setItemName(item.name);
     setItemPrice((item.price / 100).toFixed(2));
     setItemDescription(item.description || "");
     setItemIsVeg(item.isVeg ?? true);
+    setSelectedDietaryType(item.isVeg ? "veg" : "non_veg");
     setItemIsSpicy(item.isSpicy ?? false);
     setItemIsAvailable(item.isAvailable ?? true);
     setItemShowQuantity(item.showQuantity ?? false);
-    setItemShowItemType(false);
+    setItemQuantity(item.quantity ? String(item.quantity) : "");
+    setItemQuantityUnit(item.quantityUnit || "g");
     setItemIsGst(item.isGst ?? false);
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
-    setItemAdd3dAndroid(false);
-    setItemAdd3dIos(false);
-    setItemAddVideo(false);
-    setItemDrawerTab("general");
     setItemSelectedCategoryId(activeCategory?._id || "");
-    setItemImageUrl(item.imageUrl || "");
     setItemError(null);
     setIsAddItemOpen(true);
   };
 
-  // Handle Save Item Submit
+  // Handle Add/Edit Item Submit
   const handleSaveItemSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!organization?._id) return;
-    const targetCatId = (itemSelectedCategoryId as Id<"categories">) || activeCategory?._id;
-    if (!targetCatId) {
-      setItemError("Please select a category");
+    if (!organization?._id || !itemName.trim() || !itemPrice) {
+      setItemError("Please provide an item name and price.");
       return;
     }
 
-    const trimmed = itemName.trim();
     const priceNum = parseFloat(itemPrice);
-
-    if (!trimmed) {
-      setItemError("Item name is required");
+    if (isNaN(priceNum) || priceNum < 0) {
+      setItemError("Please enter a valid price.");
       return;
     }
-    if (isNaN(priceNum) || priceNum < 0) {
-      setItemError("Please enter a valid price");
+
+    const priceCents = Math.round(priceNum * 100);
+    const targetCatId = (itemSelectedCategoryId || activeCategory?._id) as Id<"categories">;
+
+    if (!targetCatId && !editingItem) {
+      setItemError("Please select or create a category first.");
       return;
     }
 
     setIsSavingItem(true);
     setItemError(null);
-    const priceInCents = Math.round(priceNum * 100);
 
     try {
+      const isVegBool = selectedDietaryType === "veg" || selectedDietaryType === "vegan" || selectedDietaryType === "jain";
+
       if (editingItem) {
         await updateItemMutation({
           id: editingItem._id,
-          name: trimmed,
-          price: priceInCents,
+          name: itemName.trim(),
+          price: priceCents,
           description: itemDescription.trim() || undefined,
-          isVeg: itemIsVeg,
+          isVeg: isVegBool,
           isSpicy: itemIsSpicy,
           isAvailable: itemIsAvailable,
           markAsBestseller: itemMarkAsBestseller,
@@ -595,58 +619,137 @@ export default function MenuPage() {
       } else {
         const newItemId = await createItemMutation({
           organizationId: organization._id,
-          name: trimmed,
-          price: priceInCents,
+          name: itemName.trim(),
+          price: priceCents,
           description: itemDescription.trim() || undefined,
-          isVeg: itemIsVeg,
+          isVeg: isVegBool,
           isSpicy: itemIsSpicy,
           isAvailable: itemIsAvailable,
           isGst: itemIsGst,
-          showQuantity: itemShowQuantity,
-          skuNumber: itemSkuNumber.trim() || undefined,
           markAsBestseller: itemMarkAsBestseller,
-          published: true,
+          showQuantity: itemShowQuantity,
+          quantity: itemQuantity ? parseFloat(itemQuantity) : undefined,
+          quantityUnit: itemQuantity ? itemQuantityUnit : undefined,
+          skuNumber: itemSkuNumber.trim() || undefined,
         });
 
         await addCategoryItemMutation({
           organizationId: organization._id,
           categoryId: targetCatId,
           itemId: newItemId,
-          position: (categoryItems?.length || 0),
-          published: true,
         });
+        setSelectedItemId(newItemId);
       }
+
       setIsAddItemOpen(false);
       setEditingItem(null);
-    } catch (err) {
-      setItemError(err instanceof Error ? err.message : "Failed to save item");
+    } catch (err: any) {
+      setItemError(err.message || "Failed to save item");
     } finally {
       setIsSavingItem(false);
     }
   };
 
-  // Filter existing items for search in drawer
-  const filteredExistingItems = useMemo(() => {
-    if (!allExistingItems) return [];
-    if (!existingItemSearchQuery.trim()) return allExistingItems;
-    const q = existingItemSearchQuery.toLowerCase();
-    return allExistingItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(q) ||
-        (item.categoryName && item.categoryName.toLowerCase().includes(q))
-    );
-  }, [allExistingItems, existingItemSearchQuery]);
+  // Handle Add Customization Group Submit
+  const handleSaveCustomizationSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!organization?._id || !selectedItemId || !custName.trim()) return;
 
+    setIsSavingCustomization(true);
+    try {
+      const custId = await createCustomizationMutation({
+        organizationId: organization._id,
+        itemId: selectedItemId,
+        name: custName.trim(),
+        customizationType: custType,
+        required: custRequired,
+        maxSelected: parseInt(custMaxSelected, 10) || 1,
+      });
+
+      // Insert initial options
+      for (let i = 0; i < custOptions.length; i++) {
+        const opt = custOptions[i];
+        if (opt.name.trim()) {
+          const optPrice = Math.round(parseFloat(opt.price || "0") * 100);
+          await createCustomizationItemMutation({
+            organizationId: organization._id,
+            customizationId: custId,
+            name: opt.name.trim(),
+            price: optPrice,
+            position: i,
+          });
+        }
+      }
+
+      setSelectedCustId(custId);
+      setIsAddCustomizationOpen(false);
+      setCustName("");
+      setCustType("AddOns");
+      setCustRequired(false);
+      setCustMaxSelected("1");
+      setCustOptions([{ name: "", price: "0.00" }]);
+    } catch (err) {
+      console.error("Failed to save customization:", err);
+    } finally {
+      setIsSavingCustomization(false);
+    }
+  };
+
+  // Handle Add Option / Choice to Selected Customization
+  const handleAddChoiceSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!organization?._id || !selectedCustId || !newChoiceName.trim()) return;
+
+    setIsAddingChoice(true);
+    try {
+      const priceCents = Math.round(parseFloat(newChoicePrice || "0") * 100);
+      await createCustomizationItemMutation({
+        organizationId: organization._id,
+        customizationId: selectedCustId as Id<"customizations">,
+        name: newChoiceName.trim(),
+        price: priceCents,
+        position: (activeCustomization?.items?.length || 0) + 1,
+      });
+      setNewChoiceName("");
+      setNewChoicePrice("0.00");
+    } catch (err) {
+      console.error("Failed to add choice:", err);
+    } finally {
+      setIsAddingChoice(false);
+    }
+  };
+
+  const handleDeleteChoice = async (choiceId: string) => {
+    try {
+      await deleteCustomizationItemMutation({ id: choiceId as Id<"customizationItems"> });
+    } catch (err) {
+      console.error("Failed to delete option:", err);
+    }
+  };
+
+  const handleDeleteCustomization = async (e: React.MouseEvent, custId: string, name: string) => {
+    e.stopPropagation();
+    if (!confirm(`Are you sure you want to delete customization group "${name}"?`)) return;
+    try {
+      await deleteCustomizationMutation({ id: custId as Id<"customizations"> });
+      if (selectedCustId === custId) {
+        setSelectedCustId(null);
+      }
+    } catch (err) {
+      console.error("Failed to delete customization:", err);
+    }
+  };
+
+  // Handle Add Existing Item Drawer
   const handleOpenAddExistingItemDrawer = () => {
     setIsAddItemDropdownOpen(false);
-    setExistingItemSearchQuery("");
     setSelectedExistingItem(null);
+    setExistingItemSearchQuery("");
     setExistingItemError(null);
     setIsAddExistingItemOpen(true);
   };
 
-  const handleAddExistingItemSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleAddExistingItemSubmit = async () => {
     if (!organization?._id || !activeCategory?._id || !selectedExistingItem) return;
 
     setIsAddingExistingItem(true);
@@ -659,23 +762,45 @@ export default function MenuPage() {
       });
       setIsAddExistingItemOpen(false);
       setSelectedExistingItem(null);
-    } catch (err) {
-      setExistingItemError(err instanceof Error ? err.message : "Failed to add existing item");
+    } catch (err: any) {
+      setExistingItemError(err.message || "Failed to add existing item");
     } finally {
       setIsAddingExistingItem(false);
     }
   };
 
-  // Handle Delete Item
-  const handleDeleteItem = async (itemId: Id<"items">, itemNameStr: string) => {
-    if (!activeCategory?._id) return;
-    if (!window.confirm(`Remove "${itemNameStr}" from this category?`)) return;
+  const filteredExistingItems = useMemo(() => {
+    if (!allExistingItems) return [];
+    if (!existingItemSearchQuery.trim()) return allExistingItems;
+    const query = existingItemSearchQuery.toLowerCase();
+    return allExistingItems.filter(
+      (item) =>
+        item.name.toLowerCase().includes(query) ||
+        (item.categoryName && item.categoryName.toLowerCase().includes(query))
+    );
+  }, [allExistingItems, existingItemSearchQuery]);
 
+  const handleToggleItemAvailability = async (itemId: Id<"items">, currentAvailable: boolean) => {
+    try {
+      await toggleItemAvailabilityMutation({
+        id: itemId,
+        isAvailable: !currentAvailable,
+      });
+    } catch (err) {
+      console.error("Failed to toggle item availability:", err);
+    }
+  };
+
+  const handleDeleteItem = async (itemId: Id<"items">, itemNameStr: string) => {
+    if (!confirm(`Are you sure you want to delete "${itemNameStr}"?`)) return;
     try {
       await deleteItemMutation({
         id: itemId,
-        categoryId: activeCategory._id,
+        categoryId: activeCategory?._id,
       });
+      if (selectedItemId === itemId) {
+        setSelectedItemId(null);
+      }
     } catch (err) {
       console.error("Failed to delete item:", err);
     }
@@ -684,474 +809,1324 @@ export default function MenuPage() {
   const activeItemsCount = categoryItems?.filter((ci) => ci.item.isAvailable).length || 0;
 
   return (
-    <PosShell title="Menu Management" subtitle="Catalog & Categories">
-      <div className="flex flex-col flex-1 min-w-0">
-        {/* Workspace Context (Top-level Menu Selector matching Stitch) */}
-        <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
-          <div className="flex items-end justify-between max-w-7xl mx-auto w-full">
-            <div>
-              <p className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-1">
-                Workspace
-              </p>
-              <div className="relative flex items-center gap-3">
-                {/* Menu Title Dropdown Button */}
-                <button
-                  type="button"
-                  onClick={() => setIsMenuDropdownOpen(!isMenuDropdownOpen)}
-                  className="flex items-center gap-2 group cursor-pointer"
-                >
-                  <span className="font-garamond text-[32px] text-[#141010] font-normal leading-tight">
-                    {activeMenu?.name || "Main Menu"}
-                  </span>
-                  <span className="text-[#5e5e5e] group-hover:text-[#141010] transition-colors mt-1">
-                    <ChevronDownIcon className="w-5 h-5" />
-                  </span>
-                </button>
+    <PosShell title="Menu Management" subtitle="Catalog & Customizations">
+      <div className="flex flex-col flex-1 min-w-0 pb-16">
+        {/* ======================================================== */}
+        {/* VIEW 1: FULL SCREEN ADD / EDIT ITEM                      */}
+        {/* ======================================================== */}
+        {isAddItemOpen ? (
+          <div className="w-full flex-1 flex flex-col font-sans">
+            {/* Top Workspace & Breadcrumb Header */}
+            <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
+              <div className="flex flex-col md:flex-row md:items-end justify-between w-full gap-4">
+                <div>
+                  <nav className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddItemOpen(false);
+                        setEditingItem(null);
+                      }}
+                      className="hover:text-[#141010] transition-colors cursor-pointer"
+                    >
+                      Menu
+                    </button>
+                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                    <span>{activeMenu?.name || "Main Menu"}</span>
+                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                    <span>{activeCategory?.name || "Category"}</span>
+                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                    <span className="text-[#141010] font-semibold">
+                      {editingItem ? "Edit Item" : "Add New Item"}
+                    </span>
+                  </nav>
+                  <h1 className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight">
+                    {editingItem ? "Edit Item" : "Add New Item"}
+                  </h1>
+                  <p className="text-[#5e5e5e] text-[14px] mt-1">
+                    Configure details, media, dietary types, settings, and nutritional metrics.
+                  </p>
+                </div>
 
-                {/* Edit Pencil Circle Button */}
-                {activeMenu && (
+                <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={openEditMenuDrawer}
-                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
-                    title="Edit Menu Name"
+                    onClick={() => {
+                      setIsAddItemOpen(false);
+                      setEditingItem(null);
+                    }}
+                    className="h-10 px-6 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-[15px] bg-transparent cursor-pointer"
                   >
-                    <EditPencilIcon className="w-4 h-4" />
+                    Cancel
                   </button>
+                  <button
+                    type="submit"
+                    form="item-details-form"
+                    disabled={isSavingItem}
+                    className="btn-primary h-10 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:opacity-90 transition-opacity shadow-sm cursor-pointer disabled:opacity-50"
+                    style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  >
+                    {isSavingItem ? "Saving..." : editingItem ? "Save Changes" : "Save & Create Item"}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Two Column Form Grid */}
+            <div className="w-full p-6 lg:p-8 flex-1">
+              <form id="item-details-form" onSubmit={handleSaveItemSubmit}>
+                {itemError && (
+                  <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                    {itemError}
+                  </div>
                 )}
 
-                {activeMenu?.isActive && (
-                  <span className="px-2 py-0.5 bg-[#f1edec] text-[#5e5e5e] font-sans text-[10px] font-semibold uppercase tracking-wider rounded border border-[#e7e5e4] self-center mt-1">
-                    Active
-                  </span>
-                )}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                  {/* Left Column (Forms) */}
+                  <div className="lg:col-span-7 xl:col-span-8 space-y-8">
+                    
+                    {/* Card 1: Item Details */}
+                    <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
+                      <h2 className="font-sans text-[20px] font-semibold text-[#0c0a09]">Item Details</h2>
 
-                {/* Menu Dropdown Menu */}
-                {isMenuDropdownOpen && (
-                  <div className="absolute top-full left-0 z-40 mt-2 w-64 rounded-xl border border-[#e7e5e4] bg-[#fdf8f7] p-2 shadow-xl font-sans">
-                    <div className="px-3 py-1.5 text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                      Select Menu
-                    </div>
-                    {menus && menus.length > 0 ? (
-                      menus.map((m) => (
-                        <button
-                          key={m._id}
-                          type="button"
-                          onClick={() => {
-                            setSelectedMenuId(m._id);
-                            setIsMenuDropdownOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm transition-colors cursor-pointer ${
-                            m._id === selectedMenuId
-                              ? "bg-[#f1edec] font-semibold text-[#141010]"
-                              : "text-[#5e5e5e] hover:bg-[#fafafa]"
-                          }`}
-                        >
-                          <span>{m.name}</span>
-                          {m.isDefault && (
-                            <span className="text-[10px] bg-[#e6e1e1] text-[#5e5e5e] px-1.5 py-0.5 rounded font-semibold uppercase">
-                              Default
+                      {/* Image Upload Area */}
+                      <div className="border-2 border-dashed border-[#d1c4c1] rounded-xl p-6 lg:p-8 flex flex-col items-center justify-center text-center bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer group">
+                        <div className="w-16 h-16 rounded-full bg-[#f0efed] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform border border-[#e7e5e4]">
+                          <ImageIcon className="w-7 h-7 text-[#141010]" />
+                        </div>
+                        <h3 className="font-medium text-[15px] text-[#0c0a09] mb-1">Click to upload item image</h3>
+                        <p className="text-xs text-[#5e5e5e] mb-4">or drag and drop. Supports JPG, PNG, WEBP (Max 5MB)</p>
+                      </div>
+
+                      {/* Category & Search Code / SKU */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-[#0c0a09]">Category</label>
+                          <div className="relative">
+                            <select
+                              value={itemSelectedCategoryId || activeCategory?._id || ""}
+                              onChange={(e) => setItemSelectedCategoryId(e.target.value)}
+                              className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 appearance-none focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm"
+                            >
+                              {categories?.map((cat) => (
+                                <option key={cat._id} value={cat._id}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                            </select>
+                            <span className="absolute right-3 top-3 text-[#5e5e5e] pointer-events-none">
+                              <ChevronDownIcon className="w-4 h-4" />
                             </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-[#0c0a09]">Search Code / SKU (Optional)</label>
+                          <input
+                            type="text"
+                            value={itemSkuNumber}
+                            onChange={(e) => setItemSkuNumber(e.target.value)}
+                            placeholder="e.g. 1211 / VF-001"
+                            className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Item Name */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-[#0c0a09]">Item Name *</label>
+                        <input
+                          type="text"
+                          required
+                          value={itemName}
+                          onChange={(e) => setItemName(e.target.value)}
+                          placeholder="Enter item name (e.g., Truffle Umami Burger)"
+                          className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm"
+                        />
+                      </div>
+
+                      {/* Price */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-[#0c0a09]">Price *</label>
+                        <div className="relative">
+                          <span className="absolute left-4 top-2.5 text-[#5e5e5e] text-sm font-semibold">{currencySymbol}</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            required
+                            value={itemPrice}
+                            onChange={(e) => setItemPrice(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full bg-white border border-[#e7e5e4] rounded-lg pl-8 pr-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm font-medium"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-[#0c0a09]">Description</label>
+                        <textarea
+                          rows={4}
+                          value={itemDescription}
+                          onChange={(e) => setItemDescription(e.target.value)}
+                          placeholder="Describe ingredients, taste notes, and culinary highlights..."
+                          className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm resize-y"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Card 2: Dietary Classification & Settings */}
+                    <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
+                      <h2 className="font-sans text-[20px] font-semibold text-[#0c0a09]">Dietary Classification & Settings</h2>
+                      
+                      {/* Dietary Type Selector */}
+                      <div className="space-y-2.5">
+                        <label className="block text-sm font-medium text-[#0c0a09]">
+                          Dietary Classification (Item Type)
+                        </label>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                          {DIETARY_TYPES.map((type) => {
+                            const isSelected = selectedDietaryType === type.id;
+                            return (
+                              <button
+                                key={type.id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedDietaryType(type.id);
+                                  setItemIsVeg(type.id === "veg" || type.id === "vegan" || type.id === "jain");
+                                }}
+                                className={`flex items-center justify-center gap-2 p-3 rounded-xl border transition-all cursor-pointer select-none text-sm font-medium ${
+                                  isSelected
+                                    ? "bg-[#141010] text-white border-[#141010] shadow-sm scale-[1.02]"
+                                    : "bg-[#f7f3f2] hover:bg-[#f1edec] text-[#141010] border-[#e7e5e4]"
+                                }`}
+                              >
+                                <span>{type.icon}</span>
+                                <span>{type.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Item Toggles Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                        {/* Show Quantity */}
+                        <div className="space-y-3 p-3.5 bg-[#f7f3f2] rounded-lg border border-[#e7e5e4]">
+                          <div
+                            onClick={() => setItemShowQuantity(!itemShowQuantity)}
+                            className="flex items-center justify-between cursor-pointer select-none"
+                          >
+                            <span className="text-sm font-medium text-[#0c0a09]">Show quantity</span>
+                            <div className={`w-9 h-5 rounded-full relative transition-colors ${itemShowQuantity ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowQuantity ? "right-0.5" : "left-0.5"}`} />
+                            </div>
+                          </div>
+                          
+                          {itemShowQuantity && (
+                            <div className="grid grid-cols-2 gap-2 pt-1">
+                              <input
+                                type="number"
+                                placeholder="Qty (e.g. 250)"
+                                value={itemQuantity}
+                                onChange={(e) => setItemQuantity(e.target.value)}
+                                className="bg-white border border-[#e7e5e4] rounded px-3 py-1.5 text-xs text-[#0c0a09]"
+                              />
+                              <select
+                                value={itemQuantityUnit}
+                                onChange={(e) => setItemQuantityUnit(e.target.value)}
+                                className="bg-white border border-[#e7e5e4] rounded px-2 py-1.5 text-xs text-[#0c0a09]"
+                              >
+                                {QUANTITY_UNITS.map((u) => (
+                                  <option key={u.value} value={u.value}>{u.label}</option>
+                                ))}
+                              </select>
+                            </div>
                           )}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-2 text-xs text-[#5e5e5e]">No menus available</div>
+                        </div>
+
+                        {/* Is Taxable */}
+                        <div
+                          onClick={() => setItemIsGst(!itemIsGst)}
+                          className="flex items-center justify-between p-3.5 bg-[#f7f3f2] hover:bg-[#f1edec] rounded-lg border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Is this item taxable? (GST)</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors ${itemIsGst ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsGst ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+
+                        {/* Mark as Bestseller */}
+                        <div
+                          onClick={() => setItemMarkAsBestseller(!itemMarkAsBestseller)}
+                          className="flex items-center justify-between p-3.5 bg-[#f7f3f2] hover:bg-[#f1edec] rounded-lg border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Bestseller ⭐</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors ${itemMarkAsBestseller ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemMarkAsBestseller ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+
+                        {/* Mark as Spicy */}
+                        <div
+                          onClick={() => setItemIsSpicy(!itemIsSpicy)}
+                          className="flex items-center justify-between p-3.5 bg-[#f7f3f2] hover:bg-[#f1edec] rounded-lg border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Spicy 🌶️</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors ${itemIsSpicy ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsSpicy ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Live Preview */}
+                  <div className="lg:col-span-5 xl:col-span-4 space-y-6 sticky top-6">
+                    <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-sm">
+                      <h2 className="font-sans text-[16px] font-semibold text-[#0c0a09] mb-4">Live Item Preview</h2>
+                      <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm">
+                        <div className="aspect-[4/3] bg-[#f0efed] flex items-center justify-center relative">
+                          <ImageIcon className="w-12 h-12 text-[#928c8a]" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end p-4 justify-between">
+                            <span className="bg-white/90 backdrop-blur-sm text-[#0c0a09] text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm">
+                              {categories?.find((c) => c._id === (itemSelectedCategoryId || activeCategory?._id))?.name || "Category"}
+                            </span>
+                            <span className="bg-black/75 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded">
+                              {DIETARY_TYPES.find((d) => d.id === selectedDietaryType)?.icon}{" "}
+                              {DIETARY_TYPES.find((d) => d.id === selectedDietaryType)?.label}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="p-5">
+                          <div className="flex justify-between items-start mb-2">
+                            <h3 className="font-garamond text-[24px] text-[#0c0a09] leading-snug truncate pr-3">
+                              {itemName || "Item Name"}
+                            </h3>
+                            <span className="font-semibold text-[16px] text-[#0c0a09]">
+                              {currencySymbol}{itemPrice ? parseFloat(itemPrice).toFixed(2) : "0.00"}
+                            </span>
+                          </div>
+                          <p className="text-sm text-[#5e5e5e] line-clamp-2">
+                            {itemDescription || "Description will appear here as you type..."}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        ) : (
+          /* ======================================================== */
+          /* VIEW 2: TWO-PANEL INTERFACE (CATEGORIES / ITEMS / CUST)   */
+          /* ======================================================== */
+          <>
+            {/* Top Workspace Context (UNTOUCHED) */}
+            <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
+              <div className="flex items-end justify-between w-full">
+                <div>
+                  <p className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-1">
+                    Workspace
+                  </p>
+                  <div className="relative flex items-center gap-3">
+                    {/* Menu Title Dropdown Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsMenuDropdownOpen(!isMenuDropdownOpen)}
+                      className="flex items-center gap-2 group cursor-pointer"
+                    >
+                      <span className="font-garamond text-[32px] text-[#141010] font-normal leading-tight">
+                        {activeMenu?.name || "Main Menu"}
+                      </span>
+                      <span className="text-[#5e5e5e] group-hover:text-[#141010] transition-colors mt-1">
+                        <ChevronDownIcon className="w-5 h-5" />
+                      </span>
+                    </button>
+
+                    {/* Edit Pencil Circle Button */}
+                    {activeMenu && (
+                      <button
+                        type="button"
+                        onClick={openEditMenuDrawer}
+                        className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                        title="Edit Menu Name"
+                      >
+                        <EditPencilIcon className="w-4 h-4" />
+                      </button>
                     )}
 
-                    <div className="mt-2 border-t border-[#e7e5e4] pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsMenuDropdownOpen(false);
-                          setIsCreateMenuOpen(true);
-                        }}
-                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium text-[#141010] hover:bg-[#f1edec] transition cursor-pointer"
-                      >
-                        <PlusIcon className="w-3.5 h-3.5" /> Create New Menu
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+                    {activeMenu?.isActive && (
+                      <span className="px-2 py-0.5 bg-[#f1edec] text-[#5e5e5e] font-sans text-[10px] font-semibold uppercase tracking-wider rounded border border-[#e7e5e4] self-center mt-1">
+                        Active
+                      </span>
+                    )}
 
-            {/* Action Buttons matching Stitch */}
-            <div className="flex items-center gap-3 font-sans">
-              {activeMenu && (
-                <button
-                  type="button"
-                  onClick={openEditMenuDrawer}
-                  className="h-10 px-4 rounded-full border border-[#e7e5e4] bg-transparent hover:bg-[#f1edec] text-[#141010] font-medium text-[15px] transition-colors flex items-center gap-2 cursor-pointer shadow-none"
-                >
-                  <EditPencilIcon className="w-4 h-4 text-[#141010]" />
-                  <span>Edit Menu</span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setIsCreateMenuOpen(true)}
-                className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
-                style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-              >
-                <PlusIcon className="w-4 h-4" />
-                <span style={{ color: "#ffffff" }}>Create Menu</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Empty State Banner */}
-        {(!menus || menus.length === 0) && (
-          <div className="max-w-7xl mx-auto w-full p-8 text-center bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] mt-6">
-            <div className="text-4xl">🍽</div>
-            <h2 className="mt-3 font-garamond text-2xl font-normal text-[#141010]">No Menus Created Yet</h2>
-            <p className="mt-1 text-sm text-[#5e5e5e]">
-              Get started by creating a new menu or loading sample categories (Viral Food, Starters, Mains).
-            </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <button
-                type="button"
-                onClick={handleSeedSample}
-                className="btn-primary rounded-full px-6 py-2.5 text-sm font-medium shadow-none hover:opacity-90 transition cursor-pointer"
-                style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-              >
-                Load Sample Menu (Demo)
-              </button>
-              <button
-                type="button"
-                onClick={() => setIsCreateMenuOpen(true)}
-                className="rounded-full border border-[#e7e5e4] bg-transparent px-6 py-2.5 text-sm font-medium text-[#141010] hover:bg-[#f1edec] transition cursor-pointer"
-              >
-                + Create Custom Menu
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Two Panel Layout (Matching Stitch HTML + Drag & Drop Reordering) */}
-        {activeMenu && (
-          <div className="flex-1 flex flex-col lg:flex-row w-full max-w-7xl mx-auto p-6 gap-6 min-h-[calc(100vh-190px)]">
-            {/* Left Panel (Categories) */}
-            <div className="w-full lg:w-1/3 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden min-h-[500px]">
-              {/* Header */}
-              <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
-                <h2 className="font-sans text-[18px] font-semibold text-[#141010]">Categories</h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingCategory(null);
-                    setCategoryName("");
-                    setCategoryPublished(true);
-                    setIsAddCategoryOpen(true);
-                  }}
-                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition-colors cursor-pointer"
-                  title="Add Category"
-                >
-                  <PlusIcon className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Category List */}
-              <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4]">
-                {categories && categories.length > 0 ? (
-                  categories.map((cat, index) => {
-                    const isSelected = cat._id === selectedCategoryId;
-                    return (
-                      <div
-                        key={cat._id}
-                        draggable
-                        onDragStart={(e) => handleCategoryDragStart(e, index)}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={(e) => handleCategoryDrop(e, index)}
-                        onClick={() => setSelectedCategoryId(cat._id)}
-                        className={`flex items-center justify-between p-4 cursor-pointer transition-colors select-none group ${
-                          isSelected
-                            ? "bg-[#fafafa] border-l-2 border-l-[#0c0a09]"
-                            : "hover:bg-white border-l-2 border-l-transparent"
-                        }`}
-                        title="Drag to reorder category"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] transition-opacity ${
-                              isSelected ? "opacity-70" : "opacity-0 group-hover:opacity-50"
-                            }`}
-                          >
-                            <DragHandleIcon className="w-4 h-4" />
-                          </span>
-                          <span
-                            className={`text-[15px] font-medium ${
-                              isSelected ? "text-[#141010] font-semibold" : "text-[#5e5e5e]"
-                            }`}
-                          >
-                            {cat.name}
-                          </span>
+                    {/* Menu Dropdown Menu */}
+                    {isMenuDropdownOpen && (
+                      <div className="absolute left-0 top-full mt-2 w-64 rounded-xl bg-white border border-[#e7e5e4] shadow-xl py-2 z-50 divide-y divide-[#e7e5e4]">
+                        <div className="py-1">
+                          {menus?.map((m) => {
+                            const isSelected = m._id === selectedMenuId;
+                            return (
+                              <button
+                                key={m._id}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedMenuId(m._id);
+                                  setSelectedItemId(null);
+                                  setIsMenuDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-4 py-2.5 flex items-center justify-between text-sm transition-colors cursor-pointer ${
+                                  isSelected ? "bg-[#f1edec] font-semibold text-[#141010]" : "hover:bg-[#fafafa] text-[#5e5e5e]"
+                                }`}
+                              >
+                                <span>{m.name}</span>
+                                {m.isDefault && (
+                                  <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded font-medium">
+                                    Default
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
                         </div>
-
-                        <div className="flex items-center gap-3">
-                          {/* Toggle Capsule Switch */}
-                          <div
-                            onClick={(e) => handleToggleCategory(e, cat._id, cat.published)}
-                            className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
-                              cat.published
-                                ? "bg-[#0c0a09]"
-                                : "bg-[#e6e1e1] border border-[#e7e5e4]"
-                            }`}
-                            title={cat.published ? "Category Published" : "Category Hidden"}
-                          >
-                            <div
-                              className={`absolute top-[2px] w-3 h-3 rounded-full transition-all ${
-                                cat.published
-                                  ? "right-[2px] bg-white"
-                                  : "left-[2px] bg-[#5e5e5e]"
-                              }`}
-                            />
-                          </div>
-
-                          {/* Edit Button */}
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setEditingCategory(cat);
-                              setCategoryName(cat.name);
-                              setCategoryPublished(cat.published);
-                              setIsAddCategoryOpen(true);
-                            }}
-                            className={`w-6 h-6 rounded hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] transition-colors cursor-pointer ${
-                              isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                            }`}
-                            title="Edit Category"
-                          >
-                            <EditPencilIcon className="w-3.5 h-3.5" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteCategory(e, cat._id, cat.name)}
-                            className="opacity-0 group-hover:opacity-100 text-[#5e5e5e] hover:text-red-600 transition cursor-pointer p-0.5"
-                            title="Delete Category"
-                          >
-                            <CloseIcon className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="p-8 text-center text-xs text-[#5e5e5e]">
-                    No categories found. Click <strong>+</strong> to add one.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Right Panel (Items) */}
-            <div className="flex-1 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden min-h-[500px]">
-              {activeCategory ? (
-                <>
-                  {/* Breadcrumb & Header matching Stitch */}
-                  <div className="p-6 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex justify-between items-start">
-                    <div>
-                      <div className="flex items-center gap-1.5 text-[#5e5e5e] font-sans text-[11px] uppercase tracking-wider mb-2 font-semibold">
-                        <span>{activeMenu.name}</span>
-                        <ChevronRightIcon className="w-3.5 h-3.5" />
-                        <span className="text-[#141010] font-bold">{activeCategory.name}</span>
-                      </div>
-                      <h2 className="font-garamond text-[26px] md:text-[30px] font-normal text-[#141010] leading-tight">
-                        Items in {activeCategory.name}
-                      </h2>
-                      <p className="font-sans text-[13px] text-[#5e5e5e] mt-1">
-                        {activeItemsCount} active {activeItemsCount === 1 ? "item" : "items"} in this category.
-                      </p>
-                    </div>
-
-                    {/* Add Item Dropdown Container matching User Image */}
-                    <div className="relative shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setIsAddItemDropdownOpen(!isAddItemDropdownOpen)}
-                        className="btn-primary h-10 px-5 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
-                        style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                      >
-                        <PlusIcon className="w-4 h-4" />
-                        <span style={{ color: "#ffffff" }}>Add Item</span>
-                        <ChevronDownIcon className="w-4 h-4 ml-0.5 opacity-80" />
-                      </button>
-
-                      {/* Dropdown Popover */}
-                      {isAddItemDropdownOpen && (
-                        <div className="absolute right-0 top-full mt-2 w-44 rounded-xl bg-[#252626] text-white py-1.5 shadow-2xl z-40 border border-[#3a3a3a] font-sans divide-y divide-white/10">
-                          <button
-                            type="button"
-                            onClick={handleOpenAddExistingItemDrawer}
-                            className="w-full text-center px-4 py-3 text-sm font-semibold hover:bg-white/10 transition cursor-pointer text-white"
-                            style={{ color: "#ffffff" }}
-                          >
-                            Existing item
-                          </button>
+                        <div className="pt-1">
                           <button
                             type="button"
                             onClick={() => {
-                              setIsAddItemDropdownOpen(false);
-                              openAddItemDrawer();
+                              setIsMenuDropdownOpen(false);
+                              setIsCreateMenuOpen(true);
                             }}
-                            className="w-full text-center px-4 py-3 text-sm font-semibold hover:bg-white/10 transition cursor-pointer text-white"
-                            style={{ color: "#ffffff" }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-[#141010] hover:bg-[#fafafa] flex items-center gap-2 font-medium cursor-pointer"
                           >
-                            New item
+                            <PlusIcon className="w-3.5 h-3.5" /> Create New Menu
                           </button>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
+                </div>
 
-                  {/* Items Table matching Stitch */}
-                  <div className="flex-1 overflow-y-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead className="bg-white sticky top-0 border-b border-[#e7e5e4] z-10 font-sans text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                        <tr>
-                          <th className="w-10 px-3 py-3 text-center"></th>
-                          <th className="px-4 py-3">Item Details</th>
-                          <th className="px-4 py-3 w-32 text-right">Base Price</th>
-                          <th className="px-4 py-3 w-24 text-center">Status</th>
-                          <th className="w-16 px-3 py-3 text-right"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="font-sans divide-y divide-[#e7e5e4]">
+                {/* Action Buttons */}
+                <div className="flex items-center gap-3 font-sans">
+                  {activeMenu && (
+                    <button
+                      type="button"
+                      onClick={openEditMenuDrawer}
+                      className="h-10 px-4 rounded-full border border-[#e7e5e4] bg-transparent hover:bg-[#f1edec] text-[#141010] font-medium text-[15px] transition-colors flex items-center gap-2 cursor-pointer shadow-none"
+                    >
+                      <EditPencilIcon className="w-4 h-4 text-[#141010]" />
+                      <span>Edit Menu</span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateMenuOpen(true)}
+                    className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+                    style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                    <span style={{ color: "#ffffff" }}>Create Menu</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Empty State Banner */}
+            {(!menus || menus.length === 0) && (
+              <div className="w-full p-8 text-center bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] mt-6">
+                <div className="text-4xl">🍽</div>
+                <h2 className="mt-3 font-garamond text-2xl font-normal text-[#141010]">No Menus Created Yet</h2>
+                <p className="mt-1 text-sm text-[#5e5e5e]">
+                  Get started by creating a new menu or loading sample categories (Viral Food, Starters, Mains).
+                </p>
+                <div className="mt-6 flex justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleSeedSample}
+                    className="btn-primary rounded-full px-6 py-2.5 text-sm font-medium shadow-none hover:opacity-90 transition cursor-pointer"
+                    style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  >
+                    Load Sample Menu (Demo)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateMenuOpen(true)}
+                    className="rounded-full border border-[#e7e5e4] bg-transparent px-6 py-2.5 text-sm font-medium text-[#141010] hover:bg-[#f1edec] transition cursor-pointer"
+                  >
+                    + Create Custom Menu
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ======================================================== */}
+            {/* TWO PANEL DRILLDOWN SYSTEM                                */}
+            {/* LEVEL 1: Categories (Left) + Category Items (Right)      */}
+            {/* LEVEL 2: Items in Category (Left) + Customizations (Right) */}
+            {/* ======================================================== */}
+            {activeMenu && (
+              <>
+                {/* Breadcrumb Navigation Strip */}
+                <div className="px-6 lg:px-8 pt-5 pb-1">
+                  <nav className="flex items-center text-[13px] text-[#5e5e5e] gap-2 font-sans select-none">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItemId(null)}
+                      className="hover:text-[#141010] transition-colors cursor-pointer font-medium hover:underline"
+                    >
+                      Menu
+                    </button>
+                    {activeCategory && (
+                      <>
+                        <span className="text-[#a8a29e]">/</span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedItemId(null)}
+                          className={`transition-colors cursor-pointer ${
+                            !selectedItemId ? "text-[#141010] font-bold" : "hover:text-[#141010] font-medium hover:underline"
+                          }`}
+                        >
+                          {activeCategory.name}
+                        </button>
+                      </>
+                    )}
+                    {selectedItemId && activeItem && (
+                      <>
+                        <span className="text-[#a8a29e]">/</span>
+                        <span className="text-[#141010] font-bold">
+                          {activeItem.name}
+                        </span>
+                      </>
+                    )}
+                  </nav>
+                </div>
+
+                <div className="flex-1 flex flex-col md:flex-row w-full p-6 lg:p-8 pt-3 gap-6 min-h-[calc(100vh-190px)] items-start font-sans">
+                
+                {/* ---------------------------------------------------- */}
+                {/* LEFT PANEL: Categories (Level 1) OR Items (Level 2) */}
+                {/* ---------------------------------------------------- */}
+                <div className="w-full md:w-72 lg:w-80 xl:w-96 shrink-0 flex flex-col bg-white rounded-xl border border-[#e7e5e4] shadow-sm overflow-hidden sticky top-6">
+                  {selectedItemId && activeItem ? (
+                    /* Level 2 Left Panel: Items in Category */
+                    <>
+                      <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
+                        <div>
+                          <div className="flex items-center text-xs text-[#5e5e5e] mb-1 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedItemId(null)}
+                              className="hover:text-[#141010] cursor-pointer"
+                            >
+                              Menu
+                            </button>
+                            <ChevronRightIcon className="w-3 h-3" />
+                            <button
+                              type="button"
+                              onClick={() => setSelectedItemId(null)}
+                              className="hover:text-[#141010] cursor-pointer"
+                            >
+                              {activeCategory?.name}
+                            </button>
+                          </div>
+                          <h2 className="font-sans text-[16px] font-bold text-[#141010]">
+                            Items ({categoryItems?.length || 0})
+                          </h2>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddNewItem}
+                          className="px-3 py-1.5 rounded-full bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#252626] transition cursor-pointer flex items-center gap-1 shadow-sm"
+                          style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                        >
+                          <PlusIcon className="w-3.5 h-3.5" />
+                          <span>Add item</span>
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] max-h-[calc(100vh-280px)]">
                         {categoryItems && categoryItems.length > 0 ? (
-                          categoryItems.map(({ categoryItemId, item }, index) => {
-                            const isSoldOut = !item.isAvailable;
+                          categoryItems.map(({ categoryItemId, item }) => {
+                            const isSelected = item._id === selectedItemId;
+                            const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
                             return (
-                              <tr
+                              <div
                                 key={categoryItemId}
-                                draggable
-                                onDragStart={(e) => handleItemDragStart(e, index)}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={(e) => handleItemDrop(e, index)}
-                                className={`hover:bg-[#fafafa] transition-colors group cursor-default ${
-                                  isSoldOut ? "opacity-65" : ""
+                                onClick={() => setSelectedItemId(item._id)}
+                                className={`flex items-center justify-between p-3.5 cursor-pointer transition-all select-none ${
+                                  isSelected
+                                    ? "bg-[#141010] text-white font-semibold shadow-inner"
+                                    : "hover:bg-[#f7f3f2] text-[#141010] bg-white"
                                 }`}
-                                title="Drag to reorder item"
                               >
-                                {/* Drag Handle */}
-                                <td className="px-3 py-3 text-center">
-                                  <span className="cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] opacity-0 group-hover:opacity-60 transition-opacity">
+                                <div className="flex items-center gap-3 min-w-0 pr-2">
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
+                                    isSelected ? "bg-black text-white border border-white/20" : "bg-[#f1edec] text-[#141010]"
+                                  }`}>
+                                    {item.imageUrl ? (
+                                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover rounded-full" />
+                                    ) : (
+                                      <span>{initialLetter}</span>
+                                    )}
+                                  </div>
+                                  <span className={`text-[14px] truncate ${isSelected ? "text-white" : "text-[#141010]"}`}>
+                                    {item.name}
+                                  </span>
+                                </div>
+                                <span className={`text-xs font-semibold shrink-0 ${isSelected ? "text-white/90" : "text-[#5e5e5e]"}`}>
+                                  {currencySymbol}{(item.price / 100).toFixed(0)}
+                                </span>
+                              </div>
+                            );
+                          })
+                        ) : null}
+                      </div>
+                    </>
+                  ) : (
+                    /* Level 1 Left Panel: Categories List */
+                    <>
+                      <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
+                        <h2 className="font-sans text-[16px] font-bold text-[#141010]">
+                          Categories ({categories?.length || 0})
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCategory(null);
+                            setCategoryName("");
+                            setCategoryPublished(true);
+                            setIsAddCategoryOpen(true);
+                          }}
+                          className="px-3 py-1.5 rounded-full bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#252626] transition cursor-pointer flex items-center gap-1 shadow-sm"
+                          style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                        >
+                          <PlusIcon className="w-3.5 h-3.5" />
+                          <span>Add category</span>
+                        </button>
+                      </div>
+
+                      <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] max-h-[calc(100vh-280px)]">
+                        {categories && categories.length > 0 ? (
+                          categories.map((cat, index) => {
+                            const isSelected = cat._id === selectedCategoryId;
+                            return (
+                              <div
+                                key={cat._id}
+                                draggable
+                                onDragStart={(e) => handleCategoryDragStart(e, index)}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={(e) => handleCategoryDrop(e, index)}
+                                onClick={() => {
+                                  setSelectedCategoryId(cat._id);
+                                  setSelectedItemId(null);
+                                }}
+                                className={`flex items-center justify-between p-3.5 cursor-pointer transition-all select-none group ${
+                                  isSelected
+                                    ? "bg-[#141010] text-white font-semibold shadow-inner"
+                                    : "hover:bg-[#f7f3f2] text-[#141010] bg-white"
+                                }`}
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                                  <span
+                                    className={`cursor-grab active:cursor-grabbing text-xs transition-opacity ${
+                                      isSelected ? "opacity-70 text-white" : "opacity-40 text-[#5e5e5e] group-hover:opacity-80"
+                                    }`}
+                                  >
                                     <DragHandleIcon className="w-4 h-4" />
                                   </span>
-                                </td>
+                                  <span className={`text-[14px] truncate ${isSelected ? "text-white font-semibold" : "text-[#141010]"}`}>
+                                    {cat.name}
+                                  </span>
+                                </div>
 
-                                {/* Item Details */}
-                                <td className="px-4 py-3">
-                                  <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-lg bg-[#f1edec] border border-[#e7e5e4] overflow-hidden shrink-0 flex items-center justify-center">
-                                      {item.imageUrl ? (
-                                        <img
-                                          src={item.imageUrl}
-                                          alt={item.name}
-                                          className={`w-full h-full object-cover ${isSoldOut ? "grayscale" : ""}`}
-                                        />
-                                      ) : item.name.toLowerCase().includes("burger") ? (
-                                        <div className="h-full w-full bg-[linear-gradient(135deg,#4a2c1d,#b87333)] flex items-center justify-center text-lg text-white">
-                                          🍔
-                                        </div>
-                                      ) : item.name.toLowerCase().includes("cake") ? (
-                                        <div className="h-full w-full bg-[#7a9a7a] flex items-center justify-center text-lg text-white">
-                                          🍰
-                                        </div>
-                                      ) : (
-                                        <span className="text-lg text-[#5e5e5e]">🖼</span>
-                                      )}
-                                    </div>
-
-                                    <div>
-                                      <p className="text-[16px] font-medium text-[#141010] leading-snug">
-                                        {item.name}
-                                      </p>
-                                      {item.description && (
-                                        <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-md">
-                                          {item.description}
-                                        </p>
-                                      )}
-                                      {isSoldOut && (
-                                        <span className="inline-block mt-1 px-1.5 py-0.5 bg-[#e6e1e1] text-[#5e5e5e] text-[10px] uppercase font-bold tracking-wider rounded">
-                                          Sold Out
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Base Price */}
-                                <td className="px-4 py-3 text-right font-medium text-[#141010] text-[15px]">
-                                  ${item.displayPrice}
-                                </td>
-
-                                {/* Status Toggle */}
-                                <td className="px-4 py-3 text-center">
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {/* Toggle Switch */}
                                   <div
-                                    onClick={() =>
-                                      handleToggleItemAvailability(item._id, item.isAvailable)
-                                    }
-                                    className={`w-8 h-4 rounded-full relative cursor-pointer inline-block transition-colors ${
-                                      item.isAvailable
-                                        ? "bg-[#0c0a09]"
-                                        : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                    onClick={(e) => handleToggleCategory(e, cat._id, cat.published)}
+                                    className={`w-7 h-4 rounded-full relative cursor-pointer transition-colors ${
+                                      cat.published
+                                        ? isSelected ? "bg-emerald-500" : "bg-[#0c0a09]"
+                                        : isSelected ? "bg-stone-600" : "bg-[#e6e1e1] border border-[#e7e5e4]"
                                     }`}
-                                    title={item.isAvailable ? "Available" : "Sold Out"}
                                   >
                                     <div
-                                      className={`absolute top-[2px] w-3 h-3 rounded-full transition-all ${
-                                        item.isAvailable
-                                          ? "right-[2px] bg-white"
-                                          : "left-[2px] bg-[#5e5e5e]"
+                                      className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
+                                        cat.published ? "right-0.5" : "left-0.5"
                                       }`}
                                     />
                                   </div>
-                                </td>
 
-                                {/* Edit Actions */}
-                                <td className="px-3 py-3 text-right">
-                                  <div className="flex items-center justify-end gap-1">
-                                    <button
-                                      type="button"
-                                      onClick={() => openEditItemDrawer(item)}
-                                      className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
-                                      title="Edit Item"
-                                    >
-                                      <EditPencilIcon className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteItem(item._id, item.name)}
-                                      className="opacity-0 group-hover:opacity-100 w-8 h-8 rounded-full hover:bg-red-50 flex items-center justify-center text-[#5e5e5e] hover:text-red-600 transition-colors cursor-pointer"
-                                      title="Delete Item"
-                                    >
-                                      <TrashIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
+                                  {/* Edit Button */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingCategory(cat);
+                                      setCategoryName(cat.name);
+                                      setCategoryPublished(cat.published);
+                                      setIsAddCategoryOpen(true);
+                                    }}
+                                    className={`w-6 h-6 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? "text-white/80 hover:text-white hover:bg-white/20"
+                                        : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] opacity-0 group-hover:opacity-100"
+                                    }`}
+                                    title="Edit Category"
+                                  >
+                                    <EditPencilIcon className="w-3.5 h-3.5" />
+                                  </button>
+
+                                  {/* Delete Button */}
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleDeleteCategory(e, cat._id, cat.name)}
+                                    className={`w-6 h-6 rounded flex items-center justify-center transition-colors cursor-pointer ${
+                                      isSelected
+                                        ? "text-red-300 hover:text-red-100 hover:bg-red-500/20"
+                                        : "text-[#5e5e5e] hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100"
+                                    }`}
+                                    title="Delete Category"
+                                  >
+                                    <CloseIcon className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                             );
                           })
                         ) : (
-                          <tr>
-                            <td colSpan={5} className="py-16 text-center text-sm text-[#5e5e5e]">
-                              No items in this category yet. Click <strong>+ Add Item</strong> to create one.
-                            </td>
-                          </tr>
+                          <div className="p-8 text-center text-xs text-[#5e5e5e]">
+                            No categories found. Click <strong>+ Add category</strong> to create one.
+                          </div>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              ) : (
-                <div className="py-24 text-center text-sm text-[#5e5e5e]">
-                  Select or create a category on the left to view its items.
+                      </div>
+                    </>
+                  )}
                 </div>
-              )}
+
+                {/* ---------------------------------------------------- */}
+                {/* RIGHT PANEL: Items (Level 1) OR Customizations (Level 2) */}
+                {/* ---------------------------------------------------- */}
+                <div className="flex-1 min-w-0 w-full flex flex-col bg-white rounded-xl border border-[#e7e5e4] shadow-sm overflow-hidden min-h-[500px]">
+                  {selectedItemId && activeItem ? (
+                    /* ======================================================== */
+                    /* LEVEL 2 RIGHT PANEL: ITEM & CUSTOMIZATIONS VIEW          */
+                    /* ======================================================== */
+                    <div className="flex flex-col divide-y divide-[#e7e5e4]">
+                      {/* Top Item Header */}
+                      <div className="p-6 bg-[#fdf8f7] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h2 className="font-garamond text-[32px] font-normal text-[#141010] leading-tight">
+                              {activeItem.name}
+                            </h2>
+                            <span className="font-sans font-normal text-[24px] text-[#5e5e5e]">
+                              {currencySymbol}{(activeItem.price / 100).toFixed(0)}
+                            </span>
+                          </div>
+                          <p className="font-sans text-[13px] text-[#5e5e5e] mt-1">
+                            {activeItem.description || "Manage customizations, availability status, and options for this menu item."}
+                          </p>
+                        </div>
+
+                        {/* Control Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* In Stock Availability Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable)}
+                            className={`h-9 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                              activeItem.isAvailable
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                                : "bg-stone-100 text-stone-600 border-stone-300 hover:bg-stone-200"
+                            }`}
+                          >
+                            <span>{activeItem.isAvailable ? "✓ In Stock" : "○ Unavailable"}</span>
+                          </button>
+
+                          {/* Edit Item Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditItem(activeItem)}
+                            className="w-9 h-9 rounded-full border border-[#e7e5e4] bg-white hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition cursor-pointer shadow-sm"
+                            title="Edit Item"
+                          >
+                            <EditPencilIcon className="w-4 h-4" />
+                          </button>
+
+                          {/* Delete Item Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteItem(activeItem._id, activeItem.name)}
+                            className="w-9 h-9 rounded-full border border-red-200 bg-white hover:bg-red-50 flex items-center justify-center text-red-600 transition cursor-pointer shadow-sm"
+                            title="Delete Item"
+                          >
+                            <CloseIcon className="w-4 h-4" />
+                          </button>
+
+                          {/* Add Customization Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setCustName("");
+                              setCustType("AddOns");
+                              setCustRequired(false);
+                              setCustMaxSelected("1");
+                              setCustOptions([{ name: "", price: "0.00" }]);
+                              setIsAddCustomizationOpen(true);
+                            }}
+                            className="btn-primary h-9 px-4 rounded-full bg-[#0c0a09] text-white font-medium text-[13px] hover:bg-[#252626] transition shadow-sm flex items-center gap-1.5 cursor-pointer ml-1"
+                            style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                          >
+                            <PlusIcon className="w-4 h-4" />
+                            <span>Add customization</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Section 1: Customizations Groups */}
+                      <div className="p-6 space-y-4">
+                        <div>
+                          <h3 className="font-garamond text-[24px] text-[#141010] font-normal">Customizations</h3>
+                          <p className="text-xs text-[#5e5e5e] mt-0.5">
+                            Add modifier groups like add-ons or preparation choices.
+                          </p>
+                        </div>
+
+                        <div className="border border-[#e7e5e4] rounded-xl overflow-hidden shadow-sm">
+                          <table className="w-full text-left border-collapse font-sans">
+                            <thead>
+                              <tr className="border-b border-[#e7e5e4] text-[12px] font-semibold text-[#5e5e5e] bg-[#fcf5f4]">
+                                <th className="py-3 px-6 font-semibold w-1/2">Customization</th>
+                                <th className="py-3 px-6 font-semibold">Type</th>
+                                <th className="py-3 px-6 font-semibold text-right">Actions</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-[#e7e5e4] bg-white">
+                              {activeItemCustomizations && activeItemCustomizations.length > 0 ? (
+                                activeItemCustomizations.map((cust: ItemCustomization) => {
+                                  const isSelected = cust._id === selectedCustId;
+                                  return (
+                                    <tr
+                                      key={cust._id}
+                                      onClick={() => setSelectedCustId(cust._id)}
+                                      className={`cursor-pointer transition-colors ${
+                                        isSelected ? "bg-[#f1edec]" : "hover:bg-[#fafafa]"
+                                      }`}
+                                    >
+                                      <td className="py-3.5 px-6">
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-[#5e5e5e] opacity-40">
+                                            <DragHandleIcon className="w-4 h-4" />
+                                          </span>
+                                          <div>
+                                            <div className="font-semibold text-[15px] text-[#141010] flex items-center gap-2">
+                                              <span>{cust.name}</span>
+                                              {cust.required && (
+                                                <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-semibold">
+                                                  Required
+                                                </span>
+                                              )}
+                                            </div>
+                                            <p className="text-xs text-[#5e5e5e] mt-0.5">
+                                              Max choices: {cust.maxSelected || 1}
+                                            </p>
+                                          </div>
+                                        </div>
+                                      </td>
+                                      <td className="py-3.5 px-6">
+                                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-800">
+                                          {cust.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                                        </span>
+                                      </td>
+                                      <td className="py-3.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => handleDeleteCustomization(e, cust._id, cust.name)}
+                                          className="w-7 h-7 rounded-full hover:bg-red-50 text-[#5e5e5e] hover:text-red-600 inline-flex items-center justify-center transition cursor-pointer"
+                                          title="Delete Customization"
+                                        >
+                                          <CloseIcon className="w-3.5 h-3.5" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                              ) : (
+                                <tr>
+                                  <td colSpan={3} className="py-8 text-center text-xs text-[#5e5e5e]">
+                                    No customization groups yet. Click <strong>+ Add customization</strong> to create one.
+                                  </td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Section 2: Choices for Selected Customization */}
+                      {activeCustomization && (
+                        <div className="p-6 space-y-4 bg-[#faf9f8]">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div>
+                              <h3 className="font-garamond text-[24px] text-[#141010] font-normal">
+                                Choices for '{activeCustomization.name}'
+                              </h3>
+                              <p className="text-xs text-[#5e5e5e] mt-0.5">
+                                Configure options and price modifiers for this customization group.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Choices List */}
+                          <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-[#e7e5e4]">
+                            {activeCustomization.items && activeCustomization.items.length > 0 ? (
+                              activeCustomization.items.map((opt: CustomizationOption) => (
+                                <div key={opt._id} className="p-3.5 flex items-center justify-between hover:bg-[#fdf8f7] transition">
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-[#5e5e5e] opacity-40">
+                                      <DragHandleIcon className="w-4 h-4" />
+                                    </span>
+                                    <span className="font-semibold text-sm text-[#141010]">{opt.name}</span>
+                                  </div>
+                                  <div className="flex items-center gap-4">
+                                    <span className="font-semibold text-sm text-[#141010]">
+                                      {opt.price > 0 ? `+${currencySymbol}${(opt.price / 100).toFixed(2)}` : "Free"}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteChoice(opt._id)}
+                                      className="w-7 h-7 rounded-full hover:bg-red-50 text-[#5e5e5e] hover:text-red-600 flex items-center justify-center transition cursor-pointer"
+                                      title="Delete Option"
+                                    >
+                                      <CloseIcon className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="p-6 text-center text-xs text-[#5e5e5e]">
+                                No choices added yet. Use the form below to add options.
+                              </div>
+                            )}
+
+                            {/* Add Choice Form */}
+                            <form onSubmit={handleAddChoiceSubmit} className="p-4 bg-[#fdf8f7] flex flex-col sm:flex-row items-center gap-3">
+                              <input
+                                type="text"
+                                required
+                                value={newChoiceName}
+                                onChange={(e) => setNewChoiceName(e.target.value)}
+                                placeholder="Choice name (e.g. Extra Cheese, Mild, Large)"
+                                className="flex-1 w-full bg-white border border-[#e7e5e4] rounded-lg px-3.5 py-2 text-xs text-[#141010] outline-none"
+                              />
+                              <div className="relative w-full sm:w-36">
+                                <span className="absolute left-3 top-2 text-xs font-semibold text-[#5e5e5e]">
+                                  {currencySymbol}
+                                </span>
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  value={newChoicePrice}
+                                  onChange={(e) => setNewChoicePrice(e.target.value)}
+                                  placeholder="0.00"
+                                  className="w-full bg-white border border-[#e7e5e4] rounded-lg pl-7 pr-3 py-2 text-xs text-[#141010] font-semibold outline-none"
+                                />
+                              </div>
+                              <button
+                                type="submit"
+                                disabled={isAddingChoice}
+                                className="btn-primary w-full sm:w-auto px-5 py-2 rounded-lg bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#252626] transition cursor-pointer shrink-0 disabled:opacity-50"
+                                style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                              >
+                                {isAddingChoice ? "Adding..." : "+ Add Choice"}
+                              </button>
+                            </form>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : activeCategory ? (
+                    /* ======================================================== */
+                    /* LEVEL 1 RIGHT PANEL: CATEGORY ITEMS TABLE                 */
+                    /* ======================================================== */
+                    <>
+                      {/* Header with Title and Category Quick Control Group */}
+                      <div className="p-5 lg:p-6 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div>
+                          <div className="flex items-center gap-1.5 text-[#5e5e5e] font-sans text-[11px] uppercase tracking-wider mb-1 font-semibold">
+                            <span>{activeMenu.name}</span>
+                            <ChevronRightIcon className="w-3.5 h-3.5" />
+                            <span className="text-[#141010] font-bold">{activeCategory.name}</span>
+                          </div>
+                          <h2 className="font-garamond text-[26px] md:text-[30px] font-normal text-[#141010] leading-tight">
+                            {activeCategory.name} ({categoryItems?.length || 0})
+                          </h2>
+                          <p className="font-sans text-[13px] text-[#5e5e5e] mt-0.5">
+                            {activeItemsCount} active {activeItemsCount === 1 ? "item" : "items"} available in this category. Click an item to view customizations.
+                          </p>
+                        </div>
+
+                        {/* Category Header Actions */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Publish Category Toggle Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleCategory(e, activeCategory._id, activeCategory.published)}
+                            className={`h-9 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                              activeCategory.published
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                                : "bg-stone-100 text-stone-600 border-stone-300 hover:bg-stone-200"
+                            }`}
+                            title={activeCategory.published ? "Category is Published (Visible Online)" : "Category is Draft (Hidden)"}
+                          >
+                            <span>{activeCategory.published ? "✓ Published" : "○ Draft"}</span>
+                          </button>
+
+                          {/* Edit Category Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCategory(activeCategory);
+                              setCategoryName(activeCategory.name);
+                              setCategoryPublished(activeCategory.published);
+                              setIsAddCategoryOpen(true);
+                            }}
+                            className="w-9 h-9 rounded-full border border-[#e7e5e4] bg-white hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition-colors cursor-pointer shadow-sm"
+                            title="Edit Category Details"
+                          >
+                            <EditPencilIcon className="w-4 h-4" />
+                          </button>
+
+                          {/* Delete Category Button */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleDeleteCategory(e, activeCategory._id, activeCategory.name)}
+                            className="w-9 h-9 rounded-full border border-red-200 bg-white hover:bg-red-50 flex items-center justify-center text-red-600 transition-colors cursor-pointer shadow-sm"
+                            title="Delete Category"
+                          >
+                            <CloseIcon className="w-4 h-4" />
+                          </button>
+
+                          {/* Add Item Dropdown Button */}
+                          <div className="relative ml-1">
+                            <button
+                              type="button"
+                              onClick={() => setIsAddItemDropdownOpen(!isAddItemDropdownOpen)}
+                              className="btn-primary h-9 px-4 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
+                              style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                            >
+                              <PlusIcon className="w-4 h-4" />
+                              <span style={{ color: "#ffffff" }}>Add item</span>
+                              <ChevronDownIcon className="w-3.5 h-3.5 ml-0.5 opacity-80" />
+                            </button>
+
+                            {/* Dropdown Popover */}
+                            {isAddItemDropdownOpen && (
+                              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl bg-[#252626] text-white py-1.5 shadow-2xl z-40 border border-[#3a3a3a] font-sans divide-y divide-white/10">
+                                <button
+                                  type="button"
+                                  onClick={handleOpenAddExistingItemDrawer}
+                                  className="w-full text-center px-4 py-2.5 text-xs font-semibold hover:bg-white/10 transition cursor-pointer text-white"
+                                >
+                                  Add existing item
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleOpenAddNewItem}
+                                  className="w-full text-center px-4 py-2.5 text-xs font-semibold hover:bg-white/10 transition cursor-pointer text-white"
+                                >
+                                  Create new item
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Items Table */}
+                      <div className="flex-1 overflow-x-auto">
+                        <table className="w-full text-left border-collapse font-sans">
+                          <thead>
+                            <tr className="border-b border-[#e7e5e4] text-[12px] font-semibold text-[#5e5e5e] bg-[#fcf5f4]">
+                              <th className="py-3.5 px-6 font-semibold">Item</th>
+                              <th className="py-3.5 px-6 font-semibold text-right">Price</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-[#e7e5e4] bg-white">
+                            {categoryItems && categoryItems.length > 0 ? (
+                              categoryItems.map(({ categoryItemId, item }, index) => {
+                                const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
+                                return (
+                                  <tr
+                                    key={categoryItemId}
+                                    draggable
+                                    onDragStart={(e) => handleItemDragStart(e, index)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={(e) => handleItemDrop(e, index)}
+                                    className={`hover:bg-[#fdf8f7] transition-colors group select-none cursor-pointer ${
+                                      !item.isAvailable ? "opacity-70 bg-stone-50/50" : ""
+                                    }`}
+                                    onClick={() => setSelectedItemId(item._id)}
+                                  >
+                                    {/* Item Column */}
+                                    <td className="py-3.5 px-6">
+                                      <div className="flex items-center gap-3.5">
+                                        <span
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="cursor-grab active:cursor-grabbing text-[#5e5e5e] opacity-0 group-hover:opacity-70 transition-opacity"
+                                        >
+                                          <DragHandleIcon className="w-4 h-4" />
+                                        </span>
+
+                                        {/* Circular Letter Avatar */}
+                                        <div className="w-10 h-10 rounded-full bg-[#f1edec] border border-[#e7e5e4] overflow-hidden shrink-0 flex items-center justify-center font-bold text-[#141010] text-sm">
+                                          {item.imageUrl ? (
+                                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
+                                          ) : (
+                                            <span>{initialLetter}</span>
+                                          )}
+                                        </div>
+
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-2 flex-wrap">
+                                            <span className="font-semibold text-[15px] text-[#141010]">
+                                              {item.name}
+                                            </span>
+                                            {item.isVeg !== undefined && (
+                                              <span
+                                                className={`w-2.5 h-2.5 rounded-full inline-block border ${
+                                                  item.isVeg ? "bg-emerald-600 border-emerald-700" : "bg-red-600 border-red-700"
+                                                }`}
+                                                title={item.isVeg ? "Vegetarian" : "Non-Veg"}
+                                              />
+                                            )}
+                                            {item.isSpicy && <span title="Spicy">🌶️</span>}
+                                            {item.markAsBestseller && (
+                                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-semibold rounded">
+                                                Bestseller
+                                              </span>
+                                            )}
+                                            {!item.isAvailable && (
+                                              <span className="px-2 py-0.5 bg-stone-100 text-stone-600 text-[10px] font-medium rounded border border-stone-200">
+                                                Unavailable
+                                              </span>
+                                            )}
+                                          </div>
+                                          {item.description && (
+                                            <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-lg">
+                                              {item.description}
+                                            </p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    {/* Price Column with Quick Actions on Hover */}
+                                    <td className="py-3.5 px-6 text-right font-medium text-[15px] text-[#141010] whitespace-nowrap">
+                                      <div className="flex items-center justify-end gap-3">
+                                        <span className="font-semibold">
+                                          {currencySymbol}{(item.price / 100).toFixed(2)}
+                                        </span>
+                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleOpenEditItem(item)}
+                                            className="w-7 h-7 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                                            title="Edit Item Details"
+                                          >
+                                            <EditPencilIcon className="w-3.5 h-3.5" />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleDeleteItem(item._id, item.name)}
+                                            className="w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-[#5e5e5e] hover:text-red-600 transition-colors cursor-pointer"
+                                            title="Delete Item"
+                                          >
+                                            <CloseIcon className="w-3.5 h-3.5" />
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            ) : (
+                              <tr>
+                                <td colSpan={2} className="py-16 text-center text-[#5e5e5e] text-sm">
+                                  No items in this category yet. Click <strong>+ Add item</strong> to create one.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="p-12 text-center text-[#5e5e5e] text-sm">
+                      Please select a category from the left panel.
+                    </div>
+                  )}
+                </div>
+              </div>
+              </>
+            )}
+          </>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* SLIDE-OVER DRAWER: ADD CUSTOMIZATION                 */}
+        {/* ---------------------------------------------------- */}
+        {isAddCustomizationOpen && (
+          <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
+            <div className="h-full w-[480px] max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
+              <div>
+                <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
+                  <div>
+                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Add Customization</h2>
+                    <p className="text-xs text-[#5e5e5e] mt-0.5">Add add-ons or preparation options for {activeItem?.name}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddCustomizationOpen(false)}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <form id="customization-form" onSubmit={handleSaveCustomizationSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-180px)]">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Customization Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={custName}
+                      onChange={(e) => setCustName(e.target.value)}
+                      placeholder="e.g. Extra Cheese, Spice Level, Crust Type"
+                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Customization Type</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCustType("AddOns")}
+                        className={`p-3 rounded-xl border text-center text-xs font-semibold transition cursor-pointer ${
+                          custType === "AddOns" ? "bg-[#141010] text-white border-[#141010]" : "bg-white text-[#141010] border-[#e7e5e4]"
+                        }`}
+                      >
+                        Add-Ons (Paid Extras)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCustType("Preparations")}
+                        className={`p-3 rounded-xl border text-center text-xs font-semibold transition cursor-pointer ${
+                          custType === "Preparations" ? "bg-[#141010] text-white border-[#141010]" : "bg-white text-[#141010] border-[#e7e5e4]"
+                        }`}
+                      >
+                        Preparations (Preferences)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-[#e7e5e4]">
+                    <div>
+                      <span className="text-sm font-medium text-[#141010]">Mandatory Selection</span>
+                      <p className="text-[11px] text-[#5e5e5e]">Customer must choose an option before adding to cart</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setCustRequired(!custRequired)}
+                      className={`w-10 h-5 rounded-full relative transition-colors ${custRequired ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${custRequired ? "right-0.5" : "left-0.5"}`} />
+                    </button>
+                  </div>
+
+                  {/* Options List */}
+                  <div className="space-y-3 pt-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Options / Items</label>
+                      <button
+                        type="button"
+                        onClick={() => setCustOptions([...custOptions, { name: "", price: "0.00" }])}
+                        className="text-xs text-[#141010] font-semibold hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <PlusIcon className="w-3.5 h-3.5" /> Add Option
+                      </button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {custOptions.map((opt, idx) => (
+                        <div key={idx} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            required
+                            value={opt.name}
+                            onChange={(e) => {
+                              const newOpts = [...custOptions];
+                              newOpts[idx].name = e.target.value;
+                              setCustOptions(newOpts);
+                            }}
+                            placeholder="Option name (e.g. Cheddar Cheese)"
+                            className="flex-1 rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-xs text-[#141010] outline-none"
+                          />
+                          <div className="relative w-28 shrink-0">
+                            <span className="absolute left-2.5 top-2 text-[#5e5e5e] text-xs font-semibold">{currencySymbol}</span>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={opt.price}
+                              onChange={(e) => {
+                                const newOpts = [...custOptions];
+                                newOpts[idx].price = e.target.value;
+                                setCustOptions(newOpts);
+                              }}
+                              placeholder="0.00"
+                              className="w-full rounded-lg border border-[#e7e5e4] bg-white pl-6 pr-2 py-2 text-xs text-[#141010] font-medium outline-none"
+                            />
+                          </div>
+                          {custOptions.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setCustOptions(custOptions.filter((_, i) => i !== idx))}
+                              className="w-7 h-7 rounded-full hover:bg-red-50 text-[#5e5e5e] hover:text-red-600 flex items-center justify-center shrink-0 cursor-pointer"
+                            >
+                              <CloseIcon className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
+                <button
+                  type="button"
+                  onClick={() => setIsAddCustomizationOpen(false)}
+                  className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[15px] hover:bg-[#f1edec] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="customization-form"
+                  disabled={isSavingCustomization}
+                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                >
+                  {isSavingCustomization ? "Saving..." : "Save Customization"}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -1162,63 +2137,48 @@ export default function MenuPage() {
         {isCreateMenuOpen && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
             <div className="h-full w-96 max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
-              {/* Header */}
-              <div className="px-6 py-5 border-b border-[#e7e5e4] flex items-start justify-between bg-[#fdf8f7]">
-                <div>
-                  <h3 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Create Menu</h3>
-                  <p className="text-[#5e5e5e] text-[13px] mt-1 font-sans">Create a menu to organize your categories and items.</p>
+              <div>
+                <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
+                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Create New Menu</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateMenuOpen(false)}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsCreateMenuOpen(false)}
-                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
-                >
-                  <CloseIcon className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Body */}
-              <div className="flex-1 p-6 overflow-y-auto">
-                {createMenuError && (
-                  <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                    {createMenuError}
-                  </div>
-                )}
-
-                <form id="create-menu-form" onSubmit={handleCreateMenuSubmit} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                      Menu Name *
-                    </label>
+                <form id="create-menu-form" onSubmit={handleCreateMenuSubmit} className="p-6 space-y-4">
+                  {createMenuError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                      {createMenuError}
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Menu Name *</label>
                     <input
                       type="text"
                       required
                       value={menuName}
                       onChange={(e) => setMenuName(e.target.value)}
-                      placeholder="Enter menu name (e.g., Dessert Menu)"
-                      className="w-full h-12 px-4 rounded-lg border border-[#e7e5e4] bg-[#fafafa] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition-colors font-sans text-[15px]"
-                      style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                      autoFocus
+                      placeholder="e.g. Breakfast Menu"
+                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
                     />
                   </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label className="font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                      Description (Optional)
-                    </label>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Description</label>
                     <textarea
                       rows={3}
                       value={menuDescription}
                       onChange={(e) => setMenuDescription(e.target.value)}
-                      placeholder="Add an optional description for this menu..."
-                      className="w-full p-3.5 rounded-lg border border-[#e7e5e4] bg-[#fafafa] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition-colors font-sans text-[14px]"
-                      style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
+                      placeholder="Optional details or service times..."
+                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
                     />
                   </div>
                 </form>
               </div>
 
-              {/* Footer */}
               <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
                 <button
                   type="button"
@@ -1242,84 +2202,79 @@ export default function MenuPage() {
         )}
 
         {/* ---------------------------------------------------- */}
-        {/* SLIDE-OVER DRAWER: EDIT MENU DETAILS                 */}
+        {/* SLIDE-OVER DRAWER: EDIT MENU                         */}
         {/* ---------------------------------------------------- */}
-        {isEditMenuOpen && activeMenu && (
+        {isEditMenuOpen && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
             <div className="h-full w-96 max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
-              {/* Header */}
-              <div className="px-6 py-5 border-b border-[#e7e5e4] flex items-start justify-between bg-[#fdf8f7]">
-                <div>
-                  <h3 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Edit Menu</h3>
-                  <p className="text-[#5e5e5e] text-[13px] mt-1 font-sans">
-                    Update menu settings or set as default active menu.
-                  </p>
+              <div>
+                <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
+                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Edit Menu</h2>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditMenuOpen(false)}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsEditMenuOpen(false)}
-                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
-                >
-                  <CloseIcon className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Body */}
-              <div className="flex-1 p-6 overflow-y-auto">
-                <form id="edit-menu-form" onSubmit={handleEditMenuSubmit} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                      Menu Name *
-                    </label>
+                <form id="edit-menu-form" onSubmit={handleEditMenuSubmit} className="p-6 space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Menu Name *</label>
                     <input
                       type="text"
                       required
                       value={editMenuName}
                       onChange={(e) => setEditMenuName(e.target.value)}
-                      placeholder="Enter menu name (e.g., Dessert Menu)"
-                      className="w-full h-12 px-4 rounded-lg border border-[#e7e5e4] bg-[#fafafa] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition-colors font-sans text-[15px]"
-                      style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                      autoFocus
+                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
                     />
                   </div>
-
-                  <div className="flex flex-col gap-2">
-                    <label className="font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                      Description (Optional)
-                    </label>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Description</label>
                     <textarea
                       rows={3}
                       value={editMenuDescription}
                       onChange={(e) => setEditMenuDescription(e.target.value)}
-                      placeholder="Add an optional description for this menu..."
-                      className="w-full p-3.5 rounded-lg border border-[#e7e5e4] bg-[#fafafa] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition-colors font-sans text-[14px]"
-                      style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
+                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
                     />
                   </div>
 
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSetDefaultMenu(activeMenu._id)}
-                      className="w-full rounded-lg border border-[#e7e5e4] bg-[#f1edec] py-3 text-xs font-medium text-[#141010] hover:bg-[#ece7e6] transition cursor-pointer"
-                    >
-                      {activeMenu.isDefault ? "✓ Currently Default Menu" : "Set as Default Active Menu"}
-                    </button>
-                  </div>
+                  <div className="pt-4 border-t border-[#e7e5e4] space-y-2">
+                    {!activeMenu?.isDefault && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!activeMenu?._id) return;
+                          await setDefaultMenuMutation({ id: activeMenu._id });
+                          setIsEditMenuOpen(false);
+                        }}
+                        className="w-full py-2 px-3 text-xs font-medium text-[#141010] bg-[#f1edec] hover:bg-[#e7e5e4] rounded-lg transition"
+                      >
+                        ⭐ Set as Default Menu
+                      </button>
+                    )}
 
-                  <div className="pt-3 border-t border-[#e7e5e4]">
-                    <button
-                      type="button"
-                      onClick={handleDeleteMenu}
-                      className="w-full rounded-lg border border-red-200 bg-red-50 py-3 text-xs font-medium text-red-700 hover:bg-red-100 transition cursor-pointer"
-                    >
-                      Delete this Menu
-                    </button>
+                    {menus && menus.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!activeMenu?._id) return;
+                          if (!confirm(`Delete menu "${activeMenu.name}"?`)) return;
+                          await deleteMenuMutation({ id: activeMenu._id });
+                          setSelectedMenuId(null);
+                          setSelectedItemId(null);
+                          setIsEditMenuOpen(false);
+                        }}
+                        className="w-full py-2 px-3 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                      >
+                        Delete Menu
+                      </button>
+                    )}
                   </div>
                 </form>
               </div>
 
-              {/* Footer */}
               <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
                 <button
                   type="button"
@@ -1343,75 +2298,67 @@ export default function MenuPage() {
         )}
 
         {/* ---------------------------------------------------- */}
-        {/* MODAL / DRAWER: ADD / EDIT CATEGORY                  */}
+        {/* SLIDE-OVER DRAWER: ADD / EDIT CATEGORY               */}
         {/* ---------------------------------------------------- */}
         {isAddCategoryOpen && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
             <div className="h-full w-96 max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
-              {/* Header */}
-              <div className="px-6 py-5 border-b border-[#e7e5e4] flex items-start justify-between bg-[#fdf8f7]">
-                <div>
-                  <h3 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+              <div>
+                <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
+                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
                     {editingCategory ? "Edit Category" : "Add Category"}
-                  </h3>
-                  <p className="text-[#5e5e5e] text-[13px] mt-1 font-sans">
-                    Categories group your dishes on the menu.
-                  </p>
+                  </h2>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddCategoryOpen(false);
+                      setEditingCategory(null);
+                    }}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAddCategoryOpen(false)}
-                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
-                >
-                  <CloseIcon className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Body */}
-              <div className="flex-1 p-6 overflow-y-auto">
-                <form id="category-form" onSubmit={handleSaveCategorySubmit} className="flex flex-col gap-4">
-                  <div className="flex flex-col gap-2">
-                    <label className="font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                      Category Name *
-                    </label>
+                <form id="category-form" onSubmit={handleSaveCategorySubmit} className="p-6 space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Category Name *</label>
                     <input
                       type="text"
                       required
                       value={categoryName}
                       onChange={(e) => setCategoryName(e.target.value)}
-                      placeholder="e.g., Viral Food, Beverages, Starters"
-                      className="w-full h-12 px-4 rounded-lg border border-[#e7e5e4] bg-[#fafafa] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition-colors font-sans text-[15px] text-[#141010] placeholder:text-[#928c8a]"
-                      style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                      autoFocus
+                      placeholder="e.g. Starters, Main Course, Drinks"
+                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between rounded-lg border border-[#e7e5e4] bg-[#f1edec] p-4">
-                    <div>
-                      <div className="text-sm font-medium text-[#141010]">Active / Published</div>
-                      <div className="text-[11px] text-[#5e5e5e] mt-0.5">Visible to customers and staff</div>
-                    </div>
-                    <div
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-sm font-medium text-[#141010]">Published on Menu</span>
+                    <button
+                      type="button"
                       onClick={() => setCategoryPublished(!categoryPublished)}
-                      className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
-                        categoryPublished ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                      className={`w-10 h-5 rounded-full relative transition-colors ${
+                        categoryPublished ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"
                       }`}
                     >
                       <div
-                        className={`absolute top-[2px] w-3 h-3 rounded-full transition-all ${
-                          categoryPublished ? "right-[2px] bg-white" : "left-[2px] bg-[#5e5e5e]"
+                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
+                          categoryPublished ? "right-0.5" : "left-0.5"
                         }`}
                       />
-                    </div>
+                    </button>
                   </div>
                 </form>
               </div>
 
-              {/* Footer */}
               <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
                 <button
                   type="button"
-                  onClick={() => setIsAddCategoryOpen(false)}
+                  onClick={() => {
+                    setIsAddCategoryOpen(false);
+                    setEditingCategory(null);
+                  }}
                   className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[15px] hover:bg-[#f1edec] transition-colors cursor-pointer"
                 >
                   Cancel
@@ -1436,7 +2383,6 @@ export default function MenuPage() {
         {isAddExistingItemOpen && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
             <aside className="w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl flex flex-col border-l border-[#e7e5e4] transform transition-transform duration-300 justify-between">
-              {/* Drawer Header */}
               <div className="px-6 py-5 border-b border-[#e7e5e4] flex justify-between items-start bg-[#fdf8f7]">
                 <div>
                   <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Add Existing Item</h2>
@@ -1451,7 +2397,6 @@ export default function MenuPage() {
                 </button>
               </div>
 
-              {/* Drawer Body */}
               <div className="flex-1 p-6 overflow-y-auto space-y-5">
                 {existingItemError && (
                   <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -1459,7 +2404,6 @@ export default function MenuPage() {
                   </div>
                 )}
 
-                {/* Search Input with floating label */}
                 <div className="relative pt-2">
                   <label className="absolute top-0 left-3 bg-[#fdf8f7] px-1 text-[10px] font-semibold text-[#5e5e5e] z-10 uppercase tracking-wider">
                     Search any item from menu
@@ -1480,7 +2424,6 @@ export default function MenuPage() {
                   </div>
                 </div>
 
-                {/* Search Results List */}
                 <div className="border border-[#e7e5e4] rounded-lg bg-white overflow-hidden shadow-sm max-h-64 overflow-y-auto">
                   {filteredExistingItems && filteredExistingItems.length > 0 ? (
                     <ul className="divide-y divide-[#e7e5e4]">
@@ -1501,7 +2444,7 @@ export default function MenuPage() {
                                   <div className="text-[11px] text-[#5e5e5e] mt-0.5 italic">{item.categoryName}</div>
                                 )}
                               </div>
-                              <div className="text-sm font-semibold text-[#141010]">${item.displayPrice}</div>
+                              <div className="text-sm font-semibold text-[#141010]">{currencySymbol}{item.displayPrice}</div>
                             </div>
                           </li>
                         );
@@ -1509,14 +2452,11 @@ export default function MenuPage() {
                     </ul>
                   ) : (
                     <div className="p-4 text-center text-xs text-[#5e5e5e]">
-                      {allExistingItems && allExistingItems.length === 0
-                        ? "No items in catalog yet. Create a new item first."
-                        : "No matching items found."}
+                      No matching items found.
                     </div>
                   )}
                 </div>
 
-                {/* Selected Item Box */}
                 {selectedExistingItem && (
                   <div className="mt-4">
                     <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-2">
@@ -1528,7 +2468,7 @@ export default function MenuPage() {
                         <div>
                           <span className="text-[15px] font-medium text-[#141010]">{selectedExistingItem.name}</span>
                           <span className="text-[#5e5e5e] ml-2 font-semibold text-sm">
-                            ${selectedExistingItem.displayPrice}
+                            {currencySymbol}{selectedExistingItem.displayPrice}
                           </span>
                         </div>
                       </div>
@@ -1545,7 +2485,6 @@ export default function MenuPage() {
                 )}
               </div>
 
-              {/* Drawer Footer */}
               <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
                 <button
                   type="button"
@@ -1562,364 +2501,6 @@ export default function MenuPage() {
                   style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
                 >
                   {isAddingExistingItem ? "Adding..." : "Add Item"}
-                </button>
-              </div>
-            </aside>
-          </div>
-        )}
-
-        {/* ---------------------------------------------------- */}
-        {/* SLIDE-OVER DRAWER: ADD / EDIT ITEM (STITCH MATCH)    */}
-        {/* ---------------------------------------------------- */}
-        {isAddItemOpen && (
-          <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
-            <aside className="w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl flex flex-col border-l border-[#e7e5e4] transform transition-transform duration-300 justify-between">
-              {/* Drawer Header */}
-              <div className="px-6 py-4 border-b border-[#e7e5e4] flex items-center justify-between bg-white">
-                <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
-                  {editingItem ? "Edit item" : "Add new item"}
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setIsAddItemOpen(false)}
-                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
-                >
-                  <CloseIcon className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex px-6 border-b border-[#e7e5e4] bg-white">
-                <button
-                  type="button"
-                  onClick={() => setItemDrawerTab("general")}
-                  className={`px-4 py-3 font-medium text-[15px] border-b-2 mr-4 transition-colors cursor-pointer ${
-                    itemDrawerTab === "general"
-                      ? "text-[#141010] border-[#141010]"
-                      : "text-[#5e5e5e] hover:text-[#141010] border-transparent"
-                  }`}
-                >
-                  General
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setItemDrawerTab("nutrition")}
-                  className={`px-4 py-3 font-medium text-[15px] border-b-2 transition-colors cursor-pointer ${
-                    itemDrawerTab === "nutrition"
-                      ? "text-[#141010] border-[#141010]"
-                      : "text-[#5e5e5e] hover:text-[#141010] border-transparent"
-                  }`}
-                >
-                  Nutrition info
-                </button>
-              </div>
-
-              {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-6 bg-white">
-                {itemError && (
-                  <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                    {itemError}
-                  </div>
-                )}
-
-                {itemDrawerTab === "general" ? (
-                  <form id="item-form" onSubmit={handleSaveItemSubmit} className="space-y-6">
-                    {/* Section 1: Item Image */}
-                    <section className="space-y-3">
-                      <h3 className="font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                        Item image
-                      </h3>
-                      <div className="space-y-3">
-                        {/* Upload Area */}
-                        <div className="border border-dashed border-[#d1c4c1] rounded-lg p-6 flex flex-col items-center justify-center text-center bg-[#fafafa] hover:bg-[#f1edec] transition-colors cursor-pointer group">
-                          <div className="w-12 h-12 rounded-full bg-white shadow-sm flex items-center justify-center mb-2 group-hover:scale-105 transition-transform border border-[#e7e5e4]">
-                            <ImageIcon className="w-5 h-5 text-[#5e5e5e]" />
-                          </div>
-                          <span className="font-medium text-[14px] text-[#141010] mb-0.5">+ Add Image</span>
-                          <span className="text-[12px] text-[#5e5e5e]">Drag and drop or click to upload</span>
-                        </div>
-
-                        {/* Image Options */}
-                        <div className="space-y-2 pt-1">
-                          <label className="flex items-center space-x-3 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={itemAdd3dAndroid}
-                              onChange={(e) => setItemAdd3dAndroid(e.target.checked)}
-                              className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                            />
-                            <span className="text-[14px] text-[#4e4543] group-hover:text-[#141010] transition-colors">
-                              Add 3d images (Android)
-                            </span>
-                          </label>
-                          <label className="flex items-center space-x-3 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={itemAdd3dIos}
-                              onChange={(e) => setItemAdd3dIos(e.target.checked)}
-                              className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                            />
-                            <span className="text-[14px] text-[#4e4543] group-hover:text-[#141010] transition-colors">
-                              Add 3d images (Ios)
-                            </span>
-                          </label>
-                          <label className="flex items-center space-x-3 cursor-pointer group">
-                            <input
-                              type="checkbox"
-                              checked={itemAddVideo}
-                              onChange={(e) => setItemAddVideo(e.target.checked)}
-                              className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                            />
-                            <span className="text-[14px] text-[#4e4543] group-hover:text-[#141010] transition-colors">
-                              Add video
-                            </span>
-                          </label>
-                        </div>
-                      </div>
-                    </section>
-
-                    <div className="h-px bg-[#e7e5e4] w-full" />
-
-                    {/* Section 2: Category */}
-                    <section className="space-y-2">
-                      <label className="block font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                        Select category
-                      </label>
-                      <div className="relative">
-                        <select
-                          value={itemSelectedCategoryId || activeCategory?._id || ""}
-                          onChange={(e) => setItemSelectedCategoryId(e.target.value)}
-                          className="w-full appearance-none bg-[#fafafa] border border-[#e7e5e4] rounded-lg px-4 py-3 font-sans text-[15px] text-[#141010] focus:outline-none focus:border-[#141010] transition-colors cursor-pointer"
-                          style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                        >
-                          {categories?.map((cat) => (
-                            <option key={cat._id} value={cat._id}>
-                              {cat.name}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-[#5e5e5e]">
-                          <ChevronDownIcon className="w-4 h-4" />
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Section 3: Item Details */}
-                    <section className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="block font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                          Item name *
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={itemName}
-                          onChange={(e) => setItemName(e.target.value)}
-                          placeholder="Enter item name"
-                          className="w-full bg-[#fafafa] border border-[#e7e5e4] rounded-lg px-4 py-3 font-sans text-[15px] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] transition-colors"
-                          style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                          autoFocus
-                        />
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="block font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                          Add price *
-                        </label>
-                        <div className="relative">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <span className="text-[#5e5e5e] text-[15px]">₹</span>
-                          </div>
-                          <input
-                            type="number"
-                            step="0.01"
-                            required
-                            value={itemPrice}
-                            onChange={(e) => setItemPrice(e.target.value)}
-                            placeholder="0.00"
-                            className="w-full bg-[#fafafa] border border-[#e7e5e4] rounded-lg pl-9 pr-4 py-3 font-sans text-[15px] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] transition-colors"
-                            style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="block font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                          Enter description
-                        </label>
-                        <div className="border border-[#e7e5e4] rounded-lg overflow-hidden focus-within:border-[#141010] transition-colors bg-[#fafafa]">
-                          {/* Formatting Toolbar */}
-                          <div className="flex items-center space-x-1 p-2 border-b border-[#e7e5e4] bg-[#f1edec] text-[#5e5e5e]">
-                            <button
-                              type="button"
-                              className="px-2 py-1 hover:bg-white rounded transition-colors text-xs font-bold"
-                            >
-                              B
-                            </button>
-                            <button
-                              type="button"
-                              className="px-2 py-1 hover:bg-white rounded transition-colors text-xs italic font-serif"
-                            >
-                              I
-                            </button>
-                            <button
-                              type="button"
-                              className="px-2 py-1 hover:bg-white rounded transition-colors text-xs underline"
-                            >
-                              U
-                            </button>
-                            <div className="w-px h-4 bg-[#e7e5e4] mx-1" />
-                            <button
-                              type="button"
-                              className="px-2 py-1 hover:bg-white rounded transition-colors text-xs"
-                            >
-                              • List
-                            </button>
-                          </div>
-                          <textarea
-                            rows={3}
-                            value={itemDescription}
-                            onChange={(e) => setItemDescription(e.target.value)}
-                            placeholder="Enter item description"
-                            className="w-full bg-[#fafafa] border-none px-4 py-3 font-sans text-[14px] text-[#141010] placeholder:text-[#928c8a] focus:outline-none resize-none"
-                            style={{ backgroundColor: "#fafafa", color: "#141010" }}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="block font-sans text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                          Search code
-                        </label>
-                        <input
-                          type="text"
-                          value={itemSkuNumber}
-                          onChange={(e) => setItemSkuNumber(e.target.value)}
-                          placeholder="Enter search code for this item. Ex: 1211"
-                          className="w-full bg-[#fafafa] border border-[#e7e5e4] rounded-lg px-4 py-3 font-sans text-[15px] text-[#141010] placeholder:text-[#928c8a] focus:outline-none focus:border-[#141010] transition-colors"
-                          style={{ backgroundColor: "#fafafa", color: "#141010", borderColor: "#e7e5e4" }}
-                        />
-                        <p className="text-[11px] text-[#5e5e5e] leading-tight">
-                          Note: Assign a unique code to this menu item. Each code must be different, as it will be used in the Cashier section to speed up the billing process.
-                        </p>
-                      </div>
-                    </section>
-
-                    <div className="h-px bg-[#e7e5e4] w-full" />
-
-                    {/* Section 4: Item Settings */}
-                    <section className="space-y-3">
-                      <label className="flex items-center space-x-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={itemShowQuantity}
-                          onChange={(e) => setItemShowQuantity(e.target.checked)}
-                          className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                        />
-                        <span className="text-[14px] text-[#141010]">Show quantity</span>
-                      </label>
-
-                      <label className="flex items-center space-x-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={itemShowItemType}
-                          onChange={(e) => setItemShowItemType(e.target.checked)}
-                          className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                        />
-                        <span className="text-[14px] text-[#141010]">Show item type</span>
-                      </label>
-
-                      <label className="flex items-center space-x-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={itemIsGst}
-                          onChange={(e) => setItemIsGst(e.target.checked)}
-                          className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                        />
-                        <span className="text-[14px] text-[#141010]">Is this item taxable?</span>
-                      </label>
-
-                      <label className="flex items-center space-x-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={itemMarkAsBestseller}
-                          onChange={(e) => setItemMarkAsBestseller(e.target.checked)}
-                          className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                        />
-                        <span className="text-[14px] text-[#141010]">Mark this item as Bestseller</span>
-                      </label>
-
-                      <label className="flex items-center space-x-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={itemIsSpicy}
-                          onChange={(e) => setItemIsSpicy(e.target.checked)}
-                          className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                        />
-                        <span className="text-[14px] text-[#141010]">Mark this item as Spicy</span>
-                      </label>
-
-                      <label className="flex items-center space-x-3 cursor-pointer group">
-                        <input
-                          type="checkbox"
-                          checked={itemIsVeg}
-                          onChange={(e) => setItemIsVeg(e.target.checked)}
-                          className="w-4 h-4 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010]"
-                        />
-                        <span className="text-[14px] text-[#141010]">Vegetarian item</span>
-                      </label>
-
-                      <div className="flex items-center justify-between rounded-lg border border-[#e7e5e4] bg-[#fafafa] p-3.5 mt-2">
-                        <div>
-                          <div className="text-sm font-medium text-[#141010]">In Stock / Available</div>
-                          <div className="text-[11px] text-[#5e5e5e] mt-0.5">Displays as Sold Out when off</div>
-                        </div>
-                        <div
-                          onClick={() => setItemIsAvailable(!itemIsAvailable)}
-                          className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
-                            itemIsAvailable ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
-                          }`}
-                        >
-                          <div
-                            className={`absolute top-[2px] w-3 h-3 rounded-full transition-all ${
-                              itemIsAvailable ? "right-[2px] bg-white" : "left-[2px] bg-[#5e5e5e]"
-                            }`}
-                          />
-                        </div>
-                      </div>
-                    </section>
-                  </form>
-                ) : (
-                  /* Nutrition Info Tab */
-                  <div className="h-full flex flex-col items-center justify-center text-center py-16">
-                    <div className="w-16 h-16 rounded-full bg-[#f1edec] flex items-center justify-center mb-4 text-[#5e5e5e]">
-                      <span className="text-2xl font-serif">⚖</span>
-                    </div>
-                    <h3 className="font-garamond text-[24px] text-[#141010] mb-1">Nutrition information</h3>
-                    <p className="font-sans text-[14px] text-[#5e5e5e] max-w-[250px]">
-                      Nutrition details will be available soon.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Drawer Footer */}
-              <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
-                <button
-                  type="button"
-                  onClick={() => setIsAddItemOpen(false)}
-                  className="h-10 px-6 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[15px] hover:bg-[#f1edec] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="item-form"
-                  disabled={isSavingItem}
-                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                >
-                  {isSavingItem ? "Saving..." : editingItem ? "Save Changes" : "Create"}
                 </button>
               </div>
             </aside>

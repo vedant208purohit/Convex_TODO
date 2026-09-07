@@ -1094,3 +1094,86 @@ export const seedSampleMenu = mutation({
     return menuId;
   },
 });
+
+
+export const listCustomizations = query({
+  args: { itemId: v.id("items") },
+  handler: async (ctx, args) => {
+    const customizations = await ctx.db
+      .query("customizations")
+      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .collect();
+
+    const results = [];
+    for (const cust of customizations) {
+      const items = await ctx.db
+        .query("customizationItems")
+        .withIndex("by_customization", (q) => q.eq("customizationId", cust._id))
+        .collect();
+
+      results.push({
+        ...cust,
+        items: items.sort((a, b) => a.position - b.position),
+      });
+    }
+
+    return results.sort((a, b) => a.position - b.position);
+  },
+});
+
+export const updateCustomization = mutation({
+  args: {
+    id: v.id("customizations"),
+    name: v.optional(v.string()),
+    customizationType: v.optional(v.union(v.literal("AddOns"), v.literal("Preparations"))),
+    required: v.optional(v.boolean()),
+    maxSelected: v.optional(v.number()),
+    published: v.optional(v.boolean()),
+    position: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, updates);
+    return await ctx.db.get(id);
+  },
+});
+
+export const deleteCustomization = mutation({
+  args: { id: v.id("customizations") },
+  handler: async (ctx, args) => {
+    const items = await ctx.db
+      .query("customizationItems")
+      .withIndex("by_customization", (q) => q.eq("customizationId", args.id))
+      .collect();
+
+    for (const item of items) {
+      await ctx.db.delete(item._id);
+    }
+
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});
+
+export const updateCustomizationItem = mutation({
+  args: {
+    id: v.id("customizationItems"),
+    name: v.optional(v.string()),
+    price: v.optional(v.number()),
+    isAvailable: v.optional(v.boolean()),
+    position: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { id, ...updates } = args;
+    await ctx.db.patch(id, updates);
+    return await ctx.db.get(id);
+  },
+});
+
+export const deleteCustomizationItem = mutation({
+  args: { id: v.id("customizationItems") },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.id);
+    return { success: true };
+  },
+});
