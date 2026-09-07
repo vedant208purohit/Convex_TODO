@@ -1,12 +1,5 @@
-"use client";
-
-import { PosShell } from "../components/PosShell";
-import { OrganizationSettings } from "../components/OrganizationSettings";
+import { redirect } from "next/navigation";
 
 export default function OrganizationPage() {
-  return (
-    <PosShell title="Organization" subtitle="Management Portal">
-      <OrganizationSettings />
-    </PosShell>
-  );
+  redirect("/settings");
 }
