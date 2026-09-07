@@ -329,6 +329,26 @@ describe("Organization Order Processes Domain Unit & Business Logic Tests", () =
 
   // 4. Update Operations
   describe("Update Logic & Revalidations", () => {
+    test("Can update process description", async () => {
+      const { asAdmin } = await setupStoreWithAdmin();
+
+      const pId = await asAdmin.mutation(api.organizationOrderProcesses.create, {
+        name: "Initial Stage",
+        description: "Initial description",
+        isSequence: true,
+        processColor: "#111111",
+      });
+
+      await asAdmin.mutation(api.organizationOrderProcesses.update, {
+        id: pId,
+        description: "Updated description text",
+      });
+
+      const updated = await asAdmin.query(api.organizationOrderProcesses.get, { id: pId });
+      expect(updated?.description).toBe("Updated description text");
+    });
+
+
     test("Store Admin can update process attributes", async () => {
       const { asAdmin } = await setupStoreWithAdmin();
 

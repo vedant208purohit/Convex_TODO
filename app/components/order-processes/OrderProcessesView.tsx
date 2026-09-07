@@ -1,14 +1,13 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "../../../convex/_generated/api";
+import { api } from "@/convex/_generated/api";
 import {
   DrawerState,
   OrderProcessDoc,
   OrderProcessFormData,
   OrderProcessId,
-  REFERENCE_ORDER_PROCESSES,
 } from "./types";
 import { OrderProcessesHeader } from "./OrderProcessesHeader";
 import { WorkflowPreview } from "./WorkflowPreview";
@@ -16,43 +15,15 @@ import { OrderProcessesTable } from "./OrderProcessesTable";
 import { OrderProcessDrawer } from "./OrderProcessDrawer";
 
 export function OrderProcessesView() {
+  // Live Convex Query
   const convexProcesses = useQuery(api.organizationOrderProcesses.list, {});
   const createProcess = useMutation(api.organizationOrderProcesses.create);
   const updateProcess = useMutation(api.organizationOrderProcesses.update);
   const reorderProcess = useMutation(api.organizationOrderProcesses.reorder);
 
-  // Unified list of order processes (contains reference + any new/updated processes)
-  const [unifiedProcesses, setUnifiedProcesses] = useState<OrderProcessDoc[]>(
-    REFERENCE_ORDER_PROCESSES
-  );
-
-  // Synchronize Convex changes into the unified processes list
-  useEffect(() => {
-    if (!convexProcesses || convexProcesses.length === 0) return;
-
-    setUnifiedProcesses((prev) => {
-      const result = [...prev];
-
-      convexProcesses.forEach((c) => {
-        const existingIdx = result.findIndex(
-          (p) =>
-            p._id === c._id ||
-            p.name.toLowerCase().trim() === c.name.toLowerCase().trim()
-        );
-
-        if (existingIdx !== -1) {
-          result[existingIdx] = c;
-        } else {
-          result.push(c);
-        }
-      });
-
-      return result.map((proc, idx) => ({
-        ...proc,
-        position: idx + 1,
-      }));
-    });
-  }, [convexProcesses]);
+  // Pure Convex-driven data
+  const processes = convexProcesses ?? [];
+  const isLoading = convexProcesses === undefined;
 
   // Drawer State
   const [drawerState, setDrawerState] = useState<DrawerState>({
@@ -101,72 +72,23 @@ export function OrderProcessesView() {
     setIsSubmitting(true);
     try {
       if (drawerState.mode === "edit" && formData.id) {
-        const targetId = formData.id;
-        const isRealId = !targetId.startsWith("ref_");
-
-        // Optimistically update unified list
-        setUnifiedProcesses((prev) =>
-          prev.map((p) =>
-            p._id === targetId
-              ? {
-                  ...p,
-                  name: formData.name,
-                  processColor: formData.processColor,
-                  published: formData.published,
-                  updatedAt: Date.now(),
-                }
-              : p
-          )
-        );
-
-        if (isRealId) {
-          await updateProcess({
-            id: targetId,
-            name: formData.name,
-            processColor: formData.processColor,
-            published: formData.published,
-            isSequence: formData.isSequence ?? true,
-          });
-        } else {
-          try {
-            await createProcess({
-              name: formData.name,
-              processColor: formData.processColor,
-              published: formData.published,
-              isSequence: formData.isSequence ?? true,
-            });
-          } catch {
-            // Maintained in unified state
-          }
-        }
-        showFeedback("success", `Process "${formData.name}" updated successfully.`);
-      } else {
-        // Create genuinely new process (appended to the workflow)
-        const newProcId = `proc_${Date.now()}` as OrderProcessId;
-        const newProc: OrderProcessDoc = {
-          _id: newProcId,
-          _creationTime: Date.now(),
+        await updateProcess({
+          id: formData.id,
           name: formData.name,
-          position: unifiedProcesses.length + 1,
+          description: formData.description,
+          processColor: formData.processColor,
           published: formData.published,
           isSequence: formData.isSequence ?? true,
+        });
+        showFeedback("success", `Process "${formData.name}" updated successfully.`);
+      } else {
+        await createProcess({
+          name: formData.name,
+          description: formData.description,
           processColor: formData.processColor,
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
-
-        setUnifiedProcesses((prev) => [...prev, newProc]);
-
-        try {
-          await createProcess({
-            name: formData.name,
-            processColor: formData.processColor,
-            published: formData.published,
-            isSequence: formData.isSequence ?? true,
-          });
-        } catch {
-          // Maintained in unified list
-        }
+          published: formData.published,
+          isSequence: formData.isSequence ?? true,
+        });
         showFeedback("success", `Process "${formData.name}" created successfully.`);
       }
       handleCloseDrawer();
@@ -189,30 +111,11 @@ export function OrderProcessesView() {
     setTogglingIds((prev) => new Set(prev).add(id));
     const nextPublished = !(process.published ?? true);
 
-    // Optimistically update unified list
-    setUnifiedProcesses((prev) =>
-      prev.map((p) => (p._id === id ? { ...p, published: nextPublished } : p))
-    );
-
     try {
-      const isRealId = !id.startsWith("ref_");
-      if (isRealId) {
-        await updateProcess({
-          id,
-          published: nextPublished,
-        });
-      } else {
-        try {
-          await createProcess({
-            name: process.name,
-            processColor: process.processColor || "#262626",
-            published: nextPublished,
-            isSequence: true,
-          });
-        } catch {
-          // Maintained in unified state
-        }
-      }
+      await updateProcess({
+        id,
+        published: nextPublished,
+      });
       showFeedback(
         "success",
         `"${process.name}" is now ${nextPublished ? "published" : "unpublished"}.`
@@ -232,26 +135,13 @@ export function OrderProcessesView() {
     }
   };
 
-  // Drag and drop reordering handler across all processes
+  // Drag and drop reordering handler
   const handleReorder = async (id: OrderProcessId, newPosition: number) => {
-    setUnifiedProcesses((prev) => {
-      const list = [...prev];
-      const srcIdx = list.findIndex((p) => p._id === id);
-      if (srcIdx === -1) return prev;
-      const [moved] = list.splice(srcIdx, 1);
-      const targetIdx = Math.max(0, Math.min(newPosition - 1, list.length));
-      list.splice(targetIdx, 0, moved);
-      return list.map((p, idx) => ({ ...p, position: idx + 1 }));
-    });
-
     try {
-      const isRealId = !id.startsWith("ref_");
-      if (isRealId) {
-        await reorderProcess({
-          id,
-          position: newPosition,
-        });
-      }
+      await reorderProcess({
+        id,
+        position: newPosition,
+      });
       showFeedback("success", "Workflow order updated.");
     } catch (err: unknown) {
       const msg =
@@ -288,21 +178,28 @@ export function OrderProcessesView() {
 
       {/* 1. Page Header */}
       <OrderProcessesHeader
-        processCount={unifiedProcesses.length}
+        processCount={processes.length}
         onAddProcess={handleOpenCreate}
       />
 
-      {/* 2. Live Order Flow Preview (with horizontal scroll bar when > 4) */}
-      <WorkflowPreview processes={unifiedProcesses} />
+      {/* 2. Live Order Flow Preview */}
+      <WorkflowPreview processes={processes} />
 
-      {/* 3. Main Process List / Table (circular dot color without hex) */}
-      <OrderProcessesTable
-        processes={unifiedProcesses}
-        onEdit={handleOpenEdit}
-        onTogglePublished={handleTogglePublished}
-        onReorder={handleReorder}
-        togglingIds={togglingIds}
-      />
+      {/* 3. Main Process List / Table */}
+      {isLoading ? (
+        <div className="bg-[#ffffff] rounded-2xl shadow-sm border border-[#e7e5e4] p-12 text-center text-[#4e4543] animate-pulse">
+          <div className="inline-block w-6 h-6 border-2 border-[#141010] border-t-transparent rounded-full animate-spin mb-3" />
+          <p className="text-sm font-medium">Loading order processes...</p>
+        </div>
+      ) : (
+        <OrderProcessesTable
+          processes={processes}
+          onEdit={handleOpenEdit}
+          onTogglePublished={handleTogglePublished}
+          onReorder={handleReorder}
+          togglingIds={togglingIds}
+        />
+      )}
 
       {/* 4. Create / Edit Drawer */}
       <OrderProcessDrawer

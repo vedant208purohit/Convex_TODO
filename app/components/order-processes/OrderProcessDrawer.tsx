@@ -32,7 +32,7 @@ export function OrderProcessDrawer({
       if (mode === "edit" && process) {
         setName(process.name || "");
         setColor(process.processColor || "#141010");
-        setDescription("");
+        setDescription(process.description || "");
         setPublished(process.published ?? true);
       } else {
         setName("");
