@@ -269,40 +269,6 @@ export async function requireAdmin(
 /**
  * Requires caller to be an active member of the target organization
  */
-
-/**
- * Requires caller to be an active Store Admin or Cashier in the target organization
- */
-export async function requireAdminOrCashier(
-  ctx: QueryCtx | MutationCtx,
-  explicitOrgId?: Id<"organizations">
-) {
-  const { identity, org, callerMember } = await requireMember(ctx, explicitOrgId);
-
-  const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
-  if (isOwnerOrUnowned) {
-    return { identity, org, callerMember };
-  }
-
-  const roles = Array.isArray(callerMember?.userType)
-    ? callerMember!.userType
-    : typeof callerMember?.userType === "string"
-      ? [callerMember!.userType]
-      : [];
-
-  const hasAuthorizedRole = roles.some((role) =>
-    ["admin", "store_admin", "org_admin", "super_admin", "cashier"].includes(
-      (role || "").trim().toLowerCase()
-    )
-  );
-
-  if (!hasAuthorizedRole) {
-    throw new Error("Forbidden. Admin or Cashier access required.");
-  }
-
-  return { identity, org, callerMember };
-}
-
 export async function requireMember(
   ctx: QueryCtx | MutationCtx,
   explicitOrgId?: Id<"organizations">

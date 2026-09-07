@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 
-export default async function HomePage({
+export default function HomePage({
   searchParams,
 }: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  searchParams?: Record<string, string | string[] | undefined>;
 }) {
-  const resolvedSearchParams = (await searchParams) ?? {};
   const params = new URLSearchParams();
 
-  for (const [key, value] of Object.entries(resolvedSearchParams)) {
+  for (const [key, value] of Object.entries(searchParams ?? {})) {
     if (typeof value === "string" && value) {
       params.set(key, value);
     } else if (Array.isArray(value) && value.length > 0 && value[0]) {
