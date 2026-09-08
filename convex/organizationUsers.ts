@@ -455,6 +455,11 @@ export const create = mutation({
   args: {
     organizationId: v.optional(v.id("organizations")),
     userId: v.string(), // Clerk User ID
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
   },
@@ -496,6 +501,11 @@ export const create = mutation({
     const newId = await ctx.db.insert("organizationUsers", {
       organizationId: org._id,
       userId: args.userId.trim(),
+      ...(args.firstName !== undefined ? { firstName: args.firstName.trim() } : {}),
+      ...(args.lastName !== undefined ? { lastName: args.lastName.trim() } : {}),
+      ...(args.email !== undefined ? { email: args.email.trim() } : {}),
+      ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
+      ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
       userType: normalizedTypes,
       userPermission: finalPermissions,
       createdAt: now,
@@ -512,6 +522,11 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.id("organizationUsers"),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     userType: v.optional(v.array(v.string())),
     userPermission: v.optional(v.any()),
   },
@@ -542,11 +557,19 @@ export const update = mutation({
     );
 
     const now = Date.now();
-    await ctx.db.patch(args.id, {
+    const patchData: Record<string, any> = {
       userType: updatedTypes,
       userPermission: updatedPermissions,
       updatedAt: now,
-    });
+    };
+
+    if (args.firstName !== undefined) patchData.firstName = args.firstName.trim();
+    if (args.lastName !== undefined) patchData.lastName = args.lastName.trim();
+    if (args.email !== undefined) patchData.email = args.email.trim();
+    if (args.phone !== undefined) patchData.phone = args.phone.trim();
+    if (args.avatarUrl !== undefined) patchData.avatarUrl = args.avatarUrl.trim();
+
+    await ctx.db.patch(args.id, patchData);
 
     return { success: true };
   },

@@ -369,20 +369,32 @@ export function OrganizationEmployees() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Helper to derive name / initials / phone / email from user ID string
+  // Helper to derive name / initials / phone / email from user ID and stored profile
   const getEmployeeDisplayMeta = (emp: Doc<"organizationUsers">) => {
     const raw = emp.userId || "";
-    let name = raw;
-    let email = raw.includes("@") ? raw : `${raw.toLowerCase()}@example.com`;
-    let phone = "+91 95210 20647";
 
-    if (raw.includes("@")) {
-      const parts = raw.split("@")[0].split(/[._-]/);
-      name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
-    } else if (raw.startsWith("user_") || raw.startsWith("usr_")) {
-      name = "MAHENDRA SUTHAR";
+    // 1. Individual Stored Phone Resolution
+    let phone = emp.phone || "";
+    if (!phone && raw.includes("@phone.user")) {
+      const cleanDigits = raw.split("@")[0];
+      phone = cleanDigits.startsWith("+") ? cleanDigits : `+91 ${cleanDigits}`;
     }
 
+    // 2. Name Resolution
+    let name = "";
+    if (emp.firstName || emp.lastName) {
+      name = `${emp.firstName || ""} ${emp.lastName || ""}`.trim();
+    } else if (raw.includes("@")) {
+      const parts = raw.split("@")[0].split(/[._-]/);
+      name = parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(" ");
+    } else {
+      name = raw;
+    }
+
+    // 3. Email Resolution
+    let email = emp.email || (raw.includes("@") ? raw : `${raw.toLowerCase()}@example.com`);
+
+    // 4. Initials
     const nameWords = name.trim().split(" ");
     let initials = "MS";
     if (nameWords.length >= 2) {
@@ -423,6 +435,7 @@ export function OrganizationEmployees() {
         !search ||
         emp.userId.toLowerCase().includes(search) ||
         meta.name.toLowerCase().includes(search) ||
+        meta.phone.toLowerCase().includes(search) ||
         emp.userType.some((r: string) => r.toLowerCase().includes(search));
 
       const matchesRole =
@@ -465,10 +478,20 @@ export function OrganizationEmployees() {
     setDrawerMode("edit");
     setEditingId(emp._id);
     const meta = getEmployeeDisplayMeta(emp);
-    const nameParts = meta.name.split(" ");
-    setFormFirstName(nameParts[0] || "");
-    setFormLastName(nameParts.slice(1).join(" ") || "");
-    setFormPhone(meta.phone || "");
+
+    if (emp.firstName || emp.lastName) {
+      setFormFirstName(emp.firstName || "");
+      setFormLastName(emp.lastName || "");
+    } else {
+      const nameParts = meta.name.split(" ");
+      setFormFirstName(nameParts[0] || "");
+      setFormLastName(nameParts.slice(1).join(" ") || "");
+    }
+
+    const rawPhone = emp.phone || meta.phone || "";
+    const cleanPhoneInput = rawPhone.replace(/^\+91\s*/, "");
+    setFormPhone(cleanPhoneInput);
+
     setFormUserIdentifier(emp.userId);
     setFormRoles(emp.userType.length > 0 ? emp.userType : ["cashier"]);
     setCustomPermissions(emp.userPermission || {});
@@ -514,8 +537,13 @@ export function OrganizationEmployees() {
       setErrorMessage("Last name is required.");
       return;
     }
-    if (!formPhone.trim()) {
+    const cleanPhoneDigits = formPhone.trim().replace(/\D/g, "");
+    if (!cleanPhoneDigits) {
       setErrorMessage("Phone number is required.");
+      return;
+    }
+    if (cleanPhoneDigits.length !== 10) {
+      setErrorMessage("Please enter a valid 10-digit mobile number.");
       return;
     }
     if (formRoles.length === 0) {
@@ -536,9 +564,18 @@ export function OrganizationEmployees() {
       const permissionPayload =
         Object.keys(customPermissions).length > 0 ? customPermissions : undefined;
 
+      const trimmedPhone = formPhone.trim();
+      const fullPhone = trimmedPhone.startsWith("+")
+        ? trimmedPhone
+        : `${formCountryCode} ${trimmedPhone}`;
+
       if (drawerMode === "add") {
         await createEmployeeMutation({
           userId: effectiveUserId,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          phone: fullPhone,
+          ...(effectiveUserId.includes("@") ? { email: effectiveUserId } : {}),
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
@@ -546,6 +583,9 @@ export function OrganizationEmployees() {
       } else if (editingId) {
         await updateEmployeeMutation({
           id: editingId,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
+          phone: fullPhone,
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
@@ -716,8 +756,9 @@ export function OrganizationEmployees() {
       </div>
 
       {/* MAIN EMPLOYEE TABLE CARD */}
-      <div className="rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
-        <div className="w-full overflow-x-auto">
+      <div className="rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden flex flex-col">
+        {/* Inner Scrollable Box with Sticky Table Header (Max 3 rows visible before scroll) */}
+        <div className="w-full overflow-x-auto max-h-[255px] overflow-y-auto custom-scrollbar">
           <table className="w-full min-w-[640px] text-left border-collapse table-fixed">
             <colgroup>
               <col className="w-[30%]" />
@@ -726,28 +767,28 @@ export function OrganizationEmployees() {
               <col className="w-[14%]" />
               <col className="w-[16%]" />
             </colgroup>
-            <thead>
-              <tr className="border-b border-[#e7e5e4] bg-[#faf8f7]">
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate">
+            <thead className="sticky top-0 z-10 bg-[#faf8f7] border-b border-[#e7e5e4] shadow-xs">
+              <tr>
+                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
                   EMPLOYEE
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate">
+                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
                   ROLES
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate">
+                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
                   JOINED
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate">
+                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
                   STATUS
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] text-right truncate">
+                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] text-right truncate bg-[#faf8f7]">
                   ACTION
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f3efe]">
-              {paginatedEmployees.length > 0 ? (
-                paginatedEmployees.map((emp) => {
+              {filteredEmployees.length > 0 ? (
+                filteredEmployees.map((emp) => {
                   const isCurrentCaller = currentMembership?.userId === emp.userId;
                   const meta = getEmployeeDisplayMeta(emp);
 
@@ -880,32 +921,10 @@ export function OrganizationEmployees() {
           </table>
         </div>
 
-        {/* FOOTER PAGINATION BAR */}
-        <div className="flex items-center justify-between px-6 py-3.5 border-t border-[#e7e5e4] bg-[#faf8f7]">
+        {/* FOOTER BAR (Clean Showing Count without Previous/Next buttons) */}
+        <div className="flex items-center px-6 py-3.5 border-t border-[#e7e5e4] bg-[#faf8f7]">
           <div className="text-xs text-[#78716c] font-medium">
-            Showing {paginatedEmployees.length} of {filteredEmployees.length} employees
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="px-3 py-1 text-xs font-medium border border-[#e7e5e4] rounded-lg bg-white text-[#78716c] hover:bg-[#f5f5f4] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              Previous
-            </button>
-            <span className="px-3 py-1 text-xs font-semibold bg-[#141010] text-white rounded-lg">
-              {currentPage}
-            </span>
-            <button
-              type="button"
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="px-3 py-1 text-xs font-medium border border-[#e7e5e4] rounded-lg bg-white text-[#78716c] hover:bg-[#f5f5f4] transition disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            >
-              Next
-            </button>
+            Showing {filteredEmployees.length} {filteredEmployees.length === 1 ? "employee" : "employees"}
           </div>
         </div>
       </div>
@@ -1313,9 +1332,13 @@ export function OrganizationEmployees() {
                     <input
                       id="phone-number"
                       type="tel"
+                      maxLength={10}
                       value={formPhone}
-                      onChange={(e) => setFormPhone(e.target.value)}
-                      placeholder="95210 20647"
+                      onChange={(e) => {
+                        const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setFormPhone(numericOnly);
+                      }}
+                      placeholder="9876543210"
                       className="flex-1 text-sm border-0 bg-transparent px-3 py-2 focus:ring-0 text-neutral-900 font-mono tracking-wide focus:outline-none"
                     />
                   </div>
