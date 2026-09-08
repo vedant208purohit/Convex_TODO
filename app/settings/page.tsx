@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, ReactNode } from "react";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrderProcessesView } from "../components/order-processes/OrderProcessesView";
 import { OrganizationEmployees } from "../components/OrganizationEmployees";
 import { ReactNode } from "react";
 
@@ -14,13 +15,13 @@ import { ReactNode } from "react";
 function OrganizationIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z" />
-      <path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2" />
-      <path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2" />
-      <path d="M10 6h4" />
-      <path d="M10 10h4" />
-      <path d="M10 14h4" />
-      <path d="M10 18h4" />
+      <path d="M3 21h18" />
+      <path d="M5 21V7l8-4v18" />
+      <path d="M19 21V11l-6-4" />
+      <path d="M9 9v.01" />
+      <path d="M9 12v.01" />
+      <path d="M9 15v.01" />
+      <path d="M9 18v.01" />
     </svg>
   );
 }
@@ -198,6 +199,8 @@ export default function SettingsPage() {
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "printers" && <OrganizationPrinters />}
+            {activeTab === "orderProcesses" && <OrderProcessesView />}
+            {activeTab !== "organization" && activeTab !== "printers" && activeTab !== "orderProcesses" && (
             {activeTab === "staff" && <OrganizationEmployees />}
             {activeTab !== "organization" && activeTab !== "printers" && activeTab !== "staff" && (
               <div className="py-12 text-center">

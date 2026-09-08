@@ -363,6 +363,7 @@ export default defineSchema({
   organizationOrderProcesses: defineTable({
     legacyId: v.optional(v.string()),
     name: v.string(),
+    description: v.optional(v.string()),
     position: v.number(),
     published: v.boolean(),
     isSequence: v.boolean(),
