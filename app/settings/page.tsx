@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrganizationEmployees } from "../components/OrganizationEmployees";
 import { ReactNode } from "react";
 
 // ==========================================
@@ -197,7 +198,8 @@ export default function SettingsPage() {
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "printers" && <OrganizationPrinters />}
-            {activeTab !== "organization" && activeTab !== "printers" && (
+            {activeTab === "staff" && <OrganizationEmployees />}
+            {activeTab !== "organization" && activeTab !== "printers" && activeTab !== "staff" && (
               <div className="py-12 text-center">
                 <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                   {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}

@@ -49,9 +49,11 @@ interface OrgFormData {
   isGst: boolean;
   inclusiveGst: boolean;
   gstNumber: string;
+  gstDocumentStorageId?: string;
   isFssai: boolean;
   fssaiRegistrationNumber: string;
   expiryDate: string;
+  fssaiDocumentStorageId?: string;
 }
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -80,6 +82,8 @@ const CURRENCY_OPTIONS = [
   { label: "EUR (€)", currency: "EUR", symbol: "€" },
   { label: "AED (AED)", currency: "AED", symbol: "AED" },
   { label: "GBP (£)", currency: "GBP", symbol: "£" },
+  { label: "CAD ($)", currency: "CAD", symbol: "$" },
+  { label: "AUD ($)", currency: "AUD", symbol: "$" },
 ];
 
 const PHONE_CODE_OPTIONS = [
@@ -88,6 +92,7 @@ const PHONE_CODE_OPTIONS = [
   { code: "+971", country: "United Arab Emirates" },
   { code: "+33", country: "France" },
   { code: "+44", country: "United Kingdom" },
+  { code: "+61", country: "Australia" },
 ];
 
 function defaultSchedule(): WeeklySchedule {
@@ -141,8 +146,11 @@ export function OrganizationSettings() {
 
   const createTaxGroupMutation = useMutation(api.taxation.createTaxGroup);
   const createTaxComponentMutation = useMutation(api.taxation.createTaxComponent);
+  const removeTaxGroupMutation = useMutation(api.taxation.removeTaxGroup);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const fssaiFileInputRef = useRef<HTMLInputElement>(null);
+  const gstFileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>("details");
 
@@ -160,6 +168,12 @@ export function OrganizationSettings() {
     { id: "1", name: "Central GST", code: "CGST", rate: "2.5" },
     { id: "2", name: "State GST", code: "SGST", rate: "2.5" },
   ]);
+  const [hiddenFallbackGroups, setHiddenFallbackGroups] = useState<string[]>([]);
+
+  // Popover States for Timings Edit
+  const [activeCopyMenu, setActiveCopyMenu] = useState<string | null>(null);
+  const [activeDotMenu, setActiveDotMenu] = useState<string | null>(null);
+  const [copySelections, setCopySelections] = useState<Record<string, boolean>>({});
 
   // Baseline state loaded from Convex DB
   const [initialData, setInitialData] = useState<OrgFormData | null>(null);
@@ -187,14 +201,33 @@ export function OrganizationSettings() {
     isGst: false,
     inclusiveGst: false,
     gstNumber: "",
+    gstDocumentStorageId: "",
     isFssai: false,
     fssaiRegistrationNumber: "",
     expiryDate: "",
+    fssaiDocumentStorageId: "",
   });
+
+  // Resolved document storage URLs from Convex Storage
+  const fssaiDocStorageUrl = useQuery(
+    api.organizations.getStorageUrl,
+    formData.fssaiDocumentStorageId
+      ? { storageId: formData.fssaiDocumentStorageId as Id<"_storage"> }
+      : "skip"
+  );
+
+  const gstDocStorageUrl = useQuery(
+    api.organizations.getStorageUrl,
+    formData.gstDocumentStorageId
+      ? { storageId: formData.gstDocumentStorageId as Id<"_storage"> }
+      : "skip"
+  );
 
   // Action / Feedback States
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingFssaiDoc, setIsUploadingFssaiDoc] = useState(false);
+  const [isUploadingGstDoc, setIsUploadingGstDoc] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -235,7 +268,10 @@ export function OrganizationSettings() {
     if (org.expiryDate) {
       const d = new Date(org.expiryDate);
       if (!isNaN(d.getTime())) {
-        expDateStr = d.toISOString().split("T")[0];
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+        const day = String(d.getUTCDate()).padStart(2, "0");
+        expDateStr = `${y}-${m}-${day}`;
       }
     }
 
@@ -261,9 +297,11 @@ export function OrganizationSettings() {
       isGst: org.isGst ?? false,
       inclusiveGst: org.inclusiveGst ?? false,
       gstNumber: org.gstNumber || "",
+      gstDocumentStorageId: (org as any).gstDocumentStorageId || "",
       isFssai: org.isFssai ?? false,
       fssaiRegistrationNumber: org.fssaiRegistrationNumber || "",
       expiryDate: expDateStr,
+      fssaiDocumentStorageId: (org as any).fssaiDocumentStorageId || "",
     };
 
     setInitialData(loaded);
@@ -326,24 +364,91 @@ export function OrganizationSettings() {
     setTimeout(() => setIsTimingsDrawerOpen(false), 300);
   };
 
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest(".copy-popover-container") && !target.closest(".dot-popover-container")) {
+        setActiveCopyMenu(null);
+        setActiveDotMenu(null);
+      }
+    };
+    if (activeCopyMenu || activeDotMenu) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [activeCopyMenu, activeDotMenu]);
+
   const handleCopyDaySchedule = (sourceDay: string) => {
+    setActiveCopyMenu(sourceDay);
+    setActiveDotMenu(null);
+    const initialSelections: Record<string, boolean> = {};
+    DAYS.forEach((d) => {
+      initialSelections[d] = false;
+    });
+    setCopySelections(initialSelections);
+  };
+
+  const handleApplyCopy = (sourceDay: string) => {
     const source = formData.schedule[sourceDay];
     if (!source) return;
 
     const updatedSchedule = { ...formData.schedule };
+    let copiedCount = 0;
     DAYS.forEach((day) => {
-      if (day !== sourceDay) {
+      if (copySelections[day] && day !== sourceDay) {
         updatedSchedule[day] = {
           is_open: source.is_open,
           is_open_all_day: source.is_open_all_day,
           hours: source.hours.map((h) => ({ ...h })),
         };
+        copiedCount++;
       }
     });
 
-    updateField("schedule", updatedSchedule);
-    setSuccessMessage(`Copied ${sourceDay}'s timings to all days.`);
-    setTimeout(() => setSuccessMessage(null), 3000);
+    if (copiedCount > 0) {
+      updateField("schedule", updatedSchedule);
+      setSuccessMessage(`Copied ${sourceDay}'s timings to ${copiedCount} day(s).`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
+    setActiveCopyMenu(null);
+  };
+
+  const handleToggleDotMenu = (day: string) => {
+    setActiveDotMenu(activeDotMenu === day ? null : day);
+    setActiveCopyMenu(null);
+  };
+
+  const handleDayStatusChange = (day: string, status: "open_all" | "open_part" | "closed") => {
+    const current = formData.schedule[day] || { is_open: true, is_open_all_day: false, hours: [] };
+    const newConfig = { ...current };
+
+    if (status === "open_all") {
+      newConfig.is_open = true;
+      newConfig.is_open_all_day = true;
+    } else if (status === "open_part") {
+      newConfig.is_open = true;
+      newConfig.is_open_all_day = false;
+      if (newConfig.hours.length === 0) {
+        newConfig.hours = [{ start_time: "11:00", end_time: "23:59" }];
+      }
+    } else {
+      newConfig.is_open = false;
+    }
+
+    updateField("schedule", { ...formData.schedule, [day]: newConfig });
+    setActiveDotMenu(null);
+  };
+
+  const handleAddTimeSlot = (day: string) => {
+    const current = formData.schedule[day] || { is_open: true, is_open_all_day: false, hours: [] };
+    const newHours = [...current.hours, { start_time: "11:00", end_time: "23:59" }];
+    updateField("schedule", {
+      ...formData.schedule,
+      [day]: { ...current, hours: newHours, is_open: true, is_open_all_day: false },
+    });
+    setActiveDotMenu(null);
   };
 
   // Tax Group Drawer Smooth Open & Close Handlers
@@ -365,6 +470,23 @@ export function OrganizationSettings() {
     );
     setIsTaxGroupDrawerOpen(true);
     setTimeout(() => setIsTaxGroupDrawerVisible(true), 20);
+  };
+
+  const handleDeleteTaxGroup = async (groupId?: Id<"taxGroups">, groupName?: string) => {
+    if (groupId) {
+      try {
+        await removeTaxGroupMutation({ id: groupId });
+        setSuccessMessage(`Tax group "${groupName || ''}" deleted successfully.`);
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err: any) {
+        setErrorMessage(err?.message || "Failed to delete tax group.");
+        setTimeout(() => setErrorMessage(null), 4000);
+      }
+    } else if (groupName) {
+      setHiddenFallbackGroups((prev) => [...prev, groupName]);
+      setSuccessMessage(`Tax group "${groupName}" removed successfully.`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    }
   };
 
   const handleCloseTaxGroupDrawer = () => {
@@ -495,6 +617,128 @@ export function OrganizationSettings() {
     }
   };
 
+  const handleFssaiDocumentUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+    if (!validTypes.includes(file.type)) {
+      setErrorMessage("Invalid file format. Only JPG, JPEG, PNG and PDF files are allowed.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMessage("File size exceeds 10MB limit.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsUploadingFssaiDoc(true);
+
+    try {
+      const postUrl = await generateUploadUrl();
+      const result = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      if (!result.ok) {
+        throw new Error(`Upload failed with status ${result.status}`);
+      }
+
+      const { storageId } = await result.json();
+      setFormData((prev) => ({
+        ...prev,
+        fssaiDocumentStorageId: storageId,
+      }));
+      setSuccessMessage("FSSAI document uploaded successfully.");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Failed to upload FSSAI document.");
+    } finally {
+      setIsUploadingFssaiDoc(false);
+    }
+  };
+
+  const handleGstDocumentUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "application/pdf"];
+    if (!validTypes.includes(file.type)) {
+      setErrorMessage("Invalid file format. Only JPG, JPEG, PNG and PDF files are allowed.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMessage("File size exceeds 10MB limit.");
+      return;
+    }
+
+    setErrorMessage(null);
+    setIsUploadingGstDoc(true);
+
+    try {
+      const postUrl = await generateUploadUrl();
+      const result = await fetch(postUrl, {
+        method: "POST",
+        headers: { "Content-Type": file.type },
+        body: file,
+      });
+
+      if (!result.ok) {
+        throw new Error(`Upload failed with status ${result.status}`);
+      }
+
+      const { storageId } = await result.json();
+      setFormData((prev) => ({
+        ...prev,
+        gstDocumentStorageId: storageId,
+      }));
+      setSuccessMessage("GST document uploaded successfully.");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err: any) {
+      setErrorMessage(err?.message || "Failed to upload GST document.");
+    } finally {
+      setIsUploadingGstDoc(false);
+    }
+  };
+
+  const handleRemoveFssaiDocument = async () => {
+    setFormData((prev) => ({ ...prev, fssaiDocumentStorageId: "" }));
+    if (fssaiFileInputRef.current) fssaiFileInputRef.current.value = "";
+
+    if (org?._id) {
+      try {
+        await updateOrg({
+          id: org._id,
+          fssaiDocumentStorageId: undefined,
+        });
+        setSuccessMessage("FSSAI document removed successfully.");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err: any) {
+        // Silently handle
+      }
+    }
+  };
+
+  const handleRemoveGstDocument = async () => {
+    setFormData((prev) => ({ ...prev, gstDocumentStorageId: "" }));
+    if (gstFileInputRef.current) gstFileInputRef.current.value = "";
+
+    if (org?._id) {
+      try {
+        await updateOrg({
+          id: org._id,
+          gstDocumentStorageId: undefined,
+        });
+        setSuccessMessage("GST document removed successfully.");
+        setTimeout(() => setSuccessMessage(null), 3000);
+      } catch (err: any) {
+        // Silently handle
+      }
+    }
+  };
+
   const handleSave = async () => {
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -520,10 +764,10 @@ export function OrganizationSettings() {
       const symbol = currMatch?.symbol || formData.defaultCurrencySymbol;
 
       let parsedExpiryDate: number | undefined = undefined;
-      if (formData.expiryDate) {
-        const timestamp = new Date(formData.expiryDate).getTime();
-        if (!isNaN(timestamp)) {
-          parsedExpiryDate = timestamp;
+      if (formData.isFssai && formData.expiryDate) {
+        const parts = formData.expiryDate.split("-").map(Number);
+        if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+          parsedExpiryDate = Date.UTC(parts[0], parts[1] - 1, parts[2]);
         }
       }
 
@@ -534,7 +778,12 @@ export function OrganizationSettings() {
         isGst: formData.isGst,
         inclusiveGst: formData.inclusiveGst,
         separateGst: !formData.inclusiveGst,
+        gstNumber: formData.isGst && formData.gstNumber.trim() ? formData.gstNumber.trim() : undefined,
+        gstDocumentStorageId: formData.isGst && formData.gstDocumentStorageId ? formData.gstDocumentStorageId : undefined,
         isFssai: formData.isFssai,
+        fssaiRegistrationNumber: formData.isFssai && formData.fssaiRegistrationNumber.trim() ? formData.fssaiRegistrationNumber.trim() : undefined,
+        expiryDate: formData.isFssai ? parsedExpiryDate : undefined,
+        fssaiDocumentStorageId: formData.isFssai && formData.fssaiDocumentStorageId ? formData.fssaiDocumentStorageId : undefined,
       };
 
       if (formData.legalEntityName.trim()) updatePayload.legalEntityName = formData.legalEntityName.trim();
@@ -552,9 +801,6 @@ export function OrganizationSettings() {
       if (formData.fax.trim()) updatePayload.fax = formData.fax.trim();
       if (formData.logoUrl !== undefined && formData.logoUrl !== "") updatePayload.logoUrl = formData.logoUrl;
       if (formData.logoStorageId) updatePayload.logoStorageId = formData.logoStorageId;
-      if (formData.gstNumber.trim()) updatePayload.gstNumber = formData.gstNumber.trim();
-      if (formData.fssaiRegistrationNumber.trim()) updatePayload.fssaiRegistrationNumber = formData.fssaiRegistrationNumber.trim();
-      if (parsedExpiryDate !== undefined) updatePayload.expiryDate = parsedExpiryDate;
 
       await updateOrg(updatePayload as any);
 
@@ -601,7 +847,7 @@ export function OrganizationSettings() {
             ? "Taxation"
             : activeTab === "country"
             ? "Country Requirements"
-            : "Organization"}
+            : "Restaurant Details"}
         </h1>
         <p className="mt-1 text-sm text-[#6f655e]">
           {activeTab === "timings"
@@ -610,7 +856,7 @@ export function OrganizationSettings() {
             ? "Manage the taxes applied to your restaurant orders. Configure tax groups and their component rates below."
             : activeTab === "country"
             ? "Add the registration details required for your restaurant."
-            : "Manage your restaurant's basic information, location, operating hours, taxation, and country requirements."}
+            : "Add your restaurant's basic information, location and contact details."}
         </p>
 
         {/* Sub-Navigation Tabs */}
@@ -690,12 +936,6 @@ export function OrganizationSettings() {
       {/* TAB 1: RESTAURANT DETAILS */}
       {activeTab === "details" && (
         <div className="space-y-8">
-          <div>
-            <h2 className="font-serif text-2xl font-light text-[#1f1a17]">Restaurant Details</h2>
-            <p className="mt-1 text-sm text-[#6f655e]">
-              Add your restaurant's basic information, location and contact details.
-            </p>
-          </div>
 
           {/* Section 1: Basic Information */}
           <div className="space-y-4">
@@ -857,7 +1097,13 @@ export function OrganizationSettings() {
                   <select
                     value={formData.country || "India"}
                     onChange={(e) => updateField("country", e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none"
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none cursor-pointer"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: "right 1rem center",
+                      backgroundRepeat: "no-repeat",
+                      backgroundSize: "1.5em 1.5em"
+                    }}
                   >
                     {COUNTRY_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -879,7 +1125,13 @@ export function OrganizationSettings() {
                   <select
                     value={formData.organizationTimeZone || "Asia/Kolkata"}
                     onChange={(e) => updateField("organizationTimeZone", e.target.value)}
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none"
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none cursor-pointer"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: "right 1rem center",
+                      backgroundRepeat: "no-repeat",
+                      backgroundSize: "1.5em 1.5em"
+                    }}
                   >
                     {TIMEZONE_OPTIONS.map((tz) => (
                       <option key={tz.value} value={tz.value}>
@@ -904,8 +1156,15 @@ export function OrganizationSettings() {
                         defaultCurrencySymbol: opt?.symbol || prev.defaultCurrencySymbol,
                       }));
                     }}
-                    style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none"
+                    style={{
+                      backgroundColor: "#fdf8f7",
+                      color: "#1f1a17",
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: "right 1rem center",
+                      backgroundRepeat: "no-repeat",
+                      backgroundSize: "1.5em 1.5em"
+                    }}
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none cursor-pointer"
                   >
                     {CURRENCY_OPTIONS.map((c) => (
                       <option key={c.currency} value={c.currency}>
@@ -921,8 +1180,8 @@ export function OrganizationSettings() {
           {/* Section 4: Contact Information */}
           <div className="rounded-2xl border border-[#eadfd6] bg-white p-6 shadow-sm">
             <h3 className="text-base font-medium text-[#1f1a17]">Contact Information</h3>
-            <div className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-3">
-              <div>
+            <div className="mt-4 grid grid-cols-1 gap-6 lg:grid-cols-12">
+              <div className="lg:col-span-5">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
                   Email
                 </label>
@@ -935,7 +1194,7 @@ export function OrganizationSettings() {
                 />
               </div>
 
-              <div>
+              <div className="lg:col-span-4">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
                   Phone Number
                 </label>
@@ -943,7 +1202,13 @@ export function OrganizationSettings() {
                   <select
                     value={formData.phoneCountryCode}
                     onChange={(e) => updateField("phoneCountryCode", e.target.value)}
-                    className="border-r border-[#eadfd6] bg-transparent px-3 py-3 text-sm text-[#1f1a17] focus:outline-none"
+                    className="appearance-none border-r border-[#eadfd6] bg-transparent px-3 py-3 pr-8 text-sm text-[#1f1a17] focus:outline-none cursor-pointer"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundPosition: "right 0.25rem center",
+                      backgroundRepeat: "no-repeat",
+                      backgroundSize: "1.25em 1.25em"
+                    }}
                   >
                     {PHONE_CODE_OPTIONS.map((p) => (
                       <option key={p.code} value={p.code}>
@@ -952,25 +1217,33 @@ export function OrganizationSettings() {
                     ))}
                   </select>
                   <input
-                    type="tel"
+                    type="number"
                     value={formData.phoneNumber || ""}
-                    onChange={(e) => updateField("phoneNumber", e.target.value)}
-                    placeholder="98765 43210"
-                    className="flex-1 bg-transparent px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] focus:outline-none"
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      updateField("phoneNumber", val);
+                    }}
+                    placeholder="9876543210"
+                    maxLength={10}
+                    className="flex-1 bg-transparent px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
                 </div>
               </div>
 
-              <div>
+              <div className="lg:col-span-3">
                 <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
                   Fax Number
                 </label>
                 <input
-                  type="text"
+                  type="number"
                   value={formData.fax || ""}
-                  onChange={(e) => updateField("fax", e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 15);
+                    updateField("fax", val);
+                  }}
                   placeholder="Optional"
-                  className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] transition focus:border-[#1f1a17] focus:outline-none"
+                  maxLength={15}
+                  className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] transition focus:border-[#1f1a17] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 />
               </div>
             </div>
@@ -1007,10 +1280,18 @@ export function OrganizationSettings() {
                     hours: [{ start_time: "11:00", end_time: "23:59" }],
                   };
 
-                  const firstSlot = dayConfig.hours?.[0] || { start_time: "11:00", end_time: "23:59" };
-                  const formattedHoursText = dayConfig.is_open
-                    ? `${formatTime12h(firstSlot.start_time)} — ${formatTime12h(firstSlot.end_time)}`
-                    : "Closed";
+                  const formattedHoursText = !dayConfig.is_open
+                    ? "Closed"
+                    : dayConfig.is_open_all_day
+                    ? "Open All Day"
+                    : dayConfig.hours.length > 0
+                    ? dayConfig.hours
+                        .map(
+                          (slot) =>
+                            `${formatTime12h(slot.start_time)} — ${formatTime12h(slot.end_time)}`
+                        )
+                        .join(", ")
+                    : "Open All Day";
 
                   return (
                     <tr key={day} className="transition hover:bg-[#fdfbf9]">
@@ -1096,7 +1377,7 @@ export function OrganizationSettings() {
                       key={day}
                       className="rounded-2xl border border-[#eadfd6] bg-[#fdf8f7] p-5 shadow-sm space-y-4"
                     >
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between relative">
                         <div className="flex items-center gap-3">
                           <button
                             type="button"
@@ -1119,56 +1400,188 @@ export function OrganizationSettings() {
                           <span className="font-serif text-lg font-normal text-[#1f1a17]">{day}</span>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1.5 relative copy-popover-container dot-popover-container">
                           <button
                             type="button"
-                            onClick={() => handleCopyDaySchedule(day)}
-                            className="flex items-center gap-1 text-xs font-medium text-[#6f655e] hover:text-[#1f1a17] transition"
-                            title={`Copy ${day}'s timings to all days`}
+                            onClick={() => activeCopyMenu === day ? setActiveCopyMenu(null) : handleCopyDaySchedule(day)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6f655e] hover:bg-[#f3eeea] hover:text-[#1f1a17] transition"
+                            title={`Copy ${day}'s timings`}
                           >
-                            <span>📋</span>
-                            <span>Copy</span>
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.5">
+                              <rect x="9" y="9" width="11" height="11" rx="2" />
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
                           </button>
-                          <span className="text-[#8a7e75] text-xs">⋮</span>
+                          
+                          {activeCopyMenu === day && (
+                            <div className="absolute right-0 top-9 z-30 w-56 rounded-xl border border-[#eadfd6] bg-white shadow-xl py-2">
+                              <div className="px-4 py-2.5 border-b border-[#eadfd6]">
+                                <span className="text-sm font-medium text-[#1f1a17]">Copy time to</span>
+                              </div>
+                              <div className="py-1">
+                                <label className="flex items-center justify-between px-4 py-2 hover:bg-[#fdf8f7] cursor-pointer">
+                                  <span className="text-sm font-medium text-[#1f1a17]">Select all</span>
+                                  <input
+                                    type="checkbox"
+                                    checked={DAYS.every(d => d === day || copySelections[d])}
+                                    onChange={(e) => {
+                                      const checked = e.target.checked;
+                                      const newSelections = { ...copySelections };
+                                      DAYS.forEach(d => { if (d !== day) newSelections[d] = checked; });
+                                      setCopySelections(newSelections);
+                                    }}
+                                    className="h-4 w-4 rounded border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                  />
+                                </label>
+                                <div className="my-1 border-b border-[#eadfd6]" />
+                                {DAYS.map(d => {
+                                  const isSource = d === day;
+                                  return (
+                                    <label key={d} className={`flex items-center justify-between px-4 py-2 hover:bg-[#fdf8f7] ${isSource ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'}`}>
+                                      <span className={`text-sm ${isSource ? 'font-medium text-[#1f1a17]' : 'text-[#1f1a17]'}`}>{d}</span>
+                                      <input
+                                        type="checkbox"
+                                        disabled={isSource}
+                                        checked={isSource ? true : (copySelections[d] || false)}
+                                        onChange={(e) => setCopySelections({ ...copySelections, [d]: e.target.checked })}
+                                        className={`h-4 w-4 rounded border-[#d1c4c1] text-[#191513] focus:ring-[#191513] ${isSource ? 'accent-[#8a7e75] cursor-not-allowed' : ''}`}
+                                      />
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                              <div className="px-3 pt-2 pb-1 border-t border-[#eadfd6] mt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => handleApplyCopy(day)}
+                                  className="w-full rounded-lg bg-[#191513] py-2 text-sm font-medium text-white transition hover:bg-[#2e2824] shadow-sm"
+                                >
+                                  Apply
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          <button 
+                            type="button" 
+                            onClick={() => handleToggleDotMenu(day)}
+                            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#6f655e] hover:bg-[#f3eeea] hover:text-[#1f1a17] transition"
+                          >
+                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                              <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                            </svg>
+                          </button>
+
+                          {activeDotMenu === day && (
+                            <div className="absolute right-0 top-9 z-30 w-48 rounded-xl border border-[#eadfd6] bg-white shadow-xl py-2">
+                              <div className="px-2 space-y-1">
+                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`status-${day}`}
+                                    checked={dayConfig.is_open && dayConfig.is_open_all_day}
+                                    onChange={() => handleDayStatusChange(day, "open_all")}
+                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                  />
+                                  <span className="text-sm font-medium text-[#1f1a17]">Open all day</span>
+                                </label>
+                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`status-${day}`}
+                                    checked={dayConfig.is_open && !dayConfig.is_open_all_day}
+                                    onChange={() => handleDayStatusChange(day, "open_part")}
+                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                  />
+                                  <span className="text-sm font-medium text-[#1f1a17]">Open part day</span>
+                                </label>
+                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`status-${day}`}
+                                    checked={!dayConfig.is_open}
+                                    onChange={() => handleDayStatusChange(day, "closed")}
+                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                  />
+                                  <span className="text-sm font-medium text-[#1f1a17]">Closed all day</span>
+                                </label>
+                                <div className="my-1 border-t border-[#eadfd6]"></div>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddTimeSlot(day)}
+                                  className="w-full text-left rounded-lg px-3 py-2 text-sm font-medium text-[#1f1a17] hover:bg-[#fdf8f7] transition"
+                                >
+                                  Add time slot
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       {dayConfig.is_open ? (
-                        <div className="flex items-center gap-3">
-                          <div className="flex-1 flex items-center justify-between rounded-xl border border-[#eadfd6] bg-white px-3 py-2 shadow-sm focus-within:border-[#1f1a17]">
-                            <input
-                              type="time"
-                              value={slot.start_time}
-                              onChange={(e) => {
-                                const newHours = [...dayConfig.hours];
-                                newHours[0] = { ...slot, start_time: e.target.value };
-                                updateField("schedule", {
-                                  ...formData.schedule,
-                                  [day]: { ...dayConfig, hours: newHours },
-                                });
-                              }}
-                              className="w-full bg-transparent text-sm text-[#1f1a17] font-medium focus:outline-none cursor-pointer"
-                            />
+                        dayConfig.is_open_all_day ? (
+                          <div className="rounded-xl border border-dashed border-[#d1c4c1] p-3 text-center text-xs italic text-[#1e6b37] bg-[#eaf4ed] font-medium">
+                            Store Open 24 Hours on {day}
                           </div>
+                        ) : (
+                          <div className="flex flex-col gap-3">
+                            {dayConfig.hours.map((slot, idx) => (
+                              <div key={idx} className="flex items-center gap-2">
+                                <div className="flex-1 min-w-0 flex items-center justify-between rounded-xl border border-[#eadfd6] bg-white px-2.5 py-2 shadow-sm focus-within:border-[#1f1a17]">
+                                  <input
+                                    type="time"
+                                    value={slot.start_time || "11:00"}
+                                    onChange={(e) => {
+                                      const newHours = [...dayConfig.hours];
+                                      newHours[idx] = { ...slot, start_time: e.target.value };
+                                      updateField("schedule", {
+                                        ...formData.schedule,
+                                        [day]: { ...dayConfig, hours: newHours },
+                                      });
+                                    }}
+                                    className="w-full bg-transparent text-xs sm:text-sm text-[#1f1a17] font-medium focus:outline-none cursor-pointer"
+                                  />
+                                </div>
 
-                          <span className="text-xs text-[#8a7e75] font-medium">—</span>
+                                <span className="text-xs text-[#8a7e75] font-medium shrink-0">—</span>
 
-                          <div className="flex-1 flex items-center justify-between rounded-xl border border-[#eadfd6] bg-white px-3 py-2 shadow-sm focus-within:border-[#1f1a17]">
-                            <input
-                              type="time"
-                              value={slot.end_time}
-                              onChange={(e) => {
-                                const newHours = [...dayConfig.hours];
-                                newHours[0] = { ...slot, end_time: e.target.value };
-                                updateField("schedule", {
-                                  ...formData.schedule,
-                                  [day]: { ...dayConfig, hours: newHours },
-                                });
-                              }}
-                              className="w-full bg-transparent text-sm text-[#1f1a17] font-medium focus:outline-none cursor-pointer"
-                            />
+                                <div className="flex-1 min-w-0 flex items-center justify-between rounded-xl border border-[#eadfd6] bg-white px-2.5 py-2 shadow-sm focus-within:border-[#1f1a17]">
+                                  <input
+                                    type="time"
+                                    value={slot.end_time || "23:59"}
+                                    onChange={(e) => {
+                                      const newHours = [...dayConfig.hours];
+                                      newHours[idx] = { ...slot, end_time: e.target.value };
+                                      updateField("schedule", {
+                                        ...formData.schedule,
+                                        [day]: { ...dayConfig, hours: newHours },
+                                      });
+                                    }}
+                                    className="w-full bg-transparent text-xs sm:text-sm text-[#1f1a17] font-medium focus:outline-none cursor-pointer"
+                                  />
+                                </div>
+
+                                {dayConfig.hours.length > 1 ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newHours = dayConfig.hours.filter((_, i) => i !== idx);
+                                      updateField("schedule", {
+                                        ...formData.schedule,
+                                        [day]: { ...dayConfig, hours: newHours },
+                                      });
+                                    }}
+                                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[#8a7e75] hover:bg-red-50 hover:text-red-600 transition"
+                                    title="Remove time slot"
+                                  >
+                                    ✕
+                                  </button>
+                                ) : null}
+                              </div>
+                            ))}
                           </div>
-                        </div>
+                        )
                       ) : (
                         <div className="rounded-xl border border-dashed border-[#d1c4c1] p-3 text-center text-xs italic text-[#8a7e75]">
                           Store Closed on {day}
@@ -1205,16 +1618,10 @@ export function OrganizationSettings() {
       {activeTab === "taxation" && (
         <div className="space-y-6">
           {/* Header Action Bar */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-serif text-2xl font-light text-[#1f1a17]">Taxation</h2>
-              <p className="mt-1 text-sm text-[#6f655e]">
-                Manage the taxes applied to your restaurant orders. Configure tax groups and their component rates below.
-              </p>
-            </div>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
 
             <div className="flex items-center gap-3">
-              {/* Segmented Tax Mode Toggle */}
+              {/* Temporarily disabled Taxes Inclusive / Taxes Exclusive toggle
               <div className="flex rounded-xl border border-[#eadfd6] bg-[#fdf8f7] p-1">
                 <button
                   type="button"
@@ -1235,6 +1642,7 @@ export function OrganizationSettings() {
                   Taxes Exclusive
                 </button>
               </div>
+              */}
 
               {/* Add Tax Group Button */}
               <button
@@ -1265,9 +1673,11 @@ export function OrganizationSettings() {
                     <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/6">
                       TOTAL RATE
                     </th>
+                    {/* Temporarily disabled MODE column header
                     <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/6">
                       MODE
                     </th>
+                    */}
                     <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] text-right w-1/12">
                       ACTION
                     </th>
@@ -1300,25 +1710,37 @@ export function OrganizationSettings() {
                             </div>
                           </td>
                           <td className="py-5 px-6 font-medium text-[#1f1a17]">{totalRate.toFixed(1)}%</td>
+                          {/* Temporarily disabled MODE cell
                           <td className="py-5 px-6 text-sm text-[#6f655e] capitalize">{group.taxMode}</td>
+                          */}
                           <td className="py-5 px-6 text-right">
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleOpenEditTaxGroup(
-                                  group.name,
-                                  comps.map((c) => ({
-                                    name: c?.name || "",
-                                    code: c?.code || "",
-                                    rate: (c?.rate || 0).toString(),
-                                  }))
-                                )
-                              }
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#8a7e75] transition hover:bg-[#f3eeea] hover:text-[#1f1a17]"
-                              title="Edit Tax Group"
-                            >
-                              ✏️
-                            </button>
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEditTaxGroup(
+                                    group.name,
+                                    comps.map((c) => ({
+                                      name: c?.name || "",
+                                      code: c?.code || "",
+                                      rate: (c?.rate || 0).toString(),
+                                    }))
+                                  )
+                                }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
+                                title="Edit Tax Group"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTaxGroup(group._id, group.name)}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
+                                title="Delete Tax Group"
+                              >
+                                🗑️
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -1326,100 +1748,142 @@ export function OrganizationSettings() {
                   ) : (
                     <>
                       {/* Fallback Pre-configured Default Rows */}
-                      <tr className="transition hover:bg-[#fdfbf9]">
-                        <td className="py-5 px-6 font-medium text-[#1f1a17]">GST</td>
-                        <td className="py-5 px-6">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                              CGST 2.5%
-                            </span>
-                            <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                              SGST 2.5%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-5 px-6 font-medium text-[#1f1a17]">5%</td>
-                        <td className="py-5 px-6 text-sm text-[#6f655e]">
-                          {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
-                        </td>
-                        <td className="py-5 px-6 text-right">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleOpenEditTaxGroup("GST", [
-                                { name: "Central GST", code: "CGST", rate: "2.5" },
-                                { name: "State GST", code: "SGST", rate: "2.5" },
-                              ])
-                            }
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#8a7e75] transition hover:bg-[#f3eeea] hover:text-[#1f1a17]"
-                            title="Edit Tax Group"
-                          >
-                            ✏️
-                          </button>
-                        </td>
-                      </tr>
+                      {!hiddenFallbackGroups.includes("GST") && (
+                        <tr className="transition hover:bg-[#fdfbf9]">
+                          <td className="py-5 px-6 font-medium text-[#1f1a17]">GST</td>
+                          <td className="py-5 px-6">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
+                                CGST 2.5%
+                              </span>
+                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
+                                SGST 2.5%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-5 px-6 font-medium text-[#1f1a17]">5%</td>
+                          {/* Temporarily disabled MODE cell
+                          <td className="py-5 px-6 text-sm text-[#6f655e]">
+                            {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
+                          </td>
+                          */}
+                          <td className="py-5 px-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEditTaxGroup("GST", [
+                                    { name: "Central GST", code: "CGST", rate: "2.5" },
+                                    { name: "State GST", code: "SGST", rate: "2.5" },
+                                  ])
+                                }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
+                                title="Edit Tax Group"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTaxGroup(undefined, "GST")}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
+                                title="Delete Tax Group"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
 
-                      <tr className="transition hover:bg-[#fdfbf9]">
-                        <td className="py-5 px-6 font-medium text-[#1f1a17]">GST 18%</td>
-                        <td className="py-5 px-6">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                              CGST 9%
-                            </span>
-                            <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                              SGST 9%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-5 px-6 font-medium text-[#1f1a17]">18%</td>
-                        <td className="py-5 px-6 text-sm text-[#6f655e]">
-                          {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
-                        </td>
-                        <td className="py-5 px-6 text-right">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleOpenEditTaxGroup("GST 18%", [
-                                { name: "Central GST", code: "CGST", rate: "9" },
-                                { name: "State GST", code: "SGST", rate: "9" },
-                              ])
-                            }
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#8a7e75] transition hover:bg-[#f3eeea] hover:text-[#1f1a17]"
-                            title="Edit Tax Group"
-                          >
-                            ✏️
-                          </button>
-                        </td>
-                      </tr>
+                      {!hiddenFallbackGroups.includes("GST 18%") && (
+                        <tr className="transition hover:bg-[#fdfbf9]">
+                          <td className="py-5 px-6 font-medium text-[#1f1a17]">GST 18%</td>
+                          <td className="py-5 px-6">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
+                                CGST 9%
+                              </span>
+                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
+                                SGST 9%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-5 px-6 font-medium text-[#1f1a17]">18%</td>
+                          {/* Temporarily disabled MODE cell
+                          <td className="py-5 px-6 text-sm text-[#6f655e]">
+                            {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
+                          </td>
+                          */}
+                          <td className="py-5 px-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEditTaxGroup("GST 18%", [
+                                    { name: "Central GST", code: "CGST", rate: "9" },
+                                    { name: "State GST", code: "SGST", rate: "9" },
+                                  ])
+                                }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
+                                title="Edit Tax Group"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTaxGroup(undefined, "GST 18%")}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
+                                title="Delete Tax Group"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
 
-                      <tr className="transition hover:bg-[#fdfbf9]">
-                        <td className="py-5 px-6 font-medium text-[#1f1a17]">Service Tax</td>
-                        <td className="py-5 px-6">
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                              Service Tax 6%
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-5 px-6 font-medium text-[#1f1a17]">6%</td>
-                        <td className="py-5 px-6 text-sm text-[#6f655e]">
-                          {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
-                        </td>
-                        <td className="py-5 px-6 text-right">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              handleOpenEditTaxGroup("Service Tax", [
-                                { name: "Service Tax", code: "SERVICE", rate: "6" },
-                              ])
-                            }
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#8a7e75] transition hover:bg-[#f3eeea] hover:text-[#1f1a17]"
-                            title="Edit Tax Group"
-                          >
-                            ✏️
-                          </button>
-                        </td>
-                      </tr>
+                      {!hiddenFallbackGroups.includes("Service Tax") && (
+                        <tr className="transition hover:bg-[#fdfbf9]">
+                          <td className="py-5 px-6 font-medium text-[#1f1a17]">Service Tax</td>
+                          <td className="py-5 px-6">
+                            <div className="flex items-center gap-2">
+                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
+                                Service Tax 6%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-5 px-6 font-medium text-[#1f1a17]">6%</td>
+                          {/* Temporarily disabled MODE cell
+                          <td className="py-5 px-6 text-sm text-[#6f655e]">
+                            {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
+                          </td>
+                          */}
+                          <td className="py-5 px-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleOpenEditTaxGroup("Service Tax", [
+                                    { name: "Service Tax", code: "SERVICE", rate: "6" },
+                                  ])
+                                }
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
+                                title="Edit Tax Group"
+                              >
+                                ✏️
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTaxGroup(undefined, "Service Tax")}
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
+                                title="Delete Tax Group"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </>
                   )}
                 </tbody>
@@ -1478,6 +1942,7 @@ export function OrganizationSettings() {
                   />
                 </div>
 
+                {/* Temporarily disabled Tax Mode selection in Tax Group drawer
                 <div>
                   <label className="block text-sm font-medium text-[#1f1a17]">Tax Mode</label>
                   <div className="mt-2 flex rounded-xl border border-[#eadfd6] bg-[#f5efec] p-1">
@@ -1510,6 +1975,7 @@ export function OrganizationSettings() {
                       : "Inclusive: Tax is included in the item price."}
                   </p>
                 </div>
+                */}
               </div>
 
               <hr className="border-[#eadfd6]" />
@@ -1657,12 +2123,6 @@ export function OrganizationSettings() {
       {/* TAB 4: COUNTRY REQUIREMENTS */}
       {activeTab === "country" && (
         <div className="space-y-6">
-          <div>
-            <h2 className="font-serif text-2xl font-light text-[#1f1a17]">Country Requirements</h2>
-            <p className="mt-1 text-sm text-[#6f655e]">
-              Add the registration details required for your restaurant.
-            </p>
-          </div>
 
           {/* Card 1: FSSAI Registration */}
           <div className="overflow-hidden rounded-2xl border border-[#eadfd6] bg-white shadow-sm">
@@ -1696,15 +2156,76 @@ export function OrganizationSettings() {
             {formData.isFssai && (
               <div className="p-6 md:p-8 bg-[#fdf8f7] space-y-6">
                 <div>
+                  <input
+                    type="file"
+                    ref={fssaiFileInputRef}
+                    onChange={handleFssaiDocumentUpload}
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    className="hidden"
+                  />
                   <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e] mb-2">
                     Upload your FSSAI document
                   </label>
-                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#d1c4c1] bg-white p-8 text-center transition hover:bg-[#fcf8f6] cursor-pointer">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f3eeea] text-[#1f1a17] text-xl mb-3">
-                      ☁️
-                    </div>
-                    <p className="text-sm font-medium text-[#1f1a17]">Click to upload or drag and drop</p>
-                    <p className="mt-1 text-xs text-[#8a7e75]">JPG, JPEG, PNG and PDF files are allowed</p>
+                  <div
+                    onClick={() => fssaiFileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#d1c4c1] bg-white p-8 text-center transition hover:bg-[#fcf8f6] cursor-pointer relative"
+                  >
+                    {isUploadingFssaiDoc ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
+                        <span className="text-sm font-medium text-[#1f1a17]">Uploading FSSAI document...</span>
+                      </div>
+                    ) : (formData.fssaiDocumentStorageId || fssaiDocStorageUrl) ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
+                          ✓
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-[#1f1a17]">FSSAI Document Uploaded</p>
+                          {fssaiDocStorageUrl && (
+                            <a
+                              href={fssaiDocStorageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-amber-700 hover:underline font-medium inline-block mt-1"
+                            >
+                              View Uploaded Document ↗
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              fssaiFileInputRef.current?.click();
+                            }}
+                            className="text-xs font-medium text-[#1f1a17] hover:underline cursor-pointer"
+                          >
+                            Change File
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveFssaiDocument();
+                            }}
+                            className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f3eeea] text-[#1f1a17] text-xl mb-3">
+                          ☁️
+                        </div>
+                        <p className="text-sm font-medium text-[#1f1a17]">Click to upload or drag and drop</p>
+                        <p className="mt-1 text-xs text-[#8a7e75]">JPG, JPEG, PNG and PDF files are allowed</p>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1770,15 +2291,76 @@ export function OrganizationSettings() {
             {formData.isGst && (
               <div className="p-6 md:p-8 bg-[#fdf8f7] space-y-6">
                 <div>
+                  <input
+                    type="file"
+                    ref={gstFileInputRef}
+                    onChange={handleGstDocumentUpload}
+                    accept=".jpg,.jpeg,.png,.pdf"
+                    className="hidden"
+                  />
                   <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e] mb-2">
                     Upload your GST document
                   </label>
-                  <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#d1c4c1] bg-white p-8 text-center transition hover:bg-[#fcf8f6] cursor-pointer">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f3eeea] text-[#1f1a17] text-xl mb-3">
-                      📤
-                    </div>
-                    <p className="text-sm font-medium text-[#1f1a17]">Click to upload or drag and drop</p>
-                    <p className="mt-1 text-xs text-[#8a7e75]">JPG, JPEG, PNG and PDF files are allowed</p>
+                  <div
+                    onClick={() => gstFileInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[#d1c4c1] bg-white p-8 text-center transition hover:bg-[#fcf8f6] cursor-pointer relative"
+                  >
+                    {isUploadingGstDoc ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
+                        <span className="text-sm font-medium text-[#1f1a17]">Uploading GST document...</span>
+                      </div>
+                    ) : (formData.gstDocumentStorageId || gstDocStorageUrl) ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
+                          ✓
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-medium text-[#1f1a17]">GST Document Uploaded</p>
+                          {gstDocStorageUrl && (
+                            <a
+                              href={gstDocStorageUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-xs text-amber-700 hover:underline font-medium inline-block mt-1"
+                            >
+                              View Uploaded Document ↗
+                            </a>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              gstFileInputRef.current?.click();
+                            }}
+                            className="text-xs font-medium text-[#1f1a17] hover:underline cursor-pointer"
+                          >
+                            Change File
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveGstDocument();
+                            }}
+                            className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#f3eeea] text-[#1f1a17] text-xl mb-3">
+                          📤
+                        </div>
+                        <p className="text-sm font-medium text-[#1f1a17]">Click to upload or drag and drop</p>
+                        <p className="mt-1 text-xs text-[#8a7e75]">JPG, JPEG, PNG and PDF files are allowed</p>
+                      </>
+                    )}
                   </div>
                 </div>
 

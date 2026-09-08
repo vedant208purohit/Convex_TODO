@@ -361,37 +361,51 @@ function validatePhoneWithCountryCode(phone?: string, country?: string): string 
 
   const digitsOnly = raw.replace(/\D/g, "");
 
-  const isUae =
-    country === "United Arab Emirates" ||
-    country === "UAE" ||
-    country === "+971" ||
-    raw.startsWith("+971");
-
-  if (isUae) {
+  if (raw.startsWith("+971") || country === "United Arab Emirates" || country === "UAE") {
     let uaeDigits = digitsOnly;
     if (uaeDigits.startsWith("971")) {
       uaeDigits = uaeDigits.slice(3);
     }
-
     if (uaeDigits.length !== 9) {
       throw new Error("Phone must be 9 digits long for UAE");
     }
-
     return `+971${uaeDigits}`;
+  } else if (raw.startsWith("+33") || country === "France") {
+    let frDigits = digitsOnly;
+    if (frDigits.startsWith("33")) {
+      frDigits = frDigits.slice(2);
+    }
+    if (frDigits.length !== 9) {
+      throw new Error("Phone must be 9 digits long for France");
+    }
+    return `+33${frDigits}`;
+  } else if (raw.startsWith("+44") || country === "United Kingdom") {
+    let ukDigits = digitsOnly;
+    if (ukDigits.startsWith("44")) {
+      ukDigits = ukDigits.slice(2);
+    }
+    if (ukDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for UK");
+    }
+    return `+44${ukDigits}`;
+  } else if (raw.startsWith("+1") || country === "United States" || country === "Canada") {
+    let usDigits = digitsOnly;
+    if (usDigits.startsWith("1") && usDigits.length === 11) {
+      usDigits = usDigits.slice(1);
+    }
+    if (usDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for US/Canada");
+    }
+    return `+1${usDigits}`;
   } else {
-    let otherDigits = digitsOnly;
-    if (otherDigits.startsWith("91") && otherDigits.length === 12) {
-      otherDigits = otherDigits.slice(2);
+    let inDigits = digitsOnly;
+    if (inDigits.startsWith("91") && inDigits.length === 12) {
+      inDigits = inDigits.slice(2);
     }
-
-    if (otherDigits.length !== 10) {
-      throw new Error("Phone must be 10 digits long for other countries");
+    if (inDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for India");
     }
-
-    if (raw.startsWith("+")) {
-      return raw;
-    }
-    return `+91${otherDigits}`;
+    return `+91${inDigits}`;
   }
 }
 
@@ -500,6 +514,30 @@ function resolveCurrencyAndSymbol(
     if (c === "united states" || c === "us" || c === "usa" || c === "+1") {
       return {
         defaultCurrency: explicitCurrency || "USD",
+        defaultCurrencySymbol: explicitSymbol || "$",
+      };
+    }
+    if (c === "france" || c === "fr" || c === "+33") {
+      return {
+        defaultCurrency: explicitCurrency || "EUR",
+        defaultCurrencySymbol: explicitSymbol || "€",
+      };
+    }
+    if (c === "united kingdom" || c === "uk" || c === "gb" || c === "+44") {
+      return {
+        defaultCurrency: explicitCurrency || "GBP",
+        defaultCurrencySymbol: explicitSymbol || "£",
+      };
+    }
+    if (c === "canada" || c === "ca") {
+      return {
+        defaultCurrency: explicitCurrency || "CAD",
+        defaultCurrencySymbol: explicitSymbol || "$",
+      };
+    }
+    if (c === "australia" || c === "au" || c === "+61") {
+      return {
+        defaultCurrency: explicitCurrency || "AUD",
         defaultCurrencySymbol: explicitSymbol || "$",
       };
     }
