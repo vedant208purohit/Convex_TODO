@@ -156,4 +156,168 @@ describe("Multi-Menu Architecture Tests", () => {
     expect(vegRes[0].category.items.length).toBe(1);
     expect(vegRes[0].category.items[0].item.name).toBe("Paneer Tikka");
   });
+
+  test("3. Customization Item Duplication & Unavailability", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Burger Station",
+    });
+
+    const menuId = await t.mutation(api.menu.createMenu, {
+      organizationId: orgId,
+      name: "Burger Menu",
+    });
+
+    const catId = await t.mutation(api.menu.createCategory, {
+      organizationId: orgId,
+      menuId,
+      name: "Burgers",
+    });
+
+    const itemId = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Cheeseburger",
+      price: 15000,
+    });
+
+    await t.mutation(api.menu.addCategoryItem, {
+      organizationId: orgId,
+      categoryId: catId,
+      itemId,
+    });
+
+    const custId = await t.mutation(api.menu.createCustomization, {
+      organizationId: orgId,
+      itemId,
+      name: "Spice Level",
+      customizationType: "AddOns",
+    });
+
+    const choiceId = await t.mutation(api.menu.createCustomizationItem, {
+      organizationId: orgId,
+      customizationId: custId,
+      name: "Extra Spicy",
+      price: 2000,
+    });
+
+    // Test Duplicating Customization Item
+    const clonedChoiceId = await t.mutation(api.menu.duplicateCustomizationItem, {
+      organizationId: orgId,
+      customizationItemId: choiceId,
+      newName: "Extra Spicy(1)",
+    });
+
+    const custs = await t.query(api.menu.listCustomizations, { itemId });
+    expect(custs[0].items.length).toBe(2);
+    expect(custs[0].items[1].name).toBe("Extra Spicy(1)");
+    expect(custs[0].items[1].price).toBe(2000);
+
+    // Test Setting Unavailability
+    await t.mutation(api.menu.setCustomizationItemUnavailability, {
+      id: clonedChoiceId,
+      isAvailable: false,
+      daysOfUnavailable: 1,
+    });
+
+    const updatedCusts = await t.query(api.menu.listCustomizations, { itemId });
+    const unavailableChoice = updatedCusts[0].items.find((i) => i._id === clonedChoiceId);
+    expect(unavailableChoice?.isAvailable).toBe(false);
+    expect(unavailableChoice?.daysOfUnavailable).toBe(1);
+
+    // Test Reordering Customization Items
+    await t.mutation(api.menu.reorderCustomizationItems, {
+      itemIds: [clonedChoiceId, choiceId],
+    });
+
+    const reorderedCusts = await t.query(api.menu.listCustomizations, { itemId });
+    expect(reorderedCusts[0].items[0]._id).toBe(clonedChoiceId);
+    expect(reorderedCusts[0].items[1]._id).toBe(choiceId);
+  });
+
+  test("4. Complete Soft Delete (deletedAt) Across Menu Hierarchy", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Paranoid Cafe",
+    });
+
+    const menuId = await t.mutation(api.menu.createMenu, {
+      organizationId: orgId,
+      name: "Drinks Menu",
+    });
+
+    const catId = await t.mutation(api.menu.createCategory, {
+      organizationId: orgId,
+      menuId,
+      name: "Coffee",
+    });
+
+    const itemId = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Cold Brew",
+      price: 15000,
+    });
+
+    await t.mutation(api.menu.addCategoryItem, {
+      organizationId: orgId,
+      categoryId: catId,
+      itemId,
+    });
+
+    const custId = await t.mutation(api.menu.createCustomization, {
+      organizationId: orgId,
+      itemId,
+      name: "Milk Type",
+      customizationType: "AddOns",
+    });
+
+    const choiceId = await t.mutation(api.menu.createCustomizationItem, {
+      organizationId: orgId,
+      customizationId: custId,
+      name: "Oat Milk",
+      price: 3000,
+    });
+
+    // Verify initial active state
+    let menus = await t.query(api.menu.listMenus, { organizationId: orgId });
+    expect(menus.length).toBe(1);
+
+    let catItems = await t.query(api.menu.listCategoryItems, { categoryId: catId });
+    expect(catItems.length).toBe(1);
+
+    let custs = await t.query(api.menu.listCustomizations, { itemId });
+    expect(custs.length).toBe(1);
+    expect(custs[0].items.length).toBe(1);
+
+    // 1. Soft delete customization item
+    await t.mutation(api.menu.deleteCustomizationItem, { id: choiceId });
+    custs = await t.query(api.menu.listCustomizations, { itemId });
+    expect(custs[0].items.length).toBe(0);
+
+    // 2. Soft delete customization group
+    await t.mutation(api.menu.deleteCustomization, { id: custId });
+    custs = await t.query(api.menu.listCustomizations, { itemId });
+    expect(custs.length).toBe(0);
+
+    // 3. Soft delete item from category
+    await t.mutation(api.menu.deleteItem, { id: itemId, categoryId: catId });
+    catItems = await t.query(api.menu.listCategoryItems, { categoryId: catId });
+    expect(catItems.length).toBe(0);
+
+    let allItems = await t.query(api.menu.listAllItems, { organizationId: orgId });
+    expect(allItems.length).toBe(0);
+
+    // 4. Soft delete category
+    await t.mutation(api.menu.deleteCategory, { id: catId });
+    let categories = await t.query(api.menu.listCategories, { menuId });
+    expect(categories.length).toBe(0);
+
+    // 5. Soft delete menu
+    await t.mutation(api.menu.deleteMenu, { id: menuId });
+    menus = await t.query(api.menu.listMenus, { organizationId: orgId });
+    expect(menus.length).toBe(0);
+  });
 });
+
+

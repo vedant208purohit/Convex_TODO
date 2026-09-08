@@ -1,23 +1,5 @@
 "use client";
 
-interface CustomizationOption {
-  _id: string;
-  name: string;
-  price: number;
-  isAvailable: boolean;
-}
-
-interface ItemCustomization {
-  _id: string;
-  name: string;
-  customizationType: "AddOns" | "Preparations";
-  required: boolean;
-  maxSelected: number;
-  items: CustomizationOption[];
-}
-
-
-
 import { useState, useEffect, useMemo, type FormEvent } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
@@ -25,7 +7,7 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
 // ==========================================
-// PIXEL-PERFECT SVG ICONS
+// PIXEL-PERFECT ICONS (PREST THEME)
 // ==========================================
 
 function EditPencilIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -84,6 +66,47 @@ function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </svg>
+  );
+}
+
+
+function CopyIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+      <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+    </svg>
+  );
+}
+
+function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function AlertTriangleIcon({ className = "w-5 h-5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
 function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -94,29 +117,43 @@ function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
-function SparklesIcon({ className = "w-4 h-4" }: { className?: string }) {
+function ClockIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
     </svg>
   );
 }
 
-// Quantity Metric Options from defx-pos-frontend
-const QUANTITY_UNITS = [
-  { value: "g", label: "Grams (g)" },
-  { value: "kg", label: "Kilograms (kg)" },
-  { value: "ml", label: "Milliliters (ml)" },
-  { value: "l", label: "Liters (L)" },
-  { value: "pc", label: "Piece (pc)" },
-  { value: "pcs", label: "Pieces (pcs)" },
-  { value: "portion", label: "Portion" },
-  { value: "can", label: "Can" },
-  { value: "bottle", label: "Bottle" },
-  { value: "box", label: "Box" },
-];
+function PowerIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+      <line x1="12" y1="2" x2="12" y2="12" />
+    </svg>
+  );
+}
 
-// Dietary Item Types from defx-pos-frontend
+function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <line x1="12" y1="16" x2="12" y2="12" />
+      <line x1="12" y1="8" x2="12.01" y2="8" />
+    </svg>
+  );
+}
+
+function CheckIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+// Dietary Item Types
 const DIETARY_TYPES = [
   { id: "veg", label: "Vegetarian", icon: "🟢" },
   { id: "non_veg", label: "Non-Veg", icon: "🔴" },
@@ -125,8 +162,22 @@ const DIETARY_TYPES = [
   { id: "egg", label: "Contains Egg", icon: "🥚" },
 ];
 
+// Helper to generate next copy name e.g. Vadapav(1), Vadapav(2)
+function getNextDuplicateName(baseName: string, existingNames: string[]): string {
+  const match = baseName.match(/^(.*?)(?:\s*\(\d+\))?$/);
+  const rootName = match && match[1] ? match[1].trim() : baseName;
+
+  let counter = 1;
+  let candidate = `${rootName}(${counter})`;
+  while (existingNames.includes(candidate)) {
+    counter++;
+    candidate = `${rootName}(${counter})`;
+  }
+  return candidate;
+}
+
 // ==========================================
-// MAIN MENU COMPONENT
+// MAIN COMPONENT
 // ==========================================
 
 export default function MenuPage() {
@@ -138,7 +189,16 @@ export default function MenuPage() {
     api.taxation.getStoreTaxSettings,
     organization?._id ? { organizationId: organization._id } : "skip"
   );
-  const currencySymbol = taxSettings?.currencySymbol || organization?.defaultCurrencySymbol || "₹";
+  const taxGroups = useQuery(
+    api.taxation.listTaxGroups,
+    organization?._id ? { organizationId: organization._id } : "skip"
+  );
+  const taxComponents = useQuery(
+    api.taxation.listTaxComponents,
+    organization?._id ? { organizationId: organization._id } : "skip"
+  );
+
+  const currencySymbol = taxSettings?.currencySymbol || "₹";
 
   // Multi-Menu Queries & Mutations
   const menus = useQuery(
@@ -166,108 +226,64 @@ export default function MenuPage() {
   const deleteItemMutation = useMutation(api.menu.deleteItem);
   const reorderCategoryItemsMutation = useMutation(api.menu.reorderCategoryItems);
   const addExistingItemToCategoryMutation = useMutation(api.menu.addExistingItemToCategory);
+  const duplicateItemMutation = useMutation(api.menu.duplicateItem);
+  const setItemUnavailabilityMutation = useMutation(api.menu.setItemUnavailability);
 
   // Customization Mutations
   const createCustomizationMutation = useMutation(api.menu.createCustomization);
   const updateCustomizationMutation = useMutation(api.menu.updateCustomization);
   const deleteCustomizationMutation = useMutation(api.menu.deleteCustomization);
   const createCustomizationItemMutation = useMutation(api.menu.createCustomizationItem);
+  const updateCustomizationItemMutation = useMutation(api.menu.updateCustomizationItem);
   const deleteCustomizationItemMutation = useMutation(api.menu.deleteCustomizationItem);
+  const duplicateCustomizationItemMutation = useMutation(api.menu.duplicateCustomizationItem);
+  const setCustomizationItemUnavailabilityMutation = useMutation(api.menu.setCustomizationItemUnavailability);
+  const reorderCustomizationItemsMutation = useMutation(api.menu.reorderCustomizationItems);
+  const reorderCustomizationsMutation = useMutation(api.menu.reorderCustomizations);
+  const copyCustomizationToItemMutation = useMutation(api.menu.copyCustomizationToItem);
 
-  // All Existing Items Query
-  const allExistingItems = useQuery(
-    api.menu.listAllItems,
+  // Dynamic Item Types from Convex itemTypes table
+  const rawItemTypes = useQuery(
+    api.menu.listItemTypes,
     organization?._id ? { organizationId: organization._id } : "skip"
   );
+  const ensureItemTypesMutation = useMutation(api.menu.ensureDefaultItemTypes);
 
-  // Active Menu State
+  useEffect(() => {
+    if (organization?._id && rawItemTypes !== undefined && rawItemTypes.length === 0) {
+      ensureItemTypesMutation({ organizationId: organization._id }).catch(console.error);
+    }
+  }, [organization?._id, rawItemTypes, ensureItemTypesMutation]);
+
+  const availableItemTypes = useMemo(() => {
+    if (rawItemTypes && rawItemTypes.length > 0) {
+      return rawItemTypes.map((t) => ({
+        id: t._id,
+        name: t.name,
+        label: t.name,
+        icon: t.icon || (t.name.toLowerCase().includes("non") ? "🔴" : t.name.toLowerCase().includes("vegan") ? "🌿" : t.name.toLowerCase().includes("jain") ? "🟡" : t.name.toLowerCase().includes("egg") ? "🥚" : "🟢"),
+      }));
+    }
+    return [
+      { id: "veg", name: "Vegetarian", label: "Vegetarian", icon: "🟢" },
+      { id: "non_veg", name: "Non-Veg", label: "Non-Veg", icon: "🔴" },
+      { id: "vegan", name: "Vegan", label: "Vegan", icon: "🌿" },
+      { id: "jain", name: "Jain", label: "Jain", icon: "🟡" },
+      { id: "egg", name: "Contains Egg", label: "Contains Egg", icon: "🥚" },
+    ];
+  }, [rawItemTypes]);
+
+  // Active Selections
   const [selectedMenuId, setSelectedMenuId] = useState<Id<"menus"> | null>(null);
-  const [isMenuDropdownOpen, setIsMenuDropdownOpen] = useState(false);
-
-  // Active Category State
   const [selectedCategoryId, setSelectedCategoryId] = useState<Id<"categories"> | null>(null);
-
-  // Active Item State (Level 2 Customization Drilldown)
   const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(null);
-  const [selectedCustId, setSelectedCustId] = useState<string | null>(null);
+  const [selectedCustomizationId, setSelectedCustomizationId] = useState<Id<"customizations"> | null>(null);
 
-  // Modal / Drawer States
-  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
-  const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
-  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
-  const [isAddItemDropdownOpen, setIsAddItemDropdownOpen] = useState(false);
-  const [isAddExistingItemOpen, setIsAddExistingItemOpen] = useState(false);
-  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
-  const [isAddCustomizationOpen, setIsAddCustomizationOpen] = useState(false);
-
-  const [editingItem, setEditingItem] = useState<any | null>(null);
-  const [editingCategory, setEditingCategory] = useState<any | null>(null);
-
-  // Existing Item Selection State
-  const [existingItemSearchQuery, setExistingItemSearchQuery] = useState("");
-  const [selectedExistingItem, setSelectedExistingItem] = useState<any | null>(null);
-  const [isAddingExistingItem, setIsAddingExistingItem] = useState(false);
-  const [existingItemError, setExistingItemError] = useState<string | null>(null);
-
-  // Drag & Drop State
-  const [draggedCategoryIdx, setDraggedCategoryIdx] = useState<number | null>(null);
-  const [draggedItemIdx, setDraggedItemIdx] = useState<number | null>(null);
-
-  // Form States - Create Menu
-  const [menuName, setMenuName] = useState("");
-  const [menuDescription, setMenuDescription] = useState("");
-  const [isCreatingMenu, setIsCreatingMenu] = useState(false);
-  const [createMenuError, setCreateMenuError] = useState<string | null>(null);
-
-  // Form States - Edit Menu
-  const [editMenuName, setEditMenuName] = useState("");
-  const [editMenuDescription, setEditMenuDescription] = useState("");
-  const [isUpdatingMenu, setIsUpdatingMenu] = useState(false);
-
-  // Form States - Add/Edit Category
-  const [categoryName, setCategoryName] = useState("");
-  const [categoryPublished, setCategoryPublished] = useState(true);
-  const [isSavingCategory, setIsSavingCategory] = useState(false);
-
-  // Form States - Add/Edit Item
-  const [itemName, setItemName] = useState("");
-  const [itemPrice, setItemPrice] = useState("");
-  const [itemDescription, setItemDescription] = useState("");
-  const [itemIsVeg, setItemIsVeg] = useState(true);
-  const [selectedDietaryType, setSelectedDietaryType] = useState<string>("veg");
-  const [itemIsSpicy, setItemIsSpicy] = useState(false);
-  const [itemIsAvailable, setItemIsAvailable] = useState(true);
-  const [itemShowQuantity, setItemShowQuantity] = useState(false);
-  const [itemQuantity, setItemQuantity] = useState("");
-  const [itemQuantityUnit, setItemQuantityUnit] = useState("g");
-  const [itemIsGst, setItemIsGst] = useState(false);
-  const [itemMarkAsBestseller, setItemMarkAsBestseller] = useState(false);
-  const [itemSkuNumber, setItemSkuNumber] = useState("");
-  const [itemSelectedCategoryId, setItemSelectedCategoryId] = useState<string>("");
-
-  const [isSavingItem, setIsSavingItem] = useState(false);
-  const [itemError, setItemError] = useState<string | null>(null);
-
-  // Form States - Add Customization
-  const [custName, setCustName] = useState("");
-  const [custType, setCustType] = useState<"AddOns" | "Preparations">("AddOns");
-  const [custRequired, setCustRequired] = useState(false);
-  const [custMaxSelected, setCustMaxSelected] = useState("1");
-  const [custOptions, setCustOptions] = useState<Array<{ name: string; price: string }>>([
-    { name: "", price: "0.00" },
-  ]);
-  const [isSavingCustomization, setIsSavingCustomization] = useState(false);
-
-  // Form State - Inline Choice / Option Addition
-  const [newChoiceName, setNewChoiceName] = useState("");
-  const [newChoicePrice, setNewChoicePrice] = useState("0.00");
-  const [isAddingChoice, setIsAddingChoice] = useState(false);
-
-  // Auto-select active/default menu
+  // Initialize Default Menu
   useEffect(() => {
     if (menus && menus.length > 0 && !selectedMenuId) {
-      const defaultMenu = menus.find((m) => m.isDefault) || menus[0];
-      setSelectedMenuId(defaultMenu._id);
+      const def = menus.find((m) => m.isDefault) || menus[0];
+      setSelectedMenuId(def._id);
     }
   }, [menus, selectedMenuId]);
 
@@ -275,20 +291,19 @@ export default function MenuPage() {
     return menus?.find((m) => m._id === selectedMenuId) || menus?.[0] || null;
   }, [menus, selectedMenuId]);
 
-  // Query categories for active menu
+  // Categories query
   const categories = useQuery(
     api.menu.listCategories,
     activeMenu?._id ? { menuId: activeMenu._id } : "skip"
   );
 
-  // Auto-select first category
+  // Initialize Default Category
   useEffect(() => {
     if (categories && categories.length > 0) {
-      const exists = categories.some((c) => c._id === selectedCategoryId);
-      if (!exists || !selectedCategoryId) {
+      if (!selectedCategoryId || !categories.some((c) => c._id === selectedCategoryId)) {
         setSelectedCategoryId(categories[0]._id);
       }
-    } else if (categories && categories.length === 0) {
+    } else {
       setSelectedCategoryId(null);
     }
   }, [categories, selectedCategoryId]);
@@ -297,146 +312,403 @@ export default function MenuPage() {
     return categories?.find((c) => c._id === selectedCategoryId) || categories?.[0] || null;
   }, [categories, selectedCategoryId]);
 
-  // Query items for active category
+  // Category Items query
   const categoryItems = useQuery(
     api.menu.listCategoryItems,
     activeCategory?._id ? { categoryId: activeCategory._id } : "skip"
   );
 
-  // Active Item for Customization View
+  // Active selected item for customizations view
   const activeItem = useMemo(() => {
-    if (!selectedItemId || !categoryItems) return null;
-    const found = categoryItems.find((ci) => ci.item._id === selectedItemId);
-    return found ? found.item : null;
+    if (!selectedItemId) return null;
+    return categoryItems?.find((ci) => ci.item._id === selectedItemId)?.item || null;
   }, [categoryItems, selectedItemId]);
 
-  // Full Menu Data Query (Includes nested items & customizations)
-  const fullMenuData = useQuery(
-    api.menu.getOrganizationMenu,
+  // Customizations for Active Item
+  const itemCustomizations = useQuery(
+    api.menu.listCustomizations,
+    selectedItemId ? { itemId: selectedItemId } : "skip"
+  );
+
+  // Active selected customization for choices / options view
+  const activeCustomization = useMemo(() => {
+    if (!selectedCustomizationId) return null;
+    return itemCustomizations?.find((c) => c._id === selectedCustomizationId) || null;
+  }, [itemCustomizations, selectedCustomizationId]);
+
+  // Choice Item Search Query State
+  const [choiceSearchQuery, setChoiceSearchQuery] = useState("");
+  const [draggedChoiceIndex, setDraggedChoiceIndex] = useState<number | null>(null);
+  const [dragOverChoiceIndex, setDragOverChoiceIndex] = useState<number | null>(null);
+  const [draggedCustomizationIndex, setDraggedCustomizationIndex] = useState<number | null>(null);
+  const [dragOverCustomizationIndex, setDragOverCustomizationIndex] = useState<number | null>(null);
+
+  const filteredChoices = useMemo(() => {
+    if (!activeCustomization?.items) return [];
+    if (!choiceSearchQuery.trim()) return activeCustomization.items;
+    const q = choiceSearchQuery.toLowerCase();
+    return activeCustomization.items.filter(
+      (c: any) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.description && c.description.toLowerCase().includes(q))
+    );
+  }, [activeCustomization, choiceSearchQuery]);
+
+  // All existing items for 'Add Existing Item' Drawer
+  const allExistingItems = useQuery(
+    api.menu.listAllItems,
     organization?._id
       ? {
           organizationId: organization._id,
-          menuId: activeMenu?._id,
+          categoryId: activeCategory?._id,
         }
       : "skip"
   );
 
-  // Derive Active Item Customizations
-  const activeItemCustomizations: ItemCustomization[] = useMemo(() => {
-    if (!fullMenuData || !selectedItemId) return [];
-    for (const catWrapper of fullMenuData) {
-      const itemsList = catWrapper.category?.items || [];
-      const found = itemsList.find(
-        (it: any) => it.item?.id === selectedItemId || it.item?._id === selectedItemId
-      );
-      if (found && found.customizations) {
-        return found.customizations.map((cust: any) => ({
-          _id: cust.id || cust._id,
-          name: cust.name,
-          customizationType: cust.type === "Add-Ons" || cust.customizationType === "AddOns" ? "AddOns" : "Preparations",
-          required: cust.required ?? false,
-          maxSelected: cust.max_selected ?? cust.maxSelected ?? 1,
-          items: (cust.customization_items || cust.items || []).map((ci: any) => ({
-            _id: ci.id || ci._id,
-            name: ci.name,
-            price: ci.price ?? 0,
-            isAvailable: ci.is_available ?? ci.isAvailable ?? true,
-          })),
-        }));
-      }
+  // All existing customizations for 'Add Existing Customization' Drawer
+  const allExistingCustomizations = useQuery(
+    api.menu.listAllCustomizations,
+    organization?._id
+      ? {
+          organizationId: organization._id,
+          currentItemId: selectedItemId || undefined,
+        }
+      : "skip"
+  );
+
+  // Dropdown States
+  const [isMenuDropdownOpen, setIsMenuDropdownOpen] = useState(false);
+  const [isAddItemDropdownOpen, setIsAddItemDropdownOpen] = useState(false);
+  const [isAddCustomizationDropdownOpen, setIsAddCustomizationDropdownOpen] = useState(false);
+
+  // Drawer & Modal States
+  const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
+  const [isEditMenuOpen, setIsEditMenuOpen] = useState(false);
+  const [isAddCategoryOpen, setIsAddCategoryOpen] = useState(false);
+  const [isAddExistingItemOpen, setIsAddExistingItemOpen] = useState(false);
+  const [isAddItemOpen, setIsAddItemOpen] = useState(false);
+
+  // Customization Group Drawers & Modals
+  const [isAddCustomizationOpen, setIsAddCustomizationOpen] = useState(false);
+  const [isAddExistingCustomizationOpen, setIsAddExistingCustomizationOpen] = useState(false);
+  const [selectedExistingCustomization, setSelectedExistingCustomization] = useState<any>(null);
+  const [existingCustomizationSearchQuery, setExistingCustomizationSearchQuery] = useState("");
+  const [isCopyingCustomization, setIsCopyingCustomization] = useState(false);
+  const [existingCustomizationError, setExistingCustomizationError] = useState<string | null>(null);
+  const [isEditCustomizationOpen, setIsEditCustomizationOpen] = useState(false);
+  const [editingCustomization, setEditingCustomization] = useState<any>(null);
+  const [isDeleteCustomizationOpen, setIsDeleteCustomizationOpen] = useState(false);
+  const [deletingCustomizationId, setDeletingCustomizationId] = useState<Id<"customizations"> | null>(null);
+
+  // Customization Choice (Item) Drawers & Modals
+  const [isAddChoiceOpen, setIsAddChoiceOpen] = useState(false);
+  const [isEditChoiceOpen, setIsEditChoiceOpen] = useState(false);
+  const [editingChoice, setEditingChoice] = useState<any>(null);
+  const [isDeleteChoiceOpen, setIsDeleteChoiceOpen] = useState(false);
+  const [deletingChoiceId, setDeletingChoiceId] = useState<Id<"customizationItems"> | null>(null);
+
+  // Change Unavailability Modal State
+  const [isUnavailabilityModalOpen, setIsUnavailabilityModalOpen] = useState(false);
+  const [targetUnavailabilityItem, setTargetUnavailabilityItem] = useState<any>(null);
+  const [unavailabilityTargetType, setUnavailabilityTargetType] = useState<"item" | "choice">("item");
+  const [unavailabilityToggle, setUnavailabilityToggle] = useState(true);
+  const [unavailabilityDuration, setUnavailabilityDuration] = useState<"12" | "24" | "48" | "custom">("24");
+  const [customDurationHours, setCustomDurationHours] = useState("72");
+  const [isSavingUnavailability, setIsSavingUnavailability] = useState(false);
+
+  // Duplicate Item Modal State
+  const [isDuplicateItemModalOpen, setIsDuplicateItemModalOpen] = useState(false);
+  const [targetDuplicateItem, setTargetDuplicateItem] = useState<any>(null);
+  const [duplicateTargetType, setDuplicateTargetType] = useState<"item" | "choice">("item");
+  const [duplicateItemNewName, setDuplicateItemNewName] = useState("");
+  const [isDuplicatingItem, setIsDuplicatingItem] = useState(false);
+
+  // Delete Item Modal State
+  const [isDeleteItemModalOpen, setIsDeleteItemModalOpen] = useState(false);
+  const [targetDeleteItem, setTargetDeleteItem] = useState<any>(null);
+  const [isDeletingItem, setIsDeletingItem] = useState(false);
+
+  // Delete Category Modal State
+  const [isDeleteCategoryModalOpen, setIsDeleteCategoryModalOpen] = useState(false);
+  const [targetDeleteCategory, setTargetDeleteCategory] = useState<any>(null);
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+
+  // Customization Form State
+  const [customizationType, setCustomizationType] = useState<"AddOns" | "Preparations">("AddOns");
+  const [customizationName, setCustomizationName] = useState("");
+  const [customizationDesc, setCustomizationDesc] = useState("");
+  const [customizationRequired, setCustomizationRequired] = useState(false);
+  const [customizationMaxSelected, setCustomizationMaxSelected] = useState(1);
+  const [customizationPublished, setCustomizationPublished] = useState(true);
+  const [isSavingCustomization, setIsSavingCustomization] = useState(false);
+
+  // Choice Item Form State
+  const [choiceName, setChoiceName] = useState("");
+  const [choicePrice, setChoicePrice] = useState("0");
+  const [choiceDescription, setChoiceDescription] = useState("");
+  const [choiceIsAvailable, setChoiceIsAvailable] = useState(true);
+  const [choiceDietaryType, setChoiceDietaryType] = useState<string>("veg");
+  const [choiceShowQuantity, setChoiceShowQuantity] = useState(false);
+  const [choiceQuantity, setChoiceQuantity] = useState("");
+  const [choiceQuantityUnit, setChoiceQuantityUnit] = useState("g");
+  const [choiceShowCalorie, setChoiceShowCalorie] = useState(false);
+  const [choiceCalorie, setChoiceCalorie] = useState("");
+  const [choiceCalorieMetric, setChoiceCalorieMetric] = useState("kcal");
+  const [choiceIsGst, setChoiceIsGst] = useState(false);
+  const [choiceSelectedTaxGroupId, setChoiceSelectedTaxGroupId] = useState<string>("");
+  const [choiceTaxMode, setChoiceTaxMode] = useState<"inclusive" | "exclusive">("inclusive");
+  const [isChoiceAdvancedOpen, setIsChoiceAdvancedOpen] = useState(false);
+  const [isSavingChoice, setIsSavingChoice] = useState(false);
+
+  // Active Tax Group resolved for choice tax calculations
+  const resolvedChoiceTaxGroup = useMemo(() => {
+    if (!taxGroups || taxGroups.length === 0) return null;
+    if (choiceSelectedTaxGroupId) {
+      return taxGroups.find((g) => g._id === choiceSelectedTaxGroupId) || null;
     }
-    return [];
-  }, [fullMenuData, selectedItemId]);
+    return taxGroups.find((g) => g.isDefault) || taxGroups[0] || null;
+  }, [taxGroups, choiceSelectedTaxGroupId]);
 
-  // Auto-select first customization
-  useEffect(() => {
-    if (activeItemCustomizations && activeItemCustomizations.length > 0) {
-      const exists = activeItemCustomizations.some((c) => c._id === selectedCustId);
-      if (!exists || !selectedCustId) {
-        setSelectedCustId(activeItemCustomizations[0]._id);
-      }
-    } else if (activeItemCustomizations && activeItemCustomizations.length === 0) {
-      setSelectedCustId(null);
+  // Choice Tax Breakdown computation
+  const choiceTaxBreakdown = useMemo(() => {
+    const rawPrice = parseFloat(choicePrice || "0");
+    if (isNaN(rawPrice) || rawPrice <= 0 || !choiceIsGst || !resolvedChoiceTaxGroup) {
+      return null;
     }
-  }, [activeItemCustomizations, selectedCustId]);
 
-  const activeCustomization = useMemo(() => {
-    return activeItemCustomizations?.find((c) => c._id === selectedCustId) || activeItemCustomizations?.[0] || null;
-  }, [activeItemCustomizations, selectedCustId]);
+    const components = (taxComponents || []).filter(
+      (c) => c.taxGroupId === resolvedChoiceTaxGroup._id && c.isActive
+    );
+    const totalRate = components.reduce((sum, c) => sum + c.rate, 0);
 
-  // Seed sample menu if none exists
+    if (totalRate <= 0) return null;
+
+    if (choiceTaxMode === "inclusive") {
+      const base = rawPrice / (1 + totalRate / 100);
+      const totalTax = rawPrice - base;
+      const computedComponents = components.map((c) => ({
+        name: c.name,
+        rate: c.rate,
+        amount: ((base * c.rate) / 100).toFixed(2),
+      }));
+      return {
+        mode: "inclusive" as const,
+        basePrice: base.toFixed(2),
+        totalTax: totalTax.toFixed(2),
+        finalPrice: rawPrice.toFixed(2),
+        totalRate,
+        components: computedComponents,
+      };
+    } else {
+      const base = rawPrice;
+      const computedComponents = components.map((c) => ({
+        name: c.name,
+        rate: c.rate,
+        amount: ((base * c.rate) / 100).toFixed(2),
+      }));
+      const totalTax = computedComponents.reduce((sum, c) => sum + parseFloat(c.amount), 0);
+      const finalPrice = base + totalTax;
+      return {
+        mode: "exclusive" as const,
+        basePrice: base.toFixed(2),
+        totalTax: totalTax.toFixed(2),
+        finalPrice: finalPrice.toFixed(2),
+        totalRate,
+        components: computedComponents,
+      };
+    }
+  }, [choicePrice, choiceIsGst, resolvedChoiceTaxGroup, taxComponents, choiceTaxMode]);
+
+  // Menu Form State
+  const [menuName, setMenuName] = useState("");
+  const [menuDescription, setMenuDescription] = useState("");
+  const [isCreatingMenu, setIsCreatingMenu] = useState(false);
+  const [createMenuError, setCreateMenuError] = useState<string | null>(null);
+
+  const [editMenuName, setEditMenuName] = useState("");
+  const [editMenuDescription, setEditMenuDescription] = useState("");
+  const [isSavingMenu, setIsSavingMenu] = useState(false);
+
+  // Category Form State
+  const [categoryName, setCategoryName] = useState("");
+  const [categoryPublished, setCategoryPublished] = useState(true);
+  const [editingCategory, setEditingCategory] = useState<any>(null);
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+
+  // Item Form State (with International Tax Engine)
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [itemName, setItemName] = useState("");
+  const [itemPrice, setItemPrice] = useState("");
+  const [itemDescription, setItemDescription] = useState("");
+  const [itemIsVeg, setItemIsVeg] = useState(true);
+  const [selectedDietaryType, setSelectedDietaryType] = useState("veg");
+  const [itemShowItemType, setItemShowItemType] = useState(true);
+  const [itemIsSpicy, setItemIsSpicy] = useState(false);
+  const [itemIsAvailable, setItemIsAvailable] = useState(true);
+  const [itemShowQuantity, setItemShowQuantity] = useState(false);
+  const [itemQuantity, setItemQuantity] = useState("");
+  const [itemQuantityUnit, setItemQuantityUnit] = useState("g");
+  const [itemMarkAsBestseller, setItemMarkAsBestseller] = useState(false);
+  const [itemSkuNumber, setItemSkuNumber] = useState("");
+  const [itemSelectedCategoryId, setItemSelectedCategoryId] = useState("");
+  const [isSavingItem, setIsSavingItem] = useState(false);
+  const [itemError, setItemError] = useState<string | null>(null);
+
+  // Tax Settings on Item Form
+  const [itemIsGst, setItemIsGst] = useState(true);
+  const [itemSelectedTaxGroupId, setItemSelectedTaxGroupId] = useState<string>("");
+  const [itemTaxMode, setItemTaxMode] = useState<"inclusive" | "exclusive">("inclusive");
+
+  // Add Existing Item State
+  const [existingItemSearchQuery, setExistingItemSearchQuery] = useState("");
+  const [selectedExistingItem, setSelectedExistingItem] = useState<any>(null);
+  const [isAddingExistingItem, setIsAddingExistingItem] = useState(false);
+  const [existingItemError, setExistingItemError] = useState<string | null>(null);
+
+  // Active Tax Group resolved for item tax calculations
+  const resolvedTaxGroup = useMemo(() => {
+    if (!taxGroups || taxGroups.length === 0) return null;
+    if (itemSelectedTaxGroupId) {
+      return taxGroups.find((g) => g._id === itemSelectedTaxGroupId) || null;
+    }
+    return taxGroups.find((g) => g.isDefault) || taxGroups[0] || null;
+  }, [taxGroups, itemSelectedTaxGroupId]);
+
+  // Tax Breakdown computation
+  const taxBreakdown = useMemo(() => {
+    if (!itemIsGst) {
+      return null;
+    }
+
+    const rawPrice = parseFloat(itemPrice || "0");
+    const isDemo = isNaN(rawPrice) || rawPrice <= 0;
+    const effectivePrice = isDemo ? 100 : rawPrice;
+
+    let matchedComponents = (taxComponents || []).filter((c) =>
+      resolvedTaxGroup?.componentIds?.includes(c._id)
+    );
+
+    if (matchedComponents.length === 0) {
+      matchedComponents = [
+        { _id: "tax_demo" as any, name: "Tax", code: "TAX", rate: 5.0, isActive: true, organizationId: "" as any, createdAt: 0 },
+      ];
+    }
+
+    const totalTaxRate = matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 5;
+
+    if (itemTaxMode === "inclusive") {
+      const basePrice = effectivePrice / (1 + totalTaxRate / 100);
+      const totalTaxAmount = effectivePrice - basePrice;
+      const componentSplits = matchedComponents.map((c) => ({
+        name: c.name,
+        code: c.code,
+        rate: c.rate,
+        amount: (basePrice * (c.rate / 100)).toFixed(2),
+      }));
+
+      return {
+        mode: "inclusive" as const,
+        isDemo,
+        basePrice: basePrice.toFixed(2),
+        totalTaxAmount: totalTaxAmount.toFixed(2),
+        finalPrice: effectivePrice.toFixed(2),
+        components: componentSplits,
+        totalRate: totalTaxRate,
+      };
+    } else {
+      const basePrice = effectivePrice;
+      const componentSplits = matchedComponents.map((c) => ({
+        name: c.name,
+        code: c.code,
+        rate: c.rate,
+        amount: (basePrice * (c.rate / 100)).toFixed(2),
+      }));
+      const totalTaxAmount = componentSplits.reduce((sum, c) => sum + parseFloat(c.amount), 0);
+      const finalPrice = basePrice + totalTaxAmount;
+
+      return {
+        mode: "exclusive" as const,
+        isDemo,
+        basePrice: basePrice.toFixed(2),
+        totalTaxAmount: totalTaxAmount.toFixed(2),
+        finalPrice: finalPrice.toFixed(2),
+        components: componentSplits,
+        totalRate: totalTaxRate,
+      };
+    }
+  }, [itemPrice, itemIsGst, resolvedTaxGroup, taxComponents, itemTaxMode]);
+
+  // Auto seed demo menus if empty
   const handleSeedSample = async () => {
     if (!organization?._id) return;
     try {
-      const newMenuId = await seedSampleMenuMutation({ organizationId: organization._id });
-      setSelectedMenuId(newMenuId);
+      const menuId = await seedSampleMenuMutation({ organizationId: organization._id });
+      setSelectedMenuId(menuId);
     } catch (err) {
       console.error("Failed to seed sample menu:", err);
     }
   };
 
-  // Handle Drag & Drop for Categories
+  // Drag & Drop Handlers
   const handleCategoryDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedCategoryIdx(index);
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", index.toString());
   };
 
-  const handleCategoryDrop = async (e: React.DragEvent, targetIndex: number) => {
+  const handleCategoryDrop = async (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    if (draggedCategoryIdx === null || draggedCategoryIdx === targetIndex || !categories) return;
+    const dragIndexStr = e.dataTransfer.getData("text/plain");
+    if (!dragIndexStr || !categories) return;
+    const dragIndex = parseInt(dragIndexStr, 10);
+    if (dragIndex === dropIndex) return;
 
     const newCategories = [...categories];
-    const [movedCat] = newCategories.splice(draggedCategoryIdx, 1);
-    newCategories.splice(targetIndex, 0, movedCat);
+    const [moved] = newCategories.splice(dragIndex, 1);
+    newCategories.splice(dropIndex, 0, moved);
 
-    setDraggedCategoryIdx(null);
+    const categoryIds = newCategories.map((c) => c._id);
     try {
-      await reorderCategoriesMutation({
-        categoryIds: newCategories.map((c) => c._id),
-      });
+      await reorderCategoriesMutation({ categoryIds });
     } catch (err) {
       console.error("Failed to reorder categories:", err);
     }
   };
 
-  // Handle Drag & Drop for Items
   const handleItemDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedItemIdx(index);
-    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", index.toString());
   };
 
-  const handleItemDrop = async (e: React.DragEvent, targetIndex: number) => {
+  const handleItemDrop = async (e: React.DragEvent, dropIndex: number) => {
     e.preventDefault();
-    if (draggedItemIdx === null || draggedItemIdx === targetIndex || !categoryItems) return;
+    const dragIndexStr = e.dataTransfer.getData("text/plain");
+    if (!dragIndexStr || !categoryItems) return;
+    const dragIndex = parseInt(dragIndexStr, 10);
+    if (dragIndex === dropIndex) return;
 
-    const newItems = [...categoryItems];
-    const [movedItem] = newItems.splice(draggedItemIdx, 1);
-    newItems.splice(targetIndex, 0, movedItem);
+    const newCategoryItems = [...categoryItems];
+    const [moved] = newCategoryItems.splice(dragIndex, 1);
+    newCategoryItems.splice(dropIndex, 0, moved);
 
-    setDraggedItemIdx(null);
+    const categoryItemIds = newCategoryItems.map((ci) => ci.categoryItemId);
     try {
-      await reorderCategoryItemsMutation({
-        categoryItemIds: newItems.map((ci) => ci.categoryItemId),
-      });
+      await reorderCategoryItemsMutation({ categoryItemIds });
     } catch (err) {
       console.error("Failed to reorder items:", err);
     }
   };
 
-  // Handle Create Menu Submit
+  // Create Menu
   const handleCreateMenuSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!organization?._id || !menuName.trim()) return;
-
     setIsCreatingMenu(true);
     setCreateMenuError(null);
     try {
-      const newId = await createMenuMutation({
+      const newMenuId = await createMenuMutation({
         organizationId: organization._id,
         name: menuName.trim(),
         description: menuDescription.trim() || undefined,
       });
-      setSelectedMenuId(newId);
+      setSelectedMenuId(newMenuId);
       setIsCreateMenuOpen(false);
       setMenuName("");
       setMenuDescription("");
@@ -447,12 +719,18 @@ export default function MenuPage() {
     }
   };
 
-  // Handle Edit Menu Submit
+  // Edit Menu
+  const openEditMenuDrawer = () => {
+    if (!activeMenu) return;
+    setEditMenuName(activeMenu.name);
+    setEditMenuDescription(activeMenu.description || "");
+    setIsEditMenuOpen(true);
+  };
+
   const handleEditMenuSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!activeMenu?._id || !editMenuName.trim()) return;
-
-    setIsUpdatingMenu(true);
+    setIsSavingMenu(true);
     try {
       await updateMenuMutation({
         id: activeMenu._id,
@@ -463,23 +741,14 @@ export default function MenuPage() {
     } catch (err) {
       console.error("Failed to update menu:", err);
     } finally {
-      setIsUpdatingMenu(false);
+      setIsSavingMenu(false);
     }
   };
 
-  const openEditMenuDrawer = () => {
-    if (!activeMenu) return;
-    setEditMenuName(activeMenu.name);
-    setEditMenuDescription(activeMenu.description || "");
-    setIsEditMenuOpen(true);
-    setIsMenuDropdownOpen(false);
-  };
-
-  // Handle Add/Edit Category Submit
+  // Category Actions
   const handleSaveCategorySubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!categoryName.trim()) return;
-
+    if (!organization?._id || !activeMenu?._id || !categoryName.trim()) return;
     setIsSavingCategory(true);
     try {
       if (editingCategory) {
@@ -489,7 +758,6 @@ export default function MenuPage() {
           published: categoryPublished,
         });
       } else {
-        if (!organization?._id || !activeMenu?._id) return;
         const newCatId = await createCategoryMutation({
           organizationId: organization._id,
           menuId: activeMenu._id,
@@ -520,18 +788,33 @@ export default function MenuPage() {
     }
   };
 
-  const handleDeleteCategory = async (e: React.MouseEvent, catId: Id<"categories">, name: string) => {
-    e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete category "${name}"?`)) return;
+  const handleOpenDeleteCategory = (category: any) => {
+    setTargetDeleteCategory(category);
+    setIsDeleteCategoryModalOpen(true);
+  };
+
+  const handleConfirmDeleteCategory = async () => {
+    if (!targetDeleteCategory?._id) return;
+    setIsDeletingCategory(true);
     try {
-      await deleteCategoryMutation({ id: catId });
-      if (selectedCategoryId === catId) {
+      await deleteCategoryMutation({ id: targetDeleteCategory._id });
+      if (selectedCategoryId === targetDeleteCategory._id) {
         setSelectedCategoryId(null);
-        setSelectedItemId(null);
       }
+      setIsDeleteCategoryModalOpen(false);
+      setTargetDeleteCategory(null);
+      setIsAddCategoryOpen(false);
+      setEditingCategory(null);
     } catch (err) {
       console.error("Failed to delete category:", err);
+    } finally {
+      setIsDeletingCategory(false);
     }
+  };
+
+  const handleDeleteCategory = async (e: React.MouseEvent, catId: Id<"categories">, name: string) => {
+    e.stopPropagation();
+    handleOpenDeleteCategory({ _id: catId, name });
   };
 
   // Open Add Item Mode
@@ -542,12 +825,15 @@ export default function MenuPage() {
     setItemDescription("");
     setItemIsVeg(true);
     setSelectedDietaryType("veg");
+    setItemShowItemType(true);
     setItemIsSpicy(false);
     setItemIsAvailable(true);
     setItemShowQuantity(false);
     setItemQuantity("");
     setItemQuantityUnit("g");
-    setItemIsGst(false);
+    setItemIsGst(true);
+    setItemSelectedTaxGroupId(taxGroups?.[0]?._id || "");
+    setItemTaxMode(taxGroups?.[0]?.taxMode || "inclusive");
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
     setItemSelectedCategoryId(activeCategory?._id || "");
@@ -564,12 +850,15 @@ export default function MenuPage() {
     setItemDescription(item.description || "");
     setItemIsVeg(item.isVeg ?? true);
     setSelectedDietaryType(item.isVeg ? "veg" : "non_veg");
+    setItemShowItemType(item.showItemType ?? true);
     setItemIsSpicy(item.isSpicy ?? false);
     setItemIsAvailable(item.isAvailable ?? true);
     setItemShowQuantity(item.showQuantity ?? false);
     setItemQuantity(item.quantity ? String(item.quantity) : "");
     setItemQuantityUnit(item.quantityUnit || "g");
-    setItemIsGst(item.isGst ?? false);
+    setItemIsGst(item.isGst ?? true);
+    setItemSelectedTaxGroupId(item.taxGroupId || taxGroups?.[0]?._id || "");
+    setItemTaxMode(item.taxMode || taxGroups?.[0]?.taxMode || "inclusive");
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
     setItemSelectedCategoryId(activeCategory?._id || "");
@@ -577,7 +866,7 @@ export default function MenuPage() {
     setIsAddItemOpen(true);
   };
 
-  // Handle Add/Edit Item Submit
+  // Save Item Submit
   const handleSaveItemSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!organization?._id || !itemName.trim() || !itemPrice) {
@@ -613,8 +902,15 @@ export default function MenuPage() {
           description: itemDescription.trim() || undefined,
           isVeg: isVegBool,
           isSpicy: itemIsSpicy,
-          isAvailable: itemIsAvailable,
+          showItemType: itemShowItemType,
+          showQuantity: itemShowQuantity,
+          quantity: itemShowQuantity && itemQuantity ? parseFloat(itemQuantity) : undefined,
+          quantityUnit: itemShowQuantity ? itemQuantityUnit : undefined,
+          isGst: itemIsGst,
+          taxGroupId: (itemSelectedTaxGroupId as any) || undefined,
+          taxMode: itemTaxMode,
           markAsBestseller: itemMarkAsBestseller,
+          isAvailable: itemIsAvailable,
         });
       } else {
         const newItemId = await createItemMutation({
@@ -624,13 +920,16 @@ export default function MenuPage() {
           description: itemDescription.trim() || undefined,
           isVeg: isVegBool,
           isSpicy: itemIsSpicy,
+          showItemType: itemShowItemType,
           isAvailable: itemIsAvailable,
           isGst: itemIsGst,
-          markAsBestseller: itemMarkAsBestseller,
+          taxGroupId: (itemSelectedTaxGroupId as any) || undefined,
+          taxMode: itemTaxMode,
           showQuantity: itemShowQuantity,
-          quantity: itemQuantity ? parseFloat(itemQuantity) : undefined,
-          quantityUnit: itemQuantity ? itemQuantityUnit : undefined,
+          quantity: itemShowQuantity && itemQuantity ? parseFloat(itemQuantity) : undefined,
+          quantityUnit: itemShowQuantity ? itemQuantityUnit : undefined,
           skuNumber: itemSkuNumber.trim() || undefined,
+          markAsBestseller: itemMarkAsBestseller,
         });
 
         await addCategoryItemMutation({
@@ -638,6 +937,8 @@ export default function MenuPage() {
           categoryId: targetCatId,
           itemId: newItemId,
         });
+
+        // Set active item to newly created item to view its customizations!
         setSelectedItemId(newItemId);
       }
 
@@ -650,97 +951,60 @@ export default function MenuPage() {
     }
   };
 
-  // Handle Add Customization Group Submit
-  const handleSaveCustomizationSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!organization?._id || !selectedItemId || !custName.trim()) return;
-
-    setIsSavingCustomization(true);
-    try {
-      const custId = await createCustomizationMutation({
-        organizationId: organization._id,
-        itemId: selectedItemId,
-        name: custName.trim(),
-        customizationType: custType,
-        required: custRequired,
-        maxSelected: parseInt(custMaxSelected, 10) || 1,
-      });
-
-      // Insert initial options
-      for (let i = 0; i < custOptions.length; i++) {
-        const opt = custOptions[i];
-        if (opt.name.trim()) {
-          const optPrice = Math.round(parseFloat(opt.price || "0") * 100);
-          await createCustomizationItemMutation({
-            organizationId: organization._id,
-            customizationId: custId,
-            name: opt.name.trim(),
-            price: optPrice,
-            position: i,
-          });
-        }
-      }
-
-      setSelectedCustId(custId);
-      setIsAddCustomizationOpen(false);
-      setCustName("");
-      setCustType("AddOns");
-      setCustRequired(false);
-      setCustMaxSelected("1");
-      setCustOptions([{ name: "", price: "0.00" }]);
-    } catch (err) {
-      console.error("Failed to save customization:", err);
-    } finally {
-      setIsSavingCustomization(false);
-    }
+  // Open Duplicate Item Modal
+  const handleOpenDuplicateItem = (item: any) => {
+    if (!item) return;
+    const existingNames = (categoryItems || []).map((ci: any) => ci.item?.name || "");
+    const nextName = getNextDuplicateName(item.name, existingNames);
+    setTargetDuplicateItem(item);
+    setDuplicateTargetType("item");
+    setDuplicateItemNewName(nextName);
+    setIsDuplicateItemModalOpen(true);
   };
 
-  // Handle Add Option / Choice to Selected Customization
-  const handleAddChoiceSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!organization?._id || !selectedCustId || !newChoiceName.trim()) return;
-
-    setIsAddingChoice(true);
-    try {
-      const priceCents = Math.round(parseFloat(newChoicePrice || "0") * 100);
-      await createCustomizationItemMutation({
-        organizationId: organization._id,
-        customizationId: selectedCustId as Id<"customizations">,
-        name: newChoiceName.trim(),
-        price: priceCents,
-        position: (activeCustomization?.items?.length || 0) + 1,
-      });
-      setNewChoiceName("");
-      setNewChoicePrice("0.00");
-    } catch (err) {
-      console.error("Failed to add choice:", err);
-    } finally {
-      setIsAddingChoice(false);
-    }
+  // Open Duplicate Customization Item Modal
+  const handleOpenDuplicateChoice = (choice: any) => {
+    if (!choice) return;
+    const existingNames = (activeCustomization?.items || []).map((c: any) => c.name || "");
+    const nextName = getNextDuplicateName(choice.name, existingNames);
+    setTargetDuplicateItem(choice);
+    setDuplicateTargetType("choice");
+    setDuplicateItemNewName(nextName);
+    setIsDuplicateItemModalOpen(true);
   };
 
-  const handleDeleteChoice = async (choiceId: string) => {
+  const handleConfirmDuplicateItem = async () => {
+    if (!organization?._id || !targetDuplicateItem) return;
+    setIsDuplicatingItem(true);
     try {
-      await deleteCustomizationItemMutation({ id: choiceId as Id<"customizationItems"> });
-    } catch (err) {
-      console.error("Failed to delete option:", err);
-    }
-  };
-
-  const handleDeleteCustomization = async (e: React.MouseEvent, custId: string, name: string) => {
-    e.stopPropagation();
-    if (!confirm(`Are you sure you want to delete customization group "${name}"?`)) return;
-    try {
-      await deleteCustomizationMutation({ id: custId as Id<"customizations"> });
-      if (selectedCustId === custId) {
-        setSelectedCustId(null);
+      if (duplicateTargetType === "choice") {
+        await duplicateCustomizationItemMutation({
+          organizationId: organization._id,
+          customizationItemId: targetDuplicateItem._id,
+          newName: duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`,
+        });
+        setIsDuplicateItemModalOpen(false);
+        setTargetDuplicateItem(null);
+      } else {
+        if (!activeCategory?._id) return;
+        const duplicatedId = await duplicateItemMutation({
+          organizationId: organization._id,
+          itemId: targetDuplicateItem._id,
+          categoryId: activeCategory._id,
+          newName: duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`,
+        });
+        setIsDuplicateItemModalOpen(false);
+        setTargetDuplicateItem(null);
+        setSelectedItemId(duplicatedId);
       }
     } catch (err) {
-      console.error("Failed to delete customization:", err);
+      console.error("Failed to duplicate:", err);
+    } finally {
+      setIsDuplicatingItem(false);
     }
   };
 
-  // Handle Add Existing Item Drawer
+  // Add Existing Item
   const handleOpenAddExistingItemDrawer = () => {
     setIsAddItemDropdownOpen(false);
     setSelectedExistingItem(null);
@@ -770,8 +1034,7 @@ export default function MenuPage() {
   };
 
   const filteredExistingItems = useMemo(() => {
-    if (!allExistingItems) return [];
-    if (!existingItemSearchQuery.trim()) return allExistingItems;
+    if (!allExistingItems || !existingItemSearchQuery.trim()) return [];
     const query = existingItemSearchQuery.toLowerCase();
     return allExistingItems.filter(
       (item) =>
@@ -779,6 +1042,46 @@ export default function MenuPage() {
         (item.categoryName && item.categoryName.toLowerCase().includes(query))
     );
   }, [allExistingItems, existingItemSearchQuery]);
+
+  // Add Existing Customization Handlers
+  const handleOpenAddExistingCustomizationDrawer = () => {
+    setIsAddCustomizationDropdownOpen(false);
+    setSelectedExistingCustomization(null);
+    setExistingCustomizationSearchQuery("");
+    setExistingCustomizationError(null);
+    setIsAddExistingCustomizationOpen(true);
+  };
+
+  const handleAddExistingCustomizationSubmit = async () => {
+    if (!organization?._id || !selectedItemId || !selectedExistingCustomization) return;
+
+    setIsCopyingCustomization(true);
+    setExistingCustomizationError(null);
+    try {
+      await copyCustomizationToItemMutation({
+        organizationId: organization._id,
+        targetItemId: selectedItemId,
+        customizationIds: [selectedExistingCustomization._id],
+      });
+      setIsAddExistingCustomizationOpen(false);
+      setSelectedExistingCustomization(null);
+    } catch (err: any) {
+      setExistingCustomizationError(err.message || "Failed to add existing customization");
+    } finally {
+      setIsCopyingCustomization(false);
+    }
+  };
+
+  const filteredExistingCustomizations = useMemo(() => {
+    if (!allExistingCustomizations || !existingCustomizationSearchQuery.trim()) return [];
+    const query = existingCustomizationSearchQuery.toLowerCase();
+    return allExistingCustomizations.filter(
+      (cust: any) =>
+        cust.name.toLowerCase().includes(query) ||
+        (cust.itemName && cust.itemName.toLowerCase().includes(query)) ||
+        (cust.customizationType && cust.customizationType.toLowerCase().includes(query))
+    );
+  }, [allExistingCustomizations, existingCustomizationSearchQuery]);
 
   const handleToggleItemAvailability = async (itemId: Id<"items">, currentAvailable: boolean) => {
     try {
@@ -791,51 +1094,486 @@ export default function MenuPage() {
     }
   };
 
-  const handleDeleteItem = async (itemId: Id<"items">, itemNameStr: string) => {
-    if (!confirm(`Are you sure you want to delete "${itemNameStr}"?`)) return;
+  const handleOpenUnavailabilityModal = (item: any) => {
+    setTargetUnavailabilityItem(item);
+    setUnavailabilityTargetType("item");
+    setUnavailabilityToggle(!item.isAvailable);
+    const existingDays = item.daysOfUnavailable || 0;
+    if (existingDays === 0.5) {
+      setUnavailabilityDuration("12");
+    } else if (existingDays === 1) {
+      setUnavailabilityDuration("24");
+    } else if (existingDays === 2) {
+      setUnavailabilityDuration("48");
+    } else if (existingDays > 0) {
+      setUnavailabilityDuration("custom");
+      setCustomDurationHours(String(existingDays * 24));
+    } else {
+      setUnavailabilityDuration("24");
+    }
+    setIsUnavailabilityModalOpen(true);
+  };
+
+  const handleOpenChoiceUnavailabilityModal = (choice: any) => {
+    setTargetUnavailabilityItem(choice);
+    setUnavailabilityTargetType("choice");
+    setUnavailabilityToggle(!choice.isAvailable);
+    const existingDays = choice.daysOfUnavailable || 0;
+    if (existingDays === 0.5) {
+      setUnavailabilityDuration("12");
+    } else if (existingDays === 1) {
+      setUnavailabilityDuration("24");
+    } else if (existingDays === 2) {
+      setUnavailabilityDuration("48");
+    } else if (existingDays > 0) {
+      setUnavailabilityDuration("custom");
+      setCustomDurationHours(String(existingDays * 24));
+    } else {
+      setUnavailabilityDuration("24");
+    }
+    setIsUnavailabilityModalOpen(true);
+  };
+
+  const handleSaveUnavailabilityConfirm = async () => {
+    if (!targetUnavailabilityItem?._id) return;
+    setIsSavingUnavailability(true);
+    try {
+      let days = 1;
+      if (unavailabilityDuration === "12") days = 0.5;
+      else if (unavailabilityDuration === "24") days = 1;
+      else if (unavailabilityDuration === "48") days = 2;
+      else if (unavailabilityDuration === "custom") {
+        const parsed = parseFloat(customDurationHours || "24");
+        days = isNaN(parsed) || parsed <= 0 ? 1 : parsed / 24;
+      }
+
+      if (unavailabilityTargetType === "choice") {
+        await setCustomizationItemUnavailabilityMutation({
+          id: targetUnavailabilityItem._id,
+          isAvailable: !unavailabilityToggle,
+          daysOfUnavailable: unavailabilityToggle ? days : 0,
+        });
+      } else {
+        await setItemUnavailabilityMutation({
+          id: targetUnavailabilityItem._id,
+          isAvailable: !unavailabilityToggle,
+          daysOfUnavailable: unavailabilityToggle ? days : 0,
+        });
+      }
+      setIsUnavailabilityModalOpen(false);
+      setTargetUnavailabilityItem(null);
+    } catch (err) {
+      console.error("Failed to update unavailability:", err);
+    } finally {
+      setIsSavingUnavailability(false);
+    }
+  };
+
+  // Open Delete Item Modal
+  const handleOpenDeleteItem = (item: any) => {
+    if (!item) return;
+    setTargetDeleteItem(item);
+    setIsDeleteItemModalOpen(true);
+  };
+
+  const handleConfirmDeleteItem = async () => {
+    if (!targetDeleteItem) return;
+    setIsDeletingItem(true);
     try {
       await deleteItemMutation({
-        id: itemId,
+        id: targetDeleteItem._id,
         categoryId: activeCategory?._id,
       });
-      if (selectedItemId === itemId) {
+      if (selectedItemId === targetDeleteItem._id) {
         setSelectedItemId(null);
+        setSelectedCustomizationId(null);
       }
+      setIsDeleteItemModalOpen(false);
+      setTargetDeleteItem(null);
     } catch (err) {
       console.error("Failed to delete item:", err);
+    } finally {
+      setIsDeletingItem(false);
     }
+  };
+
+  // ==========================================
+  // CUSTOMIZATION GROUP HANDLERS
+  // ==========================================
+
+  const handleOpenAddCustomization = () => {
+    setCustomizationType("AddOns");
+    setCustomizationName("");
+    setCustomizationDesc("");
+    setCustomizationRequired(false);
+    setCustomizationMaxSelected(1);
+    setCustomizationPublished(true);
+    setIsAddCustomizationOpen(true);
+  };
+
+  const handleOpenEditCustomization = (cust: any) => {
+    setEditingCustomization(cust);
+    setCustomizationType(cust.customizationType || "AddOns");
+    setCustomizationName(cust.name);
+    setCustomizationDesc(cust.description || "");
+    setCustomizationRequired(cust.required ?? false);
+    setCustomizationMaxSelected(cust.maxSelected ?? 1);
+    setCustomizationPublished(cust.published ?? true);
+    setIsEditCustomizationOpen(true);
+  };
+
+  const handleSaveCustomizationSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!organization?._id || !selectedItemId || !customizationName.trim()) return;
+
+    setIsSavingCustomization(true);
+    try {
+      if (editingCustomization) {
+        await updateCustomizationMutation({
+          id: editingCustomization._id,
+          name: customizationName.trim(),
+          customizationType,
+          required: customizationRequired,
+          maxSelected: customizationMaxSelected,
+          published: customizationPublished,
+        });
+        setIsEditCustomizationOpen(false);
+        setEditingCustomization(null);
+      } else {
+        const newCustId = await createCustomizationMutation({
+          organizationId: organization._id,
+          itemId: selectedItemId,
+          name: customizationName.trim(),
+          customizationType,
+          required: customizationRequired,
+          maxSelected: customizationMaxSelected,
+          published: customizationPublished,
+        });
+        setIsAddCustomizationOpen(false);
+        setSelectedCustomizationId(newCustId);
+      }
+    } catch (err) {
+      console.error("Failed to save customization:", err);
+    } finally {
+      setIsSavingCustomization(false);
+    }
+  };
+
+  const handleDeleteCustomizationConfirm = async () => {
+    if (!deletingCustomizationId) return;
+    try {
+      await deleteCustomizationMutation({ id: deletingCustomizationId });
+      if (selectedCustomizationId === deletingCustomizationId) {
+        setSelectedCustomizationId(null);
+      }
+      setIsDeleteCustomizationOpen(false);
+      setDeletingCustomizationId(null);
+    } catch (err) {
+      console.error("Failed to delete customization:", err);
+    }
+  };
+
+  const handleToggleCustomizationPublished = async (cust: any) => {
+    try {
+      await updateCustomizationMutation({
+        id: cust._id,
+        published: !cust.published,
+      });
+    } catch (err) {
+      console.error("Failed to toggle customization published status:", err);
+    }
+  };
+
+  const handleCustomizationDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("text/plain", index.toString());
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedCustomizationIndex(index);
+  };
+
+  const handleCustomizationDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverCustomizationIndex !== index) {
+      setDragOverCustomizationIndex(index);
+    }
+  };
+
+  const handleCustomizationDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedCustomizationIndex === null || draggedCustomizationIndex === targetIndex) {
+      setDraggedCustomizationIndex(null);
+      setDragOverCustomizationIndex(null);
+      return;
+    }
+
+    if (!itemCustomizations) return;
+
+    const items = [...itemCustomizations];
+    const [movedItem] = items.splice(draggedCustomizationIndex, 1);
+    items.splice(targetIndex, 0, movedItem);
+
+    setDraggedCustomizationIndex(null);
+    setDragOverCustomizationIndex(null);
+
+    try {
+      await reorderCustomizationsMutation({
+        customizationIds: items.map((c) => c._id),
+      });
+    } catch (err) {
+      console.error("Failed to reorder customizations:", err);
+    }
+  };
+
+  const handleCustomizationDragEnd = () => {
+    setDraggedCustomizationIndex(null);
+    setDragOverCustomizationIndex(null);
+  };
+
+  // ==========================================
+  // CUSTOMIZATION ITEM (CHOICE) HANDLERS
+  // ==========================================
+
+  const handleOpenAddChoice = () => {
+    setEditingChoice(null);
+    setChoiceName("");
+    setChoicePrice("0.00");
+    setChoiceDescription("");
+    setChoiceIsAvailable(true);
+    setChoiceDietaryType("veg");
+    setChoiceShowQuantity(false);
+    setChoiceQuantity("");
+    setChoiceQuantityUnit("g");
+    setChoiceShowCalorie(false);
+    setChoiceCalorie("");
+    setChoiceCalorieMetric("kcal");
+    setChoiceIsGst(false);
+    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
+    setChoiceSelectedTaxGroupId(defaultTg?._id || "");
+    setChoiceTaxMode(defaultTg?.taxMode || "inclusive");
+    setIsChoiceAdvancedOpen(false);
+    setIsAddChoiceOpen(true);
+  };
+
+  const handleOpenEditChoice = (choice: any) => {
+    setEditingChoice(choice);
+    setChoiceName(choice.name);
+    setChoicePrice((choice.price / 100).toFixed(2));
+    setChoiceDescription(choice.description || "");
+    setChoiceIsAvailable(choice.isAvailable ?? true);
+    setChoiceDietaryType(choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg"));
+    setChoiceShowQuantity(!!choice.showQuantity);
+    setChoiceQuantity(choice.quantity ? String(choice.quantity) : "");
+    setChoiceQuantityUnit(choice.quantityUnit || "g");
+    setChoiceShowCalorie(!!choice.showCalorie);
+    setChoiceCalorie(choice.calorie || "");
+    setChoiceCalorieMetric(choice.calorieMetric || "kcal");
+    setChoiceIsGst(!!choice.isGst);
+    setChoiceSelectedTaxGroupId(choice.taxGroupId || taxGroups?.find((g) => g.isDefault)?._id || taxGroups?.[0]?._id || "");
+    setChoiceTaxMode(choice.taxMode || "inclusive");
+    setIsChoiceAdvancedOpen(
+      !!(choice.description || choice.isGst || choice.showQuantity || choice.showCalorie || (choice.dietaryType && choice.dietaryType !== "veg"))
+    );
+    setIsEditChoiceOpen(true);
+  };
+
+  const handleSaveChoiceSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!organization?._id || !selectedCustomizationId || !choiceName.trim()) return;
+
+    const priceNum = parseFloat(choicePrice || "0");
+    const priceCents = Math.round(priceNum * 100);
+    const quantityNum = choiceShowQuantity && choiceQuantity ? parseFloat(choiceQuantity) : undefined;
+    const isVeg = choiceDietaryType === "veg" || choiceDietaryType === "vegan" || choiceDietaryType === "jain";
+    const matchedType = availableItemTypes.find(
+      (t) =>
+        t.id === choiceDietaryType ||
+        t.name.toLowerCase() === choiceDietaryType.toLowerCase() ||
+        (choiceDietaryType === "veg" && t.name.toLowerCase().includes("veg") && !t.name.toLowerCase().includes("non"))
+    );
+    const resolvedItemTypeIds =
+      matchedType && matchedType.id && !["veg", "non_veg", "vegan", "jain", "egg"].includes(matchedType.id)
+        ? [matchedType.id as any]
+        : undefined;
+
+    setIsSavingChoice(true);
+    try {
+      if (editingChoice) {
+        await updateCustomizationItemMutation({
+          id: editingChoice._id,
+          name: choiceName.trim(),
+          price: priceCents,
+          description: choiceDescription.trim() || undefined,
+          isVeg,
+          dietaryType: choiceDietaryType,
+          itemTypeIds: resolvedItemTypeIds,
+          showQuantity: choiceShowQuantity,
+          quantity: quantityNum,
+          quantityUnit: choiceShowQuantity ? choiceQuantityUnit : undefined,
+          showCalorie: choiceShowCalorie,
+          calorie: choiceShowCalorie ? choiceCalorie.trim() || undefined : undefined,
+          calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
+          isGst: choiceIsGst,
+          taxGroupId: choiceIsGst && choiceSelectedTaxGroupId ? (choiceSelectedTaxGroupId as any) : undefined,
+          taxMode: choiceIsGst ? choiceTaxMode : undefined,
+          isAvailable: choiceIsAvailable,
+        });
+        setIsEditChoiceOpen(false);
+        setEditingChoice(null);
+      } else {
+        await createCustomizationItemMutation({
+          organizationId: organization._id,
+          customizationId: selectedCustomizationId,
+          name: choiceName.trim(),
+          price: priceCents,
+          description: choiceDescription.trim() || undefined,
+          isVeg,
+          dietaryType: choiceDietaryType,
+          itemTypeIds: resolvedItemTypeIds,
+          showQuantity: choiceShowQuantity,
+          quantity: quantityNum,
+          quantityUnit: choiceShowQuantity ? choiceQuantityUnit : undefined,
+          showCalorie: choiceShowCalorie,
+          calorie: choiceShowCalorie ? choiceCalorie.trim() || undefined : undefined,
+          calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
+          isGst: choiceIsGst,
+          taxGroupId: choiceIsGst && choiceSelectedTaxGroupId ? (choiceSelectedTaxGroupId as any) : undefined,
+          taxMode: choiceIsGst ? choiceTaxMode : undefined,
+          isAvailable: true,
+        });
+        setIsAddChoiceOpen(false);
+      }
+      setChoiceName("");
+      setChoicePrice("0.00");
+      setChoiceDescription("");
+    } catch (err) {
+      console.error("Failed to save choice option:", err);
+    } finally {
+      setIsSavingChoice(false);
+    }
+  };
+
+  const handleDeleteChoiceConfirm = async () => {
+    if (!deletingChoiceId) return;
+    try {
+      await deleteCustomizationItemMutation({ id: deletingChoiceId });
+      setIsDeleteChoiceOpen(false);
+      setDeletingChoiceId(null);
+    } catch (err) {
+      console.error("Failed to delete choice option:", err);
+    }
+  };
+
+  const handleToggleChoiceAvailability = async (choice: any) => {
+    try {
+      await updateCustomizationItemMutation({
+        id: choice._id,
+        isAvailable: !choice.isAvailable,
+      });
+    } catch (err) {
+      console.error("Failed to toggle choice availability:", err);
+    }
+  };
+
+  const handleChoiceDragStart = (e: React.DragEvent, index: number) => {
+    e.dataTransfer.setData("text/plain", index.toString());
+    e.dataTransfer.effectAllowed = "move";
+    setDraggedChoiceIndex(index);
+  };
+
+  const handleChoiceDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverChoiceIndex !== index) {
+      setDragOverChoiceIndex(index);
+    }
+  };
+
+  const handleChoiceDrop = async (e: React.DragEvent, targetIndex: number) => {
+    e.preventDefault();
+    if (draggedChoiceIndex === null || draggedChoiceIndex === targetIndex) {
+      setDraggedChoiceIndex(null);
+      setDragOverChoiceIndex(null);
+      return;
+    }
+
+    if (!activeCustomization?.items) return;
+
+    const items = [...activeCustomization.items];
+    const [movedItem] = items.splice(draggedChoiceIndex, 1);
+    items.splice(targetIndex, 0, movedItem);
+
+    setDraggedChoiceIndex(null);
+    setDragOverChoiceIndex(null);
+
+    try {
+      await reorderCustomizationItemsMutation({
+        itemIds: items.map((i: any) => i._id),
+      });
+    } catch (err) {
+      console.error("Failed to reorder customization items:", err);
+    }
+  };
+
+  const handleChoiceDragEnd = () => {
+    setDraggedChoiceIndex(null);
+    setDragOverChoiceIndex(null);
   };
 
   const activeItemsCount = categoryItems?.filter((ci) => ci.item.isAvailable).length || 0;
 
   return (
-    <PosShell title="Menu Management" subtitle="Catalog & Customizations">
-      <div className="flex flex-col flex-1 min-w-0 pb-16">
+    <PosShell title="Menu Management" subtitle="Catalog, Categories & Customizations">
+      <div className="flex flex-col flex-1 min-w-0 bg-[#f5f5f5] text-[#1c1b1b] min-h-screen font-sans">
+        
         {/* ======================================================== */}
-        {/* VIEW 1: FULL SCREEN ADD / EDIT ITEM                      */}
+        {/* VIEW 1: FULL SCREEN ADD / EDIT ITEM STUDIO (WITH TAXES) */}
         {/* ======================================================== */}
         {isAddItemOpen ? (
-          <div className="w-full flex-1 flex flex-col font-sans">
+          <div className="w-full flex-1 flex flex-col font-sans bg-[#fdf8f7]">
             {/* Top Workspace & Breadcrumb Header */}
             <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
               <div className="flex flex-col md:flex-row md:items-end justify-between w-full gap-4">
                 <div>
-                  <nav className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans">
+                  <nav className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium">
                     <button
                       type="button"
                       onClick={() => {
                         setIsAddItemOpen(false);
                         setEditingItem(null);
+                        setSelectedItemId(null);
+                        setSelectedCustomizationId(null);
                       }}
                       className="hover:text-[#141010] transition-colors cursor-pointer"
                     >
                       Menu
                     </button>
-                    <ChevronRightIcon className="w-3.5 h-3.5" />
-                    <span>{activeMenu?.name || "Main Menu"}</span>
-                    <ChevronRightIcon className="w-3.5 h-3.5" />
-                    <span>{activeCategory?.name || "Category"}</span>
-                    <ChevronRightIcon className="w-3.5 h-3.5" />
+                    <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddItemOpen(false);
+                        setEditingItem(null);
+                        setSelectedItemId(null);
+                        setSelectedCustomizationId(null);
+                      }}
+                      className="hover:text-[#141010] transition-colors cursor-pointer"
+                    >
+                      {activeMenu?.name || "Main Menu"}
+                    </button>
+                    <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddItemOpen(false);
+                        setEditingItem(null);
+                        setSelectedItemId(null);
+                        setSelectedCustomizationId(null);
+                      }}
+                      className="hover:text-[#141010] transition-colors cursor-pointer"
+                    >
+                      {activeCategory?.name || "Category"}
+                    </button>
+                    <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
                     <span className="text-[#141010] font-semibold">
                       {editingItem ? "Edit Item" : "Add New Item"}
                     </span>
@@ -844,11 +1582,11 @@ export default function MenuPage() {
                     {editingItem ? "Edit Item" : "Add New Item"}
                   </h1>
                   <p className="text-[#5e5e5e] text-[14px] mt-1">
-                    Configure details, media, dietary types, settings, and nutritional metrics.
+                    Configure details, taxes, dietary classification, and base pricing.
                   </p>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 font-sans">
                   <button
                     type="button"
                     onClick={() => {
@@ -863,10 +1601,10 @@ export default function MenuPage() {
                     type="submit"
                     form="item-details-form"
                     disabled={isSavingItem}
-                    className="btn-primary h-10 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:opacity-90 transition-opacity shadow-sm cursor-pointer disabled:opacity-50"
-                    style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                    className="h-10 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                   >
-                    {isSavingItem ? "Saving..." : editingItem ? "Save Changes" : "Save & Create Item"}
+                    {isSavingItem ? "Saving..." : editingItem ? "Save Changes" : "Save & Configure Customizations"}
                   </button>
                 </div>
               </div>
@@ -885,9 +1623,9 @@ export default function MenuPage() {
                   {/* Left Column (Forms) */}
                   <div className="lg:col-span-7 xl:col-span-8 space-y-8">
                     
-                    {/* Card 1: Item Details */}
+                    {/* Card 1: Item Details & Pricing */}
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
-                      <h2 className="font-sans text-[20px] font-semibold text-[#0c0a09]">Item Details</h2>
+                      <h2 className="text-[20px] font-semibold text-[#0c0a09]">Item Details & Pricing</h2>
 
                       {/* Image Upload Area */}
                       <div className="border-2 border-dashed border-[#d1c4c1] rounded-xl p-6 lg:p-8 flex flex-col items-center justify-center text-center bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer group">
@@ -901,7 +1639,7 @@ export default function MenuPage() {
                       {/* Category & Search Code / SKU */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="block text-sm font-medium text-[#0c0a09]">Category</label>
+                          <label className="block text-sm font-medium text-[#0c0a09]">Category *</label>
                           <div className="relative">
                             <select
                               value={itemSelectedCategoryId || activeCategory?._id || ""}
@@ -914,9 +1652,7 @@ export default function MenuPage() {
                                 </option>
                               ))}
                             </select>
-                            <span className="absolute right-3 top-3 text-[#5e5e5e] pointer-events-none">
-                              <ChevronDownIcon className="w-4 h-4" />
-                            </span>
+                            <ChevronDownIcon className="absolute right-3.5 top-3.5 w-4 h-4 text-[#5e5e5e] pointer-events-none" />
                           </div>
                         </div>
 
@@ -940,14 +1676,14 @@ export default function MenuPage() {
                           required
                           value={itemName}
                           onChange={(e) => setItemName(e.target.value)}
-                          placeholder="Enter item name (e.g., Truffle Umami Burger)"
-                          className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm"
+                          placeholder="Enter item name (e.g., Vadapav / Truffle Umami Burger)"
+                          className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm font-medium"
                         />
                       </div>
 
                       {/* Price */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-[#0c0a09]">Price *</label>
+                        <label className="block text-sm font-medium text-[#0c0a09]">Base Price *</label>
                         <div className="relative">
                           <span className="absolute left-4 top-2.5 text-[#5e5e5e] text-sm font-semibold">{currencySymbol}</span>
                           <input
@@ -957,7 +1693,7 @@ export default function MenuPage() {
                             value={itemPrice}
                             onChange={(e) => setItemPrice(e.target.value)}
                             placeholder="0.00"
-                            className="w-full bg-white border border-[#e7e5e4] rounded-lg pl-8 pr-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm font-medium"
+                            className="w-full bg-white border border-[#e7e5e4] rounded-lg pl-9 pr-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm font-semibold"
                           />
                         </div>
                       </div>
@@ -966,7 +1702,7 @@ export default function MenuPage() {
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-[#0c0a09]">Description</label>
                         <textarea
-                          rows={4}
+                          rows={3}
                           value={itemDescription}
                           onChange={(e) => setItemDescription(e.target.value)}
                           placeholder="Describe ingredients, taste notes, and culinary highlights..."
@@ -975,135 +1711,294 @@ export default function MenuPage() {
                       </div>
                     </div>
 
-                    {/* Card 2: Dietary Classification & Settings */}
+                    {/* Card 2: Item Settings (Toggle Grid & Contextual Configuration) */}
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
-                      <h2 className="font-sans text-[20px] font-semibold text-[#0c0a09]">Dietary Classification & Settings</h2>
-                      
-                      {/* Dietary Type Selector */}
-                      <div className="space-y-2.5">
-                        <label className="block text-sm font-medium text-[#0c0a09]">
-                          Dietary Classification (Item Type)
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-                          {DIETARY_TYPES.map((type) => {
-                            const isSelected = selectedDietaryType === type.id;
-                            return (
+                      <div>
+                        <h2 className="text-[20px] font-semibold text-[#0c0a09]">Item Settings</h2>
+                        <p className="text-xs text-[#5e5e5e] mt-0.5">
+                          Enable attributes, portion sizes, dietary types, and tax configurations for this item.
+                        </p>
+                      </div>
+
+                      {/* 2-Column Settings Toggle Grid */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* 1. Show quantity */}
+                        <div
+                          onClick={() => setItemShowQuantity(!itemShowQuantity)}
+                          className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Show quantity</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemShowQuantity ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowQuantity ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+
+                        {/* 2. Show item type */}
+                        <div
+                          onClick={() => setItemShowItemType(!itemShowItemType)}
+                          className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Show item type</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemShowItemType ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowItemType ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+
+                        {/* 3. Is this item taxable? */}
+                        <div
+                          onClick={() => setItemIsGst(!itemIsGst)}
+                          className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Is this item taxable?</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemIsGst ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsGst ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+
+                        {/* 4. Mark as Bestseller */}
+                        <div
+                          onClick={() => setItemMarkAsBestseller(!itemMarkAsBestseller)}
+                          className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Bestseller</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemMarkAsBestseller ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemMarkAsBestseller ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+
+                        {/* 5. Mark as Spicy */}
+                        <div
+                          onClick={() => setItemIsSpicy(!itemIsSpicy)}
+                          className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
+                        >
+                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Spicy</span>
+                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemIsSpicy ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
+                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsSpicy ? "right-0.5" : "left-0.5"}`} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Contextual Section A: Portion & Quantity Configuration */}
+                      {itemShowQuantity && (
+                        <div className="p-4 bg-[#faf9f9] rounded-xl border border-[#e7e5e4] space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#0c0a09] border-b border-[#e7e5e4] pb-2">
+                            <span>⚖️</span>
+                            <span>Portion &amp; Quantity Configuration</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                              <label className="block text-xs font-medium text-[#5e5e5e]">Quantity / Portion Size</label>
+                              <input
+                                type="number"
+                                step="any"
+                                value={itemQuantity}
+                                onChange={(e) => setItemQuantity(e.target.value)}
+                                placeholder="e.g. 250, 1, 500"
+                                className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 text-sm font-medium text-[#0c0a09] focus:outline-none focus:border-[#141010]"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="block text-xs font-medium text-[#5e5e5e]">Unit of Measure</label>
+                              <select
+                                value={itemQuantityUnit}
+                                onChange={(e) => setItemQuantityUnit(e.target.value)}
+                                className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 text-sm font-medium text-[#0c0a09] focus:outline-none focus:border-[#141010]"
+                              >
+                                <option value="g">Grams (g)</option>
+                                <option value="kg">Kilograms (kg)</option>
+                                <option value="ml">Milliliters (ml)</option>
+                                <option value="l">Liters (L)</option>
+                                <option value="pcs">Pieces (pcs)</option>
+                                <option value="plates">Plates</option>
+                                <option value="slices">Slices</option>
+                                <option value="servings">Servings</option>
+                                <option value="oz">Ounces (oz)</option>
+                                <option value="lbs">Pounds (lbs)</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Contextual Section B: Dietary Classification */}
+                      {itemShowItemType && (
+                        <div className="p-4 bg-[#faf9f9] rounded-xl border border-[#e7e5e4] space-y-3">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#0c0a09] border-b border-[#e7e5e4] pb-2">
+                            <span>🏷️</span>
+                            <span>Dietary Category</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                            {availableItemTypes.map((type) => (
                               <button
                                 key={type.id}
                                 type="button"
-                                onClick={() => {
-                                  setSelectedDietaryType(type.id);
-                                  setItemIsVeg(type.id === "veg" || type.id === "vegan" || type.id === "jain");
-                                }}
-                                className={`flex items-center justify-center gap-2 p-3 rounded-xl border transition-all cursor-pointer select-none text-sm font-medium ${
-                                  isSelected
-                                    ? "bg-[#141010] text-white border-[#141010] shadow-sm scale-[1.02]"
-                                    : "bg-[#f7f3f2] hover:bg-[#f1edec] text-[#141010] border-[#e7e5e4]"
+                                onClick={() => setSelectedDietaryType(type.id)}
+                                className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
+                                  selectedDietaryType === type.id || selectedDietaryType === type.name.toLowerCase()
+                                    ? "border-[#141010] bg-[#f1edec] text-[#141010] ring-1 ring-[#141010]"
+                                    : "border-[#e7e5e4] bg-white hover:bg-[#f1edec] text-[#5e5e5e]"
                                 }`}
                               >
                                 <span>{type.icon}</span>
                                 <span>{type.label}</span>
                               </button>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
-                      {/* Item Toggles Grid */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                        {/* Show Quantity */}
-                        <div className="space-y-3 p-3.5 bg-[#f7f3f2] rounded-lg border border-[#e7e5e4]">
-                          <div
-                            onClick={() => setItemShowQuantity(!itemShowQuantity)}
-                            className="flex items-center justify-between cursor-pointer select-none"
-                          >
-                            <span className="text-sm font-medium text-[#0c0a09]">Show quantity</span>
-                            <div className={`w-9 h-5 rounded-full relative transition-colors ${itemShowQuantity ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                              <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowQuantity ? "right-0.5" : "left-0.5"}`} />
+                      {/* Contextual Section C: Taxation & Compliance Engine */}
+                      {itemIsGst && (
+                        <div className="p-4 bg-[#faf9f9] rounded-xl border border-[#e7e5e4] space-y-4">
+                          <div className="flex items-center gap-2 text-xs font-semibold text-[#0c0a09] border-b border-[#e7e5e4] pb-2">
+                            <span>🏛️</span>
+                            <span>Taxation &amp; Calculation Mode</span>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {/* Tax Group Selector */}
+                            <div className="space-y-1.5">
+                              <label className="block text-xs font-medium text-[#5e5e5e]">Tax Group / Rate</label>
+                              <div className="relative">
+                                <select
+                                  value={itemSelectedTaxGroupId}
+                                  onChange={(e) => setItemSelectedTaxGroupId(e.target.value)}
+                                  className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 appearance-none focus:outline-none focus:border-[#141010] text-[#0c0a09] text-xs font-medium"
+                                >
+                                  {taxGroups && taxGroups.length > 0 ? (
+                                    taxGroups.map((tg) => (
+                                      <option key={tg._id} value={tg._id}>
+                                        {tg.name} {tg.isDefault ? "⭐ (Store Default)" : ""}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <option value="">Default Store Tax</option>
+                                  )}
+                                </select>
+                                <ChevronDownIcon className="absolute right-3 top-3 w-4 h-4 text-[#5e5e5e] pointer-events-none" />
+                              </div>
+                            </div>
+
+                            {/* Tax Calculation Mode */}
+                            <div className="space-y-1.5">
+                              <label className="block text-xs font-medium text-[#5e5e5e]">Tax Calculation Mode</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setItemTaxMode("inclusive")}
+                                  className={`py-2 px-2.5 text-xs font-semibold rounded-lg border text-center transition-all cursor-pointer ${
+                                    itemTaxMode === "inclusive"
+                                      ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-sm"
+                                      : "bg-white text-[#5e5e5e] border-[#e7e5e4] hover:bg-[#f1edec]"
+                                  }`}
+                                >
+                                  Tax Inclusive
+                                  <span className="block text-[9px] font-normal opacity-80 mt-0.5">Price includes tax</span>
+                                </button>
+
+                                <button
+                                  type="button"
+                                  onClick={() => setItemTaxMode("exclusive")}
+                                  className={`py-2 px-2.5 text-xs font-semibold rounded-lg border text-center transition-all cursor-pointer ${
+                                    itemTaxMode === "exclusive"
+                                      ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-sm"
+                                      : "bg-white text-[#5e5e5e] border-[#e7e5e4] hover:bg-[#f1edec]"
+                                  }`}
+                                >
+                                  Tax Exclusive
+                                  <span className="block text-[9px] font-normal opacity-80 mt-0.5">Tax added at checkout</span>
+                                </button>
+                              </div>
                             </div>
                           </div>
-                          
-                          {itemShowQuantity && (
-                            <div className="grid grid-cols-2 gap-2 pt-1">
-                              <input
-                                type="number"
-                                placeholder="Qty (e.g. 250)"
-                                value={itemQuantity}
-                                onChange={(e) => setItemQuantity(e.target.value)}
-                                className="bg-white border border-[#e7e5e4] rounded px-3 py-1.5 text-xs text-[#0c0a09]"
-                              />
-                              <select
-                                value={itemQuantityUnit}
-                                onChange={(e) => setItemQuantityUnit(e.target.value)}
-                                className="bg-white border border-[#e7e5e4] rounded px-2 py-1.5 text-xs text-[#0c0a09]"
-                              >
-                                {QUANTITY_UNITS.map((u) => (
-                                  <option key={u.value} value={u.value}>{u.label}</option>
-                                ))}
-                              </select>
+
+                          {/* Live Tax Computation Preview */}
+                          {taxBreakdown && (
+                            <div className="p-3.5 rounded-lg bg-white border border-[#e7e5e4] space-y-2 text-xs shadow-xs">
+                              <div className="flex items-center justify-between font-semibold text-[#141010] border-b border-[#e7e5e4] pb-2 flex-wrap gap-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-sm">🧾</span>
+                                  <span className="text-xs font-bold">Receipt Split Preview ({taxBreakdown.totalRate}% Total Tax):</span>
+                                  {taxBreakdown.isDemo && (
+                                    <span className="text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded font-medium">
+                                      Demo for {currencySymbol}100
+                                    </span>
+                                  )}
+                                </div>
+                                <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${
+                                  taxBreakdown.mode === "inclusive"
+                                    ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                    : "text-blue-700 bg-blue-50 border-blue-200"
+                                }`}>
+                                  {taxBreakdown.mode === "inclusive" ? "Inclusive Pricing" : "Exclusive Pricing"}
+                                </span>
+                              </div>
+                              <div className="flex justify-between text-[#5e5e5e] text-xs">
+                                <span>Base Item Price:</span>
+                                <span className="font-semibold text-[#141010]">{currencySymbol}{taxBreakdown.basePrice}</span>
+                              </div>
+                              {taxBreakdown.components.map((c, idx) => (
+                                <div key={idx} className="flex justify-between text-[#5e5e5e] text-xs">
+                                  <span>• {c.name} ({c.rate}%):</span>
+                                  <span className="font-medium text-[#141010]">+{currencySymbol}{c.amount}</span>
+                                </div>
+                              ))}
+                              <div className="flex justify-between text-[#141010] font-bold pt-1.5 border-t border-[#e7e5e4] text-xs">
+                                <span>Total Customer Pays:</span>
+                                <span className="text-xs font-bold text-[#0c0a09]">{currencySymbol}{taxBreakdown.finalPrice}</span>
+                              </div>
                             </div>
                           )}
                         </div>
-
-                        {/* Is Taxable */}
-                        <div
-                          onClick={() => setItemIsGst(!itemIsGst)}
-                          className="flex items-center justify-between p-3.5 bg-[#f7f3f2] hover:bg-[#f1edec] rounded-lg border border-[#e7e5e4] cursor-pointer transition select-none"
-                        >
-                          <span className="text-sm font-medium text-[#0c0a09]">Is this item taxable? (GST)</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors ${itemIsGst ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsGst ? "right-0.5" : "left-0.5"}`} />
-                          </div>
-                        </div>
-
-                        {/* Mark as Bestseller */}
-                        <div
-                          onClick={() => setItemMarkAsBestseller(!itemMarkAsBestseller)}
-                          className="flex items-center justify-between p-3.5 bg-[#f7f3f2] hover:bg-[#f1edec] rounded-lg border border-[#e7e5e4] cursor-pointer transition select-none"
-                        >
-                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Bestseller ⭐</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors ${itemMarkAsBestseller ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemMarkAsBestseller ? "right-0.5" : "left-0.5"}`} />
-                          </div>
-                        </div>
-
-                        {/* Mark as Spicy */}
-                        <div
-                          onClick={() => setItemIsSpicy(!itemIsSpicy)}
-                          className="flex items-center justify-between p-3.5 bg-[#f7f3f2] hover:bg-[#f1edec] rounded-lg border border-[#e7e5e4] cursor-pointer transition select-none"
-                        >
-                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Spicy 🌶️</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors ${itemIsSpicy ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsSpicy ? "right-0.5" : "left-0.5"}`} />
-                          </div>
-                        </div>
-                      </div>
+                      )}
                     </div>
                   </div>
 
-                  {/* Right Column: Live Preview */}
+                  {/* Right Column: Live Card Preview */}
                   <div className="lg:col-span-5 xl:col-span-4 space-y-6 sticky top-6">
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-sm">
-                      <h2 className="font-sans text-[16px] font-semibold text-[#0c0a09] mb-4">Live Item Preview</h2>
+                      <h2 className="text-[16px] font-semibold text-[#0c0a09] mb-4">Live Menu Preview Card</h2>
                       <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm">
                         <div className="aspect-[4/3] bg-[#f0efed] flex items-center justify-center relative">
                           <ImageIcon className="w-12 h-12 text-[#928c8a]" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent flex items-end p-4 justify-between">
-                            <span className="bg-white/90 backdrop-blur-sm text-[#0c0a09] text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm">
-                              {categories?.find((c) => c._id === (itemSelectedCategoryId || activeCategory?._id))?.name || "Category"}
-                            </span>
-                            <span className="bg-black/75 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded">
-                              {DIETARY_TYPES.find((d) => d.id === selectedDietaryType)?.icon}{" "}
-                              {DIETARY_TYPES.find((d) => d.id === selectedDietaryType)?.label}
-                            </span>
+                          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4 justify-between">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="bg-white/90 backdrop-blur-sm text-[#0c0a09] text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm">
+                                {categories?.find((c) => c._id === (itemSelectedCategoryId || activeCategory?._id))?.name || "Category"}
+                              </span>
+                              {itemMarkAsBestseller && (
+                                <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
+                                  <span>⭐</span>
+                                  <span>Bestseller</span>
+                                </span>
+                              )}
+                              {itemIsSpicy && (
+                                <span className="bg-rose-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
+                                  <span>🌶️</span>
+                                  <span>Spicy</span>
+                                </span>
+                              )}
+                            </div>
+                            {itemShowItemType && (
+                              <span className="bg-black/75 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded flex items-center gap-1">
+                                <span>{availableItemTypes.find((d) => d.id === selectedDietaryType || d.name.toLowerCase() === selectedDietaryType.toLowerCase())?.icon || "🟢"}</span>
+                                <span>{availableItemTypes.find((d) => d.id === selectedDietaryType || d.name.toLowerCase() === selectedDietaryType.toLowerCase())?.label || "Vegetarian"}</span>
+                              </span>
+                            )}
                           </div>
                         </div>
 
-                        <div className="p-5">
-                          <div className="flex justify-between items-start mb-2">
-                            <h3 className="font-garamond text-[24px] text-[#0c0a09] leading-snug truncate pr-3">
-                              {itemName || "Item Name"}
-                            </h3>
+                        <div className="p-5 space-y-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h3 className="font-garamond text-[24px] text-[#0c0a09] leading-snug truncate pr-3">
+                                {itemName || "Item Name"}
+                              </h3>
+                              {itemShowQuantity && itemQuantity && (
+                                <p className="text-xs text-[#5e5e5e] font-medium mt-0.5">
+                                  Portion: {itemQuantity} {itemQuantityUnit}
+                                </p>
+                              )}
+                            </div>
                             <span className="font-semibold text-[16px] text-[#0c0a09]">
                               {currencySymbol}{itemPrice ? parseFloat(itemPrice).toFixed(2) : "0.00"}
                             </span>
@@ -1111,6 +2006,11 @@ export default function MenuPage() {
                           <p className="text-sm text-[#5e5e5e] line-clamp-2">
                             {itemDescription || "Description will appear here as you type..."}
                           </p>
+                          {itemIsGst && taxBreakdown && (
+                            <div className="text-[11px] text-[#5e5e5e] pt-1 border-t border-[#f0efed] mt-2">
+                              Tax: {taxBreakdown.mode === "inclusive" ? "Included" : `+${currencySymbol}${taxBreakdown.totalTaxAmount}`} ({taxBreakdown.totalRate}% Tax)
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1119,19 +2019,745 @@ export default function MenuPage() {
               </form>
             </div>
           </div>
-        ) : (
+        ) : selectedCustomizationId && activeCustomization ? (
+
           /* ======================================================== */
-          /* VIEW 2: TWO-PANEL INTERFACE (CATEGORIES / ITEMS / CUST)   */
+          /* VIEW 2: CUSTOMIZATION CHOICES (OPTIONS) SCREEN           */
           /* ======================================================== */
-          <>
-            {/* Top Workspace Context (UNTOUCHED) */}
+          <div className="flex flex-col flex-1 min-w-0 bg-[#fdf8f7] font-sans">
+            {/* Breadcrumb Navigation */}
+            <div className="px-6 lg:px-8 pt-6 pb-2">
+              <nav className="flex items-center text-xs font-medium text-[#5e5e5e] gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCustomizationId(null);
+                    setSelectedItemId(null);
+                    setSelectedCategoryId(null);
+                  }}
+                  className="hover:text-[#141010] transition-colors cursor-pointer"
+                >
+                  {activeMenu?.name || "Main Menu"}
+                </button>
+                <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCustomizationId(null);
+                    setSelectedItemId(null);
+                  }}
+                  className="hover:text-[#141010] transition-colors cursor-pointer"
+                >
+                  {activeCategory?.name || "Category"}
+                </button>
+                <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+                <button
+                  type="button"
+                  onClick={() => setSelectedCustomizationId(null)}
+                  className="hover:text-[#141010] transition-colors cursor-pointer"
+                >
+                  {activeItem?.name || "Item"}
+                </button>
+                <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+                <span className="text-[#141010] font-bold uppercase">{activeCustomization.name}</span>
+              </nav>
+            </div>
+
+            {/* Full-Width Customization Items Workspace */}
+            <main className="flex-1 w-full px-6 lg:px-8 py-4 space-y-6 min-h-[calc(100vh-140px)]">
+              {/* BEGIN: CustomizationGroupHeader */}
+              <section className="bg-[#fdf8f7] rounded-2xl border border-[#e7e5e4] shadow-xs p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  {/* Title & Config Badges */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h1 className="font-garamond text-[32px] text-[#141010] font-normal leading-tight">
+                        {activeCustomization.name}
+                      </h1>
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#f1edec] text-[#141010] border border-[#e7e5e4]">
+                        {activeCustomization.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                      </span>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                        {activeCustomization.maxSelected === 1 ? "Single Selection Modifier" : `Multiple Selection Modifier (Max ${activeCustomization.maxSelected ?? 1})`}
+                      </span>
+                    </div>
+                    {/* Parameters summary line */}
+                    <p className="text-sm text-[#5e5e5e] flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-[#141010]">
+                        {activeCustomization.required ? "Required" : "Optional"}
+                      </span>
+                      <span className="text-[#e7e5e4]">•</span>
+                      <span>Maximum {activeCustomization.maxSelected ?? 1} selection</span>
+                      <span className="text-[#e7e5e4]">•</span>
+                      <span className="font-medium text-[#141010]">
+                        {(activeCustomization.items || []).length} customization items configured
+                      </span>
+                      <span className="text-[#e7e5e4]">•</span>
+                      <span className="text-emerald-700 font-medium">
+                        {(activeCustomization.items || []).filter((i: any) => i.isAvailable).length} Available to customers
+                      </span>
+                    </p>
+                  </div>
+
+                  {/* Actions Toolbar */}
+                  <div className="flex items-center gap-3 self-start sm:self-center">
+                    {/* Published Toggle */}
+                    <div className="flex items-center gap-2.5 bg-[#f7f3f2] px-3.5 py-1.5 rounded-xl border border-[#e7e5e4]">
+                      <span className="text-xs font-medium text-[#141010]">Group Published</span>
+                      <div
+                        onClick={() => handleToggleCustomizationPublished(activeCustomization)}
+                        className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${
+                          activeCustomization.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1]"
+                        }`}
+                      >
+                        <div
+                          className={`absolute top-[2px] w-4 h-4 bg-white rounded-full transition-transform ${
+                            activeCustomization.published ? "right-[2px]" : "left-[2px]"
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Edit Customization Settings */}
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditCustomization(activeCustomization)}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#141010] bg-white border border-[#e7e5e4] rounded-xl hover:bg-[#f1edec] transition-colors cursor-pointer"
+                    >
+                      <EditPencilIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                      <span>Edit Settings</span>
+                    </button>
+                  </div>
+                </div>
+              </section>
+              {/* END: CustomizationGroupHeader */}
+
+              {/* Contextual Helper Banner */}
+              <div className="bg-[#eff6ff] border border-[#dbeafe] rounded-xl p-4 flex items-center gap-3 text-xs text-[#1e40af]">
+                <InfoIcon className="w-4 h-4 text-[#2563eb] shrink-0" />
+                <p className="font-normal">
+                  <span className="font-semibold text-[#1e3a8a]">Customization Live:</span> Customization items configured here will be presented directly to cashier staff &amp; diners when adding <span className="underline decoration-blue-300 font-medium">{activeItem.name}</span> to orders. Reorder items using the drag handles on the left.
+                </p>
+              </div>
+
+              {/* BEGIN: ChoicesSection */}
+              <section className="space-y-4">
+                {/* Table Section Header & Add Action */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                  <div>
+                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Customization Items</h2>
+                    <p className="text-xs text-[#5e5e5e] mt-0.5">Manage, price, and toggle availability of items under this customization group.</p>
+                  </div>
+                  <div className="flex items-center gap-2.5">
+                    {/* Search / Quick Filter */}
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={choiceSearchQuery}
+                        onChange={(e) => setChoiceSearchQuery(e.target.value)}
+                        placeholder="Filter customization items..."
+                        className="text-xs pl-8 pr-3 py-2 rounded-xl border border-[#e7e5e4] bg-[#f7f3f2] focus:bg-white focus:border-[#141010] text-[#141010] w-52 placeholder-[#928c8a] outline-none font-medium transition"
+                      />
+                      <svg className="w-3.5 h-3.5 text-[#928c8a] absolute left-2.5 top-2.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </div>
+                    {/* Primary Action Button: + Add customization item */}
+                    <button
+                      type="button"
+                      onClick={handleOpenAddChoice}
+                      style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                      className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-[#0c0a09] hover:bg-[#252626] rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      <PlusIcon className="w-4 h-4 text-white" />
+                      <span className="text-white font-semibold">Add customization item</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Full-Width Clean Table Card */}
+                <div className="bg-white border border-[#e7e5e4] rounded-2xl shadow-none overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b border-[#e7e5e4] bg-[#fdf8f7] text-[#5e5e5e] uppercase tracking-wider font-semibold text-[11px]">
+                            <th className="py-3.5 pl-5 pr-2 w-14 text-center" scope="col">#</th>
+                            <th className="py-3.5 px-4" scope="col">Customization Item Name</th>
+                            <th className="py-3.5 px-4" scope="col">Additional Price</th>
+                            <th className="py-3.5 px-4" scope="col">Dietary Attributes</th>
+                            <th className="py-3.5 px-4" scope="col">Availability</th>
+                            <th className="py-3.5 pr-6 pl-4 text-right" scope="col">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#f1edec] text-[#141010] font-normal">
+                          {filteredChoices && filteredChoices.length > 0 ? (
+                            filteredChoices.map((choice: any, index: number) => {
+                              const isSnoozed = !choice.isAvailable;
+                              const isDragging = draggedChoiceIndex === index;
+                              const isDragOver = dragOverChoiceIndex === index;
+                              return (
+                                <tr
+                                  key={choice._id}
+                                  draggable
+                                  onDragStart={(e) => handleChoiceDragStart(e, index)}
+                                  onDragOver={(e) => handleChoiceDragOver(e, index)}
+                                  onDrop={(e) => handleChoiceDrop(e, index)}
+                                  onDragEnd={handleChoiceDragEnd}
+                                  className={`transition-all duration-150 group select-none ${
+                                    isDragging
+                                      ? "opacity-25 bg-[#f1edec] scale-[0.99]"
+                                      : isDragOver
+                                      ? "bg-[#f1edec] border-t-2 border-[#141010]"
+                                      : isSnoozed
+                                      ? "bg-amber-50/30 hover:bg-amber-50/50"
+                                      : "hover:bg-[#fafafa]"
+                                  }`}
+                                >
+                                  {/* Handle & Index */}
+                                  <td className="py-4 pl-5 pr-2 text-center cursor-grab active:cursor-grabbing">
+                                    <div className="flex items-center justify-center gap-1 text-[#928c8a] group-hover:text-[#141010]">
+                                      <DragHandleIcon className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
+                                      <span className="text-[11px] font-mono font-medium text-[#928c8a]">{index + 1}</span>
+                                    </div>
+                                  </td>
+                                  {/* Customization Item Name */}
+                                  <td className="py-4 px-4">
+                                    <div className="font-semibold text-[#141010] text-sm flex items-center gap-2">
+                                      <span>{choice.name}</span>
+                                      {isSnoozed && (
+                                        <span className="text-[10px] bg-amber-100 text-amber-900 font-medium px-1.5 py-0.5 rounded border border-amber-200">
+                                          Snoozed
+                                        </span>
+                                      )}
+                                    </div>
+                                    {choice.description && (
+                                      <div className="text-[11px] text-[#5e5e5e] mt-0.5">{choice.description}</div>
+                                    )}
+                                  </td>
+                                  {/* Additional Price */}
+                                  <td className="py-4 px-4 font-semibold text-[#141010] text-sm">
+                                    {choice.price > 0 ? `+${currencySymbol}${(choice.price / 100).toFixed(0)}` : `${currencySymbol}0`}
+                                  </td>
+                                  {/* Dietary / Attributes */}
+                                  <td className="py-4 px-4">
+                                    {(() => {
+                                      const dtype = choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg");
+                                      const dietaryObj = availableItemTypes.find((d) =>
+                                        d.id === dtype ||
+                                        d.name.toLowerCase() === dtype.toLowerCase() ||
+                                        (dtype === "veg" && d.name.toLowerCase().includes("veg") && !d.name.toLowerCase().includes("non"))
+                                      );
+                                      const isVegType = !dietaryObj?.name?.toLowerCase().includes("non");
+                                      return (
+                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium border ${
+                                          isVegType
+                                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                            : "bg-red-50 text-red-700 border-red-200"
+                                        }`}>
+                                          <span>{dietaryObj?.icon || "🟢"}</span>
+                                          <span>{dietaryObj?.label || "Veg"}</span>
+                                        </span>
+                                      );
+                                    })()}
+                                  </td>
+                                  {/* Availability Pill */}
+                                  <td className="py-4 px-4">
+                                    {choice.isAvailable ? (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                        Available
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                        <ClockIcon className="w-3.5 h-3.5 text-amber-600" />
+                                        <span>Out of stock</span>
+                                      </span>
+                                    )}
+                                  </td>
+                                  {/* Actions */}
+                                  <td className="py-4 pr-6 pl-4 text-right">
+                                    <div className="flex items-center justify-end gap-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenChoiceUnavailabilityModal(choice)}
+                                        className="p-1.5 text-[#5e5e5e] hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                        title="Quick restock / snooze timer"
+                                      >
+                                        <ClockIcon className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenEditChoice(choice)}
+                                        className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded transition-colors cursor-pointer"
+                                        title="Edit customization item details"
+                                      >
+                                        <EditPencilIcon className="w-4 h-4" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenDuplicateChoice(choice)}
+                                        className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded transition-colors cursor-pointer"
+                                        title="Duplicate customization item"
+                                      >
+                                        <CopyIcon className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr>
+                              <td colSpan={6} className="py-12 text-center text-[#5e5e5e] text-xs">
+                                No customization items found. Click <strong>+ Add customization item</strong> to add items.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Bottom Table Footer Summary */}
+                    <div className="px-6 py-3.5 bg-[#fdf8f7] border-t border-[#e7e5e4] flex flex-col sm:flex-row items-center justify-between text-xs text-[#5e5e5e] gap-2">
+                      <div className="flex items-center gap-4">
+                        <span>Showing <strong className="font-medium text-[#141010]">{filteredChoices.length}</strong> of {(activeCustomization.items || []).length} customization items</span>
+                        <span className="text-[#e7e5e4]">•</span>
+                        <span>All changes automatically synced with terminal registers</span>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                {/* END: ChoicesSection */}
+
+                {/* Advanced Technical Rules Box */}
+                <section className="bg-white rounded-2xl border border-[#e7e5e4] p-5 shadow-none">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[#f1edec] flex items-center justify-center text-[#141010]">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="font-garamond text-[18px] text-[#141010] font-normal leading-tight">Customization Tax &amp; Inventory Calculation</h3>
+                        <p className="text-xs text-[#5e5e5e]">Tax calculation is configured for all customization items under this group. Stock deductions trigger recipe level debits on order fulfillment.</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                      Tax Configured
+                    </span>
+                  </div>
+                </section>
+              </main>
+            </div>
+          ) : selectedItemId && activeItem ? (
+          
+          /* ======================================================== */
+          /* VIEW 3: ITEM CUSTOMIZATIONS MANAGEMENT VIEW (PREST THEME)*/
+          /* ======================================================== */
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* Workspace Header (Consistent with PREST) */}
             <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
               <div className="flex items-end justify-between w-full">
                 <div>
-                  <p className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-1">
+                  <nav className="flex items-center text-xs font-medium text-gray-500 mb-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedItemId(null);
+                        setSelectedCategoryId(null);
+                      }}
+                      className="hover:text-gray-900 transition-colors cursor-pointer"
+                    >
+                      {activeMenu?.name || "Main Menu"}
+                    </button>
+                    <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400" />
+                    <button
+                      type="button"
+                      onClick={() => setSelectedItemId(null)}
+                      className="hover:text-gray-900 transition-colors cursor-pointer"
+                    >
+                      {activeCategory?.name || "Category"}
+                    </button>
+                    <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400" />
+                    <span className="text-gray-900 font-bold uppercase">{activeItem.name}</span>
+                  </nav>
+                  <h1 className="font-garamond text-[32px] text-[#141010] font-normal leading-tight flex items-center gap-3">
+                    <span>{activeItem.name}</span>
+                    <span className="text-2xl font-normal text-[#5e5e5e]">
+                      {currencySymbol}{(activeItem.price / 100).toFixed(2)}
+                    </span>
+                  </h1>
+                </div>
+
+                <div className="flex items-center gap-3 font-sans">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedItemId(null)}
+                    className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent hover:bg-[#f1edec] text-[#141010] font-medium text-[14px] transition-colors flex items-center gap-2 cursor-pointer"
+                  >
+                    <ChevronRightIcon className="w-3.5 h-3.5 rotate-180" />
+                    <span>Back to Items</span>
+                  </button>
+
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCustomizationDropdownOpen(!isAddCustomizationDropdownOpen)}
+                      style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                      className="h-10 px-5 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
+                    >
+                      <PlusIcon className="w-4 h-4 text-white" />
+                      <span className="text-white font-medium text-[14px]">Add Customization</span>
+                      <ChevronDownIcon className="w-4 h-4 text-white opacity-80" />
+                    </button>
+
+                    {isAddCustomizationDropdownOpen && (
+                      <div className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-white border border-[#e7e5e4] shadow-xl py-1 z-50 divide-y divide-[#e7e5e4]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddCustomizationDropdownOpen(false);
+                            handleOpenAddCustomization();
+                          }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-[#141010] hover:bg-[#fafafa] flex items-center gap-2 font-medium cursor-pointer"
+                        >
+                          <PlusIcon className="w-4 h-4" />
+                          <span>New Customization</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleOpenAddExistingCustomizationDrawer}
+                          className="w-full text-left px-4 py-2.5 text-sm text-[#141010] hover:bg-[#fafafa] flex items-center gap-2 font-medium cursor-pointer"
+                        >
+                          <CopyIcon className="w-4 h-4" />
+                          <span>Existing Customization</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Two Column Layout: Left Item Switcher, Right Customizations Table */}
+            <main className="flex-1 flex flex-row w-full px-4 lg:px-6 py-5 gap-5 items-start font-sans min-h-[calc(100vh-210px)]">
+              
+              {/* Left Items Column in Category */}
+              <div className="w-60 lg:w-64 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden sticky top-6 shadow-xs">
+                <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[18px] font-medium text-[#141010]">Items</h2>
+                    <span className="px-2 py-0.5 rounded-full bg-[#f1edec] text-[#5e5e5e] text-xs font-semibold border border-[#e7e5e4]">
+                      {categoryItems?.length || 0}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenAddNewItem}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition-colors cursor-pointer"
+                    title="Add Item"
+                  >
+                    <PlusIcon className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] max-h-[calc(100vh-300px)]">
+                  {categoryItems && categoryItems.length > 0 ? (
+                    categoryItems.map(({ item }) => {
+                      const isSelected = item._id === selectedItemId;
+                      const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
+                      return (
+                        <div
+                          key={item._id}
+                          onClick={() => {
+                            setSelectedItemId(item._id);
+                            setSelectedCustomizationId(null);
+                          }}
+                          className={`flex items-center justify-between p-4 cursor-pointer transition-colors border-l-2 group select-none ${
+                            isSelected
+                              ? "bg-[#fafafa] border-b border-[#e7e5e4] border-l-[#0c0a09]"
+                              : "hover:bg-white border-b border-[#e7e5e4] border-l-transparent"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0 pr-2">
+                            <span className={`cursor-grab text-[#5e5e5e] text-[18px] transition-opacity ${
+                              isSelected ? "opacity-50 group-hover:opacity-100" : "opacity-0 group-hover:opacity-50"
+                            }`}>
+                              <DragHandleIcon className="w-4 h-4" />
+                            </span>
+                            <div className="w-7 h-7 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center font-bold text-[11px] text-[#141010] shrink-0">
+                              {initialLetter}
+                            </div>
+                            <span className={`text-[15px] truncate ${isSelected ? "font-semibold text-[#141010]" : "text-[#5e5e5e]"}`}>
+                              {item.name}
+                            </span>
+                          </div>
+
+                          {isSelected && (
+                            <ChevronRightIcon className="w-4 h-4 text-[#141010] shrink-0" />
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="p-8 text-center text-xs text-[#5e5e5e]">
+                      No items in this category.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Right Customizations Workspace */}
+              <div className="flex-1 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden min-h-[500px] shadow-xs">
+                
+                {/* Item Hero Banner */}
+                <div className="p-6 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-3">
+                      <h2 className="font-garamond text-[26px] md:text-[30px] font-normal text-[#141010] leading-tight">
+                        {activeItem.name}
+                      </h2>
+                      <span className="text-xl font-medium text-[#5e5e5e]">
+                        {currencySymbol}{(activeItem.price / 100).toFixed(0)}
+                      </span>
+
+                      {/* Clean Availability badge */}
+                      <div
+                        onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold cursor-pointer transition select-none ${
+                          activeItem.isAvailable
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100"
+                            : "bg-[#e6e1e1] text-[#5e5e5e] border-[#e7e5e4] hover:bg-[#ddd9d8]"
+                        }`}
+                      >
+                        <span className={`w-2 h-2 rounded-full ${activeItem.isAvailable ? "bg-emerald-500" : "bg-gray-400"}`} />
+                        <span>{activeItem.isAvailable ? "Available" : "Sold Out"}</span>
+                      </div>
+
+                      {/* Published switch */}
+                      <div className="flex items-center gap-2 pl-2 border-l border-gray-200 select-none">
+                        <div
+                          onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable)}
+                          className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${
+                            activeItem.published ? "bg-black" : "bg-gray-300"
+                          }`}
+                        >
+                          <div
+                            className={`absolute top-[2px] w-4 h-4 bg-white rounded-full transition-transform ${
+                              activeItem.published ? "right-[2px]" : "left-[2px]"
+                            }`}
+                          />
+                        </div>
+                        <span className="text-xs font-medium text-gray-700">Published</span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1.5">
+                      Manage add-ons, availability, and customizations available for this item.
+                    </p>
+                  </div>
+
+                  {/* Quick Action Buttons */}
+                  <div className="flex items-center gap-1 text-gray-500">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditItem(activeItem)}
+                      className="p-2 hover:text-black hover:bg-gray-100 rounded-md transition cursor-pointer"
+                      title="View details"
+                    >
+                      <EyeIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenUnavailabilityModal(activeItem)}
+                      className="p-2 hover:text-black hover:bg-gray-100 rounded-md transition cursor-pointer"
+                      title="Set unavailability timer"
+                    >
+                      <ClockIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDuplicateItem(activeItem)}
+                      className="p-2 hover:text-black hover:bg-gray-100 rounded-md transition cursor-pointer"
+                      title="Duplicate item"
+                    >
+                      <CopyIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditItem(activeItem)}
+                      className="p-2 hover:text-black hover:bg-gray-100 rounded-md transition cursor-pointer"
+                      title="Edit this item"
+                    >
+                      <EditPencilIcon className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDeleteItem(activeItem)}
+                      className="p-2 hover:text-red-600 hover:bg-red-50 rounded-md transition cursor-pointer"
+                      title="Delete item"
+                    >
+                      <TrashIcon className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Customizations Table */}
+                <div className="flex-1 overflow-x-auto overflow-y-auto">
+                  <table className="w-full text-left border-collapse font-sans min-w-[620px]">
+                    <thead className="bg-white sticky top-0 border-b border-[#e7e5e4] z-10 text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                      <tr>
+                        <th className="w-8 px-2 py-3 text-center"></th>
+                        <th className="px-3 py-3">CUSTOMIZATION</th>
+                        <th className="px-3 py-3">TYPE</th>
+                        <th className="px-3 py-3">SELECTION RULES</th>
+                        <th className="px-3 py-3">CUSTOMIZATION ITEMS</th>
+                        <th className="px-2 py-3 text-center">PUBLISHED</th>
+                        <th className="px-3 py-3 text-right">ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-[13px] text-[#1c1b1b]">
+                      {itemCustomizations && itemCustomizations.length > 0 ? (
+                        itemCustomizations.map((cust, index) => {
+                          const choicesCount = cust.items?.length || 0;
+                          const isDragging = draggedCustomizationIndex === index;
+                          const isDragOver = dragOverCustomizationIndex === index;
+                          return (
+                            <tr
+                              key={cust._id}
+                              draggable
+                              onDragStart={(e) => handleCustomizationDragStart(e, index)}
+                              onDragOver={(e) => handleCustomizationDragOver(e, index)}
+                              onDrop={(e) => handleCustomizationDrop(e, index)}
+                              onDragEnd={handleCustomizationDragEnd}
+                              onClick={() => setSelectedCustomizationId(cust._id)}
+                              className={`border-b border-[#e7e5e4] transition-all select-none cursor-pointer group ${
+                                isDragging
+                                  ? "opacity-25 bg-[#f1edec]"
+                                  : isDragOver
+                                  ? "bg-[#f1edec] border-t-2 border-[#141010]"
+                                  : "hover:bg-[#fafafa]"
+                              }`}
+                              title="Click to manage customization items or drag to reorder"
+                            >
+                              <td className="px-2 py-3 text-center text-[#5e5e5e] opacity-40 group-hover:opacity-100 cursor-grab active:cursor-grabbing">
+                                <DragHandleIcon className="w-4 h-4 mx-auto" />
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="font-semibold text-[#141010] block">
+                                  {cust.name}
+                                </span>
+                                <span className="text-[11px] text-[#5e5e5e] block">
+                                  {cust.customizationType === "AddOns" ? "Add-on modifier group" : "Kitchen cook instruction"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span
+                                  className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${
+                                    cust.customizationType === "AddOns"
+                                      ? "bg-[#f1edec] text-[#141010] border-[#e7e5e4]"
+                                      : "bg-blue-50 text-blue-700 border-blue-200"
+                                  }`}
+                                >
+                                  {cust.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-[#5e5e5e]">
+                                <span
+                                  className={`inline-flex items-center gap-1 font-semibold px-2 py-0.5 rounded text-[10px] uppercase tracking-wider ${
+                                    cust.required
+                                      ? "text-amber-800 bg-amber-100"
+                                      : "text-[#5e5e5e] bg-[#f1edec]"
+                                  }`}
+                                >
+                                  {cust.required ? "Required" : "Optional"}
+                                </span>
+                                <span className="text-[11px] text-[#5e5e5e] ml-1">
+                                  · Max {cust.maxSelected ?? 1} {cust.maxSelected === 1 ? "item" : "items"}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="font-medium text-[#141010] hover:underline">
+                                  {choicesCount} {choicesCount === 1 ? "item" : "items"}
+                                </span>
+                              </td>
+                              <td className="px-2 py-3 text-center">
+                                <div className="inline-flex items-center justify-center gap-2">
+                                  <div
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleToggleCustomizationPublished(cust);
+                                    }}
+                                    className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
+                                      cust.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                    }`}
+                                  >
+                                    <div
+                                      className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
+                                        cust.published ? "right-[2px]" : "left-[2px]"
+                                      }`}
+                                    />
+                                  </div>
+                                  <span className={`text-[11px] font-semibold w-7 text-left ${cust.published ? "text-[#141010]" : "text-[#5e5e5e]"}`}>
+                                    {cust.published ? "ON" : "OFF"}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-right space-x-1 whitespace-nowrap">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditCustomization(cust);
+                                  }}
+                                  className="p-1.5 hover:bg-[#f1edec] rounded text-[#5e5e5e] hover:text-[#141010] transition cursor-pointer"
+                                  title="Edit customization"
+                                >
+                                  <EditPencilIcon className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeletingCustomizationId(cust._id);
+                                    setIsDeleteCustomizationOpen(true);
+                                  }}
+                                  className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded text-[#5e5e5e] transition cursor-pointer"
+                                  title="Delete customization"
+                                >
+                                  <TrashIcon className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="py-12 text-center text-[#5e5e5e] text-xs">
+                            No customizations configured for this item. Click <strong>+ Add Customization</strong> to add modifiers, portion sizes, or kitchen instructions.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </main>
+          </div>
+        ) : (
+          
+          /* ======================================================== */
+          /* VIEW 4: TWO-PANEL INTERFACE (EXACT PREST MOCKUP)         */
+          /* ======================================================== */
+          <div className="flex flex-col flex-1 min-w-0">
+            {/* Workspace Context (Top-level Menu Selector) */}
+            <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
+              <div className="flex items-end justify-between w-full">
+                <div>
+                  <p className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-2">
                     Workspace
                   </p>
-                  <div className="relative flex items-center gap-3">
+                  <div className="relative flex items-center gap-4">
                     {/* Menu Title Dropdown Button */}
                     <button
                       type="button"
@@ -1146,20 +2772,8 @@ export default function MenuPage() {
                       </span>
                     </button>
 
-                    {/* Edit Pencil Circle Button */}
-                    {activeMenu && (
-                      <button
-                        type="button"
-                        onClick={openEditMenuDrawer}
-                        className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
-                        title="Edit Menu Name"
-                      >
-                        <EditPencilIcon className="w-4 h-4" />
-                      </button>
-                    )}
-
                     {activeMenu?.isActive && (
-                      <span className="px-2 py-0.5 bg-[#f1edec] text-[#5e5e5e] font-sans text-[10px] font-semibold uppercase tracking-wider rounded border border-[#e7e5e4] self-center mt-1">
+                      <span className="px-2 py-1 bg-[#f1edec] text-[#5e5e5e] font-sans text-[10px] font-semibold rounded uppercase tracking-wider border border-[#e7e5e4] self-center mt-2">
                         Active
                       </span>
                     )}
@@ -1176,7 +2790,6 @@ export default function MenuPage() {
                                 type="button"
                                 onClick={() => {
                                   setSelectedMenuId(m._id);
-                                  setSelectedItemId(null);
                                   setIsMenuDropdownOpen(false);
                                 }}
                                 className={`w-full text-left px-4 py-2.5 flex items-center justify-between text-sm transition-colors cursor-pointer ${
@@ -1202,7 +2815,8 @@ export default function MenuPage() {
                             }}
                             className="w-full text-left px-4 py-2.5 text-sm text-[#141010] hover:bg-[#fafafa] flex items-center gap-2 font-medium cursor-pointer"
                           >
-                            <PlusIcon className="w-3.5 h-3.5" /> Create New Menu
+                            <PlusIcon className="w-4 h-4" />
+                            <span>Create New Menu</span>
                           </button>
                         </div>
                       </div>
@@ -1219,18 +2833,18 @@ export default function MenuPage() {
                       className="h-10 px-4 rounded-full border border-[#e7e5e4] bg-transparent hover:bg-[#f1edec] text-[#141010] font-medium text-[15px] transition-colors flex items-center gap-2 cursor-pointer shadow-none"
                     >
                       <EditPencilIcon className="w-4 h-4 text-[#141010]" />
-                      <span>Edit Menu</span>
+                      <span>Edit Details</span>
                     </button>
                   )}
 
                   <button
                     type="button"
                     onClick={() => setIsCreateMenuOpen(true)}
-                    className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
-                    style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                    className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                   >
-                    <PlusIcon className="w-4 h-4" />
-                    <span style={{ color: "#ffffff" }}>Create Menu</span>
+                    <PlusIcon className="w-4 h-4 text-white" />
+                    <span className="text-white font-medium text-[15px]">Create Menu</span>
                   </button>
                 </div>
               </div>
@@ -1248,8 +2862,8 @@ export default function MenuPage() {
                   <button
                     type="button"
                     onClick={handleSeedSample}
-                    className="btn-primary rounded-full px-6 py-2.5 text-sm font-medium shadow-none hover:opacity-90 transition cursor-pointer"
-                    style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                    className="rounded-full bg-[#0c0a09] text-white px-6 py-2.5 text-sm font-medium shadow-none hover:bg-[#252626] transition cursor-pointer"
                   >
                     Load Sample Menu (Demo)
                   </button>
@@ -1264,600 +2878,171 @@ export default function MenuPage() {
               </div>
             )}
 
-            {/* ======================================================== */}
-            {/* TWO PANEL DRILLDOWN SYSTEM                                */}
-            {/* LEVEL 1: Categories (Left) + Category Items (Right)      */}
-            {/* LEVEL 2: Items in Category (Left) + Customizations (Right) */}
-            {/* ======================================================== */}
+            {/* Two Panel Layout */}
             {activeMenu && (
-              <>
-                {/* Breadcrumb Navigation Strip */}
-                <div className="px-6 lg:px-8 pt-5 pb-1">
-                  <nav className="flex items-center text-[13px] text-[#5e5e5e] gap-2 font-sans select-none">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedItemId(null)}
-                      className="hover:text-[#141010] transition-colors cursor-pointer font-medium hover:underline"
-                    >
-                      Menu
-                    </button>
-                    {activeCategory && (
-                      <>
-                        <span className="text-[#a8a29e]">/</span>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedItemId(null)}
-                          className={`transition-colors cursor-pointer ${
-                            !selectedItemId ? "text-[#141010] font-bold" : "hover:text-[#141010] font-medium hover:underline"
-                          }`}
-                        >
-                          {activeCategory.name}
-                        </button>
-                      </>
-                    )}
-                    {selectedItemId && activeItem && (
-                      <>
-                        <span className="text-[#a8a29e]">/</span>
-                        <span className="text-[#141010] font-bold">
-                          {activeItem.name}
-                        </span>
-                      </>
-                    )}
-                  </nav>
-                </div>
-
-                <div className="flex-1 flex flex-col md:flex-row w-full p-6 lg:p-8 pt-3 gap-6 min-h-[calc(100vh-190px)] items-start font-sans">
+              <main className="flex-1 flex flex-row w-full px-4 lg:px-6 py-5 gap-5 items-start font-sans min-h-[calc(100vh-210px)]">
                 
                 {/* ---------------------------------------------------- */}
-                {/* LEFT PANEL: Categories (Level 1) OR Items (Level 2) */}
+                {/* LEFT PANEL (Categories)                              */}
                 {/* ---------------------------------------------------- */}
-                <div className="w-full md:w-72 lg:w-80 xl:w-96 shrink-0 flex flex-col bg-white rounded-xl border border-[#e7e5e4] shadow-sm overflow-hidden sticky top-6">
-                  {selectedItemId && activeItem ? (
-                    /* Level 2 Left Panel: Items in Category */
-                    <>
-                      <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
-                        <div>
-                          <div className="flex items-center text-xs text-[#5e5e5e] mb-1 gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedItemId(null)}
-                              className="hover:text-[#141010] cursor-pointer"
-                            >
-                              Menu
-                            </button>
-                            <ChevronRightIcon className="w-3 h-3" />
-                            <button
-                              type="button"
-                              onClick={() => setSelectedItemId(null)}
-                              className="hover:text-[#141010] cursor-pointer"
-                            >
-                              {activeCategory?.name}
-                            </button>
-                          </div>
-                          <h2 className="font-sans text-[16px] font-bold text-[#141010]">
-                            Items ({categoryItems?.length || 0})
-                          </h2>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleOpenAddNewItem}
-                          className="px-3 py-1.5 rounded-full bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#252626] transition cursor-pointer flex items-center gap-1 shadow-sm"
-                          style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                        >
-                          <PlusIcon className="w-3.5 h-3.5" />
-                          <span>Add item</span>
-                        </button>
-                      </div>
+                <div className="w-60 lg:w-64 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden sticky top-6 shadow-xs">
+                  <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
+                    <h2 className="text-[18px] font-medium text-[#141010]">Categories</h2>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingCategory(null);
+                        setCategoryName("");
+                        setCategoryPublished(true);
+                        setIsAddCategoryOpen(true);
+                      }}
+                      className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition-colors cursor-pointer"
+                      title="Add Category"
+                    >
+                      <PlusIcon className="w-5 h-5" />
+                    </button>
+                  </div>
 
-                      <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] max-h-[calc(100vh-280px)]">
-                        {categoryItems && categoryItems.length > 0 ? (
-                          categoryItems.map(({ categoryItemId, item }) => {
-                            const isSelected = item._id === selectedItemId;
-                            const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
-                            return (
-                              <div
-                                key={categoryItemId}
-                                onClick={() => setSelectedItemId(item._id)}
-                                className={`flex items-center justify-between p-3.5 cursor-pointer transition-all select-none ${
-                                  isSelected
-                                    ? "bg-[#141010] text-white font-semibold shadow-inner"
-                                    : "hover:bg-[#f7f3f2] text-[#141010] bg-white"
+                  <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] max-h-[calc(100vh-300px)]">
+                    {categories && categories.length > 0 ? (
+                      categories.map((cat, index) => {
+                        const isSelected = cat._id === selectedCategoryId;
+                        return (
+                          <div
+                            key={cat._id}
+                            draggable
+                            onDragStart={(e) => handleCategoryDragStart(e, index)}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => handleCategoryDrop(e, index)}
+                            onClick={() => setSelectedCategoryId(cat._id)}
+                            className={`flex items-center justify-between p-4 cursor-pointer transition-colors border-l-2 group ${
+                              isSelected
+                                ? "bg-[#fafafa] border-b border-[#e7e5e4] border-l-[#0c0a09]"
+                                : "hover:bg-white border-b border-[#e7e5e4] border-l-transparent"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3 min-w-0 pr-2">
+                              <span
+                                className={`cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] transition-opacity ${
+                                  isSelected ? "opacity-50 group-hover:opacity-100" : "opacity-0 group-hover:opacity-50"
                                 }`}
                               >
-                                <div className="flex items-center gap-3 min-w-0 pr-2">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                                    isSelected ? "bg-black text-white border border-white/20" : "bg-[#f1edec] text-[#141010]"
-                                  }`}>
-                                    {item.imageUrl ? (
-                                      <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover rounded-full" />
-                                    ) : (
-                                      <span>{initialLetter}</span>
-                                    )}
-                                  </div>
-                                  <span className={`text-[14px] truncate ${isSelected ? "text-white" : "text-[#141010]"}`}>
-                                    {item.name}
-                                  </span>
-                                </div>
-                                <span className={`text-xs font-semibold shrink-0 ${isSelected ? "text-white/90" : "text-[#5e5e5e]"}`}>
-                                  {currencySymbol}{(item.price / 100).toFixed(0)}
-                                </span>
-                              </div>
-                            );
-                          })
-                        ) : null}
-                      </div>
-                    </>
-                  ) : (
-                    /* Level 1 Left Panel: Categories List */
-                    <>
-                      <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
-                        <h2 className="font-sans text-[16px] font-bold text-[#141010]">
-                          Categories ({categories?.length || 0})
-                        </h2>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingCategory(null);
-                            setCategoryName("");
-                            setCategoryPublished(true);
-                            setIsAddCategoryOpen(true);
-                          }}
-                          className="px-3 py-1.5 rounded-full bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#252626] transition cursor-pointer flex items-center gap-1 shadow-sm"
-                          style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                        >
-                          <PlusIcon className="w-3.5 h-3.5" />
-                          <span>Add category</span>
-                        </button>
-                      </div>
+                                <DragHandleIcon className="w-4 h-4" />
+                              </span>
+                              <span className={`text-[15px] truncate ${isSelected ? "font-semibold text-[#141010]" : "text-[#5e5e5e]"}`}>
+                                {cat.name}
+                              </span>
+                            </div>
 
-                      <div className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] max-h-[calc(100vh-280px)]">
-                        {categories && categories.length > 0 ? (
-                          categories.map((cat, index) => {
-                            const isSelected = cat._id === selectedCategoryId;
-                            return (
+                            <div className="flex items-center gap-3 shrink-0">
+                              {/* Toggle */}
                               <div
-                                key={cat._id}
-                                draggable
-                                onDragStart={(e) => handleCategoryDragStart(e, index)}
-                                onDragOver={(e) => e.preventDefault()}
-                                onDrop={(e) => handleCategoryDrop(e, index)}
-                                onClick={() => {
-                                  setSelectedCategoryId(cat._id);
-                                  setSelectedItemId(null);
+                                onClick={(e) => handleToggleCategory(e, cat._id, cat.published)}
+                                className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
+                                  cat.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                }`}
+                              >
+                                <div
+                                  className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
+                                    cat.published ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                                  }`}
+                                />
+                              </div>
+
+                              {/* Edit Button */}
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEditingCategory(cat);
+                                  setCategoryName(cat.name);
+                                  setCategoryPublished(cat.published);
+                                  setIsAddCategoryOpen(true);
                                 }}
-                                className={`flex items-center justify-between p-3.5 cursor-pointer transition-all select-none group ${
-                                  isSelected
-                                    ? "bg-[#141010] text-white font-semibold shadow-inner"
-                                    : "hover:bg-[#f7f3f2] text-[#141010] bg-white"
-                                }`}
+                                className="w-6 h-6 rounded hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] opacity-0 group-hover:opacity-100 transition-all cursor-pointer"
+                                title="Edit Category"
                               >
-                                <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                                  <span
-                                    className={`cursor-grab active:cursor-grabbing text-xs transition-opacity ${
-                                      isSelected ? "opacity-70 text-white" : "opacity-40 text-[#5e5e5e] group-hover:opacity-80"
-                                    }`}
-                                  >
-                                    <DragHandleIcon className="w-4 h-4" />
-                                  </span>
-                                  <span className={`text-[14px] truncate ${isSelected ? "text-white font-semibold" : "text-[#141010]"}`}>
-                                    {cat.name}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center gap-2 shrink-0">
-                                  {/* Toggle Switch */}
-                                  <div
-                                    onClick={(e) => handleToggleCategory(e, cat._id, cat.published)}
-                                    className={`w-7 h-4 rounded-full relative cursor-pointer transition-colors ${
-                                      cat.published
-                                        ? isSelected ? "bg-emerald-500" : "bg-[#0c0a09]"
-                                        : isSelected ? "bg-stone-600" : "bg-[#e6e1e1] border border-[#e7e5e4]"
-                                    }`}
-                                  >
-                                    <div
-                                      className={`absolute top-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
-                                        cat.published ? "right-0.5" : "left-0.5"
-                                      }`}
-                                    />
-                                  </div>
-
-                                  {/* Edit Button */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setEditingCategory(cat);
-                                      setCategoryName(cat.name);
-                                      setCategoryPublished(cat.published);
-                                      setIsAddCategoryOpen(true);
-                                    }}
-                                    className={`w-6 h-6 rounded flex items-center justify-center transition-colors cursor-pointer ${
-                                      isSelected
-                                        ? "text-white/80 hover:text-white hover:bg-white/20"
-                                        : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] opacity-0 group-hover:opacity-100"
-                                    }`}
-                                    title="Edit Category"
-                                  >
-                                    <EditPencilIcon className="w-3.5 h-3.5" />
-                                  </button>
-
-                                  {/* Delete Button */}
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleDeleteCategory(e, cat._id, cat.name)}
-                                    className={`w-6 h-6 rounded flex items-center justify-center transition-colors cursor-pointer ${
-                                      isSelected
-                                        ? "text-red-300 hover:text-red-100 hover:bg-red-500/20"
-                                        : "text-[#5e5e5e] hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100"
-                                    }`}
-                                    title="Delete Category"
-                                  >
-                                    <CloseIcon className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
-                              </div>
-                            );
-                          })
-                        ) : (
-                          <div className="p-8 text-center text-xs text-[#5e5e5e]">
-                            No categories found. Click <strong>+ Add category</strong> to create one.
+                                <EditPencilIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
                           </div>
-                        )}
+                        );
+                      })
+                    ) : (
+                      <div className="p-8 text-center text-xs text-[#5e5e5e]">
+                        No categories found. Click <strong>+</strong> to create one.
                       </div>
-                    </>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* ---------------------------------------------------- */}
-                {/* RIGHT PANEL: Items (Level 1) OR Customizations (Level 2) */}
+                {/* RIGHT PANEL (Items Table - Clean & Clickable)        */}
                 {/* ---------------------------------------------------- */}
-                <div className="flex-1 min-w-0 w-full flex flex-col bg-white rounded-xl border border-[#e7e5e4] shadow-sm overflow-hidden min-h-[500px]">
-                  {selectedItemId && activeItem ? (
-                    /* ======================================================== */
-                    /* LEVEL 2 RIGHT PANEL: ITEM & CUSTOMIZATIONS VIEW          */
-                    /* ======================================================== */
-                    <div className="flex flex-col divide-y divide-[#e7e5e4]">
-                      {/* Top Item Header */}
-                      <div className="p-6 bg-[#fdf8f7] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h2 className="font-garamond text-[32px] font-normal text-[#141010] leading-tight">
-                              {activeItem.name}
-                            </h2>
-                            <span className="font-sans font-normal text-[24px] text-[#5e5e5e]">
-                              {currencySymbol}{(activeItem.price / 100).toFixed(0)}
-                            </span>
-                          </div>
-                          <p className="font-sans text-[13px] text-[#5e5e5e] mt-1">
-                            {activeItem.description || "Manage customizations, availability status, and options for this menu item."}
-                          </p>
-                        </div>
-
-                        {/* Control Actions */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* In Stock Availability Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable)}
-                            className={`h-9 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                              activeItem.isAvailable
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
-                                : "bg-stone-100 text-stone-600 border-stone-300 hover:bg-stone-200"
-                            }`}
-                          >
-                            <span>{activeItem.isAvailable ? "✓ In Stock" : "○ Unavailable"}</span>
-                          </button>
-
-                          {/* Edit Item Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditItem(activeItem)}
-                            className="w-9 h-9 rounded-full border border-[#e7e5e4] bg-white hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition cursor-pointer shadow-sm"
-                            title="Edit Item"
-                          >
-                            <EditPencilIcon className="w-4 h-4" />
-                          </button>
-
-                          {/* Delete Item Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteItem(activeItem._id, activeItem.name)}
-                            className="w-9 h-9 rounded-full border border-red-200 bg-white hover:bg-red-50 flex items-center justify-center text-red-600 transition cursor-pointer shadow-sm"
-                            title="Delete Item"
-                          >
-                            <CloseIcon className="w-4 h-4" />
-                          </button>
-
-                          {/* Add Customization Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCustName("");
-                              setCustType("AddOns");
-                              setCustRequired(false);
-                              setCustMaxSelected("1");
-                              setCustOptions([{ name: "", price: "0.00" }]);
-                              setIsAddCustomizationOpen(true);
-                            }}
-                            className="btn-primary h-9 px-4 rounded-full bg-[#0c0a09] text-white font-medium text-[13px] hover:bg-[#252626] transition shadow-sm flex items-center gap-1.5 cursor-pointer ml-1"
-                            style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                          >
-                            <PlusIcon className="w-4 h-4" />
-                            <span>Add customization</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Section 1: Customizations Groups */}
-                      <div className="p-6 space-y-4">
-                        <div>
-                          <h3 className="font-garamond text-[24px] text-[#141010] font-normal">Customizations</h3>
-                          <p className="text-xs text-[#5e5e5e] mt-0.5">
-                            Add modifier groups like add-ons or preparation choices.
-                          </p>
-                        </div>
-
-                        <div className="border border-[#e7e5e4] rounded-xl overflow-hidden shadow-sm">
-                          <table className="w-full text-left border-collapse font-sans">
-                            <thead>
-                              <tr className="border-b border-[#e7e5e4] text-[12px] font-semibold text-[#5e5e5e] bg-[#fcf5f4]">
-                                <th className="py-3 px-6 font-semibold w-1/2">Customization</th>
-                                <th className="py-3 px-6 font-semibold">Type</th>
-                                <th className="py-3 px-6 font-semibold text-right">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-[#e7e5e4] bg-white">
-                              {activeItemCustomizations && activeItemCustomizations.length > 0 ? (
-                                activeItemCustomizations.map((cust: ItemCustomization) => {
-                                  const isSelected = cust._id === selectedCustId;
-                                  return (
-                                    <tr
-                                      key={cust._id}
-                                      onClick={() => setSelectedCustId(cust._id)}
-                                      className={`cursor-pointer transition-colors ${
-                                        isSelected ? "bg-[#f1edec]" : "hover:bg-[#fafafa]"
-                                      }`}
-                                    >
-                                      <td className="py-3.5 px-6">
-                                        <div className="flex items-center gap-3">
-                                          <span className="text-[#5e5e5e] opacity-40">
-                                            <DragHandleIcon className="w-4 h-4" />
-                                          </span>
-                                          <div>
-                                            <div className="font-semibold text-[15px] text-[#141010] flex items-center gap-2">
-                                              <span>{cust.name}</span>
-                                              {cust.required && (
-                                                <span className="text-[10px] bg-red-100 text-red-800 px-1.5 py-0.5 rounded font-semibold">
-                                                  Required
-                                                </span>
-                                              )}
-                                            </div>
-                                            <p className="text-xs text-[#5e5e5e] mt-0.5">
-                                              Max choices: {cust.maxSelected || 1}
-                                            </p>
-                                          </div>
-                                        </div>
-                                      </td>
-                                      <td className="py-3.5 px-6">
-                                        <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-stone-100 text-stone-800">
-                                          {cust.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
-                                        </span>
-                                      </td>
-                                      <td className="py-3.5 px-6 text-right" onClick={(e) => e.stopPropagation()}>
-                                        <button
-                                          type="button"
-                                          onClick={(e) => handleDeleteCustomization(e, cust._id, cust.name)}
-                                          className="w-7 h-7 rounded-full hover:bg-red-50 text-[#5e5e5e] hover:text-red-600 inline-flex items-center justify-center transition cursor-pointer"
-                                          title="Delete Customization"
-                                        >
-                                          <CloseIcon className="w-3.5 h-3.5" />
-                                        </button>
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                              ) : (
-                                <tr>
-                                  <td colSpan={3} className="py-8 text-center text-xs text-[#5e5e5e]">
-                                    No customization groups yet. Click <strong>+ Add customization</strong> to create one.
-                                  </td>
-                                </tr>
-                              )}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      {/* Section 2: Choices for Selected Customization */}
-                      {activeCustomization && (
-                        <div className="p-6 space-y-4 bg-[#faf9f8]">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div>
-                              <h3 className="font-garamond text-[24px] text-[#141010] font-normal">
-                                Choices for '{activeCustomization.name}'
-                              </h3>
-                              <p className="text-xs text-[#5e5e5e] mt-0.5">
-                                Configure options and price modifiers for this customization group.
-                              </p>
-                            </div>
-                          </div>
-
-                          {/* Choices List */}
-                          <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm divide-y divide-[#e7e5e4]">
-                            {activeCustomization.items && activeCustomization.items.length > 0 ? (
-                              activeCustomization.items.map((opt: CustomizationOption) => (
-                                <div key={opt._id} className="p-3.5 flex items-center justify-between hover:bg-[#fdf8f7] transition">
-                                  <div className="flex items-center gap-3">
-                                    <span className="text-[#5e5e5e] opacity-40">
-                                      <DragHandleIcon className="w-4 h-4" />
-                                    </span>
-                                    <span className="font-semibold text-sm text-[#141010]">{opt.name}</span>
-                                  </div>
-                                  <div className="flex items-center gap-4">
-                                    <span className="font-semibold text-sm text-[#141010]">
-                                      {opt.price > 0 ? `+${currencySymbol}${(opt.price / 100).toFixed(2)}` : "Free"}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteChoice(opt._id)}
-                                      className="w-7 h-7 rounded-full hover:bg-red-50 text-[#5e5e5e] hover:text-red-600 flex items-center justify-center transition cursor-pointer"
-                                      title="Delete Option"
-                                    >
-                                      <CloseIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            ) : (
-                              <div className="p-6 text-center text-xs text-[#5e5e5e]">
-                                No choices added yet. Use the form below to add options.
-                              </div>
-                            )}
-
-                            {/* Add Choice Form */}
-                            <form onSubmit={handleAddChoiceSubmit} className="p-4 bg-[#fdf8f7] flex flex-col sm:flex-row items-center gap-3">
-                              <input
-                                type="text"
-                                required
-                                value={newChoiceName}
-                                onChange={(e) => setNewChoiceName(e.target.value)}
-                                placeholder="Choice name (e.g. Extra Cheese, Mild, Large)"
-                                className="flex-1 w-full bg-white border border-[#e7e5e4] rounded-lg px-3.5 py-2 text-xs text-[#141010] outline-none"
-                              />
-                              <div className="relative w-full sm:w-36">
-                                <span className="absolute left-3 top-2 text-xs font-semibold text-[#5e5e5e]">
-                                  {currencySymbol}
-                                </span>
-                                <input
-                                  type="number"
-                                  step="0.01"
-                                  value={newChoicePrice}
-                                  onChange={(e) => setNewChoicePrice(e.target.value)}
-                                  placeholder="0.00"
-                                  className="w-full bg-white border border-[#e7e5e4] rounded-lg pl-7 pr-3 py-2 text-xs text-[#141010] font-semibold outline-none"
-                                />
-                              </div>
-                              <button
-                                type="submit"
-                                disabled={isAddingChoice}
-                                className="btn-primary w-full sm:w-auto px-5 py-2 rounded-lg bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#252626] transition cursor-pointer shrink-0 disabled:opacity-50"
-                                style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                              >
-                                {isAddingChoice ? "Adding..." : "+ Add Choice"}
-                              </button>
-                            </form>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : activeCategory ? (
-                    /* ======================================================== */
-                    /* LEVEL 1 RIGHT PANEL: CATEGORY ITEMS TABLE                 */
-                    /* ======================================================== */
+                <div className="flex-1 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden min-h-[500px] shadow-xs">
+                  {activeCategory ? (
                     <>
-                      {/* Header with Title and Category Quick Control Group */}
-                      <div className="p-5 lg:p-6 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      {/* Category Items Header */}
+                      <div className="p-6 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex justify-between items-start">
                         <div>
-                          <div className="flex items-center gap-1.5 text-[#5e5e5e] font-sans text-[11px] uppercase tracking-wider mb-1 font-semibold">
-                            <span>{activeMenu.name}</span>
-                            <ChevronRightIcon className="w-3.5 h-3.5" />
-                            <span className="text-[#141010] font-bold">{activeCategory.name}</span>
-                          </div>
                           <h2 className="font-garamond text-[26px] md:text-[30px] font-normal text-[#141010] leading-tight">
-                            {activeCategory.name} ({categoryItems?.length || 0})
+                            Items in {activeCategory.name}
                           </h2>
-                          <p className="font-sans text-[13px] text-[#5e5e5e] mt-0.5">
-                            {activeItemsCount} active {activeItemsCount === 1 ? "item" : "items"} available in this category. Click an item to view customizations.
+                          <p className="text-[14px] text-[#5e5e5e] mt-1">
+                            {activeItemsCount} active items in this category.
                           </p>
                         </div>
 
-                        {/* Category Header Actions */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          {/* Publish Category Toggle Button */}
+                        {/* Add Item Dropdown Button */}
+                        <div className="relative">
                           <button
                             type="button"
-                            onClick={(e) => handleToggleCategory(e, activeCategory._id, activeCategory.published)}
-                            className={`h-9 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-                              activeCategory.published
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
-                                : "bg-stone-100 text-stone-600 border-stone-300 hover:bg-stone-200"
-                            }`}
-                            title={activeCategory.published ? "Category is Published (Visible Online)" : "Category is Draft (Hidden)"}
+                            onClick={() => setIsAddItemDropdownOpen(!isAddItemDropdownOpen)}
+                            style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                            className="h-10 px-5 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                           >
-                            <span>{activeCategory.published ? "✓ Published" : "○ Draft"}</span>
+                            <PlusIcon className="w-4 h-4 text-white" />
+                            <span className="text-white font-medium text-[15px]">Add Item</span>
+                            <ChevronDownIcon className="w-4 h-4 ml-1 text-white opacity-80" />
                           </button>
 
-                          {/* Edit Category Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingCategory(activeCategory);
-                              setCategoryName(activeCategory.name);
-                              setCategoryPublished(activeCategory.published);
-                              setIsAddCategoryOpen(true);
-                            }}
-                            className="w-9 h-9 rounded-full border border-[#e7e5e4] bg-white hover:bg-[#f1edec] flex items-center justify-center text-[#141010] transition-colors cursor-pointer shadow-sm"
-                            title="Edit Category Details"
-                          >
-                            <EditPencilIcon className="w-4 h-4" />
-                          </button>
-
-                          {/* Delete Category Button */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleDeleteCategory(e, activeCategory._id, activeCategory.name)}
-                            className="w-9 h-9 rounded-full border border-red-200 bg-white hover:bg-red-50 flex items-center justify-center text-red-600 transition-colors cursor-pointer shadow-sm"
-                            title="Delete Category"
-                          >
-                            <CloseIcon className="w-4 h-4" />
-                          </button>
-
-                          {/* Add Item Dropdown Button */}
-                          <div className="relative ml-1">
-                            <button
-                              type="button"
-                              onClick={() => setIsAddItemDropdownOpen(!isAddItemDropdownOpen)}
-                              className="btn-primary h-9 px-4 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-1.5 cursor-pointer"
-                              style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                            >
-                              <PlusIcon className="w-4 h-4" />
-                              <span style={{ color: "#ffffff" }}>Add item</span>
-                              <ChevronDownIcon className="w-3.5 h-3.5 ml-0.5 opacity-80" />
-                            </button>
-
-                            {/* Dropdown Popover */}
-                            {isAddItemDropdownOpen && (
-                              <div className="absolute right-0 top-full mt-2 w-48 rounded-xl bg-[#252626] text-white py-1.5 shadow-2xl z-40 border border-[#3a3a3a] font-sans divide-y divide-white/10">
-                                <button
-                                  type="button"
-                                  onClick={handleOpenAddExistingItemDrawer}
-                                  className="w-full text-center px-4 py-2.5 text-xs font-semibold hover:bg-white/10 transition cursor-pointer text-white"
-                                >
-                                  Add existing item
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={handleOpenAddNewItem}
-                                  className="w-full text-center px-4 py-2.5 text-xs font-semibold hover:bg-white/10 transition cursor-pointer text-white"
-                                >
-                                  Create new item
-                                </button>
-                              </div>
-                            )}
-                          </div>
+                          {/* Dropdown Popover */}
+                          {isAddItemDropdownOpen && (
+                            <div className="absolute right-0 top-full mt-2 w-56 rounded-xl bg-white border border-[#e7e5e4] shadow-xl py-1 z-50 divide-y divide-[#e7e5e4] font-sans">
+                              <button
+                                type="button"
+                                onClick={handleOpenAddNewItem}
+                                className="w-full text-left px-4 py-2.5 text-sm text-[#141010] hover:bg-[#fafafa] flex items-center gap-2 font-medium cursor-pointer"
+                              >
+                                <PlusIcon className="w-4 h-4" />
+                                <span>New Item</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleOpenAddExistingItemDrawer}
+                                className="w-full text-left px-4 py-2.5 text-sm text-[#141010] hover:bg-[#fafafa] flex items-center gap-2 font-medium cursor-pointer"
+                              >
+                                <CopyIcon className="w-4 h-4" />
+                                <span>Existing Item</span>
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* Items Table */}
-                      <div className="flex-1 overflow-x-auto">
+                      {/* Clean Items Table Matching Mockup */}
+                      <div className="flex-1 overflow-y-auto">
                         <table className="w-full text-left border-collapse font-sans">
-                          <thead>
-                            <tr className="border-b border-[#e7e5e4] text-[12px] font-semibold text-[#5e5e5e] bg-[#fcf5f4]">
-                              <th className="py-3.5 px-6 font-semibold">Item</th>
-                              <th className="py-3.5 px-6 font-semibold text-right">Price</th>
+                          <thead className="bg-white sticky top-0 border-b border-[#e7e5e4] z-10 text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                            <tr>
+                              <th className="w-12 px-4 py-3"></th>
+                              <th className="px-4 py-3">Item Details</th>
+                              <th className="px-4 py-3 w-32 text-right">Base Price</th>
+                              <th className="px-4 py-3 w-20 text-center">Status</th>
+                              <th className="w-16 px-4 py-3 text-right"></th>
                             </tr>
                           </thead>
-                          <tbody className="divide-y divide-[#e7e5e4] bg-white">
+                          <tbody className="text-[14px] text-[#1c1b1b]">
                             {categoryItems && categoryItems.length > 0 ? (
                               categoryItems.map(({ categoryItemId, item }, index) => {
                                 const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
@@ -1868,97 +3053,97 @@ export default function MenuPage() {
                                     onDragStart={(e) => handleItemDragStart(e, index)}
                                     onDragOver={(e) => e.preventDefault()}
                                     onDrop={(e) => handleItemDrop(e, index)}
-                                    className={`hover:bg-[#fdf8f7] transition-colors group select-none cursor-pointer ${
-                                      !item.isAvailable ? "opacity-70 bg-stone-50/50" : ""
-                                    }`}
                                     onClick={() => setSelectedItemId(item._id)}
+                                    className={`border-b border-[#e7e5e4] hover:bg-[#fafafa] transition-colors group select-none cursor-pointer ${
+                                      !item.isAvailable ? "opacity-60" : ""
+                                    }`}
+                                    title="Click to manage item customizations"
                                   >
-                                    {/* Item Column */}
-                                    <td className="py-3.5 px-6">
-                                      <div className="flex items-center gap-3.5">
-                                        <span
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="cursor-grab active:cursor-grabbing text-[#5e5e5e] opacity-0 group-hover:opacity-70 transition-opacity"
-                                        >
-                                          <DragHandleIcon className="w-4 h-4" />
-                                        </span>
+                                    {/* Drag Handle */}
+                                    <td className="px-4 py-3 text-center">
+                                      <span
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] opacity-0 group-hover:opacity-50 transition-opacity"
+                                      >
+                                        <DragHandleIcon className="w-4 h-4 mx-auto" />
+                                      </span>
+                                    </td>
 
-                                        {/* Circular Letter Avatar */}
-                                        <div className="w-10 h-10 rounded-full bg-[#f1edec] border border-[#e7e5e4] overflow-hidden shrink-0 flex items-center justify-center font-bold text-[#141010] text-sm">
+                                    {/* Item Details */}
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 rounded-lg bg-[#f1edec] border border-[#e7e5e4] overflow-hidden shrink-0 flex items-center justify-center font-bold text-[#141010] text-sm">
                                           {item.imageUrl ? (
                                             <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                                           ) : (
                                             <span>{initialLetter}</span>
                                           )}
                                         </div>
-
-                                        <div className="min-w-0">
-                                          <div className="flex items-center gap-2 flex-wrap">
-                                            <span className="font-semibold text-[15px] text-[#141010]">
-                                              {item.name}
-                                            </span>
-                                            {item.isVeg !== undefined && (
-                                              <span
-                                                className={`w-2.5 h-2.5 rounded-full inline-block border ${
-                                                  item.isVeg ? "bg-emerald-600 border-emerald-700" : "bg-red-600 border-red-700"
-                                                }`}
-                                                title={item.isVeg ? "Vegetarian" : "Non-Veg"}
-                                              />
-                                            )}
-                                            {item.isSpicy && <span title="Spicy">🌶️</span>}
-                                            {item.markAsBestseller && (
-                                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 text-[10px] font-semibold rounded">
-                                                Bestseller
-                                              </span>
-                                            )}
+                                        <div>
+                                          <p className="font-semibold text-[16px] text-[#141010] flex items-center gap-2">
+                                            <span>{item.name}</span>
                                             {!item.isAvailable && (
-                                              <span className="px-2 py-0.5 bg-stone-100 text-stone-600 text-[10px] font-medium rounded border border-stone-200">
-                                                Unavailable
+                                              <span className="inline-block px-1.5 py-0.5 bg-[#e6e1e1] text-[#5e5e5e] text-[10px] uppercase font-bold tracking-wider rounded">
+                                                Sold Out
                                               </span>
                                             )}
-                                          </div>
-                                          {item.description && (
-                                            <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-lg">
+                                          </p>
+                                          {item.description ? (
+                                            <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-xl">
                                               {item.description}
                                             </p>
+                                          ) : (
+                                            <p className="text-[#928c8a] text-[12px] italic mt-0.5">No description</p>
                                           )}
                                         </div>
                                       </div>
                                     </td>
 
-                                    {/* Price Column with Quick Actions on Hover */}
-                                    <td className="py-3.5 px-6 text-right font-medium text-[15px] text-[#141010] whitespace-nowrap">
-                                      <div className="flex items-center justify-end gap-3">
-                                        <span className="font-semibold">
-                                          {currencySymbol}{(item.price / 100).toFixed(2)}
-                                        </span>
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleOpenEditItem(item)}
-                                            className="w-7 h-7 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
-                                            title="Edit Item Details"
-                                          >
-                                            <EditPencilIcon className="w-3.5 h-3.5" />
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={() => handleDeleteItem(item._id, item.name)}
-                                            className="w-7 h-7 rounded-full hover:bg-red-50 flex items-center justify-center text-[#5e5e5e] hover:text-red-600 transition-colors cursor-pointer"
-                                            title="Delete Item"
-                                          >
-                                            <CloseIcon className="w-3.5 h-3.5" />
-                                          </button>
-                                        </div>
+                                    {/* Base Price */}
+                                    <td className="px-4 py-3 text-right font-medium text-[#141010] whitespace-nowrap">
+                                      {currencySymbol}{(item.price / 100).toFixed(2)}
+                                    </td>
+
+                                    {/* Status Toggle */}
+                                    <td className="px-4 py-3 text-center">
+                                      <div
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleItemAvailability(item._id, item.isAvailable);
+                                        }}
+                                        className={`w-8 h-4 rounded-full relative cursor-pointer inline-block transition-colors ${
+                                          item.isAvailable ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                        }`}
+                                      >
+                                        <div
+                                          className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
+                                            item.isAvailable ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                                          }`}
+                                        />
                                       </div>
+                                    </td>
+
+                                    {/* Edit Icon on Hover */}
+                                    <td className="px-4 py-3 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleOpenEditItem(item);
+                                        }}
+                                        className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] transition-colors inline-flex opacity-0 group-hover:opacity-100 cursor-pointer"
+                                        title="Edit Item Details"
+                                      >
+                                        <EditPencilIcon className="w-4 h-4 text-[#141010]" />
+                                      </button>
                                     </td>
                                   </tr>
                                 );
                               })
                             ) : (
                               <tr>
-                                <td colSpan={2} className="py-16 text-center text-[#5e5e5e] text-sm">
-                                  No items in this category yet. Click <strong>+ Add item</strong> to create one.
+                                <td colSpan={5} className="py-16 text-center text-[#5e5e5e] text-sm">
+                                  No items in this category yet. Click <strong>+ Add Item</strong> to create one.
                                 </td>
                               </tr>
                             )}
@@ -1967,167 +3152,13 @@ export default function MenuPage() {
                       </div>
                     </>
                   ) : (
-                    <div className="p-12 text-center text-[#5e5e5e] text-sm">
+                    <div className="p-16 text-center text-[#5e5e5e] text-sm">
                       Please select a category from the left panel.
                     </div>
                   )}
                 </div>
-              </div>
-              </>
+              </main>
             )}
-          </>
-        )}
-
-        {/* ---------------------------------------------------- */}
-        {/* SLIDE-OVER DRAWER: ADD CUSTOMIZATION                 */}
-        {/* ---------------------------------------------------- */}
-        {isAddCustomizationOpen && (
-          <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
-            <div className="h-full w-[480px] max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
-              <div>
-                <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
-                  <div>
-                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Add Customization</h2>
-                    <p className="text-xs text-[#5e5e5e] mt-0.5">Add add-ons or preparation options for {activeItem?.name}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setIsAddCustomizationOpen(false)}
-                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
-                  >
-                    <CloseIcon className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <form id="customization-form" onSubmit={handleSaveCustomizationSubmit} className="p-6 space-y-5 overflow-y-auto max-h-[calc(100vh-180px)]">
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Customization Name *</label>
-                    <input
-                      type="text"
-                      required
-                      value={custName}
-                      onChange={(e) => setCustName(e.target.value)}
-                      placeholder="e.g. Extra Cheese, Spice Level, Crust Type"
-                      className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Customization Type</label>
-                    <div className="grid grid-cols-2 gap-3">
-                      <button
-                        type="button"
-                        onClick={() => setCustType("AddOns")}
-                        className={`p-3 rounded-xl border text-center text-xs font-semibold transition cursor-pointer ${
-                          custType === "AddOns" ? "bg-[#141010] text-white border-[#141010]" : "bg-white text-[#141010] border-[#e7e5e4]"
-                        }`}
-                      >
-                        Add-Ons (Paid Extras)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCustType("Preparations")}
-                        className={`p-3 rounded-xl border text-center text-xs font-semibold transition cursor-pointer ${
-                          custType === "Preparations" ? "bg-[#141010] text-white border-[#141010]" : "bg-white text-[#141010] border-[#e7e5e4]"
-                        }`}
-                      >
-                        Preparations (Preferences)
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3.5 bg-white rounded-xl border border-[#e7e5e4]">
-                    <div>
-                      <span className="text-sm font-medium text-[#141010]">Mandatory Selection</span>
-                      <p className="text-[11px] text-[#5e5e5e]">Customer must choose an option before adding to cart</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setCustRequired(!custRequired)}
-                      className={`w-10 h-5 rounded-full relative transition-colors ${custRequired ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
-                    >
-                      <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${custRequired ? "right-0.5" : "left-0.5"}`} />
-                    </button>
-                  </div>
-
-                  {/* Options List */}
-                  <div className="space-y-3 pt-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Options / Items</label>
-                      <button
-                        type="button"
-                        onClick={() => setCustOptions([...custOptions, { name: "", price: "0.00" }])}
-                        className="text-xs text-[#141010] font-semibold hover:underline cursor-pointer flex items-center gap-1"
-                      >
-                        <PlusIcon className="w-3.5 h-3.5" /> Add Option
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {custOptions.map((opt, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <input
-                            type="text"
-                            required
-                            value={opt.name}
-                            onChange={(e) => {
-                              const newOpts = [...custOptions];
-                              newOpts[idx].name = e.target.value;
-                              setCustOptions(newOpts);
-                            }}
-                            placeholder="Option name (e.g. Cheddar Cheese)"
-                            className="flex-1 rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-xs text-[#141010] outline-none"
-                          />
-                          <div className="relative w-28 shrink-0">
-                            <span className="absolute left-2.5 top-2 text-[#5e5e5e] text-xs font-semibold">{currencySymbol}</span>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={opt.price}
-                              onChange={(e) => {
-                                const newOpts = [...custOptions];
-                                newOpts[idx].price = e.target.value;
-                                setCustOptions(newOpts);
-                              }}
-                              placeholder="0.00"
-                              className="w-full rounded-lg border border-[#e7e5e4] bg-white pl-6 pr-2 py-2 text-xs text-[#141010] font-medium outline-none"
-                            />
-                          </div>
-                          {custOptions.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setCustOptions(custOptions.filter((_, i) => i !== idx))}
-                              className="w-7 h-7 rounded-full hover:bg-red-50 text-[#5e5e5e] hover:text-red-600 flex items-center justify-center shrink-0 cursor-pointer"
-                            >
-                              <CloseIcon className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </form>
-              </div>
-
-              <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
-                <button
-                  type="button"
-                  onClick={() => setIsAddCustomizationOpen(false)}
-                  className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[15px] hover:bg-[#f1edec] transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="customization-form"
-                  disabled={isSavingCustomization}
-                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
-                >
-                  {isSavingCustomization ? "Saving..." : "Save Customization"}
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
@@ -2191,8 +3222,8 @@ export default function MenuPage() {
                   type="submit"
                   form="create-menu-form"
                   disabled={isCreatingMenu}
-                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                  className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
                   {isCreatingMenu ? "Creating..." : "Create Menu"}
                 </button>
@@ -2249,7 +3280,7 @@ export default function MenuPage() {
                           await setDefaultMenuMutation({ id: activeMenu._id });
                           setIsEditMenuOpen(false);
                         }}
-                        className="w-full py-2 px-3 text-xs font-medium text-[#141010] bg-[#f1edec] hover:bg-[#e7e5e4] rounded-lg transition"
+                        className="w-full py-2 px-3 text-xs font-medium text-[#141010] bg-[#f1edec] hover:bg-[#e7e5e4] rounded-lg transition cursor-pointer"
                       >
                         ⭐ Set as Default Menu
                       </button>
@@ -2263,10 +3294,9 @@ export default function MenuPage() {
                           if (!confirm(`Delete menu "${activeMenu.name}"?`)) return;
                           await deleteMenuMutation({ id: activeMenu._id });
                           setSelectedMenuId(null);
-                          setSelectedItemId(null);
                           setIsEditMenuOpen(false);
                         }}
-                        className="w-full py-2 px-3 text-xs font-medium text-red-700 bg-red-50 hover:bg-red-100 rounded-lg transition"
+                        className="w-full py-2 px-3 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
                       >
                         Delete Menu
                       </button>
@@ -2286,11 +3316,11 @@ export default function MenuPage() {
                 <button
                   type="submit"
                   form="edit-menu-form"
-                  disabled={isUpdatingMenu}
-                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  disabled={isSavingMenu}
+                  style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                  className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {isUpdatingMenu ? "Saving..." : "Save Changes"}
+                  {isSavingMenu ? "Saving..." : "Save Changes"}
                 </button>
               </div>
             </div>
@@ -2328,27 +3358,22 @@ export default function MenuPage() {
                       required
                       value={categoryName}
                       onChange={(e) => setCategoryName(e.target.value)}
-                      placeholder="e.g. Starters, Main Course, Drinks"
+                      placeholder="e.g. Starters, Desserts, Viral Food"
                       className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
                     />
                   </div>
 
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-sm font-medium text-[#141010]">Published on Menu</span>
-                    <button
-                      type="button"
-                      onClick={() => setCategoryPublished(!categoryPublished)}
-                      className={`w-10 h-5 rounded-full relative transition-colors ${
-                        categoryPublished ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"
-                      }`}
-                    >
-                      <div
-                        className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${
-                          categoryPublished ? "right-0.5" : "left-0.5"
-                        }`}
-                      />
-                    </button>
-                  </div>
+                  {editingCategory && (
+                    <div className="pt-4 border-t border-[#e7e5e4]">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenDeleteCategory(editingCategory)}
+                        className="w-full py-2 px-3 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                      >
+                        Delete Category
+                      </button>
+                    </div>
+                  )}
                 </form>
               </div>
 
@@ -2367,10 +3392,10 @@ export default function MenuPage() {
                   type="submit"
                   form="category-form"
                   disabled={isSavingCategory}
-                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                  className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingCategory ? "Saving..." : editingCategory ? "Save Changes" : "Add Category"}
+                  {isSavingCategory ? "Saving..." : editingCategory ? "Save Changes" : "Create Category"}
                 </button>
               </div>
             </div>
@@ -2378,114 +3403,83 @@ export default function MenuPage() {
         )}
 
         {/* ---------------------------------------------------- */}
-        {/* SLIDE-OVER DRAWER: ADD EXISTING ITEM                 */}
+        {/* SLIDE-OVER DRAWER: ADD EXISTING ITEM TO CATEGORY     */}
         {/* ---------------------------------------------------- */}
         {isAddExistingItemOpen && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
-            <aside className="w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl flex flex-col border-l border-[#e7e5e4] transform transition-transform duration-300 justify-between">
-              <div className="px-6 py-5 border-b border-[#e7e5e4] flex justify-between items-start bg-[#fdf8f7]">
-                <div>
-                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Add Existing Item</h2>
-                  <p className="text-[#5e5e5e] text-[13px] mt-1 font-sans">Add an item that already exists in your menu.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setIsAddExistingItemOpen(false)}
-                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
-                >
-                  <CloseIcon className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="flex-1 p-6 overflow-y-auto space-y-5">
-                {existingItemError && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                    {existingItemError}
+            <div className="h-full w-[450px] max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
+                  <div>
+                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Add Existing Item</h2>
+                    <p className="text-xs text-[#5e5e5e] mt-0.5">
+                      Attach an existing item from your catalog to <strong>{activeCategory?.name}</strong>.
+                    </p>
                   </div>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => setIsAddExistingItemOpen(false)}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
+                </div>
 
-                <div className="relative pt-2">
-                  <label className="absolute top-0 left-3 bg-[#fdf8f7] px-1 text-[10px] font-semibold text-[#5e5e5e] z-10 uppercase tracking-wider">
-                    Search any item from menu
-                  </label>
-                  <div className="relative flex items-center border border-[#e7e5e4] rounded-lg bg-[#fafafa] focus-within:border-[#141010] focus-within:ring-1 focus-within:ring-[#141010] transition-all">
-                    <input
-                      className="w-full bg-transparent border-none py-3 pl-4 pr-10 text-[#141010] placeholder:text-[#928c8a] focus:ring-0 font-sans text-[15px] outline-none"
-                      style={{ backgroundColor: "transparent", color: "#141010" }}
-                      placeholder="Search..."
-                      type="text"
-                      value={existingItemSearchQuery}
-                      onChange={(e) => setExistingItemSearchQuery(e.target.value)}
-                      autoFocus
-                    />
-                    <div className="absolute right-3 text-[#5e5e5e]">
-                      <ChevronDownIcon className="w-4 h-4" />
+                <div className="p-4 border-b border-[#e7e5e4] bg-white shrink-0">
+                  <input
+                    type="text"
+                    value={existingItemSearchQuery}
+                    onChange={(e) => setExistingItemSearchQuery(e.target.value)}
+                    placeholder="Search catalog by name or category..."
+                    className="w-full rounded-lg border border-[#e7e5e4] bg-[#f7f3f2] px-3.5 py-2 text-sm text-[#141010] focus:bg-white focus:border-[#141010] outline-none"
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-2">
+                  {existingItemError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                      {existingItemError}
                     </div>
-                  </div>
-                </div>
+                  )}
 
-                <div className="border border-[#e7e5e4] rounded-lg bg-white overflow-hidden shadow-sm max-h-64 overflow-y-auto">
-                  {filteredExistingItems && filteredExistingItems.length > 0 ? (
-                    <ul className="divide-y divide-[#e7e5e4]">
-                      {filteredExistingItems.map((item) => {
-                        const isCurrentSelected = selectedExistingItem?._id === item._id;
-                        return (
-                          <li
-                            key={item._id}
-                            onClick={() => setSelectedExistingItem(item)}
-                            className={`p-3.5 hover:bg-[#fafafa] cursor-pointer transition-colors ${
-                              isCurrentSelected ? "bg-[#f1edec]" : ""
-                            }`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <div className="text-[15px] text-[#141010] font-medium">{item.name}</div>
-                                {item.categoryName && (
-                                  <div className="text-[11px] text-[#5e5e5e] mt-0.5 italic">{item.categoryName}</div>
-                                )}
-                              </div>
-                              <div className="text-sm font-semibold text-[#141010]">{currencySymbol}{item.displayPrice}</div>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                  {!existingItemSearchQuery.trim() ? (
+                    <div className="py-12 text-center text-xs text-[#5e5e5e]">
+                      Type in the search box above to find items in your catalog.
+                    </div>
+                  ) : filteredExistingItems && filteredExistingItems.length > 0 ? (
+                    filteredExistingItems.map((item) => {
+                      const isSelected = selectedExistingItem?._id === item._id;
+                      return (
+                        <div
+                          key={item._id}
+                          onClick={() => setSelectedExistingItem(item)}
+                          className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+                            isSelected
+                              ? "border-[#141010] bg-[#f1edec] ring-1 ring-[#141010]"
+                              : "border-[#e7e5e4] bg-white hover:bg-[#fafafa]"
+                          }`}
+                        >
+                          <div>
+                            <p className="font-semibold text-sm text-[#141010]">{item.name}</p>
+                            <p className="text-xs text-[#5e5e5e] mt-0.5">
+                              {item.categoryName ? `In category: ${item.categoryName}` : "Catalog item"}
+                            </p>
+                          </div>
+                          <span className="font-medium text-sm text-[#141010]">
+                            {currencySymbol}{(item.price / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      );
+                    })
                   ) : (
-                    <div className="p-4 text-center text-xs text-[#5e5e5e]">
-                      No matching items found.
+                    <div className="py-12 text-center text-xs text-[#5e5e5e]">
+                      No existing items found matching "{existingItemSearchQuery}".
                     </div>
                   )}
                 </div>
-
-                {selectedExistingItem && (
-                  <div className="mt-4">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-2">
-                      Selected item
-                    </h3>
-                    <div className="flex items-center justify-between p-3.5 border border-[#e7e5e4] rounded-lg bg-[#f1edec]">
-                      <div className="flex items-center gap-2.5">
-                        <span className="text-emerald-700 font-bold text-sm">✓</span>
-                        <div>
-                          <span className="text-[15px] font-medium text-[#141010]">{selectedExistingItem.name}</span>
-                          <span className="text-[#5e5e5e] ml-2 font-semibold text-sm">
-                            {currencySymbol}{selectedExistingItem.displayPrice}
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSelectedExistingItem(null)}
-                        className="text-[#5e5e5e] hover:text-red-600 transition-colors p-1 cursor-pointer"
-                        title="Deselect"
-                      >
-                        <CloseIcon className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans">
+              <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsAddExistingItemOpen(false)}
@@ -2497,15 +3491,1065 @@ export default function MenuPage() {
                   type="button"
                   onClick={handleAddExistingItemSubmit}
                   disabled={!selectedExistingItem || isAddingExistingItem}
-                  className="btn-primary h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                  className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {isAddingExistingItem ? "Adding..." : "Add Item"}
+                  {isAddingExistingItem ? "Adding..." : "Add to Category"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* SLIDE-OVER DRAWER: ADD EXISTING CUSTOMIZATION        */}
+        {/* ---------------------------------------------------- */}
+        {isAddExistingCustomizationOpen && (
+          <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
+            <div className="relative w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl border-l border-[#e7e5e4] flex flex-col z-10 justify-between">
+              
+              <div>
+                <div className="p-6 border-b border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7]">
+                  <div>
+                    <h3 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+                      Add Existing Customization
+                    </h3>
+                    <p className="text-xs text-[#5e5e5e] mt-0.5">
+                      Attach an existing customization from your catalog to <strong>{activeItem?.name}</strong>.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddExistingCustomizationOpen(false)}
+                    className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  >
+                    <CloseIcon className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="p-4 border-b border-[#e7e5e4] bg-white shrink-0">
+                  <input
+                    type="text"
+                    value={existingCustomizationSearchQuery}
+                    onChange={(e) => setExistingCustomizationSearchQuery(e.target.value)}
+                    placeholder="Search customization by name, type, or item..."
+                    className="w-full rounded-lg border border-[#e7e5e4] bg-[#f7f3f2] px-3.5 py-2 text-sm text-[#141010] focus:bg-white focus:border-[#141010] outline-none"
+                  />
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-2 max-h-[calc(100vh-220px)]">
+                  {existingCustomizationError && (
+                    <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                      {existingCustomizationError}
+                    </div>
+                  )}
+
+                  {!existingCustomizationSearchQuery.trim() ? (
+                    <div className="py-12 text-center text-xs text-[#5e5e5e]">
+                      Type in the search box above to find customizations from your catalog.
+                    </div>
+                  ) : filteredExistingCustomizations && filteredExistingCustomizations.length > 0 ? (
+                    filteredExistingCustomizations.map((cust: any) => {
+                      const isSelected = selectedExistingCustomization?._id === cust._id;
+                      return (
+                        <div
+                          key={cust._id}
+                          onClick={() => setSelectedExistingCustomization(cust)}
+                          className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition select-none ${
+                            isSelected
+                              ? "border-[#141010] bg-[#f1edec] ring-1 ring-[#141010]"
+                              : "border-[#e7e5e4] bg-white hover:bg-[#fafafa]"
+                          }`}
+                        >
+                          <div>
+                            <p className="font-semibold text-sm text-[#141010]">{cust.name}</p>
+                            <p className="text-xs text-[#5e5e5e] mt-0.5">
+                              {cust.itemName ? `${cust.itemName} (${cust.choiceCount} choices)` : `${cust.choiceCount} choices`}
+                            </p>
+                          </div>
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#f1edec] text-[#5e5e5e] border border-[#e7e5e4]">
+                            {cust.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                          </span>
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <div className="py-12 text-center text-xs text-[#5e5e5e]">
+                      No existing customizations found matching "{existingCustomizationSearchQuery}".
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] flex justify-end gap-3 font-sans shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setIsAddExistingCustomizationOpen(false)}
+                  className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[15px] hover:bg-[#f1edec] transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddExistingCustomizationSubmit}
+                  disabled={!selectedExistingCustomization || isCopyingCustomization}
+                  style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                  className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isCopyingCustomization ? "Adding..." : "Add to Item"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* SLIDE-OVER DRAWER: ADD / EDIT CUSTOMIZATION GROUP    */}
+        {/* ---------------------------------------------------- */}
+        {(isAddCustomizationOpen || isEditCustomizationOpen) && (
+          <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
+            <div className="relative w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl border-l border-[#e7e5e4] flex flex-col z-10 justify-between overflow-hidden">
+              
+              {/* Drawer Header */}
+              <div className="p-6 border-b border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7] shrink-0">
+                <div>
+                  <h3 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+                    {isEditCustomizationOpen ? "Edit Customization" : "Add Customization"}
+                  </h3>
+                  <p className="text-xs text-[#5e5e5e] mt-0.5">
+                    Configure customization group for <strong>{activeItem?.name}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddCustomizationOpen(false);
+                    setIsEditCustomizationOpen(false);
+                    setEditingCustomization(null);
+                  }}
+                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition cursor-pointer"
+                >
+                  <CloseIcon className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Drawer Content Form (Scrollable) */}
+              <form id="customization-form" onSubmit={handleSaveCustomizationSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+                {/* Customization Type Tabs */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e] mb-2">
+                    Type <span className="text-red-500">*</span>
+                  </label>
+                  <div className="grid grid-cols-2 p-1 bg-[#f1edec] rounded-lg border border-[#e7e5e4]">
+                    <button
+                      type="button"
+                      onClick={() => setCustomizationType("AddOns")}
+                      className={`py-2 text-xs font-semibold rounded-md transition cursor-pointer text-center ${
+                        customizationType === "AddOns"
+                          ? "bg-white text-[#141010] shadow-sm font-bold"
+                          : "text-[#5e5e5e] hover:text-[#141010]"
+                      }`}
+                    >
+                      Add-Ons
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomizationType("Preparations")}
+                      className={`py-2 text-xs font-semibold rounded-md transition cursor-pointer text-center ${
+                        customizationType === "Preparations"
+                          ? "bg-white text-[#141010] shadow-sm font-bold"
+                          : "text-[#5e5e5e] hover:text-[#141010]"
+                      }`}
+                    >
+                      Preparations
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[#5e5e5e] mt-1.5">
+                    {customizationType === "AddOns"
+                      ? "Add-ons can have prices (e.g. Extra Cheese, Truffle Dip)."
+                      : "Preparation instructions are kitchen notes (e.g. Cooking Style, Mild/Spicy)."}
+                  </p>
+                </div>
+
+                {/* Customization Name */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                    Customization Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={customizationName}
+                    onChange={(e) => setCustomizationName(e.target.value)}
+                    placeholder="e.g. Cheese, Spice Level, Sauce, Size"
+                    className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none font-medium"
+                  />
+                </div>
+
+                {/* Description / Note */}
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                    Description / Note (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={customizationDesc}
+                    onChange={(e) => setCustomizationDesc(e.target.value)}
+                    placeholder="e.g. Customer portion or spice level preference"
+                    className="w-full rounded-lg border border-[#e7e5e4] bg-white px-3 py-2 text-sm text-[#141010] focus:border-[#141010] focus:ring-0 outline-none"
+                  />
+                </div>
+
+                {/* Selection Rules Box */}
+                <div className="border border-[#e7e5e4] rounded-xl p-4 bg-white space-y-4 shadow-none">
+                  <span className="text-xs font-bold text-[#141010] uppercase tracking-wider block">
+                    Selection Rules
+                  </span>
+
+                  {/* Required Selection Toggle */}
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-medium text-[#141010] block">Required Selection</span>
+                      <span className="text-[11px] text-[#5e5e5e]">Customer must select at least 1 option</span>
+                    </div>
+                    <div
+                      onClick={() => setCustomizationRequired(!customizationRequired)}
+                      className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
+                        customizationRequired ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                      }`}
+                    >
+                      <div
+                        className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
+                          customizationRequired ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                        }`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Maximum Selections */}
+                  <div className="flex items-center justify-between pt-3 border-t border-[#e7e5e4]">
+                    <div>
+                      <span className="text-xs font-medium text-[#141010] block">Maximum selections allowed</span>
+                      <span className="text-[11px] text-[#5e5e5e]">Limit how many customization items can be chosen</span>
+                    </div>
+                    <div className="flex items-center border border-[#e7e5e4] rounded-lg bg-white overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setCustomizationMaxSelected(Math.max(1, customizationMaxSelected - 1))}
+                        className="px-2.5 py-1 text-[#5e5e5e] hover:bg-[#f1edec] border-r border-[#e7e5e4] cursor-pointer"
+                      >
+                        -
+                      </button>
+                      <span className="px-3 text-xs font-bold text-[#141010]">{customizationMaxSelected}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCustomizationMaxSelected(customizationMaxSelected + 1)}
+                        className="px-2.5 py-1 text-[#5e5e5e] hover:bg-[#f1edec] border-l border-[#e7e5e4] cursor-pointer"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              {/* Drawer Footer */}
+              <div className="p-6 border-t border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7] shrink-0 font-sans">
+                {isEditCustomizationOpen ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditCustomizationOpen(false);
+                      setDeletingCustomizationId(editingCustomization?._id);
+                      setIsDeleteCustomizationOpen(true);
+                    }}
+                    className="text-xs text-red-600 hover:text-red-700 font-semibold cursor-pointer"
+                  >
+                    Delete this customization
+                  </button>
+                ) : <div />}
+
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddCustomizationOpen(false);
+                      setIsEditCustomizationOpen(false);
+                      setEditingCustomization(null);
+                    }}
+                    className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[14px] hover:bg-[#f1edec] transition cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    form="customization-form"
+                    disabled={isSavingCustomization}
+                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                    className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingCustomization ? "Saving..." : isEditCustomizationOpen ? "Save changes" : "Create customization"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* SLIDE-OVER DRAWER: ADD / EDIT CHOICE (OPTION)        */}
+        {/* ---------------------------------------------------- */}
+        {(isAddChoiceOpen || isEditChoiceOpen) && (
+          <div className="fixed inset-0 z-50 overflow-hidden font-sans">
+            {/* Backdrop */}
+            <div
+              className="fixed inset-0 bg-neutral-900/40 backdrop-blur-[1px] transition-opacity"
+              onClick={() => {
+                setIsAddChoiceOpen(false);
+                setIsEditChoiceOpen(false);
+                setEditingChoice(null);
+              }}
+            />
+
+            {/* Right Drawer */}
+            <aside
+              className="fixed inset-y-0 right-0 w-full max-w-md bg-white shadow-2xl z-50 flex flex-col border-l border-neutral-200 transition-transform duration-300 ease-out"
+              data-purpose="add-choice-drawer"
+            >
+              {/* Drawer Header */}
+              <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between shrink-0 bg-white">
+                <h2 className="text-base font-bold text-neutral-900 tracking-tight">
+                  {isEditChoiceOpen
+                    ? `Edit choice in "${activeCustomization?.name || "Customization"}"`
+                    : `Add choice to "${activeCustomization?.name || "Customization"}"`}
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddChoiceOpen(false);
+                    setIsEditChoiceOpen(false);
+                    setEditingChoice(null);
+                  }}
+                  className="p-1.5 text-neutral-400 hover:text-neutral-700 rounded-md hover:bg-neutral-100 transition-colors cursor-pointer"
+                  title="Close drawer"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Drawer Form Scrollable Body */}
+              <form
+                id="choice-form"
+                onSubmit={handleSaveChoiceSubmit}
+                className="flex-1 overflow-y-auto px-6 py-5 space-y-6"
+              >
+                {/* Field: Choice Name */}
+                <div className="space-y-1.5" data-purpose="field-choice-name">
+                  <label className="block text-xs font-semibold text-neutral-700" htmlFor="choice-name">
+                    Choice name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="choice-name"
+                    type="text"
+                    required
+                    value={choiceName}
+                    onChange={(e) => setChoiceName(e.target.value)}
+                    placeholder="e.g. Extra Cheese"
+                    className="block w-full rounded-md border border-neutral-300 text-xs px-3 py-2 text-neutral-900 placeholder-neutral-400 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
+                  />
+                </div>
+
+                {/* Field: Additional Price */}
+                <div className="space-y-1.5" data-purpose="field-price">
+                  <label className="block text-xs font-semibold text-neutral-700" htmlFor="choice-price">
+                    Additional price ({currencySymbol}) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative rounded-md shadow-xs">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                      <span className="text-neutral-500 text-xs font-medium">{currencySymbol}</span>
+                    </div>
+                    <input
+                      id="choice-price"
+                      type="number"
+                      step="0.01"
+                      required
+                      value={choicePrice}
+                      onChange={(e) => setChoicePrice(e.target.value)}
+                      placeholder="0.00"
+                      className="block w-full rounded-md border border-neutral-300 pl-7 text-xs py-2 text-neutral-900 placeholder-neutral-400 focus:border-neutral-900 focus:ring-neutral-900 outline-none"
+                    />
+                  </div>
+                  <p className="text-[11px] text-neutral-500 leading-tight">
+                    Additional amount added to the item's base price. (Add 0 for free item)
+                  </p>
+                </div>
+
+                {/* Advanced Details Collapsible (Accordion) */}
+                <div className="border-t border-neutral-200 pt-3" data-purpose="advanced-details-accordion">
+                  <button
+                    type="button"
+                    onClick={() => setIsChoiceAdvancedOpen(!isChoiceAdvancedOpen)}
+                    className="w-full flex items-center justify-between py-1 text-xs font-semibold text-neutral-900 select-none cursor-pointer"
+                  >
+                    <span className="flex items-center">
+                      <svg
+                        className={`w-3.5 h-3.5 mr-1 text-neutral-500 transform transition-transform duration-200 ${
+                          isChoiceAdvancedOpen ? "rotate-90" : ""
+                        }`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                      Advanced details
+                    </span>
+                    <span className="text-[10px] text-neutral-400 font-normal uppercase tracking-wider">
+                      {isChoiceAdvancedOpen ? "Configured" : "Optional"}
+                    </span>
+                  </button>
+
+                  {/* Advanced Inner Inputs */}
+                  {isChoiceAdvancedOpen && (
+                    <div className="mt-4 space-y-4 pl-4 border-l-2 border-neutral-100">
+                      {/* Description */}
+                      <div className="space-y-1">
+                        <label className="block text-[11px] font-medium text-neutral-700" htmlFor="adv-desc">
+                          Description (Optional)
+                        </label>
+                        <textarea
+                          id="adv-desc"
+                          rows={2}
+                          value={choiceDescription}
+                          onChange={(e) => setChoiceDescription(e.target.value)}
+                          placeholder="Short description for receipt or menu summary..."
+                          className="block w-full rounded-md border border-neutral-300 text-xs text-neutral-900 placeholder-neutral-400 focus:border-neutral-900 focus:ring-neutral-900 p-2.5 outline-none shadow-xs"
+                        />
+                      </div>
+
+                      {/* Tax Checkbox & Calculation Engine */}
+                      <div className="space-y-3 pt-1">
+                        <div className="flex items-start">
+                          <div className="flex h-5 items-center">
+                            <input
+                              id="is-taxable"
+                              type="checkbox"
+                              checked={choiceIsGst}
+                              onChange={(e) => setChoiceIsGst(e.target.checked)}
+                              className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
+                            />
+                          </div>
+                          <div className="ml-2.5 text-xs">
+                            <label className="font-medium text-neutral-700 cursor-pointer" htmlFor="is-taxable">
+                              Tax applicable
+                            </label>
+                            <p className="text-[11px] text-neutral-400">Include in regular item tax calculations</p>
+                          </div>
+                        </div>
+
+                        {choiceIsGst && (
+                          <div className="space-y-3 pl-6 pt-1">
+                            <div className="space-y-1">
+                              <label className="block text-[11px] font-medium text-neutral-600">Tax Group / Rate</label>
+                              <div className="relative">
+                                <select
+                                  value={choiceSelectedTaxGroupId}
+                                  onChange={(e) => setChoiceSelectedTaxGroupId(e.target.value)}
+                                  className="w-full bg-white border border-neutral-300 rounded-md px-3 py-1.5 appearance-none focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-900 text-xs font-medium shadow-xs"
+                                >
+                                  {taxGroups && taxGroups.length > 0 ? (
+                                    taxGroups.map((tg) => (
+                                      <option key={tg._id} value={tg._id}>
+                                        {tg.name} {tg.isDefault ? "⭐ (Default)" : ""}
+                                      </option>
+                                    ))
+                                  ) : (
+                                    <option value="">Default Store Tax</option>
+                                  )}
+                                </select>
+                                <ChevronDownIcon className="absolute right-2.5 top-2.5 w-3.5 h-3.5 text-neutral-500 pointer-events-none" />
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="block text-[11px] font-medium text-neutral-600">Tax Calculation Mode</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => setChoiceTaxMode("inclusive")}
+                                  className={`py-1.5 px-2 text-xs font-medium rounded-md border text-center transition-all cursor-pointer ${
+                                    choiceTaxMode === "inclusive"
+                                      ? "bg-neutral-900 text-white border-neutral-900 shadow-xs font-semibold"
+                                      : "bg-white text-neutral-600 border-neutral-300 hover:bg-neutral-50"
+                                  }`}
+                                >
+                                  Tax Inclusive
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setChoiceTaxMode("exclusive")}
+                                  className={`py-1.5 px-2 text-xs font-medium rounded-md border text-center transition-all cursor-pointer ${
+                                    choiceTaxMode === "exclusive"
+                                      ? "bg-neutral-900 text-white border-neutral-900 shadow-xs font-semibold"
+                                      : "bg-white text-neutral-600 border-neutral-300 hover:bg-neutral-50"
+                                  }`}
+                                >
+                                  Tax Exclusive
+                                </button>
+                              </div>
+                            </div>
+
+                            {choiceTaxBreakdown && (
+                              <div className="p-2.5 rounded-md bg-neutral-50 border border-neutral-200 space-y-1 text-[11px]">
+                                <div className="flex items-center justify-between font-semibold text-neutral-900 border-b border-neutral-200 pb-1">
+                                  <span>Tax Breakdown ({choiceTaxBreakdown.totalRate}%):</span>
+                                  <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                    {choiceTaxBreakdown.mode === "inclusive" ? "Inclusive" : "Exclusive"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between text-neutral-500">
+                                  <span>Base:</span>
+                                  <span className="font-medium text-neutral-900">
+                                    {currencySymbol}{choiceTaxBreakdown.basePrice}
+                                  </span>
+                                </div>
+                                {choiceTaxBreakdown.components.map((c, idx) => (
+                                  <div key={idx} className="flex justify-between text-neutral-500">
+                                    <span>• {c.name} ({c.rate}%):</span>
+                                    <span className="font-medium text-neutral-900">+{currencySymbol}{c.amount}</span>
+                                  </div>
+                                ))}
+                                <div className="flex justify-between text-neutral-900 font-bold pt-1 border-t border-neutral-200">
+                                  <span>Total Customer Pays:</span>
+                                  <span>{currencySymbol}{choiceTaxBreakdown.finalPrice}</span>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Show Quantity */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-neutral-700">Show quantity</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={choiceShowQuantity}
+                            onClick={() => setChoiceShowQuantity(!choiceShowQuantity)}
+                            className={`${
+                              choiceShowQuantity ? "bg-neutral-900" : "bg-neutral-200"
+                            } relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`${
+                                choiceShowQuantity ? "translate-x-3" : "translate-x-0"
+                              } pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+                            />
+                          </button>
+                        </div>
+                        {choiceShowQuantity && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={choiceQuantity}
+                              onChange={(e) => setChoiceQuantity(e.target.value)}
+                              placeholder="Quantity (e.g. 50)"
+                              className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
+                            />
+                            <select
+                              value={choiceQuantityUnit}
+                              onChange={(e) => setChoiceQuantityUnit(e.target.value)}
+                              className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
+                            >
+                              <option value="g">gm (Grams)</option>
+                              <option value="ml">ml (Millilitres)</option>
+                              <option value="pcs">pcs (Pieces)</option>
+                              <option value="portion">portion</option>
+                              <option value="oz">oz (Ounces)</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Show Calories */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-neutral-700">Show calorie value</span>
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={choiceShowCalorie}
+                            onClick={() => setChoiceShowCalorie(!choiceShowCalorie)}
+                            className={`${
+                              choiceShowCalorie ? "bg-neutral-900" : "bg-neutral-200"
+                            } relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`${
+                                choiceShowCalorie ? "translate-x-3" : "translate-x-0"
+                              } pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
+                            />
+                          </button>
+                        </div>
+                        {choiceShowCalorie && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="number"
+                              value={choiceCalorie}
+                              onChange={(e) => setChoiceCalorie(e.target.value)}
+                              placeholder="Calories (e.g. 150)"
+                              className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
+                            />
+                            <select
+                              value={choiceCalorieMetric}
+                              onChange={(e) => setChoiceCalorieMetric(e.target.value)}
+                              className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
+                            >
+                              <option value="kcal">kcal</option>
+                              <option value="cal">cal</option>
+                            </select>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Dietary Type */}
+                      <div className="space-y-1.5">
+                        <span className="block text-[11px] font-medium text-neutral-700">Dietary classification</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {availableItemTypes.map((type) => {
+                            const isSelected =
+                              choiceDietaryType === type.id ||
+                              choiceDietaryType.toLowerCase() === type.name.toLowerCase() ||
+                              (choiceDietaryType === "veg" && type.name.toLowerCase() === "vegetarian");
+                            return (
+                              <button
+                                key={type.id}
+                                type="button"
+                                onClick={() => setChoiceDietaryType(type.id)}
+                                className={`inline-flex items-center px-2.5 py-1 rounded text-xs transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? "font-semibold bg-neutral-900 text-white shadow-xs"
+                                    : "font-medium bg-white text-neutral-600 border border-neutral-200 hover:bg-neutral-50"
+                                }`}
+                              >
+                                <span className="mr-1.5">{type.icon}</span>
+                                {type.label}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </form>
+
+              {/* Drawer Sticky Footer Actions */}
+              <div
+                className="px-6 py-4 border-t border-neutral-200 bg-neutral-50 flex items-center justify-end space-x-3 shrink-0"
+                data-purpose="drawer-footer"
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddChoiceOpen(false);
+                    setIsEditChoiceOpen(false);
+                    setEditingChoice(null);
+                  }}
+                  className="px-4 py-2 border border-neutral-300 text-xs font-semibold rounded-md text-neutral-700 bg-white hover:bg-neutral-100 transition-colors shadow-xs cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="choice-form"
+                  disabled={isSavingChoice}
+                  className="px-4 py-2 border border-transparent text-xs font-semibold rounded-md shadow-xs text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingChoice ? "Saving..." : isEditChoiceOpen ? "Save choice" : "Save choice"}
                 </button>
               </div>
             </aside>
           </div>
         )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: CHANGE UNAVAILABILITY (PREST DESIGN)          */}
+        {/* ---------------------------------------------------- */}
+        {isUnavailabilityModalOpen && targetUnavailabilityItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isSavingUnavailability) {
+                  setIsUnavailabilityModalOpen(false);
+                  setTargetUnavailabilityItem(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col z-10">
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-gray-900 tracking-tight">
+                    {unavailabilityTargetType === "choice" ? "Change unavailability" : "Change unavailability"}
+                  </h3>
+                  <div className="relative group inline-flex items-center">
+                    <button
+                      type="button"
+                      className="text-gray-400 hover:text-gray-700 transition p-0.5 rounded cursor-pointer"
+                    >
+                      <InfoIcon className="w-4 h-4 text-gray-400 group-hover:text-gray-700 transition-colors" />
+                    </button>
+                    {/* Downward Tooltip with arrow */}
+                    <div className="absolute left-0 top-full mt-2 hidden group-hover:flex flex-col w-64 p-3 bg-neutral-900 text-white rounded-lg shadow-xl z-50 pointer-events-none transition-all">
+                      <div className="absolute -top-1 left-2 w-2 h-2 bg-neutral-900 rotate-45" />
+                      <span className="font-bold text-xs text-white">
+                        {unavailabilityTargetType === "choice" ? "Customization Item Unavailability" : "Item Unavailability"}
+                      </span>
+                      <span className="text-[11px] text-gray-300 leading-relaxed mt-1">
+                        {unavailabilityTargetType === "choice"
+                          ? "Temporarily hide this customization item from your online store and customer ordering for a specific duration or shift."
+                          : "Temporarily hide this item from your online store and customer ordering for a specific duration or shift."}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isSavingUnavailability) {
+                      setIsUnavailabilityModalOpen(false);
+                      setTargetUnavailabilityItem(null);
+                    }
+                  }}
+                  className="text-gray-400 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100 transition cursor-pointer"
+                >
+                  <CloseIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body Content */}
+              <div className="p-6 space-y-6 bg-white">
+                {/* Item Price Box */}
+                <div className="border border-gray-200 rounded-lg px-4 py-3.5 flex items-center justify-between bg-white shadow-xs">
+                  <span className="text-sm font-bold text-gray-900 truncate pr-2">
+                    {targetUnavailabilityItem.name}
+                  </span>
+                  <span className="text-sm font-semibold text-gray-900 shrink-0">
+                    {unavailabilityTargetType === "choice"
+                      ? targetUnavailabilityItem.price > 0
+                        ? `+${currencySymbol}${(targetUnavailabilityItem.price / 100).toFixed(2)}`
+                        : `${currencySymbol}0.00 (Free)`
+                      : `${currencySymbol}${(targetUnavailabilityItem.price / 100).toFixed(0)}`}
+                  </span>
+                </div>
+
+                {/* Switch Row */}
+                <div
+                  onClick={() => setUnavailabilityToggle(!unavailabilityToggle)}
+                  className="flex items-center justify-between pt-1 cursor-pointer select-none"
+                >
+                  <span className="text-sm font-bold text-gray-900">
+                    {unavailabilityTargetType === "choice"
+                      ? "Make this customization item unavailable"
+                      : "Make this item unavailable"}
+                  </span>
+                  <div
+                    className={`w-10 h-5 rounded-full relative transition-colors ${
+                      unavailabilityToggle ? "bg-neutral-800" : "bg-gray-300"
+                    }`}
+                  >
+                    <div
+                      className={`absolute top-[2px] w-4 h-4 bg-white rounded-full transition-transform ${
+                        unavailabilityToggle ? "right-[2px]" : "left-[2px]"
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                {/* Unavailability Duration */}
+                {unavailabilityToggle && (
+                  <div className="space-y-2 pt-1">
+                    <label className="block text-xs font-semibold text-gray-500">
+                      Unavailability duration
+                    </label>
+                    <div className="grid grid-cols-4 border border-gray-200 rounded-lg overflow-hidden bg-white text-xs divide-x divide-gray-200">
+                      {[
+                        { id: "12", label: "12 Hours" },
+                        { id: "24", label: "24 Hours" },
+                        { id: "48", label: "48 Hours" },
+                        { id: "custom", label: "Custom" },
+                      ].map((dur) => (
+                        <button
+                          key={dur.id}
+                          type="button"
+                          onClick={() => setUnavailabilityDuration(dur.id as any)}
+                          className={`py-2.5 px-2 text-center transition cursor-pointer ${
+                            unavailabilityDuration === dur.id
+                              ? "bg-gray-100 text-gray-900 font-bold shadow-xs"
+                              : "text-gray-600 hover:bg-gray-50 font-medium"
+                          }`}
+                        >
+                          {dur.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {unavailabilityDuration === "custom" && (
+                      <div className="pt-2">
+                        <label className="block text-[11px] font-semibold text-gray-500 mb-1">
+                          Custom Duration (Hours)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={customDurationHours}
+                          onChange={(e) => setCustomDurationHours(e.target.value)}
+                          placeholder="e.g. 72"
+                          className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:border-black outline-none"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsUnavailabilityModalOpen(false);
+                      setTargetUnavailabilityItem(null);
+                    }}
+                    className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-lg text-xs transition text-center cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveUnavailabilityConfirm}
+                    disabled={isSavingUnavailability}
+                    className="w-full py-2.5 px-4 bg-neutral-700 hover:bg-neutral-800 text-white font-semibold rounded-lg text-xs shadow-sm transition text-center cursor-pointer disabled:opacity-50"
+                  >
+                    {isSavingUnavailability ? "Saving..." : "Confirm"}
+                  </button>
+                </div>
+
+                {/* Footnote text */}
+                <p className="text-[11px] leading-relaxed text-gray-500 pt-1">
+                  {unavailabilityTargetType === "choice"
+                    ? "Note: This particular customization item will become unavailable to your online store till the duration you have selected above. To make this customization item available again before the fixed duration, just turn off the switch and hit confirm, so the customization item will be available again."
+                    : "Note: This particular item will become unavailable to your online store till the duration you have selected above. To make this item available again before the fixed duration, just turn off the switch and hit confirm, so the item will be available again."}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: DUPLICATE ITEM / CHOICE (PREST DESIGN)        */}
+        {/* ---------------------------------------------------- */}
+        {isDuplicateItemModalOpen && targetDuplicateItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isDuplicatingItem) {
+                  setIsDuplicateItemModalOpen(false);
+                  setTargetDuplicateItem(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-md bg-white rounded-xl shadow-2xl overflow-hidden border border-gray-200 flex flex-col z-10">
+              {/* Header */}
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <h3 className="text-lg font-bold text-gray-900 tracking-tight">
+                  {duplicateTargetType === "choice" ? "Duplicate Customization Item" : "Duplicate Item"}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isDuplicatingItem) {
+                      setIsDuplicateItemModalOpen(false);
+                      setTargetDuplicateItem(null);
+                    }
+                  }}
+                  className="text-gray-400 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100 transition cursor-pointer"
+                >
+                  <CloseIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Body Content */}
+              <div className="p-6 space-y-5 bg-white">
+                {/* Source item info */}
+                <div className="border border-gray-200 rounded-lg px-4 py-3.5 flex items-center justify-between bg-white shadow-xs">
+                  <div>
+                    <span className="text-xs text-gray-500 block">
+                      {duplicateTargetType === "choice" ? "Source Customization Item" : "Source Item"}
+                    </span>
+                    <span className="text-sm font-bold text-gray-900 truncate">
+                      {targetDuplicateItem.name}
+                    </span>
+                  </div>
+                  <span className="text-sm font-semibold text-gray-900 shrink-0">
+                    {duplicateTargetType === "choice"
+                      ? targetDuplicateItem.price > 0
+                        ? `+${currencySymbol}${(targetDuplicateItem.price / 100).toFixed(2)}`
+                        : `${currencySymbol}0.00 (Free)`
+                      : `${currencySymbol}${(targetDuplicateItem.price / 100).toFixed(0)}`}
+                  </span>
+                </div>
+
+                {/* New Item Name */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-semibold text-gray-700">
+                    {duplicateTargetType === "choice" ? "New customization item name" : "New item name"}
+                  </label>
+                  <input
+                    type="text"
+                    value={duplicateItemNewName}
+                    onChange={(e) => setDuplicateItemNewName(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-black outline-none font-medium"
+                    placeholder={duplicateTargetType === "choice" ? "e.g. Spice(1)" : "e.g. Vadapav(1)"}
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    {duplicateTargetType === "choice"
+                      ? "A clone will be created in this customization group with the same price and settings."
+                      : "A clone will be created with all customization groups and items from the source item."}
+                  </p>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDuplicateItemModalOpen(false);
+                      setTargetDuplicateItem(null);
+                    }}
+                    className="w-full py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-lg text-xs transition text-center cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmDuplicateItem}
+                    disabled={isDuplicatingItem || !duplicateItemNewName.trim()}
+                    className="w-full py-2.5 px-4 bg-neutral-800 hover:bg-black text-white font-semibold rounded-lg text-xs shadow-sm transition text-center cursor-pointer disabled:opacity-50"
+                  >
+                    {isDuplicatingItem ? "Duplicating..." : "Duplicate"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: DELETE ITEM (PREST DESIGN)                    */}
+        {/* ---------------------------------------------------- */}
+        {isDeleteItemModalOpen && targetDeleteItem && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isDeletingItem) {
+                  setIsDeleteItemModalOpen(false);
+                  setTargetDeleteItem(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">Delete item?</h4>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteItem.name}</strong>? This action will remove this item and its customization settings. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteItemModalOpen(false);
+                    setTargetDeleteItem(null);
+                  }}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteItem}
+                  disabled={isDeletingItem}
+                  className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingItem ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: DELETE CATEGORY                               */}
+        {/* ---------------------------------------------------- */}
+        {isDeleteCategoryModalOpen && targetDeleteCategory && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isDeletingCategory) {
+                  setIsDeleteCategoryModalOpen(false);
+                  setTargetDeleteCategory(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">Delete category?</h4>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteCategory.name}</strong>? This action will remove this category and unassign its items from this category. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteCategoryModalOpen(false);
+                    setTargetDeleteCategory(null);
+                  }}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteCategory}
+                  disabled={isDeletingCategory}
+                  className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingCategory ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </PosShell>
   );
