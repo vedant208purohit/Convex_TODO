@@ -11,6 +11,7 @@
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
 import type * as orders from "../orders.js";
+import type * as organizationBotTokens from "../organizationBotTokens.js";
 import type * as organizationCarouselScreens from "../organizationCarouselScreens.js";
 import type * as organizationFeatures from "../organizationFeatures.js";
 import type * as organizationLanguages from "../organizationLanguages.js";
@@ -37,6 +38,7 @@ declare const fullApi: ApiFromModules<{
   inventory: typeof inventory;
   menu: typeof menu;
   orders: typeof orders;
+  organizationBotTokens: typeof organizationBotTokens;
   organizationCarouselScreens: typeof organizationCarouselScreens;
   organizationFeatures: typeof organizationFeatures;
   organizationLanguages: typeof organizationLanguages;

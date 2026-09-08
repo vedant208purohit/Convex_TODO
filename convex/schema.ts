@@ -829,4 +829,19 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Bot Tokens Domain Table
+  organizationBotTokens: defineTable({
+    legacyId: v.optional(v.string()),
+
+    token: v.string(),
+    env: v.optional(v.string()),
+    userId: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
