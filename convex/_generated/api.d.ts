@@ -10,6 +10,8 @@
 
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
+import type * as migrateStorageToR2 from "../migrateStorageToR2.js";
+import type * as migrateStorageToR2Db from "../migrateStorageToR2Db.js";
 import type * as orders from "../orders.js";
 import type * as organizationAssets from "../organizationAssets.js";
 import type * as organizationBotTokens from "../organizationBotTokens.js";
@@ -39,6 +41,8 @@ import type {
 declare const fullApi: ApiFromModules<{
   inventory: typeof inventory;
   menu: typeof menu;
+  migrateStorageToR2: typeof migrateStorageToR2;
+  migrateStorageToR2Db: typeof migrateStorageToR2Db;
   orders: typeof orders;
   organizationAssets: typeof organizationAssets;
   organizationBotTokens: typeof organizationBotTokens;
