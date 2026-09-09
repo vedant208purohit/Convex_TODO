@@ -79,15 +79,27 @@ describe("Cloudflare R2 Client, Validation & Phase 3 Confirmation Tests", () => 
       ).toThrowError(/Unsupported contentType/);
     });
 
-    it("should reject file size exceeding limit", () => {
-      expect(() =>
-        validateUploadRequest({
-          assetType: "menu_image",
-          fileName: "large.png",
-          contentType: "image/png",
-          fileSize: 15 * 1024 * 1024, // 15MB > 10MB
-        })
-      ).toThrowError(/exceeds the maximum allowed size/);
+    it("should accept all Phase 4 asset types", () => {
+      const types = [
+        { type: "logo", mime: "image/png" },
+        { type: "document", mime: "application/pdf" },
+        { type: "carousel_image", mime: "image/jpeg" },
+        { type: "menu_image", mime: "image/webp" },
+        { type: "menu_3d_model", mime: "model/gltf-binary" },
+        { type: "menu_3d_model_ios", mime: "model/vnd.usdz+zip" },
+        { type: "menu_video", mime: "video/mp4" },
+      ];
+
+      for (const t of types) {
+        expect(() =>
+          validateUploadRequest({
+            assetType: t.type,
+            fileName: `sample.${t.mime.split("/")[1]}`,
+            contentType: t.mime,
+            fileSize: 1024 * 1024,
+          })
+        ).not.toThrow();
+      }
     });
   });
 

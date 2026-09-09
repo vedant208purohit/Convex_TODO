@@ -726,6 +726,7 @@ export const create = mutation({
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
     gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
@@ -733,6 +734,7 @@ export const create = mutation({
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
     fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
@@ -955,6 +957,7 @@ export const create = mutation({
       separateGst,
       gstNumber: args.gstNumber,
       gstDocumentStorageId: args.gstDocumentStorageId,
+      gstDocumentAssetId: args.gstDocumentAssetId,
       gstDocumentUrl: args.gstDocumentUrl,
 
       // FSSAI Compliance
@@ -962,6 +965,7 @@ export const create = mutation({
       fssaiRegistrationNumber: args.fssaiRegistrationNumber,
       expiryDate: args.expiryDate,
       fssaiDocumentStorageId: args.fssaiDocumentStorageId,
+      fssaiDocumentAssetId: args.fssaiDocumentAssetId,
       fssaiDocumentUrl: args.fssaiDocumentUrl,
 
       // Currency & Regional Timezone
@@ -1229,6 +1233,7 @@ export const update = mutation({
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
     gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
@@ -1236,6 +1241,7 @@ export const update = mutation({
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
     fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone

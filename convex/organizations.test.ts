@@ -602,4 +602,59 @@ describe("Organization Domain Business Logic Tests", () => {
     expect(clearedOrg?.logoAssetId).toBeUndefined();
     expect(clearedOrg?.logoStorageId).toBeUndefined();
   });
+
+  // 25. Organization FSSAI & GST R2 Asset ID Persistence
+  test("25. Accepts and persists fssaiDocumentAssetId and gstDocumentAssetId", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "R2 Compliance Store",
+    });
+
+    const fssaiAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/document/fssai.pdf`,
+        fileName: "fssai.pdf",
+        contentType: "application/pdf",
+        fileSize: 2048,
+        assetType: "document",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const gstAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/document/gst.pdf`,
+        fileName: "gst.pdf",
+        contentType: "application/pdf",
+        fileSize: 2048,
+        assetType: "document",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      isFssai: true,
+      fssaiRegistrationNumber: "12345678901234",
+      fssaiDocumentAssetId: fssaiAssetId,
+      isGst: true,
+      gstNumber: "22AAAAA0000A1Z5",
+      gstDocumentAssetId: gstAssetId,
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.fssaiDocumentAssetId).toBe(fssaiAssetId);
+    expect(org?.gstDocumentAssetId).toBe(gstAssetId);
+    expect(org?.isFssai).toBe(true);
+    expect(org?.isGst).toBe(true);
+  });
 });

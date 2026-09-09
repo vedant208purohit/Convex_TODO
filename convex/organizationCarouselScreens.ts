@@ -248,6 +248,7 @@ export const create = mutation({
   args: {
     position: v.optional(v.number()),
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
     legacyId: v.optional(v.string()),
@@ -268,6 +269,7 @@ export const create = mutation({
       legacyId: args.legacyId,
       position: effectivePos,
       storageId: args.storageId,
+      assetId: args.assetId,
       imageUrl: args.imageUrl?.trim() || undefined,
       fileName: args.fileName?.trim() || undefined,
       createdAt: args.createdAt ?? now,
@@ -287,6 +289,7 @@ export const update = mutation({
     id: v.id("organizationCarouselScreens"),
     position: v.optional(v.number()),
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
   },
@@ -310,6 +313,7 @@ export const update = mutation({
     }
 
     const updatedStorageId = args.storageId !== undefined ? args.storageId : existing.storageId;
+    const updatedAssetId = args.assetId !== undefined ? args.assetId : existing.assetId;
     const updatedImageUrl =
       args.imageUrl !== undefined ? args.imageUrl.trim() || undefined : existing.imageUrl;
     const updatedFileName =
@@ -317,6 +321,7 @@ export const update = mutation({
 
     await ctx.db.patch(args.id, {
       storageId: updatedStorageId,
+      assetId: updatedAssetId,
       imageUrl: updatedImageUrl,
       fileName: updatedFileName,
       updatedAt: now,

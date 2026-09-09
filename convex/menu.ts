@@ -312,9 +312,13 @@ export const createItem = mutation({
     ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     threeDModelStorageId: v.optional(v.id("_storage")),
+    threeDModelAssetId: v.optional(v.id("organization_assets")),
     threeDModelIosStorageId: v.optional(v.id("_storage")),
+    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
     videoStorageId: v.optional(v.id("_storage")),
+    videoAssetId: v.optional(v.id("organization_assets")),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -355,9 +359,13 @@ export const createItem = mutation({
       nutrients: args.nutrients,
       itemTypeIds: args.itemTypeIds,
       imageStorageId: args.imageStorageId,
+      imageAssetId: args.imageAssetId,
       threeDModelStorageId: args.threeDModelStorageId,
+      threeDModelAssetId: args.threeDModelAssetId,
       threeDModelIosStorageId: args.threeDModelIosStorageId,
+      threeDModelIosAssetId: args.threeDModelIosAssetId,
       videoStorageId: args.videoStorageId,
+      videoAssetId: args.videoAssetId,
       createdAt: now,
       updatedAt: now,
     });
@@ -433,6 +441,7 @@ export const createCustomizationItem = mutation({
     position: v.optional(v.number()),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
   },
   handler: async (ctx, args) => {
     return await ctx.db.insert("customizationItems", {
@@ -457,6 +466,7 @@ export const createCustomizationItem = mutation({
       position: args.position ?? 0,
       itemTypeIds: args.itemTypeIds,
       imageStorageId: args.imageStorageId,
+      imageAssetId: args.imageAssetId,
       createdAt: Date.now(),
     });
   },
@@ -1294,6 +1304,13 @@ export const updateItem = mutation({
     ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
+    threeDModelStorageId: v.optional(v.id("_storage")),
+    threeDModelAssetId: v.optional(v.id("organization_assets")),
+    threeDModelIosStorageId: v.optional(v.id("_storage")),
+    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
+    videoStorageId: v.optional(v.id("_storage")),
+    videoAssetId: v.optional(v.id("organization_assets")),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
@@ -1650,6 +1667,7 @@ export const updateCustomizationItem = mutation({
     position: v.optional(v.number()),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;

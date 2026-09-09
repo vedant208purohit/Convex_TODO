@@ -51,10 +51,12 @@ interface OrgFormData {
   inclusiveGst: boolean;
   gstNumber: string;
   gstDocumentStorageId?: string;
+  gstDocumentAssetId?: string;
   isFssai: boolean;
   fssaiRegistrationNumber: string;
   expiryDate: string;
   fssaiDocumentStorageId?: string;
+  fssaiDocumentAssetId?: string;
 }
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -127,7 +129,6 @@ export function OrganizationSettings() {
   const isLoading = organizations === undefined;
 
   const updateOrg = useMutation(api.organizations.update);
-  const generateUploadUrl = useMutation(api.organizations.generateUploadUrl);
   const createAssetUpload = useAction(api.r2.createAssetUpload);
   const confirmAssetUpload = useAction(api.r2.confirmAssetUpload);
 
@@ -212,24 +213,34 @@ export function OrganizationSettings() {
     inclusiveGst: false,
     gstNumber: "",
     gstDocumentStorageId: "",
+    gstDocumentAssetId: "",
     isFssai: false,
     fssaiRegistrationNumber: "",
     expiryDate: "",
     fssaiDocumentStorageId: "",
+    fssaiDocumentAssetId: "",
   });
 
-  // Resolved document storage URLs from Convex Storage
+  // Resolved document storage URLs from R2 / Convex Storage (R2-first fallback)
   const fssaiDocStorageUrl = useQuery(
     api.organizations.getStorageUrl,
-    formData.fssaiDocumentStorageId
-      ? { storageId: formData.fssaiDocumentStorageId as Id<"_storage"> }
+    formData.fssaiDocumentAssetId || formData.fssaiDocumentStorageId
+      ? {
+          assetId: (formData.fssaiDocumentAssetId as Id<"organization_assets">) || undefined,
+          storageId: (formData.fssaiDocumentStorageId as Id<"_storage">) || undefined,
+          organizationId: org?._id,
+        }
       : "skip"
   );
 
   const gstDocStorageUrl = useQuery(
     api.organizations.getStorageUrl,
-    formData.gstDocumentStorageId
-      ? { storageId: formData.gstDocumentStorageId as Id<"_storage"> }
+    formData.gstDocumentAssetId || formData.gstDocumentStorageId
+      ? {
+          assetId: (formData.gstDocumentAssetId as Id<"organization_assets">) || undefined,
+          storageId: (formData.gstDocumentStorageId as Id<"_storage">) || undefined,
+          organizationId: org?._id,
+        }
       : "skip"
   );
 
@@ -309,10 +320,12 @@ export function OrganizationSettings() {
       inclusiveGst: org.inclusiveGst ?? false,
       gstNumber: org.gstNumber || "",
       gstDocumentStorageId: (org as any).gstDocumentStorageId || "",
+      gstDocumentAssetId: (org as any).gstDocumentAssetId || "",
       isFssai: org.isFssai ?? false,
       fssaiRegistrationNumber: org.fssaiRegistrationNumber || "",
       expiryDate: expDateStr,
       fssaiDocumentStorageId: (org as any).fssaiDocumentStorageId || "",
+      fssaiDocumentAssetId: (org as any).fssaiDocumentAssetId || "",
     };
 
     setInitialData(loaded);
@@ -675,25 +688,50 @@ export function OrganizationSettings() {
       return;
     }
 
+    if (!org?._id) {
+      setErrorMessage("Organization not found. Please refresh the page.");
+      return;
+    }
+
     setErrorMessage(null);
     setIsUploadingFssaiDoc(true);
 
     try {
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "document",
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileSize: file.size,
+        organizationId: org._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/pdf" },
         body: file,
       });
 
-      if (!result.ok) {
-        throw new Error(`Upload failed with status ${result.status}`);
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload FSSAI document binary to R2 (Status: ${putResult.status})`);
       }
 
-      const { storageId } = await result.json();
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      // 4. Link fssaiDocumentAssetId to organization record in Convex DB
+      await updateOrg({
+        id: org._id,
+        fssaiDocumentAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local state
       setFormData((prev) => ({
         ...prev,
-        fssaiDocumentStorageId: storageId,
+        fssaiDocumentAssetId: uploadResult.assetId,
       }));
       setSuccessMessage("FSSAI document uploaded successfully.");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -718,25 +756,50 @@ export function OrganizationSettings() {
       return;
     }
 
+    if (!org?._id) {
+      setErrorMessage("Organization not found. Please refresh the page.");
+      return;
+    }
+
     setErrorMessage(null);
     setIsUploadingGstDoc(true);
 
     try {
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "document",
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileSize: file.size,
+        organizationId: org._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/pdf" },
         body: file,
       });
 
-      if (!result.ok) {
-        throw new Error(`Upload failed with status ${result.status}`);
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload GST document binary to R2 (Status: ${putResult.status})`);
       }
 
-      const { storageId } = await result.json();
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      // 4. Link gstDocumentAssetId to organization record in Convex DB
+      await updateOrg({
+        id: org._id,
+        gstDocumentAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local state
       setFormData((prev) => ({
         ...prev,
-        gstDocumentStorageId: storageId,
+        gstDocumentAssetId: uploadResult.assetId,
       }));
       setSuccessMessage("GST document uploaded successfully.");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -748,7 +811,7 @@ export function OrganizationSettings() {
   };
 
   const handleRemoveFssaiDocument = async () => {
-    setFormData((prev) => ({ ...prev, fssaiDocumentStorageId: "" }));
+    setFormData((prev) => ({ ...prev, fssaiDocumentStorageId: "", fssaiDocumentAssetId: "" }));
     if (fssaiFileInputRef.current) fssaiFileInputRef.current.value = "";
 
     if (org?._id) {
@@ -756,6 +819,7 @@ export function OrganizationSettings() {
         await updateOrg({
           id: org._id,
           fssaiDocumentStorageId: undefined,
+          fssaiDocumentAssetId: undefined,
         });
         setSuccessMessage("FSSAI document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
@@ -766,7 +830,7 @@ export function OrganizationSettings() {
   };
 
   const handleRemoveGstDocument = async () => {
-    setFormData((prev) => ({ ...prev, gstDocumentStorageId: "" }));
+    setFormData((prev) => ({ ...prev, gstDocumentStorageId: "", gstDocumentAssetId: "" }));
     if (gstFileInputRef.current) gstFileInputRef.current.value = "";
 
     if (org?._id) {
@@ -774,6 +838,7 @@ export function OrganizationSettings() {
         await updateOrg({
           id: org._id,
           gstDocumentStorageId: undefined,
+          gstDocumentAssetId: undefined,
         });
         setSuccessMessage("GST document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
@@ -824,10 +889,12 @@ export function OrganizationSettings() {
         separateGst: !formData.inclusiveGst,
         gstNumber: formData.isGst && formData.gstNumber.trim() ? formData.gstNumber.trim() : undefined,
         gstDocumentStorageId: formData.isGst && formData.gstDocumentStorageId ? formData.gstDocumentStorageId : undefined,
+        gstDocumentAssetId: formData.isGst && formData.gstDocumentAssetId ? formData.gstDocumentAssetId : undefined,
         isFssai: formData.isFssai,
         fssaiRegistrationNumber: formData.isFssai && formData.fssaiRegistrationNumber.trim() ? formData.fssaiRegistrationNumber.trim() : undefined,
         expiryDate: formData.isFssai ? parsedExpiryDate : undefined,
         fssaiDocumentStorageId: formData.isFssai && formData.fssaiDocumentStorageId ? formData.fssaiDocumentStorageId : undefined,
+        fssaiDocumentAssetId: formData.isFssai && formData.fssaiDocumentAssetId ? formData.fssaiDocumentAssetId : undefined,
       };
 
       if (formData.legalEntityName.trim()) updatePayload.legalEntityName = formData.legalEntityName.trim();
@@ -2220,7 +2287,7 @@ export function OrganizationSettings() {
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
                         <span className="text-sm font-medium text-[#1f1a17]">Uploading FSSAI document...</span>
                       </div>
-                    ) : (formData.fssaiDocumentStorageId || fssaiDocStorageUrl) ? (
+                    ) : (formData.fssaiDocumentAssetId || formData.fssaiDocumentStorageId || fssaiDocStorageUrl) ? (
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
                           ✓
@@ -2355,7 +2422,7 @@ export function OrganizationSettings() {
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
                         <span className="text-sm font-medium text-[#1f1a17]">Uploading GST document...</span>
                       </div>
-                    ) : (formData.gstDocumentStorageId || gstDocStorageUrl) ? (
+                    ) : (formData.gstDocumentAssetId || formData.gstDocumentStorageId || gstDocStorageUrl) ? (
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
                           ✓
