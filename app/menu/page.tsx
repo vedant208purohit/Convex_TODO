@@ -2150,7 +2150,7 @@ export default function MenuPage() {
     setDragOverChoiceIndex(null);
   };
 
-  const activeItemsCount = categoryItems?.filter((ci) => ci.item.isAvailable).length || 0;
+  const activeItemsCount = categoryItems?.filter((ci) => (ci.item.published ?? true)).length || 0;
 
   return (
     <PosShell title="Menu Management" subtitle="Catalog, Categories & Customizations">
@@ -4241,8 +4241,8 @@ export default function MenuPage() {
                                         </div>
                                         <div>
                                           <p className="font-semibold text-[16px] text-[#141010] flex items-center gap-2">
-                                            <span>{item.name}</span>
-                                            {!item.isAvailable && (
+                                            <span className={(item.published ?? true) ? "" : "text-[#928c8a]"}>{item.name}</span>
+                                            {(item.published ?? true) && !item.isAvailable && (
                                               <span className="inline-block px-1.5 py-0.5 bg-[#e6e1e1] text-[#5e5e5e] text-[10px] uppercase font-bold tracking-wider rounded">
                                                 Sold Out
                                               </span>
@@ -4269,15 +4269,16 @@ export default function MenuPage() {
                                       <div
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleToggleItemAvailability(item._id, item.isAvailable);
+                                          handleToggleItemPublished(item._id, item.published ?? true);
                                         }}
                                         className={`w-8 h-4 rounded-full relative cursor-pointer inline-block transition-colors ${
-                                          item.isAvailable ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                          (item.published ?? true) ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
                                         }`}
+                                        title={(item.published ?? true) ? "Published (Click to Unpublish)" : "Unpublished (Click to Publish)"}
                                       >
                                         <div
                                           className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
-                                            item.isAvailable ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                                            (item.published ?? true) ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
                                           }`}
                                         />
                                       </div>
@@ -4980,8 +4981,8 @@ export default function MenuPage() {
               <div className="px-6 py-4 border-b border-neutral-200 flex items-center justify-between shrink-0 bg-white">
                 <h2 className="text-base font-bold text-neutral-900 tracking-tight">
                   {isEditChoiceOpen
-                    ? `Edit choice in "${activeCustomization?.name || "Customization"}"`
-                    : `Add choice to "${activeCustomization?.name || "Customization"}"`}
+                    ? `Edit customization item in "${activeCustomization?.name || "Customization"}"`
+                    : `Add customization item to "${activeCustomization?.name || "Customization"}"`}
                 </h2>
                 <button
                   type="button"
@@ -5005,10 +5006,10 @@ export default function MenuPage() {
                 onSubmit={handleSaveChoiceSubmit}
                 className="flex-1 overflow-y-auto px-6 py-5 space-y-6"
               >
-                {/* Field: Choice Name */}
+                {/* Field: Customization Item Name */}
                 <div className="space-y-1.5" data-purpose="field-choice-name">
                   <label className="block text-xs font-semibold text-neutral-700" htmlFor="choice-name">
-                    Choice name <span className="text-red-500">*</span>
+                    Customization item name <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="choice-name"
@@ -5333,7 +5334,7 @@ export default function MenuPage() {
                   disabled={isSavingChoice}
                   className="px-4 py-2 border border-transparent text-xs font-semibold rounded-md shadow-xs text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingChoice ? "Saving..." : isEditChoiceOpen ? "Save choice" : "Save choice"}
+                  {isSavingChoice ? "Saving..." : isEditChoiceOpen ? "Save customization item" : "Save customization item"}
                 </button>
               </div>
             </aside>
