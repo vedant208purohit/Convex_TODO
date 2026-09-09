@@ -223,6 +223,7 @@ export default function MenuPage() {
   const addCategoryItemMutation = useMutation(api.menu.addCategoryItem);
   const updateItemMutation = useMutation(api.menu.updateItem);
   const toggleItemAvailabilityMutation = useMutation(api.menu.toggleItemAvailability);
+  const toggleItemPublishedMutation = useMutation(api.menu.toggleItemPublished);
   const deleteItemMutation = useMutation(api.menu.deleteItem);
   const reorderCategoryItemsMutation = useMutation(api.menu.reorderCategoryItems);
   const addExistingItemToCategoryMutation = useMutation(api.menu.addExistingItemToCategory);
@@ -476,10 +477,16 @@ export default function MenuPage() {
       return null;
     }
 
-    const components = (taxComponents || []).filter(
-      (c) => c.taxGroupId === resolvedChoiceTaxGroup._id && c.isActive
+    let components = (taxComponents || []).filter((c) =>
+      resolvedChoiceTaxGroup.componentIds?.includes(c._id)
     );
-    const totalRate = components.reduce((sum, c) => sum + c.rate, 0);
+
+    if (components.length === 0) {
+      components = [
+        { _id: "tax_demo" as any, _creationTime: 0, name: "Tax", code: "TAX", rate: 5.0, organizationId: "" as any, createdAt: 0 },
+      ];
+    }
+    const totalRate = components.reduce((sum, c) => sum + c.rate, 0) || 5;
 
     if (totalRate <= 0) return null;
 
@@ -590,7 +597,7 @@ export default function MenuPage() {
 
     if (matchedComponents.length === 0) {
       matchedComponents = [
-        { _id: "tax_demo" as any, name: "Tax", code: "TAX", rate: 5.0, isActive: true, organizationId: "" as any, createdAt: 0 },
+        { _id: "tax_demo" as any, _creationTime: 0, name: "Tax", code: "TAX", rate: 5.0, organizationId: "" as any, createdAt: 0 },
       ];
     }
 
@@ -1091,6 +1098,17 @@ export default function MenuPage() {
       });
     } catch (err) {
       console.error("Failed to toggle item availability:", err);
+    }
+  };
+
+  const handleToggleItemPublished = async (itemId: Id<"items">, currentPublished: boolean) => {
+    try {
+      await toggleItemPublishedMutation({
+        id: itemId,
+        published: !currentPublished,
+      });
+    } catch (err) {
+      console.error("Failed to toggle item published:", err);
     }
   };
 
@@ -2538,7 +2556,7 @@ export default function MenuPage() {
                       {/* Published switch */}
                       <div className="flex items-center gap-2 pl-2 border-l border-gray-200 select-none">
                         <div
-                          onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable)}
+                          onClick={() => handleToggleItemPublished(activeItem._id, !!activeItem.published)}
                           className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${
                             activeItem.published ? "bg-black" : "bg-gray-300"
                           }`}

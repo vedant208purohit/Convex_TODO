@@ -1172,6 +1172,23 @@ export const toggleItemAvailability = mutation({
   },
 });
 
+export const toggleItemPublished = mutation({
+  args: {
+    id: v.id("items"),
+    published: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
+
+    await ctx.db.patch(args.id, {
+      published: args.published,
+      updatedAt: Date.now(),
+    });
+    return { success: true, published: args.published };
+  },
+});
+
 export const setItemUnavailability = mutation({
   args: {
     id: v.id("items"),
