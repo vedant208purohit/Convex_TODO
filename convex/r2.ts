@@ -1,6 +1,6 @@
 "use node";
 
-import { S3Client, HeadBucketCommand, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, HeadBucketCommand, PutObjectCommand, HeadObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
@@ -39,6 +39,15 @@ export interface GetAssetDownloadUrlResult {
   contentType: string;
   fileSize: number;
   assetId: Id<"organization_assets">;
+}
+
+export interface DeleteAssetResult {
+  success: boolean;
+  assetId: Id<"organization_assets">;
+  storageKey: string;
+  status: "deleted";
+  deletedAt: number;
+  alreadyDeleted?: boolean;
 }
 
 /**
@@ -595,4 +604,84 @@ export const getAssetDownloadUrl = action({
     };
   },
 });
+
+/**
+ * Phase 3 Step 3.4: Securely deletes an asset from Cloudflare R2 storage
+ * and updates Convex metadata to "deleted" status with deletedAt timestamp.
+ * Safely handles idempotency for already deleted assets.
+ */
+export const deleteAsset = action({
+  args: {
+    assetId: v.id("organization_assets"),
+  },
+  handler: async (ctx, args): Promise<DeleteAssetResult> => {
+    // 1. Authenticate caller
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: A valid Clerk session is required to delete assets.");
+    }
+
+    // 2. Fetch asset record from database
+    const asset: Doc<"organization_assets"> | null = await ctx.runQuery(
+      internal.organizationAssets.internalGet,
+      {
+        id: args.assetId,
+      }
+    );
+
+    if (!asset) {
+      throw new Error(`Asset not found: ${args.assetId}`);
+    }
+
+    // 3. Verify organization authorization
+    const org = await ctx.runQuery(api.organizations.get, { id: asset.organizationId });
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found or access denied.");
+    }
+
+    // 4. Idempotency Check: if already marked deleted, return immediately
+    if (asset.status === "deleted" || asset.deletedAt !== undefined) {
+      return {
+        success: true,
+        assetId: asset._id,
+        storageKey: asset.storageKey,
+        status: "deleted",
+        deletedAt: asset.deletedAt ?? Date.now(),
+        alreadyDeleted: true,
+      };
+    }
+
+    // 5. Delete object from Cloudflare R2
+    const config = getR2Config();
+    const client = getR2Client();
+
+    try {
+      await client.send(
+        new DeleteObjectCommand({
+          Bucket: config.bucketName,
+          Key: asset.storageKey,
+        })
+      );
+    } catch (err: unknown) {
+      // Do NOT mark as deleted in Convex if R2 deletion failed
+      throw new Error(
+        `Failed to delete asset from R2 storage: ${err instanceof Error ? err.message : "R2 deletion error"}`
+      );
+    }
+
+    // 6. Update Convex metadata record to "deleted"
+    const updated = await ctx.runMutation(internal.organizationAssets.internalMarkDeleted, {
+      assetId: asset._id,
+    });
+
+    return {
+      success: true,
+      assetId: asset._id,
+      storageKey: asset.storageKey,
+      status: "deleted",
+      deletedAt: updated?.deletedAt ?? Date.now(),
+    };
+  },
+});
+
 

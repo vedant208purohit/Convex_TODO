@@ -239,6 +239,63 @@ export const internalMarkFailed = internalMutation({
 });
 
 /**
+ * Marks an asset as "deleted" with deletedAt timestamp.
+ * Preserves the record for audit/history without physical row deletion.
+ */
+export const markDeleted = mutation({
+  args: {
+    assetId: v.id("organization_assets"),
+  },
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get(args.assetId);
+    if (!asset) {
+      throw new Error(`Asset not found: ${args.assetId}`);
+    }
+
+    if (asset.status === "deleted" && asset.deletedAt !== undefined) {
+      return asset;
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.assetId, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+
+    return await ctx.db.get(args.assetId);
+  },
+});
+
+/**
+ * Internal mutation variant of markDeleted.
+ */
+export const internalMarkDeleted = internalMutation({
+  args: {
+    assetId: v.id("organization_assets"),
+  },
+  handler: async (ctx, args) => {
+    const asset = await ctx.db.get(args.assetId);
+    if (!asset) {
+      throw new Error(`Asset not found: ${args.assetId}`);
+    }
+
+    if (asset.status === "deleted" && asset.deletedAt !== undefined) {
+      return asset;
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.assetId, {
+      status: "deleted",
+      deletedAt: now,
+      updatedAt: now,
+    });
+
+    return await ctx.db.get(args.assetId);
+  },
+});
+
+/**
  * Lists active assets for an organization with optional assetType filter.
  */
 export const listByOrganization = query({
@@ -264,3 +321,4 @@ export const listByOrganization = query({
       .collect();
   },
 });
+

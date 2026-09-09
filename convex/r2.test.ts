@@ -5,11 +5,12 @@ import {
   createAssetUpload,
   confirmAssetUpload,
   getAssetDownloadUrl,
+  deleteAsset,
   validateUploadRequest,
   sanitizeFileName,
   generateR2StorageKey,
 } from "./r2";
-import { S3Client, PutObjectCommand, HeadObjectCommand, HeadObjectCommandOutput } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, HeadObjectCommand, HeadObjectCommandOutput, DeleteObjectCommand, DeleteObjectCommandOutput } from "@aws-sdk/client-s3";
 import { Id } from "./_generated/dataModel";
 
 vi.mock("@aws-sdk/s3-request-presigner", () => ({
@@ -492,5 +493,194 @@ describe("Cloudflare R2 Client, Validation & Phase 3 Confirmation Tests", () => 
       expect(result.expiresAt).toBeGreaterThan(Date.now());
     });
   });
+
+  describe("7. Phase 3 deleteAsset Action", () => {
+    type DeleteAssetHandler = {
+      _handler: (
+        ctx: {
+          auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
+          runQuery: (q: unknown, args: unknown) => Promise<unknown>;
+          runMutation: (m: unknown, args: unknown) => Promise<unknown>;
+        },
+        args: { assetId: Id<"organization_assets"> }
+      ) => Promise<{ success: boolean; assetId: string; storageKey: string; status: "deleted"; deletedAt: number; alreadyDeleted?: boolean }>;
+    };
+
+    it("should reject unauthenticated caller", async () => {
+      const handler = (deleteAsset as unknown as DeleteAssetHandler)._handler;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => null },
+        runQuery: async () => ({ _id: "asset_1" }),
+        runMutation: async () => ({}),
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Unauthenticated/);
+    });
+
+    it("should reject when asset is not found", async () => {
+      const handler = (deleteAsset as unknown as DeleteAssetHandler)._handler;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => null,
+        runMutation: async () => ({}),
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_missing" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Asset not found/);
+    });
+
+    it("should reject when caller's organization does not match or access is denied", async () => {
+      const handler = (deleteAsset as unknown as DeleteAssetHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_foreign",
+              status: "uploaded",
+              storageKey: "organizations/org_foreign/menu_image/123-burger.png",
+            };
+          }
+          return null; // Foreign organization not found for caller
+        },
+        runMutation: async () => ({}),
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Organization not found or access denied/);
+    });
+
+    it("should handle already deleted asset idempotently without re-issuing R2 delete", async () => {
+      process.env.R2_ACCOUNT_ID = "acc_123";
+      process.env.R2_ACCESS_KEY_ID = "key_123";
+      process.env.R2_SECRET_ACCESS_KEY = "sec_123";
+      process.env.R2_BUCKET_NAME = "pos-assets";
+
+      const sendMock = vi.spyOn(S3Client.prototype, "send");
+
+      const handler = (deleteAsset as unknown as DeleteAssetHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_1",
+              status: "deleted",
+              deletedAt: 1700000000000,
+              storageKey: "organizations/org_1/menu_image/already_deleted.png",
+            };
+          }
+          return { _id: "org_1" };
+        },
+        runMutation: vi.fn(),
+      };
+
+      const result = await handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> });
+
+      expect(result.success).toBe(true);
+      expect(result.alreadyDeleted).toBe(true);
+      expect(result.status).toBe("deleted");
+      expect(result.deletedAt).toBe(1700000000000);
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
+    it("should issue DeleteObjectCommand to R2 and mark Convex asset as deleted", async () => {
+      process.env.R2_ACCOUNT_ID = "acc_123";
+      process.env.R2_ACCESS_KEY_ID = "key_123";
+      process.env.R2_SECRET_ACCESS_KEY = "sec_123";
+      process.env.R2_BUCKET_NAME = "pos-assets";
+
+      const sendMock = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+        expect(command).toBeInstanceOf(DeleteObjectCommand);
+        expect((command as DeleteObjectCommand).input.Bucket).toBe("pos-assets");
+        expect((command as DeleteObjectCommand).input.Key).toBe("organizations/org_1/logo/17889-logo.png");
+        return {} as unknown as DeleteObjectCommandOutput;
+      });
+
+      const mutationMock = vi.fn().mockResolvedValue({
+        _id: "asset_1",
+        status: "deleted",
+        deletedAt: 1788900000,
+      });
+
+      const handler = (deleteAsset as unknown as DeleteAssetHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_1",
+              status: "uploaded",
+              storageKey: "organizations/org_1/logo/17889-logo.png",
+            };
+          }
+          return { _id: "org_1" };
+        },
+        runMutation: mutationMock,
+      };
+
+      const result = await handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> });
+
+      expect(result.success).toBe(true);
+      expect(result.status).toBe("deleted");
+      expect(result.storageKey).toBe("organizations/org_1/logo/17889-logo.png");
+      expect(sendMock).toHaveBeenCalledTimes(1);
+      expect(mutationMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          assetId: "asset_1",
+        })
+      );
+    });
+
+    it("should NOT mark Convex record as deleted if R2 DeleteObject fails", async () => {
+      process.env.R2_ACCOUNT_ID = "acc_123";
+      process.env.R2_ACCESS_KEY_ID = "key_123";
+      process.env.R2_SECRET_ACCESS_KEY = "sec_123";
+      process.env.R2_BUCKET_NAME = "pos-assets";
+
+      vi.spyOn(S3Client.prototype, "send").mockRejectedValue(new Error("R2 Network Timeout"));
+      const mutationMock = vi.fn();
+
+      const handler = (deleteAsset as unknown as DeleteAssetHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_1",
+              status: "uploaded",
+              storageKey: "organizations/org_1/logo/17889-logo.png",
+            };
+          }
+          return { _id: "org_1" };
+        },
+        runMutation: mutationMock,
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Failed to delete asset from R2 storage/);
+
+      expect(mutationMock).not.toHaveBeenCalled();
+    });
+  });
 });
+
 
