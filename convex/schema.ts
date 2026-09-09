@@ -60,6 +60,7 @@ export default defineSchema({
     separateGst: v.boolean(),
     gstNumber: v.optional(v.string()),
     gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Food Safety Compliance Configuration
@@ -67,6 +68,7 @@ export default defineSchema({
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
     fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone Configuration
@@ -85,6 +87,7 @@ export default defineSchema({
     theme: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
+    logoAssetId: v.optional(v.id("organization_assets")),
 
     // POS Feature & Module Configuration
     isDineIn: v.boolean(),
@@ -291,9 +294,13 @@ export default defineSchema({
     ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     threeDModelStorageId: v.optional(v.id("_storage")),
+    threeDModelAssetId: v.optional(v.id("organization_assets")),
     threeDModelIosStorageId: v.optional(v.id("_storage")),
+    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
     videoStorageId: v.optional(v.id("_storage")),
+    videoAssetId: v.optional(v.id("organization_assets")),
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
@@ -357,6 +364,7 @@ export default defineSchema({
     position: v.number(),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
   }).index("by_customization", ["customizationId"]),
@@ -614,6 +622,7 @@ export default defineSchema({
     position: v.number(),
 
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
 
