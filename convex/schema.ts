@@ -215,6 +215,7 @@ export default defineSchema({
     position: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_org", ["organizationId"])
     .index("by_org_default", ["organizationId", "isDefault"]),
@@ -229,6 +230,7 @@ export default defineSchema({
     name_gu: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_menu", ["menuId"])
     .index("by_org", ["organizationId"]),
@@ -246,6 +248,9 @@ export default defineSchema({
     showQuantity: v.boolean(),
     quantity: v.optional(v.number()),
     quantityUnit: v.optional(v.string()),
+    showItemType: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     skuNumber: v.optional(v.string()),
     markAsBestseller: v.boolean(),
     favouriteItem: v.optional(v.boolean()),
@@ -263,6 +268,7 @@ export default defineSchema({
     videoStorageId: v.optional(v.id("_storage")),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_org", ["organizationId"]),
 
   categoryItems: defineTable({
@@ -272,6 +278,7 @@ export default defineSchema({
     position: v.number(),
     published: v.boolean(),
     createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_category", ["categoryId"]),
 
   itemTypes: defineTable({
@@ -279,6 +286,7 @@ export default defineSchema({
     name: v.string(),
     icon: v.optional(v.string()),
     createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_org", ["organizationId"]),
 
   customizations: defineTable({
@@ -294,7 +302,10 @@ export default defineSchema({
     position: v.number(),
     published: v.boolean(),
     createdAt: v.number(),
-  }).index("by_item", ["itemId"]),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_item", ["itemId"])
+    .index("by_org", ["organizationId"]),
 
   customizationItems: defineTable({
     organizationId: v.id("organizations"),
@@ -302,6 +313,10 @@ export default defineSchema({
     name: v.string(),
     price: v.number(),
     isGst: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
+    isVeg: v.optional(v.boolean()),
+    dietaryType: v.optional(v.string()),
     showQuantity: v.optional(v.boolean()),
     quantity: v.optional(v.number()),
     quantityUnit: v.optional(v.string()),
@@ -315,6 +330,7 @@ export default defineSchema({
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
     createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_customization", ["customizationId"]),
 
   // Organization Languages Domain Table

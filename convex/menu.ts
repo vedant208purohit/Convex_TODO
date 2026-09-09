@@ -11,6 +11,7 @@ export const listMenus = query({
     const menus = await ctx.db
       .query("menus")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     return menus.sort((a, b) => a.position - b.position);
@@ -20,7 +21,9 @@ export const listMenus = query({
 export const getMenu = query({
   args: { id: v.id("menus") },
   handler: async (ctx, args) => {
-    return await ctx.db.get(args.id);
+    const menu = await ctx.db.get(args.id);
+    if (!menu || menu.deletedAt !== undefined) return null;
+    return menu;
   },
 });
 
@@ -37,6 +40,7 @@ export const createMenu = mutation({
     const existingMenus = await ctx.db
       .query("menus")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const isFirstMenu = existingMenus.length === 0;
@@ -72,13 +76,14 @@ export const setDefaultMenu = mutation({
   },
   handler: async (ctx, args) => {
     const targetMenu = await ctx.db.get(args.id);
-    if (!targetMenu) {
+    if (!targetMenu || targetMenu.deletedAt !== undefined) {
       throw new Error("Menu not found");
     }
 
     const existingMenus = await ctx.db
       .query("menus")
       .withIndex("by_org", (q) => q.eq("organizationId", targetMenu.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const now = Date.now();
@@ -105,7 +110,7 @@ export const updateMenu = mutation({
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const existing = await ctx.db.get(id);
-    if (!existing) {
+    if (!existing || existing.deletedAt !== undefined) {
       throw new Error("Menu not found");
     }
 
@@ -126,7 +131,30 @@ export const deleteMenu = mutation({
     const menu = await ctx.db.get(args.id);
     if (!menu) throw new Error("Menu not found");
 
-    await ctx.db.delete(args.id);
+    const now = Date.now();
+    await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
+
+    // Soft delete all categories under this menu
+    const categories = await ctx.db
+      .query("categories")
+      .withIndex("by_menu", (q) => q.eq("menuId", args.id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    for (const cat of categories) {
+      await ctx.db.patch(cat._id, { deletedAt: now, updatedAt: now });
+
+      const catItems = await ctx.db
+        .query("categoryItems")
+        .withIndex("by_category", (q) => q.eq("categoryId", cat._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      for (const ci of catItems) {
+        await ctx.db.patch(ci._id, { deletedAt: now });
+      }
+    }
+
     return { success: true };
   },
 });
@@ -148,6 +176,55 @@ export const createItemType = mutation({
       icon: args.icon,
       createdAt: Date.now(),
     });
+  },
+});
+
+export const listItemTypes = query({
+  args: {
+    organizationId: v.id("organizations"),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("itemTypes")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+  },
+});
+
+export const ensureDefaultItemTypes = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("itemTypes")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    if (existing.length === 0) {
+      const defaults = [
+        { name: "Vegetarian", icon: "🟢" },
+        { name: "Non-Veg", icon: "🔴" },
+        { name: "Vegan", icon: "🌿" },
+        { name: "Jain", icon: "🟡" },
+        { name: "Contains Egg", icon: "🥚" },
+      ];
+      const now = Date.now();
+      const created = [];
+      for (const d of defaults) {
+        const id = await ctx.db.insert("itemTypes", {
+          organizationId: args.organizationId,
+          name: d.name,
+          icon: d.icon,
+          createdAt: now,
+        });
+        created.push({ _id: id, name: d.name, icon: d.icon, organizationId: args.organizationId, createdAt: now });
+      }
+      return created;
+    }
+    return existing;
   },
 });
 
@@ -186,8 +263,11 @@ export const createItem = mutation({
     published: v.optional(v.boolean()),
     isAvailable: v.optional(v.boolean()),
     isGst: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     isVeg: v.optional(v.boolean()),
     isSpicy: v.optional(v.boolean()),
+    showItemType: v.optional(v.boolean()),
     showQuantity: v.optional(v.boolean()),
     quantity: v.optional(v.number()),
     quantityUnit: v.optional(v.string()),
@@ -217,8 +297,11 @@ export const createItem = mutation({
       published: args.published ?? true,
       isAvailable: args.isAvailable ?? true,
       isGst: args.isGst ?? false,
+      taxGroupId: args.taxGroupId,
+      taxMode: args.taxMode,
       isVeg: args.isVeg ?? true,
       isSpicy: args.isSpicy ?? false,
+      showItemType: args.showItemType ?? true,
       showQuantity: args.showQuantity ?? false,
       quantity: args.quantity,
       quantityUnit: args.quantityUnit,
@@ -296,6 +379,10 @@ export const createCustomizationItem = mutation({
     name: v.string(),
     price: v.number(),
     isGst: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
+    isVeg: v.optional(v.boolean()),
+    dietaryType: v.optional(v.string()),
     showQuantity: v.optional(v.boolean()),
     quantity: v.optional(v.number()),
     quantityUnit: v.optional(v.string()),
@@ -316,6 +403,10 @@ export const createCustomizationItem = mutation({
       name: args.name,
       price: args.price,
       isGst: args.isGst ?? false,
+      taxGroupId: args.taxGroupId,
+      taxMode: args.taxMode,
+      isVeg: args.isVeg ?? true,
+      dietaryType: args.dietaryType,
       showQuantity: args.showQuantity ?? false,
       quantity: args.quantity,
       quantityUnit: args.quantityUnit,
@@ -330,6 +421,148 @@ export const createCustomizationItem = mutation({
       imageStorageId: args.imageStorageId,
       createdAt: Date.now(),
     });
+  },
+});
+
+export const listAllCustomizations = query({
+  args: {
+    organizationId: v.id("organizations"),
+    currentItemId: v.optional(v.id("items")),
+  },
+  handler: async (ctx, args) => {
+    const customizations = await ctx.db
+      .query("customizations")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    const results: Array<any> = [];
+    for (const cust of customizations) {
+      // Exclude customizations already belonging to the current item
+      if (args.currentItemId && cust.itemId === args.currentItemId) {
+        continue;
+      }
+
+      // Check if item exists, is active, and is valid
+      const item = await ctx.db.get(cust.itemId);
+      if (!item || item.deletedAt !== undefined) continue;
+
+      // Only include customizations from items linked to an active category
+      const catItem = await ctx.db
+        .query("categoryItems")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("itemId"), item._id),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
+        .first();
+
+      if (!catItem) continue;
+
+      const cat = await ctx.db.get(catItem.categoryId);
+      if (!cat || cat.deletedAt !== undefined) continue;
+
+      // Count child choice items
+      const choices = await ctx.db
+        .query("customizationItems")
+        .withIndex("by_customization", (q) => q.eq("customizationId", cust._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      results.push({
+        _id: cust._id,
+        name: cust.name,
+        customizationType: cust.customizationType,
+        required: cust.required,
+        maxSelected: cust.maxSelected,
+        published: cust.published,
+        itemId: cust.itemId,
+        itemName: item.name,
+        categoryName: cat.name,
+        choiceCount: choices.length,
+        choices: choices.map((c) => ({
+          _id: c._id,
+          name: c.name,
+          price: c.price,
+        })),
+      });
+    }
+
+    return results;
+  },
+});
+
+export const copyCustomizationToItem = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    targetItemId: v.id("items"),
+    customizationIds: v.array(v.id("customizations")),
+  },
+  handler: async (ctx, args) => {
+    const currentCusts = await ctx.db
+      .query("customizations")
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("itemId"), args.targetItemId),
+          q.eq(q.field("deletedAt"), undefined)
+        )
+      )
+      .collect();
+
+    let nextPosition = currentCusts.length;
+    const createdCustomizationIds: Array<any> = [];
+
+    for (const sourceCustId of args.customizationIds) {
+      const sourceCust = await ctx.db.get(sourceCustId);
+      if (!sourceCust || sourceCust.deletedAt !== undefined) continue;
+
+      const newCustId = await ctx.db.insert("customizations", {
+        organizationId: args.organizationId,
+        itemId: args.targetItemId,
+        name: sourceCust.name,
+        customizationType: sourceCust.customizationType,
+        required: sourceCust.required,
+        maxSelected: sourceCust.maxSelected,
+        position: nextPosition++,
+        published: sourceCust.published ?? true,
+        createdAt: Date.now(),
+      });
+
+      createdCustomizationIds.push(newCustId);
+
+      // Copy child choice items
+      const sourceChoices = await ctx.db
+        .query("customizationItems")
+        .withIndex("by_customization", (q) => q.eq("customizationId", sourceCustId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      for (const choice of sourceChoices) {
+        await ctx.db.insert("customizationItems", {
+          organizationId: args.organizationId,
+          customizationId: newCustId,
+          name: choice.name,
+          price: choice.price,
+          isGst: choice.isGst ?? false,
+          showQuantity: choice.showQuantity ?? false,
+          quantity: choice.quantity,
+          quantityUnit: choice.quantityUnit,
+          description: choice.description,
+          showCalorie: choice.showCalorie ?? false,
+          calorie: choice.calorie,
+          calorieMetric: choice.calorieMetric ?? "kcal",
+          daysOfUnavailable: choice.daysOfUnavailable ?? 0,
+          isAvailable: choice.isAvailable ?? true,
+          position: choice.position ?? 0,
+          itemTypeIds: choice.itemTypeIds,
+          imageStorageId: choice.imageStorageId,
+          createdAt: Date.now(),
+        });
+      }
+    }
+
+    return { success: true, createdCustomizationIds };
   },
 });
 
@@ -355,6 +588,7 @@ export const getOrganizationMenu = query({
         .withIndex("by_org_default", (q) =>
           q.eq("organizationId", args.organizationId).eq("isDefault", true)
         )
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
 
       const activeDefault = defaultMenus.find((m) => m.isActive);
@@ -364,6 +598,7 @@ export const getOrganizationMenu = query({
         const orgMenus = await ctx.db
           .query("menus")
           .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
           .collect();
         const firstActive = orgMenus.find((m) => m.isActive);
         if (firstActive) {
@@ -376,10 +611,16 @@ export const getOrganizationMenu = query({
       return [];
     }
 
+    const targetMenu = await ctx.db.get(targetMenuId);
+    if (!targetMenu || targetMenu.deletedAt !== undefined) {
+      return [];
+    }
+
     // 2. Query Categories for the resolved menu
     const categories = await ctx.db
       .query("categories")
       .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const activeCategories = categories
@@ -394,6 +635,7 @@ export const getOrganizationMenu = query({
       const catItems = await ctx.db
         .query("categoryItems")
         .withIndex("by_category", (q) => q.eq("categoryId", category._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
 
       const activeCatItems = catItems
@@ -404,7 +646,7 @@ export const getOrganizationMenu = query({
 
       for (const ci of activeCatItems) {
         const item = await ctx.db.get(ci.itemId);
-        if (!item || !item.published) continue;
+        if (!item || item.deletedAt !== undefined || !item.published) continue;
 
         // Apply attribute filters
         if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
@@ -436,7 +678,7 @@ export const getOrganizationMenu = query({
         if (item.itemTypeIds) {
           for (const typeId of item.itemTypeIds) {
             const itemTypeObj = await ctx.db.get(typeId);
-            if (itemTypeObj) {
+            if (itemTypeObj && itemTypeObj.deletedAt === undefined) {
               resolvedItemTypes.push({
                 id: itemTypeObj._id,
                 name: itemTypeObj.name,
@@ -450,6 +692,7 @@ export const getOrganizationMenu = query({
         const itemCustomizations = await ctx.db
           .query("customizations")
           .withIndex("by_item", (q) => q.eq("itemId", item._id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
           .collect();
 
         const activeCustomizations = itemCustomizations
@@ -462,6 +705,7 @@ export const getOrganizationMenu = query({
           const custItems = await ctx.db
             .query("customizationItems")
             .withIndex("by_customization", (q) => q.eq("customizationId", cust._id))
+            .filter((q) => q.eq(q.field("deletedAt"), undefined))
             .collect();
 
           const sortedCustItems = custItems.sort((a, b) => a.position - b.position);
@@ -656,6 +900,7 @@ export const listCategories = query({
     const categories = await ctx.db
       .query("categories")
       .withIndex("by_menu", (q) => q.eq("menuId", args.menuId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     return categories.sort((a, b) => a.position - b.position);
@@ -703,7 +948,7 @@ export const updateCategory = mutation({
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const cat = await ctx.db.get(id);
-    if (!cat) throw new Error("Category not found");
+    if (!cat || cat.deletedAt !== undefined) throw new Error("Category not found");
 
     await ctx.db.patch(id, {
       ...updates,
@@ -720,7 +965,7 @@ export const toggleCategoryPublished = mutation({
   },
   handler: async (ctx, args) => {
     const cat = await ctx.db.get(args.id);
-    if (!cat) throw new Error("Category not found");
+    if (!cat || cat.deletedAt !== undefined) throw new Error("Category not found");
 
     await ctx.db.patch(args.id, {
       published: args.published,
@@ -736,17 +981,20 @@ export const deleteCategory = mutation({
     const cat = await ctx.db.get(args.id);
     if (!cat) throw new Error("Category not found");
 
-    // Remove category items associations
+    const now = Date.now();
+    await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
+
+    // Soft delete all categoryItems under this category
     const catItems = await ctx.db
       .query("categoryItems")
       .withIndex("by_category", (q) => q.eq("categoryId", args.id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     for (const ci of catItems) {
-      await ctx.db.delete(ci._id);
+      await ctx.db.patch(ci._id, { deletedAt: now });
     }
 
-    await ctx.db.delete(args.id);
     return { success: true };
   },
 });
@@ -757,6 +1005,7 @@ export const listCategoryItems = query({
     const catItems = await ctx.db
       .query("categoryItems")
       .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const sortedCatItems = catItems.sort((a, b) => a.position - b.position);
@@ -764,7 +1013,7 @@ export const listCategoryItems = query({
 
     for (const ci of sortedCatItems) {
       const item = await ctx.db.get(ci.itemId);
-      if (!item) continue;
+      if (!item || item.deletedAt !== undefined) continue;
 
       const imageUrl = item.imageStorageId
         ? await ctx.storage.getUrl(item.imageStorageId)
@@ -782,6 +1031,7 @@ export const listCategoryItems = query({
           description: item.description,
           published: item.published,
           isAvailable: item.isAvailable,
+          daysOfUnavailable: item.daysOfUnavailable ?? 0,
           isVeg: item.isVeg,
           isSpicy: item.isSpicy,
           markAsBestseller: item.markAsBestseller,
@@ -797,25 +1047,49 @@ export const listCategoryItems = query({
 });
 
 export const listAllItems = query({
-  args: { organizationId: v.id("organizations") },
+  args: {
+    organizationId: v.id("organizations"),
+    categoryId: v.optional(v.id("categories")),
+  },
   handler: async (ctx, args) => {
+    let excludedItemIds = new Set<string>();
+    if (args.categoryId) {
+      const catItems = await ctx.db
+        .query("categoryItems")
+        .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId!))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+      for (const ci of catItems) {
+        excludedItemIds.add(ci.itemId);
+      }
+    }
+
     const items = await ctx.db
       .query("items")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const results: Array<any> = [];
     for (const item of items) {
+      if (excludedItemIds.has(item._id)) continue;
+
       const catItem = await ctx.db
         .query("categoryItems")
-        .filter((q) => q.eq(q.field("itemId"), item._id))
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("itemId"), item._id),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
         .first();
 
-      let categoryName: string | null = null;
-      if (catItem) {
-        const cat = await ctx.db.get(catItem.categoryId);
-        categoryName = cat?.name ?? null;
-      }
+      // Only include items currently linked to a valid active category (skip unlinked/deleted items)
+      if (!catItem) continue;
+
+      const cat = await ctx.db.get(catItem.categoryId);
+      if (!cat || cat.deletedAt !== undefined) continue;
+      const categoryName = cat.name;
 
       const imageUrl = item.imageStorageId
         ? await ctx.storage.getUrl(item.imageStorageId)
@@ -829,6 +1103,7 @@ export const listAllItems = query({
         description: item.description,
         published: item.published,
         isAvailable: item.isAvailable,
+        daysOfUnavailable: item.daysOfUnavailable ?? 0,
         isVeg: item.isVeg,
         isSpicy: item.isSpicy,
         imageUrl,
@@ -854,12 +1129,16 @@ export const addExistingItemToCategory = mutation({
       .first();
 
     if (existing) {
+      if (existing.deletedAt !== undefined) {
+        await ctx.db.patch(existing._id, { deletedAt: undefined, published: true });
+      }
       return { success: true, categoryItemId: existing._id };
     }
 
     const currentItems = await ctx.db
       .query("categoryItems")
       .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const categoryItemId = await ctx.db.insert("categoryItems", {
@@ -882,13 +1161,50 @@ export const toggleItemAvailability = mutation({
   },
   handler: async (ctx, args) => {
     const item = await ctx.db.get(args.id);
-    if (!item) throw new Error("Item not found");
+    if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
 
     await ctx.db.patch(args.id, {
       isAvailable: args.isAvailable,
+      daysOfUnavailable: args.isAvailable ? 0 : item.daysOfUnavailable,
       updatedAt: Date.now(),
     });
     return { success: true, isAvailable: args.isAvailable };
+  },
+});
+
+export const toggleItemPublished = mutation({
+  args: {
+    id: v.id("items"),
+    published: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
+
+    await ctx.db.patch(args.id, {
+      published: args.published,
+      updatedAt: Date.now(),
+    });
+    return { success: true, published: args.published };
+  },
+});
+
+export const setItemUnavailability = mutation({
+  args: {
+    id: v.id("items"),
+    isAvailable: v.boolean(),
+    daysOfUnavailable: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.id);
+    if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
+
+    await ctx.db.patch(args.id, {
+      isAvailable: args.isAvailable,
+      daysOfUnavailable: args.isAvailable ? 0 : (args.daysOfUnavailable ?? 1),
+      updatedAt: Date.now(),
+    });
+    return { success: true, isAvailable: args.isAvailable, daysOfUnavailable: args.daysOfUnavailable ?? 0 };
   },
 });
 
@@ -900,15 +1216,24 @@ export const updateItem = mutation({
     description: v.optional(v.string()),
     published: v.optional(v.boolean()),
     isAvailable: v.optional(v.boolean()),
+    isGst: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     isVeg: v.optional(v.boolean()),
     isSpicy: v.optional(v.boolean()),
+    showItemType: v.optional(v.boolean()),
+    showQuantity: v.optional(v.boolean()),
+    quantity: v.optional(v.number()),
+    quantityUnit: v.optional(v.string()),
+    skuNumber: v.optional(v.string()),
     markAsBestseller: v.optional(v.boolean()),
+    itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const item = await ctx.db.get(id);
-    if (!item) throw new Error("Item not found");
+    if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
 
     await ctx.db.patch(id, {
       ...updates,
@@ -925,28 +1250,101 @@ export const deleteItem = mutation({
   },
   handler: async (ctx, args) => {
     const item = await ctx.db.get(args.id);
-    if (!item) throw new Error("Item not found");
+    if (!item) return { success: true };
+
+    const now = Date.now();
 
     if (args.categoryId) {
       const catItems = await ctx.db
         .query("categoryItems")
         .withIndex("by_category", (q) => q.eq("categoryId", args.categoryId!))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
 
       for (const ci of catItems) {
         if (ci.itemId === args.id) {
-          await ctx.db.delete(ci._id);
+          await ctx.db.patch(ci._id, { deletedAt: now });
         }
+      }
+
+      // Check if item is still linked to any other active category
+      const remainingCatItem = await ctx.db
+        .query("categoryItems")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("itemId"), args.id),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
+        .first();
+
+      // If no other category links this item, soft-delete the item and its customizations
+      if (!remainingCatItem) {
+        const customizations = await ctx.db
+          .query("customizations")
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("itemId"), args.id),
+              q.eq(q.field("deletedAt"), undefined)
+            )
+          )
+          .collect();
+        for (const cust of customizations) {
+          const custItems = await ctx.db
+            .query("customizationItems")
+            .filter((q) =>
+              q.and(
+                q.eq(q.field("customizationId"), cust._id),
+                q.eq(q.field("deletedAt"), undefined)
+              )
+            )
+            .collect();
+          for (const ci of custItems) {
+            await ctx.db.patch(ci._id, { deletedAt: now });
+          }
+          await ctx.db.patch(cust._id, { deletedAt: now });
+        }
+        await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
       }
     } else {
       // Remove all category associations
-      const allCatItems = await ctx.db.query("categoryItems").collect();
+      const allCatItems = await ctx.db
+        .query("categoryItems")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("itemId"), args.id),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
+        .collect();
       for (const ci of allCatItems) {
-        if (ci.itemId === args.id) {
-          await ctx.db.delete(ci._id);
-        }
+        await ctx.db.patch(ci._id, { deletedAt: now });
       }
-      await ctx.db.delete(args.id);
+      const customizations = await ctx.db
+        .query("customizations")
+        .filter((q) =>
+          q.and(
+            q.eq(q.field("itemId"), args.id),
+            q.eq(q.field("deletedAt"), undefined)
+          )
+        )
+        .collect();
+      for (const cust of customizations) {
+        const custItems = await ctx.db
+          .query("customizationItems")
+          .filter((q) =>
+            q.and(
+              q.eq(q.field("customizationId"), cust._id),
+              q.eq(q.field("deletedAt"), undefined)
+            )
+          )
+          .collect();
+        for (const ci of custItems) {
+          await ctx.db.patch(ci._id, { deletedAt: now });
+        }
+        await ctx.db.patch(cust._id, { deletedAt: now });
+      }
+      await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
     }
 
     return { success: true };
@@ -959,6 +1357,7 @@ export const seedSampleMenu = mutation({
     const existingMenus = await ctx.db
       .query("menus")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     if (existingMenus.length > 0) {
@@ -1095,13 +1494,13 @@ export const seedSampleMenu = mutation({
   },
 });
 
-
 export const listCustomizations = query({
   args: { itemId: v.id("items") },
   handler: async (ctx, args) => {
     const customizations = await ctx.db
       .query("customizations")
       .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     const results = [];
@@ -1109,6 +1508,7 @@ export const listCustomizations = query({
       const items = await ctx.db
         .query("customizationItems")
         .withIndex("by_customization", (q) => q.eq("customizationId", cust._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
 
       results.push({
@@ -1133,6 +1533,9 @@ export const updateCustomization = mutation({
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
+    const existing = await ctx.db.get(id);
+    if (!existing || existing.deletedAt !== undefined) throw new Error("Customization not found");
+
     await ctx.db.patch(id, updates);
     return await ctx.db.get(id);
   },
@@ -1141,16 +1544,22 @@ export const updateCustomization = mutation({
 export const deleteCustomization = mutation({
   args: { id: v.id("customizations") },
   handler: async (ctx, args) => {
+    const cust = await ctx.db.get(args.id);
+    if (!cust) return { success: true };
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, { deletedAt: now });
+
     const items = await ctx.db
       .query("customizationItems")
       .withIndex("by_customization", (q) => q.eq("customizationId", args.id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
     for (const item of items) {
-      await ctx.db.delete(item._id);
+      await ctx.db.patch(item._id, { deletedAt: now });
     }
 
-    await ctx.db.delete(args.id);
     return { success: true };
   },
 });
@@ -1160,11 +1569,28 @@ export const updateCustomizationItem = mutation({
     id: v.id("customizationItems"),
     name: v.optional(v.string()),
     price: v.optional(v.number()),
+    description: v.optional(v.string()),
+    isGst: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
+    isVeg: v.optional(v.boolean()),
+    dietaryType: v.optional(v.string()),
+    showQuantity: v.optional(v.boolean()),
+    quantity: v.optional(v.number()),
+    quantityUnit: v.optional(v.string()),
+    showCalorie: v.optional(v.boolean()),
+    calorie: v.optional(v.string()),
+    calorieMetric: v.optional(v.string()),
     isAvailable: v.optional(v.boolean()),
     position: v.optional(v.number()),
+    itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
+    imageStorageId: v.optional(v.id("_storage")),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
+    const existing = await ctx.db.get(id);
+    if (!existing || existing.deletedAt !== undefined) throw new Error("Customization item not found");
+
     await ctx.db.patch(id, updates);
     return await ctx.db.get(id);
   },
@@ -1173,7 +1599,153 @@ export const updateCustomizationItem = mutation({
 export const deleteCustomizationItem = mutation({
   args: { id: v.id("customizationItems") },
   handler: async (ctx, args) => {
-    await ctx.db.delete(args.id);
+    const choice = await ctx.db.get(args.id);
+    if (!choice) return { success: true };
+
+    await ctx.db.patch(args.id, { deletedAt: Date.now() });
     return { success: true };
   },
 });
+
+export const duplicateItem = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    itemId: v.id("items"),
+    categoryId: v.id("categories"),
+    newName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const originalItem = await ctx.db.get(args.itemId);
+    if (!originalItem || originalItem.deletedAt !== undefined) {
+      throw new Error("Item not found");
+    }
+
+    const now = Date.now();
+    const { _id, _creationTime, deletedAt, ...itemFields } = originalItem;
+
+    // Create cloned item
+    const newItemId = await ctx.db.insert("items", {
+      ...itemFields,
+      name: args.newName,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // Link to category
+    await ctx.db.insert("categoryItems", {
+      organizationId: args.organizationId,
+      categoryId: args.categoryId,
+      itemId: newItemId,
+      position: 999,
+      published: true,
+      createdAt: now,
+    });
+
+    // Copy customizations & customizationItems
+    const customizations = await ctx.db
+      .query("customizations")
+      .withIndex("by_item", (q) => q.eq("itemId", args.itemId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    for (const cust of customizations) {
+      const { _id: custId, _creationTime: cct, deletedAt: cdAt, ...custFields } = cust;
+      const newCustId = await ctx.db.insert("customizations", {
+        ...custFields,
+        itemId: newItemId,
+        createdAt: now,
+      });
+
+      const custItems = await ctx.db
+        .query("customizationItems")
+        .withIndex("by_customization", (q) => q.eq("customizationId", custId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      for (const cItem of custItems) {
+        const { _id: cItemId, _creationTime: cict, deletedAt: cidAt, ...cItemFields } = cItem;
+        await ctx.db.insert("customizationItems", {
+          ...cItemFields,
+          customizationId: newCustId,
+          createdAt: now,
+        });
+      }
+    }
+
+    return newItemId;
+  },
+});
+
+export const duplicateCustomizationItem = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    customizationItemId: v.id("customizationItems"),
+    newName: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const original = await ctx.db.get(args.customizationItemId);
+    if (!original || original.deletedAt !== undefined) {
+      throw new Error("Customization item not found");
+    }
+
+    const { _id, _creationTime, deletedAt, ...fields } = original;
+    const now = Date.now();
+
+    const newId = await ctx.db.insert("customizationItems", {
+      ...fields,
+      name: args.newName,
+      createdAt: now,
+    });
+
+    return newId;
+  },
+});
+
+export const setCustomizationItemUnavailability = mutation({
+  args: {
+    id: v.id("customizationItems"),
+    isAvailable: v.boolean(),
+    daysOfUnavailable: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.deletedAt !== undefined) throw new Error("Customization item not found");
+
+    await ctx.db.patch(args.id, {
+      isAvailable: args.isAvailable,
+      daysOfUnavailable: args.daysOfUnavailable ?? 0,
+    });
+    return await ctx.db.get(args.id);
+  },
+});
+
+export const reorderCustomizationItems = mutation({
+  args: {
+    itemIds: v.array(v.id("customizationItems")),
+  },
+  handler: async (ctx, args) => {
+    for (let i = 0; i < args.itemIds.length; i++) {
+      await ctx.db.patch(args.itemIds[i], {
+        position: i,
+      });
+    }
+    return { success: true };
+  },
+});
+
+export const reorderCustomizations = mutation({
+  args: {
+    customizationIds: v.array(v.id("customizations")),
+  },
+  handler: async (ctx, args) => {
+    for (let i = 0; i < args.customizationIds.length; i++) {
+      await ctx.db.patch(args.customizationIds[i], {
+        position: i,
+      });
+    }
+    return { success: true };
+  },
+});
+
+
+
