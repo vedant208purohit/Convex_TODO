@@ -1,6 +1,6 @@
 "use node";
 
-import { S3Client, HeadBucketCommand, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, HeadBucketCommand, PutObjectCommand, HeadObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
@@ -30,6 +30,15 @@ export interface ConfirmAssetUploadResult {
   storageKey: string;
   status: string;
   alreadyConfirmed?: boolean;
+}
+
+export interface GetAssetDownloadUrlResult {
+  downloadUrl: string;
+  expiresAt: number;
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+  assetId: Id<"organization_assets">;
 }
 
 /**
@@ -517,3 +526,73 @@ export const confirmAssetUpload = action({
     }
   },
 });
+
+/**
+ * Phase 3 Step 3.3: Generates a short-lived signed GET download URL for an uploaded asset.
+ * Enforces authentication, organization authorization, asset status verification,
+ * and uses the trusted storageKey from database metadata.
+ */
+export const getAssetDownloadUrl = action({
+  args: {
+    assetId: v.id("organization_assets"),
+    expiresInSeconds: v.optional(v.number()),
+  },
+  handler: async (ctx, args): Promise<GetAssetDownloadUrlResult> => {
+    // 1. Authenticate caller
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: A valid Clerk session is required to download assets.");
+    }
+
+    // 2. Fetch asset record from database
+    const asset: Doc<"organization_assets"> | null = await ctx.runQuery(
+      internal.organizationAssets.internalGet,
+      {
+        id: args.assetId,
+      }
+    );
+
+    if (!asset || asset.deletedAt !== undefined || asset.status === "deleted") {
+      throw new Error(`Asset not found: ${args.assetId}`);
+    }
+
+    // 3. Verify organization authorization
+    const org = await ctx.runQuery(api.organizations.get, { id: asset.organizationId });
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found or access denied.");
+    }
+
+    // 4. Validate asset state: only "uploaded" assets can be downloaded
+    if (asset.status === "pending") {
+      throw new Error("Cannot generate download URL: Asset upload is still pending confirmation.");
+    }
+    if (asset.status === "failed") {
+      throw new Error("Cannot generate download URL: Asset upload failed.");
+    }
+    if (asset.status !== "uploaded") {
+      throw new Error(`Cannot generate download URL for asset in '${asset.status}' state.`);
+    }
+
+    // 5. Generate short-lived signed GET URL (default 15 minutes / 900 seconds)
+    const config = getR2Config();
+    const client = getR2Client();
+    const expiresIn = Math.min(Math.max(args.expiresInSeconds || 900, 60), 900);
+
+    const command = new GetObjectCommand({
+      Bucket: config.bucketName,
+      Key: asset.storageKey,
+    });
+
+    const downloadUrl = await getSignedUrl(client, command, { expiresIn });
+
+    return {
+      downloadUrl,
+      expiresAt: Date.now() + expiresIn * 1000,
+      fileName: asset.fileName,
+      contentType: asset.contentType,
+      fileSize: asset.fileSize,
+      assetId: asset._id,
+    };
+  },
+});
+

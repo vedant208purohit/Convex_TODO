@@ -4,6 +4,7 @@ import {
   resetR2ClientCache,
   createAssetUpload,
   confirmAssetUpload,
+  getAssetDownloadUrl,
   validateUploadRequest,
   sanitizeFileName,
   generateR2StorageKey,
@@ -324,4 +325,172 @@ describe("Cloudflare R2 Client, Validation & Phase 3 Confirmation Tests", () => 
       expect(result.status).toBe("uploaded");
     });
   });
+
+  describe("6. Phase 3 getAssetDownloadUrl Action", () => {
+    type GetAssetDownloadUrlHandler = {
+      _handler: (
+        ctx: {
+          auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
+          runQuery: (q: unknown, args: unknown) => Promise<unknown>;
+        },
+        args: { assetId: Id<"organization_assets">; expiresInSeconds?: number }
+      ) => Promise<{ downloadUrl: string; expiresAt: number; fileName: string; contentType: string; fileSize: number; assetId: string }>;
+    };
+
+    it("should reject unauthenticated caller", async () => {
+      const handler = (getAssetDownloadUrl as unknown as GetAssetDownloadUrlHandler)._handler;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => null },
+        runQuery: async () => ({ _id: "asset_1" }),
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Unauthenticated/);
+    });
+
+    it("should reject when asset is not found or is deleted", async () => {
+      const handler = (getAssetDownloadUrl as unknown as GetAssetDownloadUrlHandler)._handler;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => null,
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_nonexistent" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Asset not found/);
+    });
+
+    it("should reject when asset organization does not exist or access is denied", async () => {
+      const handler = (getAssetDownloadUrl as unknown as GetAssetDownloadUrlHandler)._handler;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async (q: unknown) => {
+          // If querying asset:
+          if (typeof q === "object" && q !== null) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_foreign",
+              status: "uploaded",
+              storageKey: "organizations/org_foreign/menu_image/123-burger.png",
+              fileName: "burger.png",
+              contentType: "image/png",
+              fileSize: 1024,
+            };
+          }
+          return null;
+        },
+      };
+
+      // When organization query returns null:
+      let queryCallCount = 0;
+      mockCtx.runQuery = async () => {
+        queryCallCount++;
+        if (queryCallCount === 1) {
+          return {
+            _id: "asset_1",
+            organizationId: "org_foreign",
+            status: "uploaded",
+            storageKey: "organizations/org_foreign/menu_image/123-burger.png",
+            fileName: "burger.png",
+            contentType: "image/png",
+            fileSize: 1024,
+          };
+        }
+        return null; // Org not found
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Organization not found or access denied/);
+    });
+
+    it("should reject download when asset is in pending state", async () => {
+      const handler = (getAssetDownloadUrl as unknown as GetAssetDownloadUrlHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_1",
+              status: "pending",
+              storageKey: "organizations/org_1/menu_image/123-burger.png",
+            };
+          }
+          return { _id: "org_1" };
+        },
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Asset upload is still pending confirmation/);
+    });
+
+    it("should reject download when asset is in failed state", async () => {
+      const handler = (getAssetDownloadUrl as unknown as GetAssetDownloadUrlHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_1",
+              organizationId: "org_1",
+              status: "failed",
+              storageKey: "organizations/org_1/menu_image/123-burger.png",
+            };
+          }
+          return { _id: "org_1" };
+        },
+      };
+
+      await expect(
+        handler(mockCtx, { assetId: "asset_1" as Id<"organization_assets"> })
+      ).rejects.toThrowError(/Asset upload failed/);
+    });
+
+    it("should generate signed GET URL for uploaded asset using stored storageKey", async () => {
+      process.env.R2_ACCOUNT_ID = "acc_123";
+      process.env.R2_ACCESS_KEY_ID = "key_123";
+      process.env.R2_SECRET_ACCESS_KEY = "sec_123";
+      process.env.R2_BUCKET_NAME = "pos-assets";
+
+      const handler = (getAssetDownloadUrl as unknown as GetAssetDownloadUrlHandler)._handler;
+      let queryCallCount = 0;
+      const mockCtx = {
+        auth: { getUserIdentity: async () => ({ subject: "user_1" }) },
+        runQuery: async () => {
+          queryCallCount++;
+          if (queryCallCount === 1) {
+            return {
+              _id: "asset_valid_1",
+              organizationId: "org_1",
+              status: "uploaded",
+              storageKey: "organizations/org_1/logo/17889-logo.png",
+              fileName: "brand_logo.png",
+              contentType: "image/png",
+              fileSize: 4096,
+            };
+          }
+          return { _id: "org_1", name: "Main Store" };
+        },
+      };
+
+      const result = await handler(mockCtx, {
+        assetId: "asset_valid_1" as Id<"organization_assets">,
+      });
+
+      expect(result.assetId).toBe("asset_valid_1");
+      expect(result.downloadUrl).toContain("https://presigned.r2.cloudflarestorage.com/pos-assets/organizations/org_1/logo/17889-logo.png");
+      expect(result.fileName).toBe("brand_logo.png");
+      expect(result.contentType).toBe("image/png");
+      expect(result.fileSize).toBe(4096);
+      expect(result.expiresAt).toBeGreaterThan(Date.now());
+    });
+  });
 });
+
