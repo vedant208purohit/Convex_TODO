@@ -1430,6 +1430,7 @@ export const update = mutation({
       const docToReplace = { ...existing, ...finalState, updatedAt: Date.now() };
       delete (docToReplace as any).logoUrl;
       delete (docToReplace as any).logoStorageId;
+      delete (docToReplace as any).logoAssetId;
       await ctx.db.replace(id, docToReplace as any);
     } else {
       await ctx.db.patch(id, {

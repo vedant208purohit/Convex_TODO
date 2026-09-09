@@ -549,4 +549,57 @@ describe("Organization Domain Business Logic Tests", () => {
     expect(clearedOrg?.fssaiDocumentUrl).toBe("");
     expect(clearedOrg?.gstDocumentUrl).toBe("");
   });
+
+  // 24. Organization Logo R2 Asset ID Persistence & Dual Schema
+  test("24. Accepts and persists logoAssetId while preserving dual schema logoStorageId", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "R2 Logo Store",
+    });
+
+    const legacyStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["legacy logo"])));
+    const assetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/logo/test.png`,
+        fileName: "test.png",
+        contentType: "image/png",
+        fileSize: 1024,
+        assetType: "logo",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Update organization with logoAssetId
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      logoStorageId: legacyStorageId,
+      logoAssetId: assetId,
+    });
+
+    // Verify organization query returns logoAssetId
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.logoAssetId).toBe(assetId);
+    expect(org?.logoStorageId).toBe(legacyStorageId);
+
+    // Verify organizations.list query returns logoAssetId
+    const orgs = await t.query(api.organizations.list);
+    const listedOrg = orgs.find((o) => o?._id === orgId);
+    expect(listedOrg?.logoAssetId).toBe(assetId);
+    expect(listedOrg?.logoStorageId).toBe(legacyStorageId);
+
+    // Verify clearing logo removes logoAssetId
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      logoUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.logoAssetId).toBeUndefined();
+    expect(clearedOrg?.logoStorageId).toBeUndefined();
+  });
 });
