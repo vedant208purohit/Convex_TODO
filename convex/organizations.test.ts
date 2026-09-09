@@ -361,7 +361,7 @@ describe("Organization Domain Business Logic Tests", () => {
         country: "India",
         phone: "987654321",
       })
-    ).rejects.toThrow("Phone must be 10 digits long for other countries");
+    ).rejects.toThrow("Phone must be 10 digits long for India");
 
     // Rejects formatting characters (spaces, hyphens, slashes)
     await expect(
