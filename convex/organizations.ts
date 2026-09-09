@@ -1254,6 +1254,7 @@ export const update = mutation({
     theme: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
+    logoAssetId: v.optional(v.id("organization_assets")),
 
     // Module & Feature Flags
     isDineIn: v.optional(v.boolean()),

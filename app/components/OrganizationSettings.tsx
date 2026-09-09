@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, ChangeEvent } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -45,6 +45,7 @@ interface OrgFormData {
   fax: string;
   logoUrl: string;
   logoStorageId: string;
+  logoAssetId?: string;
   schedule: WeeklySchedule;
   isGst: boolean;
   inclusiveGst: boolean;
@@ -127,11 +128,19 @@ export function OrganizationSettings() {
 
   const updateOrg = useMutation(api.organizations.update);
   const generateUploadUrl = useMutation(api.organizations.generateUploadUrl);
+  const createAssetUpload = useAction(api.r2.createAssetUpload);
+  const confirmAssetUpload = useAction(api.r2.confirmAssetUpload);
 
-  // Convex Storage URL Resolution Query
+  // Storage & R2 URL Resolution Query (R2 First, Convex Storage Fallback)
   const logoStorageUrl = useQuery(
     api.organizations.getStorageUrl,
-    org?.logoStorageId ? { storageId: org.logoStorageId as Id<"_storage"> } : "skip"
+    org?.logoAssetId || org?.logoStorageId
+      ? {
+          assetId: org.logoAssetId as Id<"organization_assets"> | undefined,
+          storageId: org.logoStorageId as Id<"_storage"> | undefined,
+          organizationId: org._id,
+        }
+      : "skip"
   );
 
   // Real Tax Groups & Components Queries and Mutations from Convex DB
@@ -197,6 +206,7 @@ export function OrganizationSettings() {
     fax: "",
     logoUrl: "",
     logoStorageId: "",
+    logoAssetId: "",
     schedule: defaultSchedule(),
     isGst: false,
     inclusiveGst: false,
@@ -293,6 +303,7 @@ export function OrganizationSettings() {
       fax: org.fax || "",
       logoUrl: (org as any).logoUrl || "",
       logoStorageId: (org as any).logoStorageId || "",
+      logoAssetId: (org as any).logoAssetId || "",
       schedule: loadedSchedule,
       isGst: org.isGst ?? false,
       inclusiveGst: org.inclusiveGst ?? false,
@@ -308,13 +319,13 @@ export function OrganizationSettings() {
     setFormData(loaded);
   }, [org]);
 
-  // Compute resolved display logo URL (either direct logoUrl or generated storage URL)
+  // Compute resolved display logo URL (either direct logoUrl, R2 signed URL or generated storage URL)
   const displayLogoUrl = useMemo(() => {
-    if (formData.logoUrl === "" && formData.logoStorageId === "") {
+    if (formData.logoUrl === "" && formData.logoStorageId === "" && !formData.logoAssetId) {
       return "";
     }
     return formData.logoUrl || logoStorageUrl || "";
-  }, [formData.logoUrl, formData.logoStorageId, logoStorageUrl]);
+  }, [formData.logoUrl, formData.logoStorageId, formData.logoAssetId, logoStorageUrl]);
 
   // Map Convex DB Tax Components for display lookup
   const taxComponentMap = useMemo(() => {
@@ -570,20 +581,45 @@ export function OrganizationSettings() {
     setIsUploadingLogo(true);
 
     try {
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "logo",
+        fileName: file.name,
+        contentType: file.type || "image/png",
+        fileSize: file.size,
+        organizationId: org?._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "image/png" },
         body: file,
       });
 
-      const { storageId } = await result.json();
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload logo binary to R2 (Status: ${putResult.status})`);
+      }
+
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
       const localPreviewUrl = URL.createObjectURL(file);
       setFormData((prev) => ({
         ...prev,
-        logoStorageId: storageId,
+        logoAssetId: uploadResult.assetId,
         logoUrl: localPreviewUrl,
       }));
+
+      // 4. Link logoAssetId to organization record in Convex DB
+      if (org?._id) {
+        await updateOrg({
+          id: org._id,
+          logoAssetId: uploadResult.assetId,
+        });
+      }
     } catch (err: any) {
       setErrorMessage(err?.message || "Failed to upload organization logo.");
     } finally {
@@ -596,6 +632,7 @@ export function OrganizationSettings() {
       ...prev,
       logoUrl: "",
       logoStorageId: "",
+      logoAssetId: "",
     }));
 
     if (fileInputRef.current) {
@@ -608,6 +645,7 @@ export function OrganizationSettings() {
           id: org._id,
           logoUrl: "",
           logoStorageId: undefined,
+          logoAssetId: undefined,
         });
         setSuccessMessage("Organization logo removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
@@ -801,6 +839,7 @@ export function OrganizationSettings() {
       if (formData.fax.trim()) updatePayload.fax = formData.fax.trim();
       if (formData.logoUrl !== undefined && formData.logoUrl !== "") updatePayload.logoUrl = formData.logoUrl;
       if (formData.logoStorageId) updatePayload.logoStorageId = formData.logoStorageId;
+      if (formData.logoAssetId) updatePayload.logoAssetId = formData.logoAssetId;
 
       await updateOrg(updatePayload as any);
 
