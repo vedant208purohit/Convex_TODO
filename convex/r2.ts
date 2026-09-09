@@ -1,10 +1,11 @@
 "use node";
 
-import { S3Client, HeadBucketCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, HeadBucketCommand, PutObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v } from "convex/values";
 import { action } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
+import { Id, Doc } from "./_generated/dataModel";
 
 export interface R2Config {
   accountId: string;
@@ -13,6 +14,22 @@ export interface R2Config {
   bucketName: string;
   publicDomain?: string;
   endpoint: string;
+}
+
+export interface CreateAssetUploadResult {
+  assetId: Id<"organization_assets">;
+  uploadUrl: string;
+  storageKey: string;
+  expiresAt: number;
+  contentType: string;
+}
+
+export interface ConfirmAssetUploadResult {
+  success: boolean;
+  assetId: Id<"organization_assets">;
+  storageKey: string;
+  status: string;
+  alreadyConfirmed?: boolean;
 }
 
 /**
@@ -127,7 +144,6 @@ export function resetR2ClientCache(): void {
  * control characters, and unsafe characters.
  */
 export function sanitizeFileName(rawName: string, defaultExt: string): { baseName: string; ext: string } {
-  // Strip control chars, directory traversal sequences, null bytes, and path separators
   const cleanName = rawName
     .replace(/[\0\x00-\x1f\x7f]/g, "")
     .replace(/[/\\?%*:|"<>]/g, "_")
@@ -138,13 +154,11 @@ export function sanitizeFileName(rawName: string, defaultExt: string): { baseNam
   let baseName = lastDotIndex > 0 ? cleanName.substring(0, lastDotIndex) : cleanName;
   let ext = lastDotIndex > 0 ? cleanName.substring(lastDotIndex + 1).toLowerCase() : "";
 
-  // Normalize baseName: keep alphanumeric, hyphen, underscore
   baseName = baseName.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/__+/g, "_").replace(/^_+|_+$/g, "");
   if (!baseName) {
     baseName = "asset";
   }
 
-  // Normalize ext: keep alphanumeric characters only
   ext = ext.replace(/[^a-zA-Z0-9]/g, "");
   if (!ext) {
     ext = defaultExt;
@@ -163,7 +177,7 @@ export function generateR2StorageKey(
   rawFileName: string,
   mimeType: string
 ): string {
-  const cleanOrgId = organizationId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const cleanOrgId = String(organizationId).replace(/[^a-zA-Z0-9_-]/g, "");
   if (!cleanOrgId) {
     throw new Error("Invalid organizationId: must contain valid identifier characters.");
   }
@@ -221,7 +235,6 @@ export function validateUploadRequest(args: {
 /**
  * Minimal safe Convex Action to test backend connectivity to Cloudflare R2.
  * Performs a read-only HeadBucket check against the configured bucket.
- * Does NOT expose secrets or upload/create any assets.
  */
 export const testConnection = action({
   args: {},
@@ -253,12 +266,7 @@ export const testConnection = action({
 });
 
 /**
- * Generates a presigned Cloudflare R2 PUT upload URL.
- * 
- * - Enforces Clerk user authentication.
- * - Validates assetType, contentType, and fileSize limits.
- * - Sanitizes file name and generates a deterministic, collision-proof tenant storage key.
- * - Issues a short-lived (15 min) presigned PUT URL directly targeting Cloudflare R2.
+ * Generates a presigned Cloudflare R2 PUT upload URL (Phase 2 API).
  */
 export const generateUploadUrl = action({
   args: {
@@ -286,6 +294,10 @@ export const generateUploadUrl = action({
       orgId = defaultOrg._id;
     }
 
+    if (!orgId) {
+      throw new Error("Organization not found.");
+    }
+
     // 3. Validate upload parameters
     validateUploadRequest({
       assetType: args.assetType,
@@ -296,7 +308,7 @@ export const generateUploadUrl = action({
 
     // 4. Generate scoped, safe storage key
     const storageKey = generateR2StorageKey(
-      orgId,
+      String(orgId),
       args.assetType,
       args.fileName,
       args.contentType
@@ -321,5 +333,187 @@ export const generateUploadUrl = action({
       expiresAt: Date.now() + expiresInSeconds * 1000,
       contentType: args.contentType,
     };
+  },
+});
+
+/**
+ * Phase 3: Creates an organization_assets record in "pending" status and returns
+ * a presigned PUT upload URL with the newly created assetId.
+ */
+export const createAssetUpload = action({
+  args: {
+    assetType: v.string(),
+    fileName: v.string(),
+    contentType: v.string(),
+    fileSize: v.number(),
+    organizationId: v.optional(v.union(v.id("organizations"), v.string())),
+  },
+  handler: async (ctx, args): Promise<CreateAssetUploadResult> => {
+    // 1. Authenticate caller
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: A valid Clerk session is required to initiate asset uploads.");
+    }
+
+    // 2. Resolve organization scope
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const orgs = await ctx.runQuery(api.organizations.list);
+      const defaultOrg = orgs && orgs.length > 0 ? orgs[0] : null;
+      if (!defaultOrg) {
+        throw new Error("Organization not found: Ensure the store organization is initialized.");
+      }
+      orgId = defaultOrg._id;
+    }
+
+    if (!orgId) {
+      throw new Error("Organization not found.");
+    }
+
+    // 3. Validate upload parameters
+    validateUploadRequest({
+      assetType: args.assetType,
+      fileName: args.fileName,
+      contentType: args.contentType,
+      fileSize: args.fileSize,
+    });
+
+    // 4. Generate scoped storage key
+    const storageKey = generateR2StorageKey(
+      String(orgId),
+      args.assetType,
+      args.fileName,
+      args.contentType
+    );
+
+    // 5. Insert pending metadata record in organization_assets
+    const normalizedOrgId = orgId as Id<"organizations">;
+    const assetId: Id<"organization_assets"> = await ctx.runMutation(
+      internal.organizationAssets.internalCreatePending,
+      {
+        organizationId: normalizedOrgId,
+        storageKey,
+        fileName: args.fileName,
+        contentType: args.contentType,
+        fileSize: args.fileSize,
+        assetType: args.assetType,
+        createdBy: identity.subject,
+      }
+    );
+
+    // 6. Generate presigned PUT upload URL
+    const config = getR2Config();
+    const client = getR2Client();
+    const expiresInSeconds = 900; // 15 minutes
+
+    const command = new PutObjectCommand({
+      Bucket: config.bucketName,
+      Key: storageKey,
+      ContentType: args.contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
+
+    return {
+      assetId,
+      uploadUrl,
+      storageKey,
+      expiresAt: Date.now() + expiresInSeconds * 1000,
+      contentType: args.contentType,
+    };
+  },
+});
+
+/**
+ * Phase 3: Confirms that an upload completed by verifying the R2 object exists
+ * via a HeadObject check and transitioning the asset status to "uploaded".
+ */
+export const confirmAssetUpload = action({
+  args: {
+    assetId: v.id("organization_assets"),
+  },
+  handler: async (ctx, args): Promise<ConfirmAssetUploadResult> => {
+    // 1. Authenticate caller
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Unauthenticated: A valid Clerk session is required to confirm asset uploads.");
+    }
+
+    // 2. Fetch asset record from database
+    const asset: Doc<"organization_assets"> | null = await ctx.runQuery(
+      internal.organizationAssets.internalGet,
+      {
+        id: args.assetId,
+      }
+    );
+
+    if (!asset) {
+      throw new Error(`Asset not found: ${args.assetId}`);
+    }
+
+    // 3. Prevent invalid lifecycle transitions
+    if (asset.status === "deleted" || asset.deletedAt !== undefined) {
+      throw new Error("Invalid state transition: Cannot confirm a deleted asset.");
+    }
+
+    const config = getR2Config();
+    const client = getR2Client();
+
+    // 4. Idempotency Check: if already uploaded, verify R2 object still exists and return success
+    if (asset.status === "uploaded") {
+      try {
+        await client.send(
+          new HeadObjectCommand({
+            Bucket: config.bucketName,
+            Key: asset.storageKey,
+          })
+        );
+        return {
+          success: true,
+          assetId: asset._id,
+          storageKey: asset.storageKey,
+          status: "uploaded",
+          alreadyConfirmed: true,
+        };
+      } catch (err: unknown) {
+        throw new Error(
+          `Asset record is marked uploaded but object was not found in storage: ${err instanceof Error ? err.message : "HeadObject failed"}`
+        );
+      }
+    }
+
+    // 5. Verify R2 object exists via HeadObjectCommand
+    try {
+      const headResult = await client.send(
+        new HeadObjectCommand({
+          Bucket: config.bucketName,
+          Key: asset.storageKey,
+        })
+      );
+
+      // 6. Update status to "uploaded" with verified metadata
+      const updated = await ctx.runMutation(internal.organizationAssets.internalMarkUploaded, {
+        assetId: asset._id,
+        fileSize: headResult.ContentLength ?? asset.fileSize,
+        contentType: headResult.ContentType ?? asset.contentType,
+      });
+
+      return {
+        success: true,
+        assetId: updated?._id || asset._id,
+        storageKey: asset.storageKey,
+        status: "uploaded",
+      };
+    } catch (err: unknown) {
+      // Mark as failed in database if R2 object does not exist
+      await ctx.runMutation(internal.organizationAssets.internalMarkFailed, {
+        assetId: asset._id,
+        reason: err instanceof Error ? err.message : "R2 object not found during confirmation",
+      });
+
+      throw new Error(
+        `Failed to confirm asset upload: Object '${asset.storageKey}' not found in R2 storage.`
+      );
+    }
   },
 });
