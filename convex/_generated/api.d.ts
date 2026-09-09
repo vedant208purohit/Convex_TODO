@@ -26,6 +26,7 @@ import type * as organizationTables from "../organizationTables.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
+import type * as r2 from "../r2.js";
 import type * as taxation from "../taxation.js";
 
 import type {
@@ -53,6 +54,7 @@ declare const fullApi: ApiFromModules<{
   organizationUsers: typeof organizationUsers;
   organizationWaiters: typeof organizationWaiters;
   organizations: typeof organizations;
+  r2: typeof r2;
   taxation: typeof taxation;
 }>;
 
