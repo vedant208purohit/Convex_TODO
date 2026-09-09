@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, type FormEvent } from "react";
+import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
@@ -151,6 +151,413 @@ function CheckIcon({ className = "w-4 h-4" }: { className?: string }) {
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
+}
+
+function MoreVerticalIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="5" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="12" cy="19" r="2" />
+    </svg>
+  );
+}
+
+// Allergen Options
+const ALLERGEN_OPTIONS = [
+  { id: "Soy", name: "Soy", icon: "🫘" },
+  { id: "Sulphite", name: "Sulphite", icon: "🧪" },
+  { id: "Nuts", name: "Nuts", icon: "🥜" },
+  { id: "Wheat", name: "Wheat", icon: "🌾" },
+  { id: "Milk", name: "Milk", icon: "🥛" },
+  { id: "Celery", name: "Celery", icon: "🥬" },
+  { id: "Lupin", name: "Lupin", icon: "🌱" },
+  { id: "Sesame", name: "Sesame", icon: "⚪" },
+  { id: "Mustard", name: "Mustard", icon: "🫙" },
+  { id: "Egg", name: "Egg", icon: "🥚" },
+  { id: "Fish", name: "Fish", icon: "🐟" },
+  { id: "Crustaceans", name: "Crustaceans", icon: "🦐" },
+  { id: "Pork", name: "Pork", icon: "🥓" },
+];
+
+export interface ChildNutrient {
+  id: string;
+  name: string;
+  quantity?: string;
+  dailyValue?: string;
+}
+
+export interface NutrientItem {
+  id: string;
+  name: string;
+  quantity?: string;
+  dailyValue?: string;
+  children?: ChildNutrient[];
+}
+
+function RichTextDescriptionEditor({
+  value,
+  onChange,
+  placeholder = "Enter item description",
+}: {
+  value: string;
+  onChange: (val: string) => void;
+  placeholder?: string;
+}) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const isInternalChange = useRef(false);
+  const [activeStates, setActiveStates] = useState({
+    bold: false,
+    italic: false,
+    underline: false,
+    strike: false,
+    h1: false,
+    h2: false,
+    h3: false,
+    orderedList: false,
+    unorderedList: false,
+    format: "normal",
+  });
+
+  useEffect(() => {
+    if (isInternalChange.current) {
+      isInternalChange.current = false;
+      return;
+    }
+    if (editorRef.current && editorRef.current.innerHTML !== (value || "")) {
+      editorRef.current.innerHTML = value || "";
+    }
+  }, [value]);
+
+  const updateActiveStates = () => {
+    if (!editorRef.current) return;
+    try {
+      const isBold = document.queryCommandState("bold");
+      const isItalic = document.queryCommandState("italic");
+      const isUnderline = document.queryCommandState("underline");
+      const isStrike = document.queryCommandState("strikeThrough");
+      const isOrdered = document.queryCommandState("insertOrderedList");
+      const isUnordered = document.queryCommandState("insertUnorderedList");
+
+      let currentBlock = "";
+      try {
+        currentBlock = (document.queryCommandValue("formatBlock") || "").replace(/[<>]/g, "").toLowerCase();
+      } catch (e) {}
+
+      // Fallback ancestor check
+      const sel = window.getSelection();
+      if (sel && sel.anchorNode && editorRef.current.contains(sel.anchorNode)) {
+        let node: Node | null = sel.anchorNode;
+        while (node && node !== editorRef.current) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const tag = (node as HTMLElement).tagName?.toLowerCase();
+            if (tag === "h1" || tag === "h2" || tag === "h3") {
+              currentBlock = tag;
+              break;
+            }
+          }
+          node = node.parentNode;
+        }
+      }
+
+      const format = currentBlock === "h1" ? "h1" : currentBlock === "h2" ? "h2" : currentBlock === "h3" ? "h3" : "normal";
+
+      setActiveStates({
+        bold: isBold,
+        italic: isItalic,
+        underline: isUnderline,
+        strike: isStrike,
+        h1: format === "h1",
+        h2: format === "h2",
+        h3: format === "h3",
+        orderedList: isOrdered,
+        unorderedList: isUnordered,
+        format,
+      });
+    } catch (e) {}
+  };
+
+  const focusEditor = () => {
+    if (!editorRef.current) return;
+    if (document.activeElement !== editorRef.current) {
+      editorRef.current.focus();
+    }
+  };
+
+  const notifyChange = () => {
+    if (editorRef.current) {
+      isInternalChange.current = true;
+      onChange(editorRef.current.innerHTML);
+      updateActiveStates();
+    }
+  };
+
+  const exec = (command: string, arg?: string) => {
+    focusEditor();
+    try {
+      document.execCommand(command, false, arg);
+    } catch (e) {
+      console.error("execCommand error:", e);
+    }
+    notifyChange();
+  };
+
+  const toggleHeading = (level: "h1" | "h2") => {
+    focusEditor();
+    try {
+      if (activeStates[level]) {
+        // Toggle off back to normal paragraph
+        const success = document.execCommand("formatBlock", false, "<p>");
+        if (!success) document.execCommand("formatBlock", false, "p");
+      } else {
+        // Toggle heading on
+        const success = document.execCommand("formatBlock", false, `<${level}>`);
+        if (!success) document.execCommand("formatBlock", false, level);
+      }
+    } catch (e) {
+      try {
+        document.execCommand("formatBlock", false, level);
+      } catch (err) {}
+    }
+    notifyChange();
+  };
+
+  const handleFormatChange = (format: string) => {
+    focusEditor();
+    try {
+      if (format === "h1") {
+        document.execCommand("formatBlock", false, "<h1>") || document.execCommand("formatBlock", false, "h1");
+      } else if (format === "h2") {
+        document.execCommand("formatBlock", false, "<h2>") || document.execCommand("formatBlock", false, "h2");
+      } else if (format === "h3") {
+        document.execCommand("formatBlock", false, "<h3>") || document.execCommand("formatBlock", false, "h3");
+      } else {
+        document.execCommand("formatBlock", false, "<p>") || document.execCommand("formatBlock", false, "p");
+      }
+    } catch (e) {}
+    notifyChange();
+  };
+
+  const handleInput = () => {
+    if (editorRef.current) {
+      isInternalChange.current = true;
+      onChange(editorRef.current.innerHTML);
+      updateActiveStates();
+    }
+  };
+
+  return (
+    <div className="space-y-2 font-sans">
+      {/* Quill-style Toolbar matching prest design */}
+      <div className="bg-[#fcfbfa] border border-[#e7e5e4] rounded-xl p-2.5 space-y-2 select-none shadow-2xs">
+        {/* Row 1: Inline & Block Controls */}
+        <div className="flex flex-wrap items-center gap-1 text-[#0c0a09]">
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("bold");
+            }}
+            className={`w-7 h-7 rounded flex items-center justify-center transition-colors font-bold text-sm cursor-pointer ${
+              activeStates.bold ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Bold"
+          >
+            B
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("italic");
+            }}
+            className={`w-7 h-7 rounded flex items-center justify-center transition-colors italic font-serif text-sm cursor-pointer ${
+              activeStates.italic ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Italic"
+          >
+            I
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("underline");
+            }}
+            className={`w-7 h-7 rounded flex items-center justify-center transition-colors underline text-sm cursor-pointer ${
+              activeStates.underline ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Underline"
+          >
+            U
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("strikeThrough");
+            }}
+            className={`w-7 h-7 rounded flex items-center justify-center transition-colors line-through text-sm cursor-pointer ${
+              activeStates.strike ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Strikethrough"
+          >
+            S
+          </button>
+
+          <span className="w-px h-4 bg-[#e7e5e4] mx-1" />
+
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              toggleHeading("h1");
+            }}
+            className={`w-8 h-7 rounded flex items-center justify-center transition-colors font-bold text-xs cursor-pointer ${
+              activeStates.h1 ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Heading 1"
+          >
+            H<sub className="text-[9px]">1</sub>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              toggleHeading("h2");
+            }}
+            className={`w-8 h-7 rounded flex items-center justify-center transition-colors font-bold text-xs cursor-pointer ${
+              activeStates.h2 ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Heading 2"
+          >
+            H<sub className="text-[9px]">2</sub>
+          </button>
+
+          <span className="w-px h-4 bg-[#e7e5e4] mx-1" />
+
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("insertOrderedList");
+            }}
+            className={`w-7 h-7 rounded flex items-center justify-center transition-colors text-xs cursor-pointer ${
+              activeStates.orderedList ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Numbered List"
+          >
+            <span className="font-mono text-[11px] leading-none">1≡</span>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("insertUnorderedList");
+            }}
+            className={`w-7 h-7 rounded flex items-center justify-center transition-colors text-xs cursor-pointer ${
+              activeStates.unorderedList ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+            }`}
+            title="Bullet List"
+          >
+            <span className="font-mono text-[11px] leading-none">•≡</span>
+          </button>
+
+          <span className="w-px h-4 bg-[#e7e5e4] mx-1" />
+
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("outdent");
+            }}
+            className="w-7 h-7 rounded flex items-center justify-center hover:bg-[#e7e5e4] transition-colors text-xs cursor-pointer text-[#0c0a09]"
+            title="Outdent"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="21" y1="4" x2="11" y2="4" />
+              <line x1="21" y1="12" x2="11" y2="12" />
+              <line x1="21" y1="20" x2="11" y2="20" />
+              <polyline points="7 8 3 12 7 16" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("indent");
+            }}
+            className="w-7 h-7 rounded flex items-center justify-center hover:bg-[#e7e5e4] transition-colors text-xs cursor-pointer text-[#0c0a09]"
+            title="Indent"
+          >
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="21" y1="4" x2="11" y2="4" />
+              <line x1="21" y1="12" x2="11" y2="12" />
+              <line x1="21" y1="20" x2="11" y2="20" />
+              <polyline points="3 8 7 12 3 16" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              handleFormatChange("normal");
+            }}
+            className="w-7 h-7 rounded flex items-center justify-center hover:bg-[#e7e5e4] transition-colors text-xs cursor-pointer text-[#0c0a09]"
+            title="Paragraph"
+          >
+            ¶
+          </button>
+        </div>
+
+        {/* Row 2: Heading Dropdown & Clean Format */}
+        <div className="flex items-center gap-2 pt-1 border-t border-[#f0efed]">
+          <div className="relative inline-flex items-center">
+            <select
+              value={activeStates.format}
+              onChange={(e) => handleFormatChange(e.target.value)}
+              className="bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09] font-medium pr-6 focus:outline-none cursor-pointer"
+            >
+              <option value="normal">Normal</option>
+              <option value="h1">Heading 1</option>
+              <option value="h2">Heading 2</option>
+              <option value="h3">Heading 3</option>
+            </select>
+          </div>
+          <button
+            type="button"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              exec("removeFormat");
+              handleFormatChange("normal");
+            }}
+            className="px-2 py-1 hover:bg-[#e7e5e4] rounded text-xs font-semibold text-[#5e5e5e] hover:text-[#0c0a09] transition-colors flex items-center gap-1 cursor-pointer"
+            title="Clear Formatting"
+          >
+            <span className="font-serif italic text-sm">T</span><sub className="text-[9px]">x</sub>
+          </button>
+        </div>
+      </div>
+
+      {/* Editor Content Area */}
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        onBlur={handleInput}
+        onKeyUp={updateActiveStates}
+        onMouseUp={updateActiveStates}
+        data-placeholder={placeholder}
+        className="rich-text-editor w-full bg-white border border-[#e7e5e4] rounded-lg p-3.5 min-h-[110px] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm leading-relaxed overflow-y-auto"
+      />
+    </div>
+  );
+}
+
+// Helper to strip HTML tags for plain text table/list previews
+function stripHtml(html?: string): string {
+  if (!html) return "";
+  return html.replace(/<[^>]*>?/gm, "").trim();
 }
 
 // Dietary Item Types
@@ -561,6 +968,154 @@ export default function MenuPage() {
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
 
+  // Nutrition Information State (Configured during item edit)
+  const [itemServingSize, setItemServingSize] = useState("");
+  const [itemServing, setItemServing] = useState("");
+  const [itemCaloriesPerServing, setItemCaloriesPerServing] = useState("");
+  const [itemProtein, setItemProtein] = useState("");
+  const [itemCarbs, setItemCarbs] = useState("");
+  const [itemFat, setItemFat] = useState("");
+  const [itemFiber, setItemFiber] = useState("");
+  const [itemSugar, setItemSugar] = useState("");
+  const [itemSodium, setItemSodium] = useState("");
+  const [itemShowAllergens, setItemShowAllergens] = useState(false);
+  const [itemSelectedAllergens, setItemSelectedAllergens] = useState<string[]>([]);
+  const [itemNutrients, setItemNutrients] = useState<NutrientItem[]>([]);
+  const [newNutrientName, setNewNutrientName] = useState("");
+  const [activeNutrientMenuId, setActiveNutrientMenuId] = useState<string | null>(null);
+  const [editingNutrientId, setEditingNutrientId] = useState<string | null>(null);
+  const [editingNutrientName, setEditingNutrientName] = useState("");
+  const [addingChildForNutrientId, setAddingChildForNutrientId] = useState<string | null>(null);
+  const [childNutrientNameInput, setChildNutrientNameInput] = useState("");
+
+  const handleToggleAllergen = (allergenName: string) => {
+    setItemSelectedAllergens((prev) =>
+      prev.includes(allergenName)
+        ? prev.filter((a) => a !== allergenName)
+        : [...prev, allergenName]
+    );
+  };
+
+  const handleAddNutrient = () => {
+    if (!newNutrientName.trim()) return;
+    const newNutrient: NutrientItem = {
+      id: `nut_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: newNutrientName.trim(),
+      quantity: "",
+      dailyValue: "",
+      children: [],
+    };
+    setItemNutrients((prev) => [...prev, newNutrient]);
+    setNewNutrientName("");
+  };
+
+  const handleUpdateNutrient = (id: string, field: "name" | "quantity" | "dailyValue", val: string) => {
+    setItemNutrients((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, [field]: val } : n))
+    );
+  };
+
+  const handleRemoveNutrient = (id: string) => {
+    setItemNutrients((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleAddChildNutrient = (parentId: string, childName: string) => {
+    if (!childName.trim()) return;
+    const newChild: ChildNutrient = {
+      id: `child_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      name: childName.trim(),
+      quantity: "",
+      dailyValue: "",
+    };
+    setItemNutrients((prev) =>
+      prev.map((n) =>
+        n.id === parentId
+          ? { ...n, children: [...(n.children || []), newChild] }
+          : n
+      )
+    );
+  };
+
+  const handleUpdateChildNutrient = (
+    parentId: string,
+    childId: string,
+    field: "name" | "quantity" | "dailyValue",
+    val: string
+  ) => {
+    setItemNutrients((prev) =>
+      prev.map((n) => {
+        if (n.id !== parentId) return n;
+        return {
+          ...n,
+          children: (n.children || []).map((c) =>
+            c.id === childId ? { ...c, [field]: val } : c
+          ),
+        };
+      })
+    );
+  };
+
+  const handleRemoveChildNutrient = (parentId: string, childId: string) => {
+    setItemNutrients((prev) =>
+      prev.map((n) => {
+        if (n.id !== parentId) return n;
+        return {
+          ...n,
+          children: (n.children || []).filter((c) => c.id !== childId),
+        };
+      })
+    );
+  };
+
+  // AI Assistant & Suggestions State
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [aiNameSuggestion, setAiNameSuggestion] = useState("Truffle Umami Burger");
+  const [aiDescSuggestion, setAiDescSuggestion] = useState(
+    "A decadent blend of wagyu beef, black truffle aioli, and aged gruyère on a toasted brioche bun."
+  );
+  const [aiNutritionSuggestion, setAiNutritionSuggestion] = useState({
+    calories: "520 kcal",
+    protein: "24",
+    carbs: "42",
+    fat: "28",
+  });
+  const [aiCopiedKey, setAiCopiedKey] = useState<string | null>(null);
+
+  const handleGenerateAiSuggestions = () => {
+    setIsGeneratingAi(true);
+    const baseName = itemName.trim() || activeCategory?.name || "Specialty Item";
+    setTimeout(() => {
+      if (baseName.toLowerCase().includes("vadapav") || baseName.toLowerCase().includes("vada")) {
+        setAiNameSuggestion("Artisanal Spiced Vadapav");
+        setAiDescSuggestion("Crispy spiced potato dumpling encased in golden chickpea batter, served in a butter-toasted brioche pav with signature dry garlic chutney and mint relish.");
+        setAiNutritionSuggestion({ calories: "290 kcal", protein: "7", carbs: "38", fat: "12" });
+      } else if (baseName.toLowerCase().includes("burger")) {
+        setAiNameSuggestion("Truffle Umami Burger");
+        setAiDescSuggestion("A decadent blend of premium patty, black truffle aioli, caramelized onions, and aged melted cheese on a toasted brioche bun.");
+        setAiNutritionSuggestion({ calories: "520 kcal", protein: "24", carbs: "42", fat: "28" });
+      } else if (baseName.toLowerCase().includes("pizza")) {
+        setAiNameSuggestion("Charred Sourdough Margherita");
+        setAiDescSuggestion("Wood-fired 48-hour fermented sourdough crust topped with San Marzano tomatoes, fresh buffalo mozzarella, and fragrant sweet basil.");
+        setAiNutritionSuggestion({ calories: "680 kcal", protein: "28", carbs: "78", fat: "22" });
+      } else if (baseName.toLowerCase().includes("coffee") || baseName.toLowerCase().includes("beverage") || baseName.toLowerCase().includes("shake")) {
+        setAiNameSuggestion("Velvet Cold Brew Latte");
+        setAiDescSuggestion("Slow-steeped single-origin Arabica cold brew infused with organic oat milk and a touch of Madagascar vanilla bean.");
+        setAiNutritionSuggestion({ calories: "140 kcal", protein: "4", carbs: "18", fat: "5" });
+      } else {
+        setAiNameSuggestion(`${baseName} Gourmet Supreme`);
+        setAiDescSuggestion(`Signature chef-crafted ${baseName} prepared with premium fresh ingredients, balanced aromatic seasonings, and cooked to perfection.`);
+        setAiNutritionSuggestion({ calories: "380 kcal", protein: "18", carbs: "32", fat: "14" });
+      }
+      setIsGeneratingAi(false);
+    }, 450);
+  };
+
+  const handleCopyAiText = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setAiCopiedKey(key);
+    setTimeout(() => setAiCopiedKey(null), 1500);
+  };
+
   // Tax Settings on Item Form
   const [itemIsGst, setItemIsGst] = useState(true);
   const [itemSelectedTaxGroupId, setItemSelectedTaxGroupId] = useState<string>("");
@@ -844,6 +1399,22 @@ export default function MenuPage() {
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
     setItemSelectedCategoryId(activeCategory?._id || "");
+    setItemServingSize("");
+    setItemServing("");
+    setItemCaloriesPerServing("");
+    setItemProtein("");
+    setItemCarbs("");
+    setItemFat("");
+    setItemFiber("");
+    setItemSugar("");
+    setItemSodium("");
+    setItemShowAllergens(false);
+    setItemSelectedAllergens([]);
+    setItemNutrients([]);
+    setNewNutrientName("");
+    setActiveNutrientMenuId(null);
+    setEditingNutrientId(null);
+    setAddingChildForNutrientId(null);
     setItemError(null);
     setIsAddItemOpen(true);
     setIsAddItemDropdownOpen(false);
@@ -869,6 +1440,22 @@ export default function MenuPage() {
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
     setItemSelectedCategoryId(activeCategory?._id || "");
+    setItemServingSize(item.servingSize || "");
+    setItemServing(item.serving ? String(item.serving) : "");
+    setItemCaloriesPerServing(item.caloriesPerServing || item.calorie || "");
+    setItemProtein(item.protein || "");
+    setItemCarbs(item.carbs || "");
+    setItemFat(item.fat || "");
+    setItemFiber(item.fiber || "");
+    setItemSugar(item.sugar || "");
+    setItemSodium(item.sodium || "");
+    setItemShowAllergens(item.showAllergenContents ?? false);
+    setItemSelectedAllergens(item.allergens || []);
+    setItemNutrients(item.nutrients || []);
+    setNewNutrientName("");
+    setActiveNutrientMenuId(null);
+    setEditingNutrientId(null);
+    setAddingChildForNutrientId(null);
     setItemError(null);
     setIsAddItemOpen(true);
   };
@@ -918,6 +1505,19 @@ export default function MenuPage() {
           taxMode: itemTaxMode,
           markAsBestseller: itemMarkAsBestseller,
           isAvailable: itemIsAvailable,
+          servingSize: itemServingSize.trim() || undefined,
+          serving: itemServing ? parseFloat(itemServing) : undefined,
+          caloriesPerServing: itemCaloriesPerServing.trim() || undefined,
+          calorie: itemCaloriesPerServing.trim() || undefined,
+          protein: itemProtein.trim() || undefined,
+          carbs: itemCarbs.trim() || undefined,
+          fat: itemFat.trim() || undefined,
+          fiber: itemFiber.trim() || undefined,
+          sugar: itemSugar.trim() || undefined,
+          sodium: itemSodium.trim() || undefined,
+          showAllergenContents: itemShowAllergens,
+          allergens: itemSelectedAllergens,
+          nutrients: itemNutrients,
         });
       } else {
         const newItemId = await createItemMutation({
@@ -937,6 +1537,19 @@ export default function MenuPage() {
           quantityUnit: itemShowQuantity ? itemQuantityUnit : undefined,
           skuNumber: itemSkuNumber.trim() || undefined,
           markAsBestseller: itemMarkAsBestseller,
+          servingSize: itemServingSize.trim() || undefined,
+          serving: itemServing ? parseFloat(itemServing) : undefined,
+          caloriesPerServing: itemCaloriesPerServing.trim() || undefined,
+          calorie: itemCaloriesPerServing.trim() || undefined,
+          protein: itemProtein.trim() || undefined,
+          carbs: itemCarbs.trim() || undefined,
+          fat: itemFat.trim() || undefined,
+          fiber: itemFiber.trim() || undefined,
+          sugar: itemSugar.trim() || undefined,
+          sodium: itemSodium.trim() || undefined,
+          showAllergenContents: itemShowAllergens,
+          allergens: itemSelectedAllergens,
+          nutrients: itemNutrients,
         });
 
         await addCategoryItemMutation({
@@ -1603,28 +2216,6 @@ export default function MenuPage() {
                     Configure details, taxes, dietary classification, and base pricing.
                   </p>
                 </div>
-
-                <div className="flex items-center gap-3 font-sans">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddItemOpen(false);
-                      setEditingItem(null);
-                    }}
-                    className="h-10 px-6 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-[15px] bg-transparent cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    form="item-details-form"
-                    disabled={isSavingItem}
-                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-                    className="h-10 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingItem ? "Saving..." : editingItem ? "Save Changes" : "Save & Configure Customizations"}
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -1718,13 +2309,24 @@ export default function MenuPage() {
 
                       {/* Description */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-[#0c0a09]">Description</label>
-                        <textarea
-                          rows={3}
+                        <div className="flex justify-between items-center">
+                          <label className="block text-sm font-medium text-[#0c0a09]">Enter description</label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              handleGenerateAiSuggestions();
+                              setItemDescription(aiDescSuggestion);
+                            }}
+                            className="text-xs text-[#5e5e5e] hover:text-[#0c0a09] flex items-center gap-1 transition-colors font-medium cursor-pointer"
+                          >
+                            <span>✨</span>
+                            <span>Generate with AI</span>
+                          </button>
+                        </div>
+                        <RichTextDescriptionEditor
                           value={itemDescription}
-                          onChange={(e) => setItemDescription(e.target.value)}
-                          placeholder="Describe ingredients, taste notes, and culinary highlights..."
-                          className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm resize-y"
+                          onChange={(val) => setItemDescription(val)}
+                          placeholder="Enter item description"
                         />
                       </div>
                     </div>
@@ -1969,10 +2571,335 @@ export default function MenuPage() {
                         </div>
                       )}
                     </div>
+
+                    {/* Card 3: Nutrition Information (Shown ONLY in Edit Mode per specifications) */}
+                    {editingItem && (
+                      <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
+                        {/* Card Header with Show Allergen Contents Checkbox */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e7e5e4] pb-4 gap-3">
+                          <div>
+                            <h2 className="text-[20px] font-semibold text-[#0c0a09]">Nutrition Information</h2>
+                            <p className="text-xs text-[#5e5e5e] mt-0.5">Configure nutritional breakdown, portion metrics, and allergen contents.</p>
+                          </div>
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={itemShowAllergens}
+                              onChange={(e) => setItemShowAllergens(e.target.checked)}
+                              className="w-4 h-4 rounded text-[#0c0a09] focus:ring-[#0c0a09] border-[#d1c4c1] cursor-pointer"
+                            />
+                            <span className="text-xs text-[#0c0a09] font-medium">Show allergen contents</span>
+                          </label>
+                        </div>
+
+                        {/* Allergen Pills Grid (when itemShowAllergens is checked) */}
+                        {itemShowAllergens && (
+                          <div className="space-y-2 pt-1">
+                            <p className="text-xs font-medium text-[#5e5e5e]">Allergen Contents (Select all that apply)</p>
+                            <div className="flex flex-wrap gap-2.5">
+                              {ALLERGEN_OPTIONS.map((allergen) => {
+                                const isSelected = itemSelectedAllergens.includes(allergen.name);
+                                return (
+                                  <button
+                                    key={allergen.id}
+                                    type="button"
+                                    onClick={() => handleToggleAllergen(allergen.name)}
+                                    className={`px-3.5 py-2 rounded-lg border text-sm font-medium flex items-center gap-2 transition-all cursor-pointer ${
+                                      isSelected
+                                        ? "bg-[#1c1b1b] text-white border-[#1c1b1b] shadow-xs"
+                                        : "bg-white text-[#1c1b1b] border-[#e7e5e4] hover:bg-[#f7f3f2]"
+                                    }`}
+                                  >
+                                    <span className="text-base leading-none">{allergen.icon}</span>
+                                    <span>{allergen.name}</span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Base Serving Metrics */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-[#5e5e5e]">Serving size</label>
+                            <input
+                              type="text"
+                              value={itemServingSize}
+                              onChange={(e) => setItemServingSize(e.target.value)}
+                              className="w-full bg-[#f7f3f2] border-0 rounded-lg px-3 py-2 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
+                              placeholder="Enter the serving size"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-[#5e5e5e]">Servings</label>
+                            <input
+                              type="text"
+                              value={itemServing}
+                              onChange={(e) => setItemServing(e.target.value)}
+                              className="w-full bg-[#f7f3f2] border-0 rounded-lg px-3 py-2 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
+                              placeholder="Enter the servings"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium text-[#5e5e5e]">Calories per serving</label>
+                            <input
+                              type="text"
+                              value={itemCaloriesPerServing}
+                              onChange={(e) => setItemCaloriesPerServing(e.target.value)}
+                              className="w-full bg-[#f7f3f2] border-0 rounded-lg px-3 py-2 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
+                              placeholder="Enter the quantity"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Dynamic Nutrients Builder */}
+                        <div className="space-y-4 pt-2 border-t border-[#e7e5e4]">
+                          <div className="space-y-1.5">
+                            <label className="text-xs font-medium text-[#5e5e5e]">Nutrient name</label>
+                            <div className="flex gap-2">
+                              <input
+                                type="text"
+                                value={newNutrientName}
+                                onChange={(e) => setNewNutrientName(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleAddNutrient();
+                                  }
+                                }}
+                                placeholder="Enter nutrient name"
+                                className="flex-1 bg-[#f7f3f2] border-0 rounded-lg px-3 py-2 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddNutrient}
+                                className="px-6 py-2 bg-[#0c0a09] text-white rounded-lg font-medium text-sm hover:bg-[#252626] transition-colors cursor-pointer"
+                              >
+                                Add
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Nutrients List */}
+                          <div className="space-y-3">
+                            {itemNutrients.map((nutrient) => {
+                              const isMenuOpen = activeNutrientMenuId === nutrient.id;
+                              const isRenaming = editingNutrientId === nutrient.id;
+                              const isAddingChild = addingChildForNutrientId === nutrient.id;
+
+                              return (
+                                <div
+                                  key={nutrient.id}
+                                  className="border border-[#e7e5e4] rounded-xl p-4 bg-[#fcfbfa] space-y-3 shadow-2xs relative"
+                                >
+                                  {/* Nutrient Card Header */}
+                                  <div className="flex items-center justify-between border-b border-[#f0efed] pb-2">
+                                    {isRenaming ? (
+                                      <div className="flex items-center gap-2 flex-1 mr-2">
+                                        <input
+                                          type="text"
+                                          value={editingNutrientName}
+                                          onChange={(e) => setEditingNutrientName(e.target.value)}
+                                          className="bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-sm text-[#0c0a09] flex-1"
+                                          autoFocus
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (editingNutrientName.trim()) {
+                                              handleUpdateNutrient(nutrient.id, "name", editingNutrientName.trim());
+                                            }
+                                            setEditingNutrientId(null);
+                                          }}
+                                          className="px-3 py-1 bg-[#0c0a09] text-white text-xs rounded hover:bg-[#252626] font-medium"
+                                        >
+                                          Save
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingNutrientId(null)}
+                                          className="px-2.5 py-1 text-[#5e5e5e] text-xs hover:text-[#0c0a09]"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <span className="font-semibold text-sm text-[#0c0a09]">{nutrient.name}</span>
+                                    )}
+
+                                    <div className="relative">
+                                      <button
+                                        type="button"
+                                        onClick={() => setActiveNutrientMenuId(isMenuOpen ? null : nutrient.id)}
+                                        className="p-1 text-[#5e5e5e] hover:text-[#0c0a09] rounded hover:bg-[#f0efed] cursor-pointer"
+                                      >
+                                        <MoreVerticalIcon className="w-4 h-4" />
+                                      </button>
+
+                                      {isMenuOpen && (
+                                        <div className="absolute right-0 top-6 z-20 w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 text-xs font-medium">
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              setEditingNutrientId(nutrient.id);
+                                              setEditingNutrientName(nutrient.name);
+                                              setActiveNutrientMenuId(null);
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-[#0c0a09] hover:bg-[#f7f3f2] flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <EditPencilIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                                            <span>Edit nutrient name</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleRemoveNutrient(nutrient.id);
+                                              setActiveNutrientMenuId(null);
+                                            }}
+                                            className="w-full text-left px-3 py-2 text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                                          >
+                                            <TrashIcon className="w-3.5 h-3.5 text-red-500" />
+                                            <span>Remove nutrient</span>
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Quantity & %DV */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-medium text-[#5e5e5e]">Quantity</label>
+                                      <input
+                                        type="text"
+                                        value={nutrient.quantity || ""}
+                                        onChange={(e) => handleUpdateNutrient(nutrient.id, "quantity", e.target.value)}
+                                        placeholder="Ex: 20g"
+                                        className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-1.5 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-medium text-[#5e5e5e]">%DV</label>
+                                      <input
+                                        type="text"
+                                        value={nutrient.dailyValue || ""}
+                                        onChange={(e) => handleUpdateNutrient(nutrient.id, "dailyValue", e.target.value)}
+                                        placeholder="Ex: 2%"
+                                        className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-1.5 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Child Nutrients List */}
+                                  {nutrient.children && nutrient.children.length > 0 && (
+                                    <div className="space-y-2 pt-2 border-t border-[#f0efed]">
+                                      {nutrient.children.map((child) => (
+                                        <div key={child.id} className="pl-3 border-l-2 border-[#d1c4c1] space-y-2 bg-[#f7f6f5] p-2.5 rounded-r-lg">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-xs font-semibold text-[#0c0a09]">{child.name}</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => handleRemoveChildNutrient(nutrient.id, child.id)}
+                                              className="text-[#928c8a] hover:text-red-600 p-0.5 cursor-pointer"
+                                            >
+                                              <TrashIcon className="w-3.5 h-3.5" />
+                                            </button>
+                                          </div>
+                                          <div className="grid grid-cols-2 gap-3">
+                                            <input
+                                              type="text"
+                                              value={child.quantity || ""}
+                                              onChange={(e) => handleUpdateChildNutrient(nutrient.id, child.id, "quantity", e.target.value)}
+                                              placeholder="Ex: 5g"
+                                              className="w-full bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09]"
+                                            />
+                                            <input
+                                              type="text"
+                                              value={child.dailyValue || ""}
+                                              onChange={(e) => handleUpdateChildNutrient(nutrient.id, child.id, "dailyValue", e.target.value)}
+                                              placeholder="Ex: 1%"
+                                              className="w-full bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09]"
+                                            />
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Add Child Nutrient Inline Adder */}
+                                  {isAddingChild ? (
+                                    <div className="pt-2 border-t border-[#f0efed] space-y-2">
+                                      <div className="flex items-center gap-2">
+                                        <input
+                                          type="text"
+                                          value={childNutrientNameInput}
+                                          onChange={(e) => setChildNutrientNameInput(e.target.value)}
+                                          placeholder="Enter child nutrient name"
+                                          className="bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09] flex-1"
+                                          autoFocus
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                              e.preventDefault();
+                                              if (childNutrientNameInput.trim()) {
+                                                handleAddChildNutrient(nutrient.id, childNutrientNameInput.trim());
+                                                setChildNutrientNameInput("");
+                                                setAddingChildForNutrientId(null);
+                                              }
+                                            }
+                                          }}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (childNutrientNameInput.trim()) {
+                                              handleAddChildNutrient(nutrient.id, childNutrientNameInput.trim());
+                                              setChildNutrientNameInput("");
+                                              setAddingChildForNutrientId(null);
+                                            }
+                                          }}
+                                          className="px-3 py-1 bg-[#0c0a09] text-white text-xs rounded hover:bg-[#252626] font-medium cursor-pointer"
+                                        >
+                                          Add
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            setAddingChildForNutrientId(null);
+                                            setChildNutrientNameInput("");
+                                          }}
+                                          className="px-2 py-1 text-[#5e5e5e] text-xs hover:text-[#0c0a09] cursor-pointer"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex justify-end pt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setAddingChildForNutrientId(nutrient.id);
+                                          setChildNutrientNameInput("");
+                                        }}
+                                        className="px-3 py-1.5 bg-[#0c0a09] text-white rounded-lg text-xs font-medium hover:bg-[#252626] transition-colors cursor-pointer"
+                                      >
+                                        Add child nutrient
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  {/* Right Column: Live Card Preview */}
+                  {/* Right Column: Live Card Preview & AI Assistant */}
                   <div className="lg:col-span-5 xl:col-span-4 space-y-6 sticky top-6">
+                    {/* Item Preview Card */}
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-sm">
                       <h2 className="text-[16px] font-semibold text-[#0c0a09] mb-4">Live Menu Preview Card</h2>
                       <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm">
@@ -2021,18 +2948,233 @@ export default function MenuPage() {
                               {currencySymbol}{itemPrice ? parseFloat(itemPrice).toFixed(2) : "0.00"}
                             </span>
                           </div>
-                          <p className="text-sm text-[#5e5e5e] line-clamp-2">
-                            {itemDescription || "Description will appear here as you type..."}
-                          </p>
+                          {itemDescription ? (
+                            <div
+                              className="text-sm text-[#5e5e5e] rich-text-content line-clamp-3 overflow-hidden"
+                              dangerouslySetInnerHTML={{ __html: itemDescription }}
+                            />
+                          ) : (
+                            <p className="text-sm text-[#5e5e5e] italic">
+                              Description will appear here as you type...
+                            </p>
+                          )}
                           {itemIsGst && taxBreakdown && (
                             <div className="text-[11px] text-[#5e5e5e] pt-1 border-t border-[#f0efed] mt-2">
                               Tax: {taxBreakdown.mode === "inclusive" ? "Included" : `+${currencySymbol}${taxBreakdown.totalTaxAmount}`} ({taxBreakdown.totalRate}% Tax)
                             </div>
                           )}
+
+                          {/* Allergen Contents Preview */}
+                          {itemShowAllergens && itemSelectedAllergens.length > 0 && (
+                            <div className="text-[11px] text-amber-950 bg-amber-50/80 rounded-lg p-2 border border-amber-200/80 mt-2 flex items-start gap-1.5">
+                              <span className="font-semibold shrink-0">⚠️ Allergens:</span>
+                              <span className="truncate">{itemSelectedAllergens.join(", ")}</span>
+                            </div>
+                          )}
+
+                          {/* Nutrition Preview */}
+                          {(itemCaloriesPerServing || itemProtein || itemCarbs || itemFat || itemNutrients.length > 0) && (
+                            <div className="mt-4 pt-3 border-t border-[#e7e5e4]">
+                              <p className="text-[10px] uppercase tracking-wider text-[#5e5e5e] font-semibold mb-1">Nutrition Preview</p>
+                              <p className="text-xs text-[#5e5e5e]">
+                                {[
+                                  itemCaloriesPerServing || "520 kcal",
+                                  itemProtein ? `${itemProtein}g Protein` : null,
+                                  itemCarbs ? `${itemCarbs}g Carbs` : null,
+                                  itemFat ? `${itemFat}g Fat` : null,
+                                ].filter(Boolean).join(" | ")}
+                              </p>
+                              {itemNutrients.length > 0 && (
+                                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#5e5e5e] mt-1.5 pt-1.5 border-t border-[#f0efed]">
+                                  {itemNutrients.map((n) => (
+                                    <span key={n.id}>
+                                      <strong className="text-[#0c0a09]">{n.name}</strong>: {n.quantity || "-"}{n.dailyValue ? ` (${n.dailyValue} DV)` : ""}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* AI Assistant Card */}
+                    <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-sm">
+                      <h2 className="text-[16px] font-semibold text-[#0c0a09] mb-2 flex items-center gap-1.5">
+                        <span>✨</span>
+                        <span>AI Assistant</span>
+                      </h2>
+                      <p className="text-sm text-[#5e5e5e] mb-4">
+                        Use AI to improve your item information and estimate nutrition values.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={isGeneratingAi}
+                        onClick={handleGenerateAiSuggestions}
+                        className="w-full h-10 bg-[#0c0a09] text-white rounded-full font-medium text-[14px] hover:bg-[#252626] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 shadow-sm"
+                      >
+                        {isGeneratingAi ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Generating AI Suggestions...</span>
+                          </>
+                        ) : (
+                          <span>Confirm &amp; Generate AI Suggestions</span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* AI Suggestions Card (Lavender Accent) */}
+                    <div className="bg-white rounded-xl border border-[#c8b8e0]/40 p-6 shadow-sm bg-[#c8b8e0]/5 space-y-4">
+                      <h2 className="text-[16px] font-semibold text-[#0c0a09] flex items-center gap-2">
+                        <span>✨</span>
+                        <span>AI Suggestions</span>
+                      </h2>
+
+                      <div className="space-y-4">
+                        {/* Suggested Name */}
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">Suggested Name</p>
+                          <div className="p-3 bg-white rounded-lg border border-[#e7e5e4] flex justify-between items-center gap-2 shadow-xs">
+                            <span className="text-sm font-medium text-[#0c0a09] truncate">{aiNameSuggestion}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setItemName(aiNameSuggestion)}
+                                className="text-xs text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                              >
+                                Use
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAiText(aiNameSuggestion, "name")}
+                                className="text-xs text-[#5e5e5e] hover:text-[#0c0a09] cursor-pointer"
+                              >
+                                {aiCopiedKey === "name" ? "Copied!" : "Copy"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Suggested Description */}
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">Suggested Description</p>
+                          <div className="p-3 bg-white rounded-lg border border-[#e7e5e4] space-y-2 shadow-xs">
+                            <p className="text-xs text-[#0c0a09] leading-relaxed">{aiDescSuggestion}</p>
+                            <div className="flex justify-end gap-3 pt-1 border-t border-[#f0efed]">
+                              <button
+                                type="button"
+                                onClick={() => setItemDescription(aiDescSuggestion)}
+                                className="text-xs text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                              >
+                                Use
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAiText(aiDescSuggestion, "desc")}
+                                className="text-xs text-[#5e5e5e] hover:text-[#0c0a09] cursor-pointer"
+                              >
+                                {aiCopiedKey === "desc" ? "Copied!" : "Copy"}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Nutrition Estimate */}
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between items-center">
+                            <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">Nutrition Estimate</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setItemCaloriesPerServing(aiNutritionSuggestion.calories);
+                                setItemProtein(aiNutritionSuggestion.protein);
+                                setItemCarbs(aiNutritionSuggestion.carbs);
+                                setItemFat(aiNutritionSuggestion.fat);
+                              }}
+                              className="text-xs text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                            >
+                              Use All
+                            </button>
+                          </div>
+                          <div className="bg-white rounded-lg border border-[#e7e5e4] overflow-hidden divide-y divide-[#e7e5e4] shadow-xs">
+                            <div className="flex justify-between items-center p-2.5 text-xs">
+                              <span className="text-[#0c0a09]">Calories: <strong>{aiNutritionSuggestion.calories}</strong></span>
+                              <button
+                                type="button"
+                                onClick={() => setItemCaloriesPerServing(aiNutritionSuggestion.calories)}
+                                className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                              >
+                                Use
+                              </button>
+                            </div>
+                            <div className="flex justify-between items-center p-2.5 text-xs">
+                              <span className="text-[#0c0a09]">Protein: <strong>{aiNutritionSuggestion.protein}g</strong></span>
+                              <button
+                                type="button"
+                                onClick={() => setItemProtein(aiNutritionSuggestion.protein)}
+                                className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                              >
+                                Use
+                              </button>
+                            </div>
+                            <div className="flex justify-between items-center p-2.5 text-xs">
+                              <span className="text-[#0c0a09]">Carbs: <strong>{aiNutritionSuggestion.carbs}g</strong></span>
+                              <button
+                                type="button"
+                                onClick={() => setItemCarbs(aiNutritionSuggestion.carbs)}
+                                className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                              >
+                                Use
+                              </button>
+                            </div>
+                            <div className="flex justify-between items-center p-2.5 text-xs">
+                              <span className="text-[#0c0a09]">Total Fat: <strong>{aiNutritionSuggestion.fat}g</strong></span>
+                              <button
+                                type="button"
+                                onClick={() => setItemFat(aiNutritionSuggestion.fat)}
+                                className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
+                              >
+                                Use
+                              </button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
+                </div>
+
+                {/* Sticky Bottom Action Bar */}
+                <div className="sticky bottom-0 z-20 -mx-6 lg:-mx-8 -mb-6 lg:-mb-8 mt-12 bg-white/95 backdrop-blur-sm border-t border-[#e7e5e4] px-6 lg:px-8 py-4 flex items-center justify-between shadow-[0_-4px_16px_rgba(0,0,0,0.03)]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddItemOpen(false);
+                      setEditingItem(null);
+                    }}
+                    className="h-11 px-6 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-[15px] bg-white cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingItem}
+                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                    className="h-11 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isSavingItem ? (
+                      <>
+                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Saving...</span>
+                      </>
+                    ) : editingItem ? (
+                      "Save Changes"
+                    ) : (
+                      "Save & Create Item"
+                    )}
+                  </button>
                 </div>
               </form>
             </div>
@@ -3108,7 +4250,7 @@ export default function MenuPage() {
                                           </p>
                                           {item.description ? (
                                             <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-xl">
-                                              {item.description}
+                                              {stripHtml(item.description)}
                                             </p>
                                           ) : (
                                             <p className="text-[#928c8a] text-[12px] italic mt-0.5">No description</p>

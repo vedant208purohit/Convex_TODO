@@ -281,6 +281,34 @@ export const createItem = mutation({
     servingSize: v.optional(v.string()),
     serving: v.optional(v.number()),
     caloriesPerServing: v.optional(v.string()),
+    protein: v.optional(v.string()),
+    carbs: v.optional(v.string()),
+    fat: v.optional(v.string()),
+    fiber: v.optional(v.string()),
+    sugar: v.optional(v.string()),
+    sodium: v.optional(v.string()),
+    showAllergenContents: v.optional(v.boolean()),
+    allergens: v.optional(v.array(v.string())),
+    nutrients: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          quantity: v.optional(v.string()),
+          dailyValue: v.optional(v.string()),
+          children: v.optional(
+            v.array(
+              v.object({
+                id: v.string(),
+                name: v.string(),
+                quantity: v.optional(v.string()),
+                dailyValue: v.optional(v.string()),
+              })
+            )
+          ),
+        })
+      )
+    ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
     threeDModelStorageId: v.optional(v.id("_storage")),
@@ -315,6 +343,15 @@ export const createItem = mutation({
       servingSize: args.servingSize,
       serving: args.serving,
       caloriesPerServing: args.caloriesPerServing,
+      protein: args.protein,
+      carbs: args.carbs,
+      fat: args.fat,
+      fiber: args.fiber,
+      sugar: args.sugar,
+      sodium: args.sodium,
+      showAllergenContents: args.showAllergenContents ?? false,
+      allergens: args.allergens,
+      nutrients: args.nutrients,
       itemTypeIds: args.itemTypeIds,
       imageStorageId: args.imageStorageId,
       threeDModelStorageId: args.threeDModelStorageId,
@@ -1024,20 +1061,9 @@ export const listCategoryItems = query({
         position: ci.position,
         published: ci.published,
         item: {
-          _id: item._id,
-          name: item.name,
-          price: item.price,
+          ...item,
           displayPrice: (item.price / 100).toFixed(2),
-          description: item.description,
-          published: item.published,
-          isAvailable: item.isAvailable,
-          daysOfUnavailable: item.daysOfUnavailable ?? 0,
-          isVeg: item.isVeg,
-          isSpicy: item.isSpicy,
-          markAsBestseller: item.markAsBestseller,
           imageUrl,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
         },
       });
     }
@@ -1096,16 +1122,8 @@ export const listAllItems = query({
         : null;
 
       results.push({
-        _id: item._id,
-        name: item.name,
-        price: item.price,
+        ...item,
         displayPrice: (item.price / 100).toFixed(2),
-        description: item.description,
-        published: item.published,
-        isAvailable: item.isAvailable,
-        daysOfUnavailable: item.daysOfUnavailable ?? 0,
-        isVeg: item.isVeg,
-        isSpicy: item.isSpicy,
         imageUrl,
         categoryName,
       });
@@ -1227,6 +1245,38 @@ export const updateItem = mutation({
     quantityUnit: v.optional(v.string()),
     skuNumber: v.optional(v.string()),
     markAsBestseller: v.optional(v.boolean()),
+    servingSize: v.optional(v.string()),
+    serving: v.optional(v.number()),
+    caloriesPerServing: v.optional(v.string()),
+    calorie: v.optional(v.string()),
+    protein: v.optional(v.string()),
+    carbs: v.optional(v.string()),
+    fat: v.optional(v.string()),
+    fiber: v.optional(v.string()),
+    sugar: v.optional(v.string()),
+    sodium: v.optional(v.string()),
+    showAllergenContents: v.optional(v.boolean()),
+    allergens: v.optional(v.array(v.string())),
+    nutrients: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          quantity: v.optional(v.string()),
+          dailyValue: v.optional(v.string()),
+          children: v.optional(
+            v.array(
+              v.object({
+                id: v.string(),
+                name: v.string(),
+                quantity: v.optional(v.string()),
+                dailyValue: v.optional(v.string()),
+              })
+            )
+          ),
+        })
+      )
+    ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
   },

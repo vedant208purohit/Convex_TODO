@@ -261,6 +261,34 @@ export default defineSchema({
     servingSize: v.optional(v.string()),
     serving: v.optional(v.number()),
     caloriesPerServing: v.optional(v.string()),
+    protein: v.optional(v.string()),
+    carbs: v.optional(v.string()),
+    fat: v.optional(v.string()),
+    fiber: v.optional(v.string()),
+    sugar: v.optional(v.string()),
+    sodium: v.optional(v.string()),
+    showAllergenContents: v.optional(v.boolean()),
+    allergens: v.optional(v.array(v.string())),
+    nutrients: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          quantity: v.optional(v.string()),
+          dailyValue: v.optional(v.string()),
+          children: v.optional(
+            v.array(
+              v.object({
+                id: v.string(),
+                name: v.string(),
+                quantity: v.optional(v.string()),
+                dailyValue: v.optional(v.string()),
+              })
+            )
+          ),
+        })
+      )
+    ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
     threeDModelStorageId: v.optional(v.id("_storage")),
