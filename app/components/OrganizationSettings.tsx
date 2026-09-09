@@ -577,6 +577,11 @@ export function OrganizationSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!org?._id) {
+      setErrorMessage("Organization not found. Please refresh the page.");
+      return;
+    }
+
     setErrorMessage(null);
     setIsUploadingLogo(true);
 
@@ -587,7 +592,7 @@ export function OrganizationSettings() {
         fileName: file.name,
         contentType: file.type || "image/png",
         fileSize: file.size,
-        organizationId: org?._id,
+        organizationId: org._id,
       });
 
       // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
@@ -606,6 +611,13 @@ export function OrganizationSettings() {
         assetId: uploadResult.assetId,
       });
 
+      // 4. Link logoAssetId to organization record in Convex DB
+      await updateOrg({
+        id: org._id,
+        logoAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local preview and state
       const localPreviewUrl = URL.createObjectURL(file);
       setFormData((prev) => ({
         ...prev,
@@ -613,13 +625,8 @@ export function OrganizationSettings() {
         logoUrl: localPreviewUrl,
       }));
 
-      // 4. Link logoAssetId to organization record in Convex DB
-      if (org?._id) {
-        await updateOrg({
-          id: org._id,
-          logoAssetId: uploadResult.assetId,
-        });
-      }
+      setSuccessMessage("Organization logo uploaded and saved successfully.");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setErrorMessage(err?.message || "Failed to upload organization logo.");
     } finally {
@@ -628,13 +635,6 @@ export function OrganizationSettings() {
   };
 
   const handleRemoveLogo = async () => {
-    setFormData((prev) => ({
-      ...prev,
-      logoUrl: "",
-      logoStorageId: "",
-      logoAssetId: "",
-    }));
-
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -647,10 +647,16 @@ export function OrganizationSettings() {
           logoStorageId: undefined,
           logoAssetId: undefined,
         });
+        setFormData((prev) => ({
+          ...prev,
+          logoUrl: "",
+          logoStorageId: "",
+          logoAssetId: "",
+        }));
         setSuccessMessage("Organization logo removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err: any) {
-        // Silently handle error if any
+        setErrorMessage(err?.message || "Failed to remove organization logo.");
       }
     }
   };
