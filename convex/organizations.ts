@@ -250,6 +250,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./organizationUsers";
 import { initializeDefaultsHelper } from "./organizationFeatures";
 import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 
 
@@ -1739,8 +1740,16 @@ export const generateUploadUrl = mutation({
 });
 
 export const getStorageUrl = query({
-  args: { storageId: v.id("_storage") },
+  args: {
+    storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
+    organizationId: v.optional(v.id("organizations")),
+  },
   handler: async (ctx, args) => {
-    return await ctx.storage.getUrl(args.storageId);
+    return await resolveAssetOrStorageUrl(ctx, {
+      assetId: args.assetId,
+      storageId: args.storageId,
+      organizationId: args.organizationId,
+    });
   },
 });

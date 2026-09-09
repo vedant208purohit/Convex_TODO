@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 // ==========================================
 // MENU MANAGEMENT MUTATIONS & QUERIES
@@ -696,19 +697,27 @@ export const getOrganizationMenu = query({
           if (!matchName && !matchDesc) continue;
         }
 
-        // Resolve Image & Media Storage URLs
-        const imageUrl = item.imageStorageId
-          ? await ctx.storage.getUrl(item.imageStorageId)
-          : null;
-        const threeDModelUrl = item.threeDModelStorageId
-          ? await ctx.storage.getUrl(item.threeDModelStorageId)
-          : null;
-        const threeDModelIosUrl = item.threeDModelIosStorageId
-          ? await ctx.storage.getUrl(item.threeDModelIosStorageId)
-          : null;
-        const videoUrl = item.videoStorageId
-          ? await ctx.storage.getUrl(item.videoStorageId)
-          : null;
+        // Resolve Image & Media Storage URLs (R2 First, Convex Storage Fallback)
+        const imageUrl = await resolveAssetOrStorageUrl(ctx, {
+          assetId: item.imageAssetId,
+          storageId: item.imageStorageId,
+          organizationId: args.organizationId,
+        });
+        const threeDModelUrl = await resolveAssetOrStorageUrl(ctx, {
+          assetId: item.threeDModelAssetId,
+          storageId: item.threeDModelStorageId,
+          organizationId: args.organizationId,
+        });
+        const threeDModelIosUrl = await resolveAssetOrStorageUrl(ctx, {
+          assetId: item.threeDModelIosAssetId,
+          storageId: item.threeDModelIosStorageId,
+          organizationId: args.organizationId,
+        });
+        const videoUrl = await resolveAssetOrStorageUrl(ctx, {
+          assetId: item.videoAssetId,
+          storageId: item.videoStorageId,
+          organizationId: args.organizationId,
+        });
 
         // Resolve Item Types (Veg, Non-Veg, Jain, Vegan, etc.)
         const resolvedItemTypes: Array<any> = [];
@@ -749,9 +758,11 @@ export const getOrganizationMenu = query({
 
           const serializedCustItems: Array<any> = [];
           for (const ciOpt of sortedCustItems) {
-            const custOptImgUrl = ciOpt.imageStorageId
-              ? await ctx.storage.getUrl(ciOpt.imageStorageId)
-              : null;
+            const custOptImgUrl = await resolveAssetOrStorageUrl(ctx, {
+              assetId: ciOpt.imageAssetId,
+              storageId: ciOpt.imageStorageId,
+              organizationId: args.organizationId,
+            });
 
             const custItemTypes: Array<any> = [];
             if (ciOpt.itemTypeIds) {
@@ -1052,9 +1063,11 @@ export const listCategoryItems = query({
       const item = await ctx.db.get(ci.itemId);
       if (!item || item.deletedAt !== undefined) continue;
 
-      const imageUrl = item.imageStorageId
-        ? await ctx.storage.getUrl(item.imageStorageId)
-        : null;
+      const imageUrl = await resolveAssetOrStorageUrl(ctx, {
+        assetId: item.imageAssetId,
+        storageId: item.imageStorageId,
+        organizationId: item.organizationId,
+      });
 
       results.push({
         categoryItemId: ci._id,
@@ -1117,9 +1130,11 @@ export const listAllItems = query({
       if (!cat || cat.deletedAt !== undefined) continue;
       const categoryName = cat.name;
 
-      const imageUrl = item.imageStorageId
-        ? await ctx.storage.getUrl(item.imageStorageId)
-        : null;
+      const imageUrl = await resolveAssetOrStorageUrl(ctx, {
+        assetId: item.imageAssetId,
+        storageId: item.imageStorageId,
+        organizationId: args.organizationId,
+      });
 
       results.push({
         ...item,
