@@ -177,6 +177,11 @@ export default defineSchema({
   organizationUsers: defineTable({
     organizationId: v.id("organizations"),
     userId: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
     createdAt: v.optional(v.number()),
