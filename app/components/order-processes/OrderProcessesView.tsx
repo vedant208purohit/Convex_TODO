@@ -8,6 +8,7 @@ import {
   OrderProcessDoc,
   OrderProcessFormData,
   OrderProcessId,
+  REFERENCE_ORDER_PROCESSES,
 } from "./types";
 import { OrderProcessesHeader } from "./OrderProcessesHeader";
 import { WorkflowPreview } from "./WorkflowPreview";
@@ -21,9 +22,14 @@ export function OrderProcessesView() {
   const updateProcess = useMutation(api.organizationOrderProcesses.update);
   const reorderProcess = useMutation(api.organizationOrderProcesses.reorder);
 
-  // Pure Convex-driven data
-  const processes = convexProcesses ?? [];
   const isLoading = convexProcesses === undefined;
+  // Use live Convex records if available, otherwise display reference workflow processes
+  const processes =
+    convexProcesses && convexProcesses.length > 0
+      ? convexProcesses
+      : isLoading
+      ? []
+      : REFERENCE_ORDER_PROCESSES;
 
   // Drawer State
   const [drawerState, setDrawerState] = useState<DrawerState>({
@@ -71,7 +77,8 @@ export function OrderProcessesView() {
   const handleFormSubmit = async (formData: OrderProcessFormData) => {
     setIsSubmitting(true);
     try {
-      if (drawerState.mode === "edit" && formData.id) {
+      const isReference = Boolean(formData.id && formData.id.startsWith("ref_proc_"));
+      if (drawerState.mode === "edit" && formData.id && !isReference) {
         await updateProcess({
           id: formData.id,
           name: formData.name,
@@ -89,7 +96,7 @@ export function OrderProcessesView() {
           published: formData.published,
           isSequence: formData.isSequence ?? true,
         });
-        showFeedback("success", `Process "${formData.name}" created successfully.`);
+        showFeedback("success", `Process "${formData.name}" saved successfully.`);
       }
       handleCloseDrawer();
     } catch (err: unknown) {
@@ -112,10 +119,22 @@ export function OrderProcessesView() {
     const nextPublished = !(process.published ?? true);
 
     try {
-      await updateProcess({
-        id,
-        published: nextPublished,
-      });
+      const isReference = id.startsWith("ref_proc_");
+      if (isReference) {
+        await createProcess({
+          name: process.name,
+          description: process.description,
+          processColor: process.processColor,
+          published: nextPublished,
+          isSequence: process.isSequence ?? true,
+          position: process.position,
+        });
+      } else {
+        await updateProcess({
+          id,
+          published: nextPublished,
+        });
+      }
       showFeedback(
         "success",
         `"${process.name}" is now ${nextPublished ? "published" : "unpublished"}.`
@@ -137,6 +156,10 @@ export function OrderProcessesView() {
 
   // Drag and drop reordering handler
   const handleReorder = async (id: OrderProcessId, newPosition: number) => {
+    const isReference = id.startsWith("ref_proc_");
+    if (isReference) {
+      return;
+    }
     try {
       await reorderProcess({
         id,
@@ -153,7 +176,7 @@ export function OrderProcessesView() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden w-full bg-[#fdf8f7]">
+    <div className="flex flex-col h-full overflow-hidden w-full">
       {/* Feedback Toast Banner */}
       {feedback && (
         <div
@@ -176,8 +199,8 @@ export function OrderProcessesView() {
         </div>
       )}
 
-      {/* 1. Fixed / Sticky Page Header */}
-      <div className="shrink-0 space-y-4 bg-[#fdf8f7] pb-3 border-b border-[#e7e5e4]">
+      {/* 1. Header */}
+      <div className="shrink-0 mb-6">
         <OrderProcessesHeader
           processCount={processes.length}
           onAddProcess={handleOpenCreate}
@@ -185,7 +208,7 @@ export function OrderProcessesView() {
       </div>
 
       {/* 2. Scrollable Middle Content Area */}
-      <div className="flex-1 overflow-y-auto pt-6 space-y-8 pr-1 pb-16">
+      <div className="flex-1 overflow-y-auto space-y-6 pr-1 pb-12">
         {/* Live Order Flow Preview */}
         <WorkflowPreview processes={processes} />
 
@@ -206,7 +229,7 @@ export function OrderProcessesView() {
         )}
       </div>
 
-      {/* 4. Create / Edit Drawer */}
+      {/* 3. Create / Edit Drawer */}
       <OrderProcessDrawer
         drawerState={drawerState}
         onClose={handleCloseDrawer}

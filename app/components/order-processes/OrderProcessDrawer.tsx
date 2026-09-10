@@ -18,6 +18,26 @@ interface DrawerFormProps {
   isSubmitting: boolean;
 }
 
+/**
+ * Normalizes a hex string to uppercase 6-digit #RRGGBB format if valid, or null.
+ */
+function normalizeHex(input: string): string | null {
+  let val = input.trim();
+  if (!val.startsWith("#")) {
+    val = "#" + val;
+  }
+  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+    return val.toUpperCase();
+  }
+  if (/^#[0-9A-Fa-f]{3}$/.test(val)) {
+    const r = val[1];
+    const g = val[2];
+    const b = val[3];
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+  return null;
+}
+
 function DrawerForm({
   mode,
   process,
@@ -25,10 +45,18 @@ function DrawerForm({
   onSubmit,
   isSubmitting,
 }: DrawerFormProps) {
-  const [name, setName] = useState(mode === "edit" && process ? process.name || "" : "");
-  const [color, setColor] = useState(
-    mode === "edit" && process ? process.processColor || "#141010" : "#141010"
+  const initialColor =
+    mode === "edit" && process?.processColor
+      ? normalizeHex(process.processColor) || process.processColor
+      : "#141010";
+
+  const [name, setName] = useState(
+    mode === "edit" && process ? process.name || "" : ""
   );
+  const [color, setColor] = useState(
+    normalizeHex(initialColor) || "#141010"
+  );
+  const [hexInput, setHexInput] = useState(initialColor);
   const [description, setDescription] = useState(
     mode === "edit" && process ? process.description || "" : ""
   );
@@ -43,6 +71,34 @@ function DrawerForm({
     nameInputRef.current?.focus();
   }, []);
 
+  // Sync color picker changes to both color state and manual hex input
+  const handleColorPickerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newColor = e.target.value.toUpperCase();
+    setColor(newColor);
+    setHexInput(newColor);
+  };
+
+  // Allow manual hex typing and sync color swatch when valid
+  const handleHexInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setHexInput(val);
+    const normalized = normalizeHex(val);
+    if (normalized) {
+      setColor(normalized);
+    }
+  };
+
+  // On blur, normalize to standard uppercase #RRGGBB or revert to current valid color
+  const handleHexInputBlur = () => {
+    const normalized = normalizeHex(hexInput);
+    if (normalized) {
+      setColor(normalized);
+      setHexInput(normalized);
+    } else {
+      setHexInput(color);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedName = name.trim();
@@ -54,10 +110,12 @@ function DrawerForm({
 
     setValidationError(null);
 
+    const effectiveColor = normalizeHex(hexInput) || color || "#141010";
+
     await onSubmit({
       id: process?._id,
       name: trimmedName,
-      processColor: color,
+      processColor: effectiveColor,
       description: description.trim() || undefined,
       published,
       isSequence: true,
@@ -76,7 +134,7 @@ function DrawerForm({
         <div className="flex items-center justify-between mb-8">
           <h2
             id="drawer-title"
-            className="font-serif text-[32px] text-[#141010] font-light leading-[1.13] tracking-[-0.32px]"
+            className="font-garamond text-[32px] text-[#141010] font-normal leading-[1.13] tracking-[-0.32px]"
           >
             {mode === "edit" ? "Edit Order Process" : "Create Order Process"}
           </h2>
@@ -103,7 +161,7 @@ function DrawerForm({
 
         {/* Validation / Server Error Banner */}
         {validationError && (
-          <div className="mb-6 p-3 rounded-xl bg-[#ffdad6]/60 border border-[#ffdad6] text-[#ba1a1a] text-sm">
+          <div className="mb-6 p-3 rounded-xl bg-[#ffdad6]/60 border border-[#ffdad6] text-[#ba1a1a] text-sm font-sans">
             {validationError}
           </div>
         )}
@@ -126,36 +184,49 @@ function DrawerForm({
               onChange={(e) => setName(e.target.value)}
               placeholder="e.g. Quality Check"
               disabled={isSubmitting}
-              className="w-full h-11 px-4 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] text-[#141010] placeholder:text-[#4e4543]/60 focus:outline-none focus:border-[#7f7572] transition-colors text-[15px]"
+              className="w-full h-11 px-4 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] text-[#141010] placeholder:text-[#4e4543]/60 focus:outline-none focus:border-[#7f7572] transition-colors text-[15px] font-sans"
             />
           </div>
 
           {/* Field B: Process color */}
           <div>
             <label
-              htmlFor="process-color"
+              htmlFor="process-color-input"
               className="block text-[12px] font-semibold text-[#4e4543] tracking-[0.96px] uppercase mb-2 font-sans"
             >
               Process color *
             </label>
-            <div className="flex items-center gap-4">
-              <input
-                id="process-color"
-                type="color"
-                value={color}
-                onChange={(e) => setColor(e.target.value)}
-                disabled={isSubmitting}
-                className="w-12 h-11 p-1 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] cursor-pointer shrink-0"
-                aria-label="Choose process color"
-              />
-              <div className="flex-1 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4]">
+            <div className="flex items-center gap-3">
+              {/* Color Swatch & Native Color Picker Trigger */}
+              <div className="relative w-12 h-11 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] overflow-hidden flex items-center justify-center cursor-pointer hover:border-[#7f7572] transition-colors shrink-0">
+                <input
+                  id="process-color-picker"
+                  type="color"
+                  value={color}
+                  onChange={handleColorPickerChange}
+                  disabled={isSubmitting}
+                  className="absolute inset-[-10px] w-[200%] h-[200%] cursor-pointer opacity-0"
+                  aria-label="Choose process color"
+                />
                 <span
-                  className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm"
+                  className="w-5 h-5 rounded-md shadow-sm border border-black/10"
                   style={{ backgroundColor: color }}
                 />
-                <span className="font-mono text-sm text-[#141010] font-medium">
-                  {color}
-                </span>
+              </div>
+
+              {/* Editable Hex Input */}
+              <div className="flex-1">
+                <input
+                  id="process-color-input"
+                  type="text"
+                  value={hexInput}
+                  onChange={handleHexInputChange}
+                  onBlur={handleHexInputBlur}
+                  placeholder="#141010"
+                  maxLength={7}
+                  disabled={isSubmitting}
+                  className="w-full h-11 px-4 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] text-[#141010] placeholder:text-[#4e4543]/60 focus:outline-none focus:border-[#7f7572] transition-colors font-mono text-sm uppercase font-medium"
+                />
               </div>
             </div>
           </div>
@@ -175,7 +246,7 @@ function DrawerForm({
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Brief description of workflow stage"
               disabled={isSubmitting}
-              className="w-full h-24 p-4 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] text-[#141010] placeholder:text-[#4e4543]/60 focus:outline-none focus:border-[#7f7572] resize-none transition-colors text-[15px]"
+              className="w-full h-24 p-4 rounded-xl bg-[#f7f3f2] border border-[#e7e5e4] text-[#141010] placeholder:text-[#4e4543]/60 focus:outline-none focus:border-[#7f7572] resize-none transition-colors text-[15px] font-sans"
             />
           </div>
 
@@ -218,14 +289,15 @@ function DrawerForm({
           type="submit"
           form="order-process-form"
           disabled={isSubmitting}
+          style={{ backgroundColor: "#141010", color: "#ffffff" }}
           className="px-6 h-10 rounded-full !bg-[#141010] hover:!bg-[#292524] !text-[#ffffff] text-[15px] font-medium transition-all cursor-pointer shadow-sm disabled:opacity-50 active:scale-[0.98] inline-flex items-center justify-center min-w-[130px] font-sans"
         >
           {isSubmitting ? (
             <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
           ) : mode === "edit" ? (
-            "Save changes"
+            <span style={{ color: "#ffffff" }} className="!text-[#ffffff] font-medium">Save changes</span>
           ) : (
-            "Create process"
+            <span style={{ color: "#ffffff" }} className="!text-[#ffffff] font-medium">Create process</span>
           )}
         </button>
       </div>
@@ -279,5 +351,3 @@ export function OrderProcessDrawer({
     </div>
   );
 }
-
-

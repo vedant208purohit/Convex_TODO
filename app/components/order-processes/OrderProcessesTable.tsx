@@ -12,18 +12,24 @@ interface OrderProcessesTableProps {
 }
 
 function getProcessDescription(process: OrderProcessDoc): string {
+  // If the process has a saved description in the backend, always use it
+  if (process.description && process.description.trim()) {
+    return process.description.trim();
+  }
+
+  // Fallback defaults for standard initial workflow stages without a custom description
   const nameLower = process.name.toLowerCase().trim();
+  if (nameLower === "delivered" || (nameLower.includes("deliver") && !nameLower.includes("ready"))) {
+    return "Order completed";
+  }
+  if (nameLower.includes("ready")) return "Ready for handoff";
   if (nameLower.includes("accept")) return "Initial order acceptance";
   if (nameLower.includes("progress") || nameLower.includes("cook") || nameLower.includes("prep"))
     return "Kitchen preparation";
-  if (nameLower.includes("ready") || nameLower.includes("deliver"))
-    return "Ready for handoff";
-  if (nameLower.includes("deliver") || nameLower.includes("complete") || nameLower.includes("done"))
-    return "Order completed";
   if (nameLower.includes("check") || nameLower.includes("quality"))
     return "Quality and standard check";
   if (nameLower.includes("pack")) return "Order packaging and labeling";
-  return "Workflow process stage";
+  return "";
 }
 
 export function OrderProcessesTable({
@@ -108,6 +114,7 @@ export function OrderProcessesTable({
               const isToggling = togglingIds.has(process._id);
               const isPublished = process.published ?? true;
               const posFormatted = String(index + 1).padStart(2, "0");
+              const descriptionText = getProcessDescription(process);
 
               return (
                 <tr
@@ -151,12 +158,14 @@ export function OrderProcessesTable({
 
                   {/* 2. Process Name & Description */}
                   <td className="py-4 px-4 align-middle">
-                    <div className="font-medium text-[#141010] text-[15px] leading-snug">
+                    <div className="font-medium text-[#141010] text-[15px] leading-snug font-sans">
                       {process.name}
                     </div>
-                    <div className="text-[14px] text-[#4e4543] leading-tight mt-0.5 truncate font-sans">
-                      {getProcessDescription(process)}
-                    </div>
+                    {descriptionText ? (
+                      <div className="text-[13px] text-[#4e4543] leading-tight mt-0.5 truncate font-sans">
+                        {descriptionText}
+                      </div>
+                    ) : null}
                   </td>
 
                   {/* 3. Status Published Toggle */}
@@ -186,7 +195,7 @@ export function OrderProcessesTable({
                   {/* 4. Color Swatch */}
                   <td className="py-4 px-4 align-middle">
                     <span
-                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm inline-block align-middle"
+                      className="w-3.5 h-3.5 rounded-full shrink-0 shadow-sm inline-block align-middle border border-black/10"
                       style={{ backgroundColor: process.processColor || "#262626" }}
                     />
                   </td>
@@ -196,7 +205,7 @@ export function OrderProcessesTable({
                     <button
                       type="button"
                       onClick={() => onEdit(process)}
-                      className="px-3 py-1.5 rounded-lg border border-[#e7e5e4] text-[#141010] hover:bg-[#ece7e6] text-[15px] font-medium transition-all cursor-pointer inline-flex items-center justify-center active:scale-95 font-sans"
+                      className="px-3 py-1.5 rounded-lg border border-[#e7e5e4] text-[#141010] hover:bg-[#ece7e6] text-[13px] font-medium transition-all cursor-pointer inline-flex items-center justify-center active:scale-95 font-sans"
                     >
                       Edit
                     </button>
