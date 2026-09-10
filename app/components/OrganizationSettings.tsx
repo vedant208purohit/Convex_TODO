@@ -1932,7 +1932,7 @@ export function OrganizationSettings() {
               <div className="space-y-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6f655e]">DETAILS</h3>
                 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-[#1f1a17]">Tax Group Name</label>
                   <input
                     type="text"
@@ -1942,8 +1942,20 @@ export function OrganizationSettings() {
                     style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
                     className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
                   />
-                </div>
-
+                </div> */}
+<div>
+  <label className="block text-sm font-medium text-[#1f1a17]">
+    Tax Group Name <span className="text-red-600">*</span>
+  </label>
+  <input
+    type="text"
+    value={taxGroupName}
+    onChange={(e) => setTaxGroupName(e.target.value)}
+    placeholder="e.g. GST"
+    style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
+    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
+  />
+</div>
                 {/* Temporarily disabled Tax Mode selection in Tax Group drawer
                 <div>
                   <label className="block text-sm font-medium text-[#1f1a17]">Tax Mode</label>

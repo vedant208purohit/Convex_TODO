@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { ReactNode, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
@@ -142,8 +143,24 @@ const SETTINGS_TABS: SettingsNavOption[] = [
   { id: "liveScreens", label: "Live Screens", icon: <LiveScreensIcon className="w-4 h-4" /> },
 ];
 
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("organization");
+function SettingsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Read active tab from URL param, default to "organization"
+  const rawTab = searchParams.get("tab") as SettingsTab | null;
+  const validTabIds = SETTINGS_TABS.map((t) => t.id);
+  const activeTab: SettingsTab = rawTab && validTabIds.includes(rawTab) ? rawTab : "organization";
+
+  // Update URL when tab changes (replaces history so back button works naturally)
+  const setActiveTab = useCallback(
+    (tab: SettingsTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", tab);
+      router.replace(`/settings?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
 
   return (
     <PosShell title="Settings" subtitle="Management Portal">
@@ -226,5 +243,14 @@ export default function SettingsPage() {
         </div>
       </div>
     </PosShell>
+  );
+}
+
+// Wrap in Suspense so useSearchParams() doesn't break SSR in Next.js App Router
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsContent />
+    </Suspense>
   );
 }

@@ -11,7 +11,13 @@ import { Id } from "../../convex/_generated/dataModel";
 
 function PlusIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
       <path d="M12 4v16m8-8H4" />
     </svg>
   );
@@ -19,7 +25,13 @@ function PlusIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
 
 function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
       <circle cx="11" cy="11" r="8" />
       <path d="M21 21l-4.35-4.35" />
     </svg>
@@ -28,7 +40,13 @@ function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function EditIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
       <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
     </svg>
   );
@@ -36,7 +54,15 @@ function EditIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      viewBox="0 0 24 24"
+    >
       <path d="M3 6h18" />
       <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
       <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
@@ -48,7 +74,13 @@ function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function XIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
       <path d="M6 18L18 6M6 6l12 12" />
     </svg>
   );
@@ -56,7 +88,13 @@ function XIcon({ className = "w-5 h-5" }: { className?: string }) {
 
 function AlertCircleIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="8" x2="12" y2="12" />
       <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -66,7 +104,13 @@ function AlertCircleIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function InfoIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -101,7 +145,10 @@ export function OrganizationWaiters() {
   const [searchQuery, setSearchQuery] = useState("");
 
   // Toast Feedback State
-  const [toast, setToast] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [toast, setToast] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
     setToast({ type, text });
@@ -135,7 +182,12 @@ export function OrganizationWaiters() {
       const fullName = `${fn} ${ln}`.trim();
       const code = w.waiterCode?.toLowerCase() || "";
 
-      return fn.includes(q) || ln.includes(q) || fullName.includes(q) || code.includes(q);
+      return (
+        fn.includes(q) ||
+        ln.includes(q) ||
+        fullName.includes(q) ||
+        code.includes(q)
+      );
     });
   }, [waiters, searchQuery]);
 
@@ -218,8 +270,12 @@ export function OrganizationWaiters() {
 
     setIsDeleting(true);
     try {
-      await removeWaiter({ id: deletingWaiter._id as Id<"organizationWaiters"> });
-      showToast(`Waiter "${deletingWaiter.firstName || deletingWaiter.waiterCode || "Waiter"}" deleted successfully.`);
+      await removeWaiter({
+        id: deletingWaiter._id as Id<"organizationWaiters">,
+      });
+      showToast(
+        `Waiter "${deletingWaiter.firstName || deletingWaiter.waiterCode || "Waiter"}" deleted successfully.`,
+      );
       setDeletingWaiter(null);
     } catch (err: any) {
       showToast(err?.message || "Failed to delete floor server.", "error");
@@ -232,7 +288,9 @@ export function OrganizationWaiters() {
     return (
       <div className="py-16 text-center">
         <div className="w-8 h-8 mx-auto border-2 border-[#141010] border-t-transparent rounded-full animate-spin mb-3" />
-        <p className="text-sm font-medium text-[#5e5e5e]">Loading Floor Staff Roster...</p>
+        <p className="text-sm font-medium text-[#5e5e5e]">
+          Loading Floor Staff Roster...
+        </p>
       </div>
     );
   }
@@ -257,11 +315,15 @@ export function OrganizationWaiters() {
         {/* Editorial Header Section */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="text-[30px] leading-tight font-normal text-[#141010]" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+            <h1
+              className="text-[30px] leading-tight font-normal text-[#141010]"
+              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+            >
               Waiters &amp; Floor Servers
             </h1>
             <p className="text-[14px] text-[#5e5e5e] mt-1 font-normal">
-              Manage floor staff, server badge codes, and table assignment profiles.
+              Manage floor staff, server badge codes, and table assignment
+              profiles.
             </p>
           </div>
 
@@ -272,7 +334,9 @@ export function OrganizationWaiters() {
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full bg-[#0c0a09] hover:bg-[#292524] active:scale-[0.98] text-white font-semibold text-[13px] transition shadow-xs cursor-pointer"
           >
             <PlusIcon className="w-3.5 h-3.5 text-white" />
-            <span className="text-white" style={{ color: "#ffffff" }}>Add Waiter</span>
+            <span className="text-white" style={{ color: "#ffffff" }}>
+              Add Waiter
+            </span>
           </button>
         </div>
 
@@ -294,7 +358,9 @@ export function OrganizationWaiters() {
 
           {/* Meta Count Badge */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
-            <span className="text-[12px] text-[#5e5e5e]">Total Active Waiters:</span>
+            <span className="text-[12px] text-[#5e5e5e]">
+              Total Active Waiters:
+            </span>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white text-[#141010] border border-[#e7e5e4] shadow-xs">
               {filteredWaiters.length} active
             </span>
@@ -304,7 +370,6 @@ export function OrganizationWaiters() {
 
       {/* Scrollable Table Content Area */}
       <div className="flex-1 overflow-y-auto pt-4 pb-8 pr-1 min-h-0">
-
         {/* Table Container */}
         <div className="bg-white rounded-xl border border-[#e7e5e4] overflow-hidden shadow-xs">
           <table className="w-full text-left border-collapse">
@@ -320,16 +385,27 @@ export function OrganizationWaiters() {
             <tbody className="divide-y divide-[#e7e5e4] text-[14px] text-[#1c1b1b]">
               {filteredWaiters.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-[#8a7e75] text-xs">
-                    {searchQuery ? `No floor servers found matching "${searchQuery}"` : "No floor servers registered yet."}
+                  <td
+                    colSpan={5}
+                    className="py-12 text-center text-[#8a7e75] text-xs"
+                  >
+                    {searchQuery
+                      ? `No floor servers found matching "${searchQuery}"`
+                      : "No floor servers registered yet."}
                   </td>
                 </tr>
               ) : (
                 filteredWaiters.map((waiter) => {
-                  const fullName = [waiter.firstName, waiter.lastName].filter(Boolean).join(" ") || "Unnamed Server";
+                  const fullName =
+                    [waiter.firstName, waiter.lastName]
+                      .filter(Boolean)
+                      .join(" ") || "Unnamed Server";
 
                   return (
-                    <tr key={waiter._id} className="hover:bg-[#fdf8f7] transition-colors">
+                    <tr
+                      key={waiter._id}
+                      className="hover:bg-[#fdf8f7] transition-colors"
+                    >
                       {/* Badge / Code */}
                       <td className="py-4 px-6 font-mono text-[13px]">
                         {waiter.waiterCode ? (
@@ -391,14 +467,16 @@ export function OrganizationWaiters() {
           {/* Table Footer / Attribution Notice */}
           <div className="py-3 px-6 bg-[#fdf8f7] border-t border-[#e7e5e4] flex items-center justify-between text-[12px] text-[#8a7e75]">
             <div>
-              Sorted by created date (newest first) • Displaying {filteredWaiters.length} of {waiters?.length ?? 0} active floor servers
+              Sorted by created date (newest first) • Displaying{" "}
+              {filteredWaiters.length} of {waiters?.length ?? 0} active floor
+              servers
             </div>
             <div>
-              Floor server assignments affect Captain orders &amp; thermal receipts
+              Floor server assignments affect Captain orders &amp; thermal
+              receipts
             </div>
           </div>
         </div>
-
       </div>
 
       {/* ------------------------------------------ */}
@@ -419,11 +497,13 @@ export function OrganizationWaiters() {
       {/* ------------------------------------------ */}
       {isDrawerOpen && (
         <aside className="fixed right-0 top-0 bottom-0 w-[460px] bg-white z-40 shadow-2xl flex flex-col justify-between border-l border-[#e7e5e4] animate-in slide-in-from-right duration-200">
-          
           {/* Drawer Header */}
           <div className="px-7 py-6 border-b border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7]">
             <div>
-              <h2 className="text-[24px] font-normal text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h2
+                className="text-[24px] font-normal text-[#141010] leading-snug"
+                style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+              >
                 {editingWaiter ? "Edit Floor Server" : "Add New Floor Server"}
               </h2>
               <p className="text-[12px] text-[#5e5e5e] mt-0.5">
@@ -443,15 +523,19 @@ export function OrganizationWaiters() {
           </div>
 
           {/* Drawer Form Content */}
-          <form onSubmit={handleFormSubmit} className="p-7 flex-1 overflow-y-auto space-y-6">
-            
+          <form
+            onSubmit={handleFormSubmit}
+            className="p-7 flex-1 overflow-y-auto space-y-6"
+          >
             {/* Field 1: First Name (Required) */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
                   FIRST NAME <span className="text-[#ef4444]">*</span>
                 </label>
-                <span className="text-[11px] text-[#8a7e75]">Required • max 50 chars</span>
+                <span className="text-[11px] text-[#8a7e75]">
+                  Required • max 50 chars
+                </span>
               </div>
               <input
                 type="text"
@@ -487,7 +571,9 @@ export function OrganizationWaiters() {
                 <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
                   WAITER CODE / BADGE ID
                 </label>
-                <span className="text-[11px] text-[#8a7e75]">Optional • max 20 chars</span>
+                <span className="text-[11px] text-[#8a7e75]">
+                  Optional • max 20 chars
+                </span>
               </div>
               <input
                 type="text"
@@ -496,11 +582,14 @@ export function OrganizationWaiters() {
                 onChange={(e) => setWaiterCode(e.target.value)}
                 placeholder="e.g. W-04 or #14"
                 className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-[14px] font-mono text-[#141010] placeholder-[#928c8a] focus:outline-none transition ${
-                  formError ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500" : "border-[#e7e5e4] focus:border-[#141010] focus:ring-1 focus:ring-[#141010]"
+                  formError
+                    ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                    : "border-[#e7e5e4] focus:border-[#141010] focus:ring-1 focus:ring-[#141010]"
                 }`}
               />
               <p className="text-[12px] text-[#8a7e75] leading-relaxed pt-1">
-                Unique short code printed on kitchen order tickets (KOT) &amp; receipts. Leave blank if not using badge codes.
+                Unique short code printed on kitchen order tickets (KOT) &amp;
+                receipts. Leave blank if not using badge codes.
               </p>
             </div>
 
@@ -512,7 +601,8 @@ export function OrganizationWaiters() {
                   <span>{formError}</span>
                 </div>
                 <p className="text-[11px] text-red-600 pl-5 leading-normal">
-                  Each active floor waiter requires an exclusive badge code for thermal printing &amp; register assignment.
+                  Each active floor waiter requires an exclusive badge code for
+                  thermal printing &amp; register assignment.
                 </p>
               </div>
             )}
@@ -521,7 +611,11 @@ export function OrganizationWaiters() {
             <div className="p-3.5 rounded-lg bg-[#f7f3f2] border border-[#eadfd6] text-[12px] text-[#5e5e5e] space-y-1">
               <div className="font-medium text-[#141010] flex items-center gap-1.5">
                 <InfoIcon className="w-3.5 h-3.5 text-[#8a7e75]" />
-                <span>{editingWaiter ? "Record Attribution" : "Floor Staff Attribution Note"}</span>
+                <span>
+                  {editingWaiter
+                    ? "Record Attribution"
+                    : "Floor Staff Attribution Note"}
+                </span>
               </div>
               <p className="leading-relaxed">
                 {editingWaiter
@@ -529,7 +623,6 @@ export function OrganizationWaiters() {
                   : "This profile is strictly used for order taker tagging, table coverage, and cashier receipts. Sensitive data (passwords, PINs, phone numbers) are never stored here."}
               </p>
             </div>
-
           </form>
 
           {/* Sticky Drawer Footer */}
@@ -551,14 +644,17 @@ export function OrganizationWaiters() {
               {isSubmitting ? (
                 <>
                   <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span className="text-white" style={{ color: "#ffffff" }}>Saving...</span>
+                  <span className="text-white" style={{ color: "#ffffff" }}>
+                    Saving...
+                  </span>
                 </>
               ) : (
-                <span className="text-white" style={{ color: "#ffffff" }}>{editingWaiter ? "Update Waiter" : "Save Waiter"}</span>
+                <span className="text-white" style={{ color: "#ffffff" }}>
+                  {editingWaiter ? "Update Waiter" : "Save Waiter"}
+                </span>
               )}
             </button>
           </div>
-
         </aside>
       )}
 
@@ -568,7 +664,6 @@ export function OrganizationWaiters() {
       {deletingWaiter && (
         <div className="fixed inset-0 z-40 flex items-center justify-center p-4">
           <div className="w-full max-w-lg bg-white rounded-2xl border border-[#e7e5e4] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150">
-            
             {/* Modal Header */}
             <div className="p-6 pb-4 border-b border-[#e7e5e4] flex items-start justify-between bg-[#fdf8f7]">
               <div className="flex items-center gap-3">
@@ -583,7 +678,10 @@ export function OrganizationWaiters() {
                   <TrashIcon className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-[24px] font-normal text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+                  <h3
+                    className="text-[24px] font-normal text-[#141010] leading-snug"
+                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                  >
                     Delete Floor Server?
                   </h3>
                   <p className="text-[12px] text-[#8a7e75] font-medium">
@@ -605,7 +703,9 @@ export function OrganizationWaiters() {
               <p className="text-[15px] font-normal text-[#1c1b1b] leading-relaxed">
                 Are you sure you want to delete{" "}
                 <span className="font-medium text-[#141010]">
-                  {[deletingWaiter.firstName, deletingWaiter.lastName].filter(Boolean).join(" ") || "this waiter"}
+                  {[deletingWaiter.firstName, deletingWaiter.lastName]
+                    .filter(Boolean)
+                    .join(" ") || "this waiter"}
                 </span>{" "}
                 {deletingWaiter.waiterCode && (
                   <span className="text-xs bg-[#f1edec] text-[#141010] px-2 py-0.5 rounded font-mono">
@@ -619,16 +719,27 @@ export function OrganizationWaiters() {
               <div className="p-4 rounded-xl bg-[#f7f3f2] border border-[#eadfd6] space-y-2.5 text-[13px] text-[#4e4543]">
                 <div className="flex items-start gap-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
-                  <span>This server profile will be permanently removed from your active staff roster.</span>
-                </div>
-                <div className="flex items-start gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
-                  <span>The server will no longer appear in POS terminal station logins or order assignment dropdowns.</span>
+                  <span>
+                    This server profile will be permanently removed from your
+                    active staff roster.
+                  </span>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
                   <span>
-                    Code <strong className="font-mono text-[#141010]">"{deletingWaiter.waiterCode || "—"}"</strong> will be immediately released and available for reassignment to new staff.
+                    The server will no longer appear in POS terminal station
+                    logins or order assignment dropdowns.
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
+                  <span>
+                    Code{" "}
+                    <strong className="font-mono text-[#141010]">
+                      "{deletingWaiter.waiterCode || "—"}"
+                    </strong>{" "}
+                    will be immediately released and available for reassignment
+                    to new staff.
                   </span>
                 </div>
               </div>
@@ -654,7 +765,6 @@ export function OrganizationWaiters() {
                 <span>{isDeleting ? "Deleting..." : "Delete Server"}</span>
               </button>
             </div>
-
           </div>
         </div>
       )}
