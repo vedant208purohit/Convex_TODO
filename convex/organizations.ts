@@ -1432,11 +1432,28 @@ export const update = mutation({
 
     validateOrganizationState(finalState);
 
-    if (updates.logoUrl === "") {
+    const needsReplace =
+      updates.logoUrl === "" ||
+      updates.fssaiDocumentUrl === "" ||
+      updates.gstDocumentUrl === "";
+
+    if (needsReplace) {
       const docToReplace = { ...existing, ...finalState, updatedAt: Date.now() };
-      delete (docToReplace as any).logoUrl;
-      delete (docToReplace as any).logoStorageId;
-      delete (docToReplace as any).logoAssetId;
+      if (updates.logoUrl === "") {
+        delete (docToReplace as any).logoUrl;
+        delete (docToReplace as any).logoStorageId;
+        delete (docToReplace as any).logoAssetId;
+      }
+      if (updates.fssaiDocumentUrl === "") {
+        delete (docToReplace as any).fssaiDocumentUrl;
+        delete (docToReplace as any).fssaiDocumentStorageId;
+        delete (docToReplace as any).fssaiDocumentAssetId;
+      }
+      if (updates.gstDocumentUrl === "") {
+        delete (docToReplace as any).gstDocumentUrl;
+        delete (docToReplace as any).gstDocumentStorageId;
+        delete (docToReplace as any).gstDocumentAssetId;
+      }
       await ctx.db.replace(id, docToReplace as any);
     } else {
       await ctx.db.patch(id, {

@@ -546,8 +546,10 @@ describe("Organization Domain Business Logic Tests", () => {
     });
 
     const clearedOrg = await t.query(api.organizations.get, { id: orgId });
-    expect(clearedOrg?.fssaiDocumentUrl).toBe("");
-    expect(clearedOrg?.gstDocumentUrl).toBe("");
+    expect(clearedOrg?.fssaiDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.gstDocumentStorageId).toBeUndefined();
   });
 
   // 24. Organization Logo R2 Asset ID Persistence & Dual Schema
@@ -656,5 +658,20 @@ describe("Organization Domain Business Logic Tests", () => {
     expect(org?.gstDocumentAssetId).toBe(gstAssetId);
     expect(org?.isFssai).toBe(true);
     expect(org?.isGst).toBe(true);
+
+    // Verify clearing FSSAI and GST documents removes their asset IDs
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentUrl: "",
+      gstDocumentUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.fssaiDocumentAssetId).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.gstDocumentAssetId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentUrl).toBeUndefined();
   });
 });

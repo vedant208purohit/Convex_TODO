@@ -818,13 +818,12 @@ export function OrganizationSettings() {
       try {
         await updateOrg({
           id: org._id,
-          fssaiDocumentStorageId: undefined,
-          fssaiDocumentAssetId: undefined,
+          fssaiDocumentUrl: "",
         });
         setSuccessMessage("FSSAI document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err: any) {
-        // Silently handle
+        setErrorMessage(err?.message || "Failed to remove FSSAI document.");
       }
     }
   };
@@ -837,13 +836,12 @@ export function OrganizationSettings() {
       try {
         await updateOrg({
           id: org._id,
-          gstDocumentStorageId: undefined,
-          gstDocumentAssetId: undefined,
+          gstDocumentUrl: "",
         });
         setSuccessMessage("GST document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err: any) {
-        // Silently handle
+        setErrorMessage(err?.message || "Failed to remove GST document.");
       }
     }
   };
@@ -888,14 +886,34 @@ export function OrganizationSettings() {
         inclusiveGst: formData.inclusiveGst,
         separateGst: !formData.inclusiveGst,
         gstNumber: formData.isGst && formData.gstNumber.trim() ? formData.gstNumber.trim() : undefined,
-        gstDocumentStorageId: formData.isGst && formData.gstDocumentStorageId ? formData.gstDocumentStorageId : undefined,
-        gstDocumentAssetId: formData.isGst && formData.gstDocumentAssetId ? formData.gstDocumentAssetId : undefined,
         isFssai: formData.isFssai,
         fssaiRegistrationNumber: formData.isFssai && formData.fssaiRegistrationNumber.trim() ? formData.fssaiRegistrationNumber.trim() : undefined,
         expiryDate: formData.isFssai ? parsedExpiryDate : undefined,
-        fssaiDocumentStorageId: formData.isFssai && formData.fssaiDocumentStorageId ? formData.fssaiDocumentStorageId : undefined,
-        fssaiDocumentAssetId: formData.isFssai && formData.fssaiDocumentAssetId ? formData.fssaiDocumentAssetId : undefined,
       };
+
+      if (formData.isGst) {
+        if (formData.gstDocumentAssetId) {
+          updatePayload.gstDocumentAssetId = formData.gstDocumentAssetId;
+        } else if (formData.gstDocumentStorageId) {
+          updatePayload.gstDocumentStorageId = formData.gstDocumentStorageId;
+        } else {
+          updatePayload.gstDocumentUrl = "";
+        }
+      } else {
+        updatePayload.gstDocumentUrl = "";
+      }
+
+      if (formData.isFssai) {
+        if (formData.fssaiDocumentAssetId) {
+          updatePayload.fssaiDocumentAssetId = formData.fssaiDocumentAssetId;
+        } else if (formData.fssaiDocumentStorageId) {
+          updatePayload.fssaiDocumentStorageId = formData.fssaiDocumentStorageId;
+        } else {
+          updatePayload.fssaiDocumentUrl = "";
+        }
+      } else {
+        updatePayload.fssaiDocumentUrl = "";
+      }
 
       if (formData.legalEntityName.trim()) updatePayload.legalEntityName = formData.legalEntityName.trim();
       if (formData.addressLine1.trim()) updatePayload.addressLine1 = formData.addressLine1.trim();
@@ -910,9 +928,15 @@ export function OrganizationSettings() {
       if (formData.email.trim()) updatePayload.email = formData.email.trim();
       if (fullPhone) updatePayload.phone = fullPhone;
       if (formData.fax.trim()) updatePayload.fax = formData.fax.trim();
-      if (formData.logoUrl !== undefined && formData.logoUrl !== "") updatePayload.logoUrl = formData.logoUrl;
-      if (formData.logoStorageId) updatePayload.logoStorageId = formData.logoStorageId;
-      if (formData.logoAssetId) updatePayload.logoAssetId = formData.logoAssetId;
+      if (formData.logoAssetId) {
+        updatePayload.logoAssetId = formData.logoAssetId;
+      } else if (formData.logoStorageId) {
+        updatePayload.logoStorageId = formData.logoStorageId;
+      } else if (formData.logoUrl) {
+        updatePayload.logoUrl = formData.logoUrl;
+      } else {
+        updatePayload.logoUrl = "";
+      }
 
       await updateOrg(updatePayload as any);
 
@@ -2287,7 +2311,7 @@ export function OrganizationSettings() {
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
                         <span className="text-sm font-medium text-[#1f1a17]">Uploading FSSAI document...</span>
                       </div>
-                    ) : (formData.fssaiDocumentAssetId || formData.fssaiDocumentStorageId || fssaiDocStorageUrl) ? (
+                    ) : (formData.fssaiDocumentAssetId || formData.fssaiDocumentStorageId) ? (
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
                           ✓
@@ -2422,7 +2446,7 @@ export function OrganizationSettings() {
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
                         <span className="text-sm font-medium text-[#1f1a17]">Uploading GST document...</span>
                       </div>
-                    ) : (formData.gstDocumentAssetId || formData.gstDocumentStorageId || gstDocStorageUrl) ? (
+                    ) : (formData.gstDocumentAssetId || formData.gstDocumentStorageId) ? (
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
                           ✓
