@@ -60,6 +60,7 @@ export default defineSchema({
     separateGst: v.boolean(),
     gstNumber: v.optional(v.string()),
     gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Food Safety Compliance Configuration
@@ -67,6 +68,7 @@ export default defineSchema({
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
     fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone Configuration
@@ -85,6 +87,7 @@ export default defineSchema({
     theme: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
+    logoAssetId: v.optional(v.id("organization_assets")),
 
     // POS Feature & Module Configuration
     isDineIn: v.boolean(),
@@ -308,9 +311,13 @@ export default defineSchema({
     ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     threeDModelStorageId: v.optional(v.id("_storage")),
+    threeDModelAssetId: v.optional(v.id("organization_assets")),
     threeDModelIosStorageId: v.optional(v.id("_storage")),
+    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
     videoStorageId: v.optional(v.id("_storage")),
+    videoAssetId: v.optional(v.id("organization_assets")),
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
@@ -374,6 +381,7 @@ export default defineSchema({
     position: v.number(),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
   }).index("by_customization", ["customizationId"]),
@@ -631,6 +639,7 @@ export default defineSchema({
     position: v.number(),
 
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
 
@@ -912,5 +921,35 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   })
     .index("by_token", ["token"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Assets Domain Table (Cloudflare R2 Metadata & References)
+  organization_assets: defineTable({
+    legacyId: v.optional(v.string()),
+
+    organizationId: v.id("organizations"),
+    storageKey: v.string(),
+    fileName: v.string(),
+    contentType: v.string(),
+    fileSize: v.number(),
+    assetType: v.string(),
+
+    status: v.union(
+      v.literal("pending"),
+      v.literal("uploaded"),
+      v.literal("failed"),
+      v.literal("deleted")
+    ),
+
+    createdBy: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_asset_type", ["organizationId", "assetType"])
+    .index("by_storage_key", ["storageKey"])
+    .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

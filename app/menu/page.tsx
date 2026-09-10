@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, type FormEvent } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useState, useEffect, useMemo, useRef, type FormEvent, type ChangeEvent } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -625,10 +625,12 @@ export default function MenuPage() {
   const deleteCategoryMutation = useMutation(api.menu.deleteCategory);
   const reorderCategoriesMutation = useMutation(api.menu.reorderCategories);
 
-  // Item Mutations
+  // Item Mutations & R2 Upload Actions
   const createItemMutation = useMutation(api.menu.createItem);
   const addCategoryItemMutation = useMutation(api.menu.addCategoryItem);
   const updateItemMutation = useMutation(api.menu.updateItem);
+  const createAssetUpload = useAction(api.r2.createAssetUpload);
+  const confirmAssetUpload = useAction(api.r2.confirmAssetUpload);
   const toggleItemAvailabilityMutation = useMutation(api.menu.toggleItemAvailability);
   const toggleItemPublishedMutation = useMutation(api.menu.toggleItemPublished);
   const deleteItemMutation = useMutation(api.menu.deleteItem);
@@ -965,6 +967,10 @@ export default function MenuPage() {
   const [itemMarkAsBestseller, setItemMarkAsBestseller] = useState(false);
   const [itemSkuNumber, setItemSkuNumber] = useState("");
   const [itemSelectedCategoryId, setItemSelectedCategoryId] = useState("");
+  const [itemImageAssetId, setItemImageAssetId] = useState("");
+  const [itemImageUrl, setItemImageUrl] = useState("");
+  const [isUploadingItemImage, setIsUploadingItemImage] = useState(false);
+  const itemFileInputRef = useRef<HTMLInputElement>(null);
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
 
@@ -1399,6 +1405,9 @@ export default function MenuPage() {
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
     setItemSelectedCategoryId(activeCategory?._id || "");
+    setItemImageAssetId("");
+    setItemImageUrl("");
+    if (itemFileInputRef.current) itemFileInputRef.current.value = "";
     setItemServingSize("");
     setItemServing("");
     setItemCaloriesPerServing("");
@@ -1440,6 +1449,9 @@ export default function MenuPage() {
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
     setItemSelectedCategoryId(activeCategory?._id || "");
+    setItemImageAssetId(item.imageAssetId || "");
+    setItemImageUrl(item.imageUrl || "");
+    if (itemFileInputRef.current) itemFileInputRef.current.value = "";
     setItemServingSize(item.servingSize || "");
     setItemServing(item.serving ? String(item.serving) : "");
     setItemCaloriesPerServing(item.caloriesPerServing || item.calorie || "");
@@ -1458,6 +1470,60 @@ export default function MenuPage() {
     setAddingChildForNutrientId(null);
     setItemError(null);
     setIsAddItemOpen(true);
+  };
+
+  const handleItemImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!organization?._id) {
+      setItemError("Organization not found. Please refresh the page.");
+      return;
+    }
+
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type)) {
+      setItemError("Invalid file format. Only JPG, PNG, and WEBP files are allowed.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setItemError("File size exceeds 10MB limit.");
+      return;
+    }
+
+    setItemError(null);
+    setIsUploadingItemImage(true);
+
+    try {
+      const uploadResult = await createAssetUpload({
+        assetType: "menu_image",
+        fileName: file.name,
+        contentType: file.type || "image/png",
+        fileSize: file.size,
+        organizationId: organization._id,
+      });
+
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "image/png" },
+        body: file,
+      });
+
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload item image to R2 (Status: ${putResult.status})`);
+      }
+
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      setItemImageAssetId(uploadResult.assetId);
+      setItemImageUrl(URL.createObjectURL(file));
+    } catch (err: any) {
+      setItemError(err?.message || "Failed to upload item image.");
+    } finally {
+      setIsUploadingItemImage(false);
+    }
   };
 
   // Save Item Submit
@@ -1518,6 +1584,7 @@ export default function MenuPage() {
           showAllergenContents: itemShowAllergens,
           allergens: itemSelectedAllergens,
           nutrients: itemNutrients,
+          imageAssetId: itemImageAssetId ? (itemImageAssetId as Id<"organization_assets">) : undefined,
         });
       } else {
         const newItemId = await createItemMutation({
@@ -1550,6 +1617,7 @@ export default function MenuPage() {
           showAllergenContents: itemShowAllergens,
           allergens: itemSelectedAllergens,
           nutrients: itemNutrients,
+          imageAssetId: itemImageAssetId ? (itemImageAssetId as Id<"organization_assets">) : undefined,
         });
 
         await addCategoryItemMutation({
@@ -2237,12 +2305,52 @@ export default function MenuPage() {
                       <h2 className="text-[20px] font-semibold text-[#0c0a09]">Item Details & Pricing</h2>
 
                       {/* Image Upload Area */}
-                      <div className="border-2 border-dashed border-[#d1c4c1] rounded-xl p-6 lg:p-8 flex flex-col items-center justify-center text-center bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer group">
-                        <div className="w-16 h-16 rounded-full bg-[#f0efed] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform border border-[#e7e5e4]">
-                          <ImageIcon className="w-7 h-7 text-[#141010]" />
-                        </div>
-                        <h3 className="font-medium text-[15px] text-[#0c0a09] mb-1">Click to upload item image</h3>
-                        <p className="text-xs text-[#5e5e5e] mb-4">or drag and drop. Supports JPG, PNG, WEBP (Max 5MB)</p>
+                      <input
+                        type="file"
+                        ref={itemFileInputRef}
+                        onChange={handleItemImageUpload}
+                        accept="image/jpeg,image/png,image/webp"
+                        className="hidden"
+                      />
+                      <div
+                        onClick={() => itemFileInputRef.current?.click()}
+                        className="border-2 border-dashed border-[#d1c4c1] rounded-xl p-6 lg:p-8 flex flex-col items-center justify-center text-center bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer group relative overflow-hidden"
+                      >
+                        {isUploadingItemImage ? (
+                          <div className="flex flex-col items-center gap-2 py-4">
+                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#141010] border-t-transparent"></div>
+                            <span className="text-sm font-medium text-[#141010]">Uploading item image to R2...</span>
+                          </div>
+                        ) : (itemImageUrl || itemImageAssetId) ? (
+                          <div className="flex flex-col items-center gap-3">
+                            <div className="w-24 h-24 rounded-lg overflow-hidden border border-[#e7e5e4] shadow-xs">
+                              <img src={itemImageUrl} alt="Item Preview" className="w-full h-full object-cover" />
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-xs font-medium text-[#141010] hover:underline">Change Image</span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemImageAssetId("");
+                                  setItemImageUrl("");
+                                  if (itemFileInputRef.current) itemFileInputRef.current.value = "";
+                                }}
+                                className="text-xs font-medium text-rose-600 hover:underline cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-16 h-16 rounded-full bg-[#f0efed] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform border border-[#e7e5e4]">
+                              <ImageIcon className="w-7 h-7 text-[#141010]" />
+                            </div>
+                            <h3 className="font-medium text-[15px] text-[#0c0a09] mb-1">Click to upload item image</h3>
+                            <p className="text-xs text-[#5e5e5e] mb-4">or drag and drop. Supports JPG, PNG, WEBP (Max 10MB)</p>
+                          </>
+                        )}
                       </div>
 
                       {/* Category & Search Code / SKU */}
@@ -2903,8 +3011,12 @@ export default function MenuPage() {
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-sm">
                       <h2 className="text-[16px] font-semibold text-[#0c0a09] mb-4">Live Menu Preview Card</h2>
                       <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm">
-                        <div className="aspect-[4/3] bg-[#f0efed] flex items-center justify-center relative">
-                          <ImageIcon className="w-12 h-12 text-[#928c8a]" />
+                        <div className="aspect-[4/3] bg-[#f0efed] flex items-center justify-center relative overflow-hidden">
+                          {itemImageUrl ? (
+                            <img src={itemImageUrl} alt={itemName || "Preview"} className="w-full h-full object-cover" />
+                          ) : (
+                            <ImageIcon className="w-12 h-12 text-[#928c8a]" />
+                          )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4 justify-between">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="bg-white/90 backdrop-blur-sm text-[#0c0a09] text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm">

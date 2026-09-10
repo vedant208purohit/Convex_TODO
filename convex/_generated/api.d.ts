@@ -8,10 +8,14 @@
  * @module
  */
 
+import type * as assetResolver from "../assetResolver.js";
 import type * as features from "../features.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
+import type * as migrateStorageToR2 from "../migrateStorageToR2.js";
+import type * as migrateStorageToR2Db from "../migrateStorageToR2Db.js";
 import type * as orders from "../orders.js";
+import type * as organizationAssets from "../organizationAssets.js";
 import type * as organizationBotTokens from "../organizationBotTokens.js";
 import type * as organizationCarouselScreens from "../organizationCarouselScreens.js";
 import type * as organizationFeatures from "../organizationFeatures.js";
@@ -29,6 +33,7 @@ import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
 import type * as paymentModes from "../paymentModes.js";
 import type * as r2 from "../r2.js";
+import type * as r2SignedUrl from "../r2SignedUrl.js";
 import type * as taxation from "../taxation.js";
 
 import type {
@@ -38,10 +43,14 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  assetResolver: typeof assetResolver;
   features: typeof features;
   inventory: typeof inventory;
   menu: typeof menu;
+  migrateStorageToR2: typeof migrateStorageToR2;
+  migrateStorageToR2Db: typeof migrateStorageToR2Db;
   orders: typeof orders;
+  organizationAssets: typeof organizationAssets;
   organizationBotTokens: typeof organizationBotTokens;
   organizationCarouselScreens: typeof organizationCarouselScreens;
   organizationFeatures: typeof organizationFeatures;
@@ -59,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   organizations: typeof organizations;
   paymentModes: typeof paymentModes;
   r2: typeof r2;
+  r2SignedUrl: typeof r2SignedUrl;
   taxation: typeof taxation;
 }>;
 
