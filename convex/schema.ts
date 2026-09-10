@@ -893,4 +893,34 @@ export default defineSchema({
   })
     .index("by_token", ["token"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Assets Domain Table (Cloudflare R2 Metadata & References)
+  organization_assets: defineTable({
+    legacyId: v.optional(v.string()),
+
+    organizationId: v.id("organizations"),
+    storageKey: v.string(),
+    fileName: v.string(),
+    contentType: v.string(),
+    fileSize: v.number(),
+    assetType: v.string(),
+
+    status: v.union(
+      v.literal("pending"),
+      v.literal("uploaded"),
+      v.literal("failed"),
+      v.literal("deleted")
+    ),
+
+    createdBy: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_asset_type", ["organizationId", "assetType"])
+    .index("by_storage_key", ["storageKey"])
+    .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
