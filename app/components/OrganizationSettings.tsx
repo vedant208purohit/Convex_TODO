@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef, ChangeEvent } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -45,15 +45,18 @@ interface OrgFormData {
   fax: string;
   logoUrl: string;
   logoStorageId: string;
+  logoAssetId?: string;
   schedule: WeeklySchedule;
   isGst: boolean;
   inclusiveGst: boolean;
   gstNumber: string;
   gstDocumentStorageId?: string;
+  gstDocumentAssetId?: string;
   isFssai: boolean;
   fssaiRegistrationNumber: string;
   expiryDate: string;
   fssaiDocumentStorageId?: string;
+  fssaiDocumentAssetId?: string;
 }
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
@@ -126,12 +129,19 @@ export function OrganizationSettings() {
   const isLoading = organizations === undefined;
 
   const updateOrg = useMutation(api.organizations.update);
-  const generateUploadUrl = useMutation(api.organizations.generateUploadUrl);
+  const createAssetUpload = useAction(api.r2.createAssetUpload);
+  const confirmAssetUpload = useAction(api.r2.confirmAssetUpload);
 
-  // Convex Storage URL Resolution Query
+  // Storage & R2 URL Resolution Query (R2 First, Convex Storage Fallback)
   const logoStorageUrl = useQuery(
     api.organizations.getStorageUrl,
-    org?.logoStorageId ? { storageId: org.logoStorageId as Id<"_storage"> } : "skip"
+    org?.logoAssetId || org?.logoStorageId
+      ? {
+          assetId: org.logoAssetId as Id<"organization_assets"> | undefined,
+          storageId: org.logoStorageId as Id<"_storage"> | undefined,
+          organizationId: org._id,
+        }
+      : "skip"
   );
 
   // Real Tax Groups & Components Queries and Mutations from Convex DB
@@ -197,29 +207,40 @@ export function OrganizationSettings() {
     fax: "",
     logoUrl: "",
     logoStorageId: "",
+    logoAssetId: "",
     schedule: defaultSchedule(),
     isGst: false,
     inclusiveGst: false,
     gstNumber: "",
     gstDocumentStorageId: "",
+    gstDocumentAssetId: "",
     isFssai: false,
     fssaiRegistrationNumber: "",
     expiryDate: "",
     fssaiDocumentStorageId: "",
+    fssaiDocumentAssetId: "",
   });
 
-  // Resolved document storage URLs from Convex Storage
+  // Resolved document storage URLs from R2 / Convex Storage (R2-first fallback)
   const fssaiDocStorageUrl = useQuery(
     api.organizations.getStorageUrl,
-    formData.fssaiDocumentStorageId
-      ? { storageId: formData.fssaiDocumentStorageId as Id<"_storage"> }
+    formData.fssaiDocumentAssetId || formData.fssaiDocumentStorageId
+      ? {
+          assetId: (formData.fssaiDocumentAssetId as Id<"organization_assets">) || undefined,
+          storageId: (formData.fssaiDocumentStorageId as Id<"_storage">) || undefined,
+          organizationId: org?._id,
+        }
       : "skip"
   );
 
   const gstDocStorageUrl = useQuery(
     api.organizations.getStorageUrl,
-    formData.gstDocumentStorageId
-      ? { storageId: formData.gstDocumentStorageId as Id<"_storage"> }
+    formData.gstDocumentAssetId || formData.gstDocumentStorageId
+      ? {
+          assetId: (formData.gstDocumentAssetId as Id<"organization_assets">) || undefined,
+          storageId: (formData.gstDocumentStorageId as Id<"_storage">) || undefined,
+          organizationId: org?._id,
+        }
       : "skip"
   );
 
@@ -293,28 +314,31 @@ export function OrganizationSettings() {
       fax: org.fax || "",
       logoUrl: (org as any).logoUrl || "",
       logoStorageId: (org as any).logoStorageId || "",
+      logoAssetId: (org as any).logoAssetId || "",
       schedule: loadedSchedule,
       isGst: org.isGst ?? false,
       inclusiveGst: org.inclusiveGst ?? false,
       gstNumber: org.gstNumber || "",
       gstDocumentStorageId: (org as any).gstDocumentStorageId || "",
+      gstDocumentAssetId: (org as any).gstDocumentAssetId || "",
       isFssai: org.isFssai ?? false,
       fssaiRegistrationNumber: org.fssaiRegistrationNumber || "",
       expiryDate: expDateStr,
       fssaiDocumentStorageId: (org as any).fssaiDocumentStorageId || "",
+      fssaiDocumentAssetId: (org as any).fssaiDocumentAssetId || "",
     };
 
     setInitialData(loaded);
     setFormData(loaded);
   }, [org]);
 
-  // Compute resolved display logo URL (either direct logoUrl or generated storage URL)
+  // Compute resolved display logo URL (either direct logoUrl, R2 signed URL or generated storage URL)
   const displayLogoUrl = useMemo(() => {
-    if (formData.logoUrl === "" && formData.logoStorageId === "") {
+    if (formData.logoUrl === "" && formData.logoStorageId === "" && !formData.logoAssetId) {
       return "";
     }
     return formData.logoUrl || logoStorageUrl || "";
-  }, [formData.logoUrl, formData.logoStorageId, logoStorageUrl]);
+  }, [formData.logoUrl, formData.logoStorageId, formData.logoAssetId, logoStorageUrl]);
 
   // Map Convex DB Tax Components for display lookup
   const taxComponentMap = useMemo(() => {
@@ -566,24 +590,56 @@ export function OrganizationSettings() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!org?._id) {
+      setErrorMessage("Organization not found. Please refresh the page.");
+      return;
+    }
+
     setErrorMessage(null);
     setIsUploadingLogo(true);
 
     try {
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "logo",
+        fileName: file.name,
+        contentType: file.type || "image/png",
+        fileSize: file.size,
+        organizationId: org._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "image/png" },
         body: file,
       });
 
-      const { storageId } = await result.json();
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload logo binary to R2 (Status: ${putResult.status})`);
+      }
+
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      // 4. Link logoAssetId to organization record in Convex DB
+      await updateOrg({
+        id: org._id,
+        logoAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local preview and state
       const localPreviewUrl = URL.createObjectURL(file);
       setFormData((prev) => ({
         ...prev,
-        logoStorageId: storageId,
+        logoAssetId: uploadResult.assetId,
         logoUrl: localPreviewUrl,
       }));
+
+      setSuccessMessage("Organization logo uploaded and saved successfully.");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err: any) {
       setErrorMessage(err?.message || "Failed to upload organization logo.");
     } finally {
@@ -592,12 +648,6 @@ export function OrganizationSettings() {
   };
 
   const handleRemoveLogo = async () => {
-    setFormData((prev) => ({
-      ...prev,
-      logoUrl: "",
-      logoStorageId: "",
-    }));
-
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -608,11 +658,18 @@ export function OrganizationSettings() {
           id: org._id,
           logoUrl: "",
           logoStorageId: undefined,
+          logoAssetId: undefined,
         });
+        setFormData((prev) => ({
+          ...prev,
+          logoUrl: "",
+          logoStorageId: "",
+          logoAssetId: "",
+        }));
         setSuccessMessage("Organization logo removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err: any) {
-        // Silently handle error if any
+        setErrorMessage(err?.message || "Failed to remove organization logo.");
       }
     }
   };
@@ -631,25 +688,50 @@ export function OrganizationSettings() {
       return;
     }
 
+    if (!org?._id) {
+      setErrorMessage("Organization not found. Please refresh the page.");
+      return;
+    }
+
     setErrorMessage(null);
     setIsUploadingFssaiDoc(true);
 
     try {
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "document",
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileSize: file.size,
+        organizationId: org._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/pdf" },
         body: file,
       });
 
-      if (!result.ok) {
-        throw new Error(`Upload failed with status ${result.status}`);
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload FSSAI document binary to R2 (Status: ${putResult.status})`);
       }
 
-      const { storageId } = await result.json();
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      // 4. Link fssaiDocumentAssetId to organization record in Convex DB
+      await updateOrg({
+        id: org._id,
+        fssaiDocumentAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local state
       setFormData((prev) => ({
         ...prev,
-        fssaiDocumentStorageId: storageId,
+        fssaiDocumentAssetId: uploadResult.assetId,
       }));
       setSuccessMessage("FSSAI document uploaded successfully.");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -674,25 +756,50 @@ export function OrganizationSettings() {
       return;
     }
 
+    if (!org?._id) {
+      setErrorMessage("Organization not found. Please refresh the page.");
+      return;
+    }
+
     setErrorMessage(null);
     setIsUploadingGstDoc(true);
 
     try {
-      const postUrl = await generateUploadUrl();
-      const result = await fetch(postUrl, {
-        method: "POST",
-        headers: { "Content-Type": file.type },
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "document",
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileSize: file.size,
+        organizationId: org._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/pdf" },
         body: file,
       });
 
-      if (!result.ok) {
-        throw new Error(`Upload failed with status ${result.status}`);
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload GST document binary to R2 (Status: ${putResult.status})`);
       }
 
-      const { storageId } = await result.json();
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      // 4. Link gstDocumentAssetId to organization record in Convex DB
+      await updateOrg({
+        id: org._id,
+        gstDocumentAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local state
       setFormData((prev) => ({
         ...prev,
-        gstDocumentStorageId: storageId,
+        gstDocumentAssetId: uploadResult.assetId,
       }));
       setSuccessMessage("GST document uploaded successfully.");
       setTimeout(() => setSuccessMessage(null), 3000);
@@ -704,37 +811,37 @@ export function OrganizationSettings() {
   };
 
   const handleRemoveFssaiDocument = async () => {
-    setFormData((prev) => ({ ...prev, fssaiDocumentStorageId: "" }));
+    setFormData((prev) => ({ ...prev, fssaiDocumentStorageId: "", fssaiDocumentAssetId: "" }));
     if (fssaiFileInputRef.current) fssaiFileInputRef.current.value = "";
 
     if (org?._id) {
       try {
         await updateOrg({
           id: org._id,
-          fssaiDocumentStorageId: undefined,
+          fssaiDocumentUrl: "",
         });
         setSuccessMessage("FSSAI document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err: any) {
-        // Silently handle
+        setErrorMessage(err?.message || "Failed to remove FSSAI document.");
       }
     }
   };
 
   const handleRemoveGstDocument = async () => {
-    setFormData((prev) => ({ ...prev, gstDocumentStorageId: "" }));
+    setFormData((prev) => ({ ...prev, gstDocumentStorageId: "", gstDocumentAssetId: "" }));
     if (gstFileInputRef.current) gstFileInputRef.current.value = "";
 
     if (org?._id) {
       try {
         await updateOrg({
           id: org._id,
-          gstDocumentStorageId: undefined,
+          gstDocumentUrl: "",
         });
         setSuccessMessage("GST document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
       } catch (err: any) {
-        // Silently handle
+        setErrorMessage(err?.message || "Failed to remove GST document.");
       }
     }
   };
@@ -779,12 +886,34 @@ export function OrganizationSettings() {
         inclusiveGst: formData.inclusiveGst,
         separateGst: !formData.inclusiveGst,
         gstNumber: formData.isGst && formData.gstNumber.trim() ? formData.gstNumber.trim() : undefined,
-        gstDocumentStorageId: formData.isGst && formData.gstDocumentStorageId ? formData.gstDocumentStorageId : undefined,
         isFssai: formData.isFssai,
         fssaiRegistrationNumber: formData.isFssai && formData.fssaiRegistrationNumber.trim() ? formData.fssaiRegistrationNumber.trim() : undefined,
         expiryDate: formData.isFssai ? parsedExpiryDate : undefined,
-        fssaiDocumentStorageId: formData.isFssai && formData.fssaiDocumentStorageId ? formData.fssaiDocumentStorageId : undefined,
       };
+
+      if (formData.isGst) {
+        if (formData.gstDocumentAssetId) {
+          updatePayload.gstDocumentAssetId = formData.gstDocumentAssetId;
+        } else if (formData.gstDocumentStorageId) {
+          updatePayload.gstDocumentStorageId = formData.gstDocumentStorageId;
+        } else {
+          updatePayload.gstDocumentUrl = "";
+        }
+      } else {
+        updatePayload.gstDocumentUrl = "";
+      }
+
+      if (formData.isFssai) {
+        if (formData.fssaiDocumentAssetId) {
+          updatePayload.fssaiDocumentAssetId = formData.fssaiDocumentAssetId;
+        } else if (formData.fssaiDocumentStorageId) {
+          updatePayload.fssaiDocumentStorageId = formData.fssaiDocumentStorageId;
+        } else {
+          updatePayload.fssaiDocumentUrl = "";
+        }
+      } else {
+        updatePayload.fssaiDocumentUrl = "";
+      }
 
       if (formData.legalEntityName.trim()) updatePayload.legalEntityName = formData.legalEntityName.trim();
       if (formData.addressLine1.trim()) updatePayload.addressLine1 = formData.addressLine1.trim();
@@ -799,8 +928,15 @@ export function OrganizationSettings() {
       if (formData.email.trim()) updatePayload.email = formData.email.trim();
       if (fullPhone) updatePayload.phone = fullPhone;
       if (formData.fax.trim()) updatePayload.fax = formData.fax.trim();
-      if (formData.logoUrl !== undefined && formData.logoUrl !== "") updatePayload.logoUrl = formData.logoUrl;
-      if (formData.logoStorageId) updatePayload.logoStorageId = formData.logoStorageId;
+      if (formData.logoAssetId) {
+        updatePayload.logoAssetId = formData.logoAssetId;
+      } else if (formData.logoStorageId) {
+        updatePayload.logoStorageId = formData.logoStorageId;
+      } else if (formData.logoUrl) {
+        updatePayload.logoUrl = formData.logoUrl;
+      } else {
+        updatePayload.logoUrl = "";
+      }
 
       await updateOrg(updatePayload as any);
 
@@ -2189,7 +2325,7 @@ export function OrganizationSettings() {
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
                         <span className="text-sm font-medium text-[#1f1a17]">Uploading FSSAI document...</span>
                       </div>
-                    ) : (formData.fssaiDocumentStorageId || fssaiDocStorageUrl) ? (
+                    ) : (formData.fssaiDocumentAssetId || formData.fssaiDocumentStorageId) ? (
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
                           ✓
@@ -2324,7 +2460,7 @@ export function OrganizationSettings() {
                         <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#191513] border-t-transparent"></div>
                         <span className="text-sm font-medium text-[#1f1a17]">Uploading GST document...</span>
                       </div>
-                    ) : (formData.gstDocumentStorageId || gstDocStorageUrl) ? (
+                    ) : (formData.gstDocumentAssetId || formData.gstDocumentStorageId) ? (
                       <div className="flex flex-col items-center gap-3">
                         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-xl">
                           ✓

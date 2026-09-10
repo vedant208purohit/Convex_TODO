@@ -57,6 +57,9 @@ export const ALLOWED_ASSET_TYPES = [
   "logo",
   "icon",
   "menu_image",
+  "menu_3d_model",
+  "menu_3d_model_ios",
+  "menu_video",
   "menu_pdf",
   "product_image",
   "invoice_pdf",
@@ -89,6 +92,8 @@ export const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number; defaultE
   "video/webm": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "webm" },
   "model/gltf-binary": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "glb" },
   "model/gltf+json": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "gltf" },
+  "model/vnd.usdz+zip": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "usdz" },
+  "model/usdz+zip": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "usdz" },
 
   // Plain text (for test/diagnostics, max 2MB)
   "text/plain": { maxSizeBytes: 2 * 1024 * 1024, defaultExt: "txt" },

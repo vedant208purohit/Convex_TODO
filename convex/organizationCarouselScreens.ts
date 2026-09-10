@@ -2,6 +2,7 @@ import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireAuth, resolveStoreOrganization, getCallerMembership, requireMember } from "./organizationUsers";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 // ----------------------------------------------------
 // AUTHORIZATION HELPERS
@@ -49,22 +50,21 @@ export async function getNextPosition(ctx: QueryCtx | MutationCtx): Promise<numb
 }
 
 /**
- * Formats doc into response object, resolving storage URL from storageId if present.
+ * Formats doc into response object, resolving storage URL from assetId (R2 first) or storageId fallback.
  */
 export async function toScreenResponse(
   ctx: QueryCtx | MutationCtx,
-  doc: Doc<"organizationCarouselScreens">
+  doc: Doc<"organizationCarouselScreens">,
+  explicitOrgId?: Id<"organizations">
 ) {
   let resolvedUrl: string | null = doc.imageUrl ?? null;
-  if (doc.storageId) {
-    try {
-      const storageUrl = await ctx.storage.getUrl(doc.storageId);
-      if (storageUrl) {
-        resolvedUrl = storageUrl;
-      }
-    } catch {
-      // Storage lookup fallback
-    }
+  const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+    assetId: doc.assetId,
+    storageId: doc.storageId,
+    organizationId: explicitOrgId,
+  });
+  if (storageOrR2Url) {
+    resolvedUrl = storageOrR2Url;
   }
 
   return {
@@ -74,6 +74,7 @@ export async function toScreenResponse(
     fileName: doc.fileName,
     imageUrl: resolvedUrl,
     storageId: doc.storageId,
+    assetId: doc.assetId,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };
@@ -84,18 +85,17 @@ export async function toScreenResponse(
  */
 export async function toPublicResponse(
   ctx: QueryCtx | MutationCtx,
-  doc: Doc<"organizationCarouselScreens">
+  doc: Doc<"organizationCarouselScreens">,
+  explicitOrgId?: Id<"organizations">
 ) {
   let resolvedUrl: string | null = doc.imageUrl ?? null;
-  if (doc.storageId) {
-    try {
-      const storageUrl = await ctx.storage.getUrl(doc.storageId);
-      if (storageUrl) {
-        resolvedUrl = storageUrl;
-      }
-    } catch {
-      // Storage lookup fallback
-    }
+  const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+    assetId: doc.assetId,
+    storageId: doc.storageId,
+    organizationId: explicitOrgId,
+  });
+  if (storageOrR2Url) {
+    resolvedUrl = storageOrR2Url;
   }
 
   return {
@@ -248,6 +248,7 @@ export const create = mutation({
   args: {
     position: v.optional(v.number()),
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
     legacyId: v.optional(v.string()),
@@ -268,6 +269,7 @@ export const create = mutation({
       legacyId: args.legacyId,
       position: effectivePos,
       storageId: args.storageId,
+      assetId: args.assetId,
       imageUrl: args.imageUrl?.trim() || undefined,
       fileName: args.fileName?.trim() || undefined,
       createdAt: args.createdAt ?? now,
@@ -287,6 +289,7 @@ export const update = mutation({
     id: v.id("organizationCarouselScreens"),
     position: v.optional(v.number()),
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
   },
@@ -310,6 +313,7 @@ export const update = mutation({
     }
 
     const updatedStorageId = args.storageId !== undefined ? args.storageId : existing.storageId;
+    const updatedAssetId = args.assetId !== undefined ? args.assetId : existing.assetId;
     const updatedImageUrl =
       args.imageUrl !== undefined ? args.imageUrl.trim() || undefined : existing.imageUrl;
     const updatedFileName =
@@ -317,6 +321,7 @@ export const update = mutation({
 
     await ctx.db.patch(args.id, {
       storageId: updatedStorageId,
+      assetId: updatedAssetId,
       imageUrl: updatedImageUrl,
       fileName: updatedFileName,
       updatedAt: now,

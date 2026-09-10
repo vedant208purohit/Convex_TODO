@@ -250,6 +250,7 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireAuth } from "./organizationUsers";
 import { initializeDefaultsHelper } from "./organizationFeatures";
 import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 
 
@@ -725,6 +726,7 @@ export const create = mutation({
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
     gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
@@ -732,6 +734,7 @@ export const create = mutation({
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
     fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
@@ -954,6 +957,7 @@ export const create = mutation({
       separateGst,
       gstNumber: args.gstNumber,
       gstDocumentStorageId: args.gstDocumentStorageId,
+      gstDocumentAssetId: args.gstDocumentAssetId,
       gstDocumentUrl: args.gstDocumentUrl,
 
       // FSSAI Compliance
@@ -961,6 +965,7 @@ export const create = mutation({
       fssaiRegistrationNumber: args.fssaiRegistrationNumber,
       expiryDate: args.expiryDate,
       fssaiDocumentStorageId: args.fssaiDocumentStorageId,
+      fssaiDocumentAssetId: args.fssaiDocumentAssetId,
       fssaiDocumentUrl: args.fssaiDocumentUrl,
 
       // Currency & Regional Timezone
@@ -1228,6 +1233,7 @@ export const update = mutation({
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
     gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
@@ -1235,6 +1241,7 @@ export const update = mutation({
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
     fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
@@ -1253,6 +1260,7 @@ export const update = mutation({
     theme: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
     logoStorageId: v.optional(v.id("_storage")),
+    logoAssetId: v.optional(v.id("organization_assets")),
 
     // Module & Feature Flags
     isDineIn: v.optional(v.boolean()),
@@ -1424,10 +1432,28 @@ export const update = mutation({
 
     validateOrganizationState(finalState);
 
-    if (updates.logoUrl === "") {
+    const needsReplace =
+      updates.logoUrl === "" ||
+      updates.fssaiDocumentUrl === "" ||
+      updates.gstDocumentUrl === "";
+
+    if (needsReplace) {
       const docToReplace = { ...existing, ...finalState, updatedAt: Date.now() };
-      delete (docToReplace as any).logoUrl;
-      delete (docToReplace as any).logoStorageId;
+      if (updates.logoUrl === "") {
+        delete (docToReplace as any).logoUrl;
+        delete (docToReplace as any).logoStorageId;
+        delete (docToReplace as any).logoAssetId;
+      }
+      if (updates.fssaiDocumentUrl === "") {
+        delete (docToReplace as any).fssaiDocumentUrl;
+        delete (docToReplace as any).fssaiDocumentStorageId;
+        delete (docToReplace as any).fssaiDocumentAssetId;
+      }
+      if (updates.gstDocumentUrl === "") {
+        delete (docToReplace as any).gstDocumentUrl;
+        delete (docToReplace as any).gstDocumentStorageId;
+        delete (docToReplace as any).gstDocumentAssetId;
+      }
       await ctx.db.replace(id, docToReplace as any);
     } else {
       await ctx.db.patch(id, {
@@ -1739,8 +1765,16 @@ export const generateUploadUrl = mutation({
 });
 
 export const getStorageUrl = query({
-  args: { storageId: v.id("_storage") },
+  args: {
+    storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
+    organizationId: v.optional(v.id("organizations")),
+  },
   handler: async (ctx, args) => {
-    return await ctx.storage.getUrl(args.storageId);
+    return await resolveAssetOrStorageUrl(ctx, {
+      assetId: args.assetId,
+      storageId: args.storageId,
+      organizationId: args.organizationId,
+    });
   },
 });

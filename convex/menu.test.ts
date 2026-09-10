@@ -318,6 +318,133 @@ describe("Multi-Menu Architecture Tests", () => {
     menus = await t.query(api.menu.listMenus, { organizationId: orgId });
     expect(menus.length).toBe(0);
   });
+
+  test("5. Item and Customization Item R2 Asset ID Persistence", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "R2 Menu Store",
+    });
+
+    const menuImageAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/menu_image/burger.jpg`,
+        fileName: "burger.jpg",
+        contentType: "image/jpeg",
+        fileSize: 5000,
+        assetType: "menu_image",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const threeDAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/menu_3d_model/burger.glb`,
+        fileName: "burger.glb",
+        contentType: "model/gltf-binary",
+        fileSize: 50000,
+        assetType: "menu_3d_model",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const threeDIosAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/menu_3d_model_ios/burger.usdz`,
+        fileName: "burger.usdz",
+        contentType: "model/vnd.usdz+zip",
+        fileSize: 50000,
+        assetType: "menu_3d_model_ios",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const videoAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/menu_video/burger.mp4`,
+        fileName: "burger.mp4",
+        contentType: "video/mp4",
+        fileSize: 200000,
+        assetType: "menu_video",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const itemId = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Truffle Burger",
+      price: 1500,
+      imageAssetId: menuImageAssetId,
+      threeDModelAssetId: threeDAssetId,
+      threeDModelIosAssetId: threeDIosAssetId,
+      videoAssetId: videoAssetId,
+    });
+
+    const item = await t.run(async (ctx) => await ctx.db.get(itemId));
+    expect(item?.imageAssetId).toBe(menuImageAssetId);
+    expect(item?.threeDModelAssetId).toBe(threeDAssetId);
+    expect(item?.threeDModelIosAssetId).toBe(threeDIosAssetId);
+    expect(item?.videoAssetId).toBe(videoAssetId);
+
+    // Update item with new asset
+    const newImageAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/menu_image/burger_new.jpg`,
+        fileName: "burger_new.jpg",
+        contentType: "image/jpeg",
+        fileSize: 6000,
+        assetType: "menu_image",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    await t.mutation(api.menu.updateItem, {
+      id: itemId,
+      imageAssetId: newImageAssetId,
+    });
+
+    const updatedItem = await t.run(async (ctx) => await ctx.db.get(itemId));
+    expect(updatedItem?.imageAssetId).toBe(newImageAssetId);
+
+    // Customization Item Asset ID test
+    const custId = await t.mutation(api.menu.createCustomization, {
+      organizationId: orgId,
+      itemId,
+      name: "Add Extra Cheese",
+      customizationType: "AddOns",
+    });
+
+    const choiceId = await t.mutation(api.menu.createCustomizationItem, {
+      organizationId: orgId,
+      customizationId: custId,
+      name: "Cheddar",
+      price: 200,
+      imageAssetId: menuImageAssetId,
+    });
+
+    const choice = await t.run(async (ctx) => await ctx.db.get(choiceId));
+    expect(choice?.imageAssetId).toBe(menuImageAssetId);
+  });
 });
 
 

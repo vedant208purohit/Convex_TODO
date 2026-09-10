@@ -546,7 +546,132 @@ describe("Organization Domain Business Logic Tests", () => {
     });
 
     const clearedOrg = await t.query(api.organizations.get, { id: orgId });
-    expect(clearedOrg?.fssaiDocumentUrl).toBe("");
-    expect(clearedOrg?.gstDocumentUrl).toBe("");
+    expect(clearedOrg?.fssaiDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.gstDocumentStorageId).toBeUndefined();
+  });
+
+  // 24. Organization Logo R2 Asset ID Persistence & Dual Schema
+  test("24. Accepts and persists logoAssetId while preserving dual schema logoStorageId", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "R2 Logo Store",
+    });
+
+    const legacyStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["legacy logo"])));
+    const assetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/logo/test.png`,
+        fileName: "test.png",
+        contentType: "image/png",
+        fileSize: 1024,
+        assetType: "logo",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Update organization with logoAssetId
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      logoStorageId: legacyStorageId,
+      logoAssetId: assetId,
+    });
+
+    // Verify organization query returns logoAssetId
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.logoAssetId).toBe(assetId);
+    expect(org?.logoStorageId).toBe(legacyStorageId);
+
+    // Verify organizations.list query returns logoAssetId
+    const orgs = await t.query(api.organizations.list);
+    const listedOrg = orgs.find((o) => o?._id === orgId);
+    expect(listedOrg?.logoAssetId).toBe(assetId);
+    expect(listedOrg?.logoStorageId).toBe(legacyStorageId);
+
+    // Verify clearing logo removes logoAssetId
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      logoUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.logoAssetId).toBeUndefined();
+    expect(clearedOrg?.logoStorageId).toBeUndefined();
+  });
+
+  // 25. Organization FSSAI & GST R2 Asset ID Persistence
+  test("25. Accepts and persists fssaiDocumentAssetId and gstDocumentAssetId", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "R2 Compliance Store",
+    });
+
+    const fssaiAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/document/fssai.pdf`,
+        fileName: "fssai.pdf",
+        contentType: "application/pdf",
+        fileSize: 2048,
+        assetType: "document",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const gstAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/document/gst.pdf`,
+        fileName: "gst.pdf",
+        contentType: "application/pdf",
+        fileSize: 2048,
+        assetType: "document",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      isFssai: true,
+      fssaiRegistrationNumber: "12345678901234",
+      fssaiDocumentAssetId: fssaiAssetId,
+      isGst: true,
+      gstNumber: "22AAAAA0000A1Z5",
+      gstDocumentAssetId: gstAssetId,
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.fssaiDocumentAssetId).toBe(fssaiAssetId);
+    expect(org?.gstDocumentAssetId).toBe(gstAssetId);
+    expect(org?.isFssai).toBe(true);
+    expect(org?.isGst).toBe(true);
+
+    // Verify clearing FSSAI and GST documents removes their asset IDs
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentUrl: "",
+      gstDocumentUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.fssaiDocumentAssetId).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.gstDocumentAssetId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentUrl).toBeUndefined();
   });
 });
