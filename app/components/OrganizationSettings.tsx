@@ -837,9 +837,9 @@ export function OrganizationSettings() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-8 pb-16 relative">
-      {/* Header */}
-      <div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Sticky / Fixed Top Header (Title + Subtitle + Sub-Nav Tabs) */}
+      <div className="shrink-0 space-y-4 bg-[#fdf8f7] pb-2 border-b border-[#eadfd6]">
         <h1 className="font-serif text-3xl font-light text-[#1f1a17]">
           {activeTab === "timings"
             ? "Operational Timings"
@@ -860,7 +860,7 @@ export function OrganizationSettings() {
         </p>
 
         {/* Sub-Navigation Tabs */}
-        <nav className="mt-6 flex border-b border-[#eadfd6]">
+        <nav className="mt-4 flex">
           <button
             type="button"
             onClick={() => setActiveTab("details")}
@@ -908,7 +908,9 @@ export function OrganizationSettings() {
         </nav>
       </div>
 
-      {/* Notifications */}
+      {/* Scrollable Form & Content Area */}
+      <div className="flex-1 overflow-y-auto pt-6 space-y-8 pr-1 pb-16">
+        {/* Notifications */}
       {successMessage && (
         <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 shadow-sm">
           <div className="flex items-center gap-2">
@@ -1930,7 +1932,7 @@ export function OrganizationSettings() {
               <div className="space-y-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6f655e]">DETAILS</h3>
                 
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-[#1f1a17]">Tax Group Name</label>
                   <input
                     type="text"
@@ -1940,8 +1942,20 @@ export function OrganizationSettings() {
                     style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
                     className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
                   />
-                </div>
-
+                </div> */}
+<div>
+  <label className="block text-sm font-medium text-[#1f1a17]">
+    Tax Group Name <span className="text-red-600">*</span>
+  </label>
+  <input
+    type="text"
+    value={taxGroupName}
+    onChange={(e) => setTaxGroupName(e.target.value)}
+    placeholder="e.g. GST"
+    style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
+    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
+  />
+</div>
                 {/* Temporarily disabled Tax Mode selection in Tax Group drawer
                 <div>
                   <label className="block text-sm font-medium text-[#1f1a17]">Tax Mode</label>
@@ -2382,14 +2396,16 @@ export function OrganizationSettings() {
         </div>
       )}
 
-      {/* FOOTER ACTIONS BAR (Hidden on Operational Timings & Taxation since drawers handle actions) */}
+      </div>
+
+      {/* FOOTER ACTIONS BAR (Fixed at bottom; Hidden on Operational Timings & Taxation since drawers handle actions) */}
       {activeTab !== "timings" && activeTab !== "taxation" && (
-        <div className="sticky bottom-0 flex justify-end gap-4 border-t border-[#eadfd6] bg-[#fdf8f7] py-4 z-10">
+        <div className="shrink-0 flex items-center justify-end gap-4 border-t border-[#eadfd6] bg-[#fdf8f7] pt-4 pb-2 z-20">
           <button
             type="button"
             onClick={handleCancel}
             disabled={isSaving}
-            className="h-10 rounded-full border border-[#eadfd6] bg-white px-6 text-sm font-medium text-[#1f1a17] shadow-sm transition hover:bg-[#f3eeea] active:scale-95 disabled:opacity-50"
+            className="h-10 rounded-full border border-[#eadfd6] bg-white px-6 text-sm font-medium text-[#1f1a17] shadow-sm transition hover:bg-[#f3eeea] active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             Cancel
           </button>
@@ -2397,7 +2413,7 @@ export function OrganizationSettings() {
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="flex h-10 items-center justify-center rounded-full bg-[#191513] px-6 text-sm font-medium text-white shadow-md transition hover:bg-[#2e2824] active:scale-95 disabled:opacity-50"
+            className="flex h-10 items-center justify-center rounded-full bg-[#191513] px-6 text-sm font-medium text-white shadow-md transition hover:bg-[#2e2824] active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {isSaving ? (
               <div className="flex items-center gap-2">

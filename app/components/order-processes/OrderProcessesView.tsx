@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useQuery, useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 import {
   DrawerState,
   OrderProcessDoc,
@@ -153,7 +153,7 @@ export function OrderProcessesView() {
   };
 
   return (
-    <div className="p-8 max-w-[1600px] mx-auto min-h-screen bg-[#fdf8f7] flex flex-col w-full pb-24">
+    <div className="flex flex-col h-full overflow-hidden w-full bg-[#fdf8f7]">
       {/* Feedback Toast Banner */}
       {feedback && (
         <div
@@ -176,30 +176,35 @@ export function OrderProcessesView() {
         </div>
       )}
 
-      {/* 1. Page Header */}
-      <OrderProcessesHeader
-        processCount={processes.length}
-        onAddProcess={handleOpenCreate}
-      />
-
-      {/* 2. Live Order Flow Preview */}
-      <WorkflowPreview processes={processes} />
-
-      {/* 3. Main Process List / Table */}
-      {isLoading ? (
-        <div className="bg-[#ffffff] rounded-2xl shadow-sm border border-[#e7e5e4] p-12 text-center text-[#4e4543] animate-pulse">
-          <div className="inline-block w-6 h-6 border-2 border-[#141010] border-t-transparent rounded-full animate-spin mb-3" />
-          <p className="text-sm font-medium">Loading order processes...</p>
-        </div>
-      ) : (
-        <OrderProcessesTable
-          processes={processes}
-          onEdit={handleOpenEdit}
-          onTogglePublished={handleTogglePublished}
-          onReorder={handleReorder}
-          togglingIds={togglingIds}
+      {/* 1. Fixed / Sticky Page Header */}
+      <div className="shrink-0 space-y-4 bg-[#fdf8f7] pb-3 border-b border-[#e7e5e4]">
+        <OrderProcessesHeader
+          processCount={processes.length}
+          onAddProcess={handleOpenCreate}
         />
-      )}
+      </div>
+
+      {/* 2. Scrollable Middle Content Area */}
+      <div className="flex-1 overflow-y-auto pt-6 space-y-8 pr-1 pb-16">
+        {/* Live Order Flow Preview */}
+        <WorkflowPreview processes={processes} />
+
+        {/* Main Process List / Table */}
+        {isLoading ? (
+          <div className="bg-[#ffffff] rounded-2xl shadow-sm border border-[#e7e5e4] p-12 text-center text-[#4e4543] animate-pulse">
+            <div className="inline-block w-6 h-6 border-2 border-[#141010] border-t-transparent rounded-full animate-spin mb-3" />
+            <p className="text-sm font-medium">Loading order processes...</p>
+          </div>
+        ) : (
+          <OrderProcessesTable
+            processes={processes}
+            onEdit={handleOpenEdit}
+            onTogglePublished={handleTogglePublished}
+            onReorder={handleReorder}
+            togglingIds={togglingIds}
+          />
+        )}
+      </div>
 
       {/* 4. Create / Edit Drawer */}
       <OrderProcessDrawer

@@ -1,11 +1,14 @@
 "use client";
 
-import { useState, ReactNode } from "react";
+import { ReactNode, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrderProcessesView } from "../components/order-processes/OrderProcessesView";
 import { OrganizationEmployees } from "../components/OrganizationEmployees";
+import { OrganizationFeatures } from "../components/OrganizationFeatures";
+import { OrganizationWaiters } from "../components/OrganizationWaiters";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -140,12 +143,28 @@ const SETTINGS_TABS: SettingsNavOption[] = [
   { id: "liveScreens", label: "Live Screens", icon: <LiveScreensIcon className="w-4 h-4" /> },
 ];
 
-export default function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<SettingsTab>("organization");
+function SettingsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // Read active tab from URL param, default to "organization"
+  const rawTab = searchParams.get("tab") as SettingsTab | null;
+  const validTabIds = SETTINGS_TABS.map((t) => t.id);
+  const activeTab: SettingsTab = rawTab && validTabIds.includes(rawTab) ? rawTab : "organization";
+
+  // Update URL when tab changes (replaces history so back button works naturally)
+  const setActiveTab = useCallback(
+    (tab: SettingsTab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("tab", tab);
+      router.replace(`/settings?${params.toString()}`);
+    },
+    [router, searchParams]
+  );
 
   return (
     <PosShell title="Settings" subtitle="Management Portal">
-      <div className="flex flex-col flex-1 min-w-0">
+      <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
         {/* Workspace Context Header */}
         <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
           <div className="flex items-end justify-between w-full">
@@ -161,9 +180,9 @@ export default function SettingsPage() {
         </div>
 
         {/* Settings Two-Panel Layout */}
-        <div className="flex-1 flex flex-col lg:flex-row w-full p-6 lg:p-8 gap-6 min-h-[calc(100vh-190px)]">
+        <div className="flex-1 flex flex-col lg:flex-row w-full p-6 lg:p-8 gap-6 min-h-0 overflow-hidden">
           {/* Left Panel: Settings Navigation */}
-          <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden min-h-[500px]">
+          <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full">
             <div className="p-4 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0">
               <h2 className="font-sans text-[16px] font-semibold text-[#141010]">
                 Settings Menu
@@ -195,12 +214,19 @@ export default function SettingsPage() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 overflow-y-auto">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full overflow-hidden">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "printers" && <OrganizationPrinters />}
+            {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
+            {activeTab === "waiters" && <OrganizationWaiters />}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
-            {activeTab !== "organization" && activeTab !== "printers" && activeTab !== "orderProcesses" && activeTab !== "staff" && (
+            {activeTab !== "organization" &&
+              activeTab !== "printers" &&
+              activeTab !== "features" &&
+              activeTab !== "orderProcesses" &&
+              activeTab !== "staff" &&
+              activeTab !== "waiters" && (
               <div className="py-12 text-center">
                 <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                   {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}
@@ -217,5 +243,14 @@ export default function SettingsPage() {
         </div>
       </div>
     </PosShell>
+  );
+}
+
+// Wrap in Suspense so useSearchParams() doesn't break SSR in Next.js App Router
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsContent />
+    </Suspense>
   );
 }

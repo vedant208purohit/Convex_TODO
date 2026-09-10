@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
@@ -157,11 +157,11 @@ export function PosShell({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex">
+    <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full overflow-hidden">
         {/* Logo */}
-        <div className="px-6 py-6 border-b border-[#e7e5e4] flex items-center gap-4">
+        <div className="px-6 py-6 border-b border-[#e7e5e4] flex items-center gap-4 shrink-0">
           <div className="w-10 h-10 rounded-full bg-[#f1edec] flex items-center justify-center overflow-hidden border border-[#e7e5e4] shrink-0 font-serif font-bold text-[#141010]">
             P
           </div>
@@ -182,7 +182,7 @@ export function PosShell({
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="flex min-w-0 flex-1 flex-col bg-[#f5f5f5]">
+      <div className="flex min-w-0 flex-1 flex-col bg-[#f5f5f5] h-full overflow-hidden">
         {/* TopAppBar */}
         <header className="w-full h-16 border-b border-[#e7e5e4] bg-[#fdf8f7] flex justify-between items-center px-6 lg:px-8 z-30 shrink-0">
           <div className="flex items-center gap-6" />
@@ -216,7 +216,7 @@ export function PosShell({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
       </div>
     </div>
   );
