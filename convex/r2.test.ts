@@ -257,7 +257,7 @@ describe("Cloudflare R2 Client & Configuration Tests", () => {
       process.env.R2_SECRET_ACCESS_KEY = "secret_key_456";
       process.env.R2_BUCKET_NAME = "pos-default-bucket";
 
-      const sendMock = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command) => {
+      const sendMock = vi.spyOn(S3Client.prototype, "send").mockImplementation(async (command: any) => {
         expect(command).toBeInstanceOf(HeadBucketCommand);
         expect((command as HeadBucketCommand).input.Bucket).toBe("pos-default-bucket");
         return {} as HeadBucketCommandOutput;

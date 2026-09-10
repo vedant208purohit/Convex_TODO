@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as features from "../features.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
 import type * as orders from "../orders.js";
@@ -26,6 +27,7 @@ import type * as organizationTables from "../organizationTables.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
+import type * as paymentModes from "../paymentModes.js";
 import type * as r2 from "../r2.js";
 import type * as taxation from "../taxation.js";
 
@@ -36,6 +38,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  features: typeof features;
   inventory: typeof inventory;
   menu: typeof menu;
   orders: typeof orders;
@@ -54,6 +57,7 @@ declare const fullApi: ApiFromModules<{
   organizationUsers: typeof organizationUsers;
   organizationWaiters: typeof organizationWaiters;
   organizations: typeof organizations;
+  paymentModes: typeof paymentModes;
   r2: typeof r2;
   taxation: typeof taxation;
 }>;

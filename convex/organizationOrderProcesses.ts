@@ -141,8 +141,6 @@ export const list = query({
     isSequence: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireMember(ctx);
-
     let active: Doc<"organizationOrderProcesses">[];
 
     if (args.isSequence !== undefined) {

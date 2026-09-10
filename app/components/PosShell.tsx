@@ -147,6 +147,9 @@ function NavLink({ href, label, icon }: NavItem) {
   );
 }
 
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+
 export function PosShell({
   title,
   subtitle,
@@ -156,6 +159,10 @@ export function PosShell({
   subtitle?: string;
   children: ReactNode;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const branchName = activeOrg?.name || "Flagship Main Store";
+
   return (
     <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
@@ -185,7 +192,12 @@ export function PosShell({
       <div className="flex min-w-0 flex-1 flex-col bg-[#f5f5f5] h-full overflow-hidden">
         {/* TopAppBar */}
         <header className="w-full h-16 border-b border-[#e7e5e4] bg-[#fdf8f7] flex justify-between items-center px-6 lg:px-8 z-30 shrink-0">
-          <div className="flex items-center gap-6" />
+          <div className="flex items-center gap-3">
+            <span className="text-xs font-semibold tracking-wider uppercase text-stone-400 font-mono">Store Branch:</span>
+            <span className="text-xs font-semibold text-stone-800 bg-stone-100 px-2.5 py-1 rounded border border-[#eadfd6]">
+              {branchName}
+            </span>
+          </div>
           <div className="flex flex-1 justify-end items-center gap-4">
             <button
               type="button"
