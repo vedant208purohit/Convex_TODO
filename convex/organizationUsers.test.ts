@@ -627,6 +627,4 @@ describe("Organization Users Domain Unit & Business Logic Tests", () => {
       })
     ).rejects.toThrow("Forbidden. Admin access required.");
   });
-
 });
-
