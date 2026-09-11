@@ -3,6 +3,7 @@ import { convexTest } from "convex-test";
 import { expect, test, describe } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
+import { generateHmacSha256 } from "./organizations";
 
 const modules = import.meta.glob("./**/*.*s");
 
@@ -393,4 +394,239 @@ describe("Organization Users Domain Unit & Business Logic Tests", () => {
     expect(searchChef.length).toBe(1);
     expect(searchChef[0].userId).toBe("user_staff_chef");
   });
+
+  // 18. syncStaffFromMaster with valid HMAC signature successfully provisions staff
+  test("18. syncStaffFromMaster with valid HMAC signature creates new staff membership", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const timestamp = Date.now();
+    const createOrgToken = await generateHmacSha256(TEST_SECRET, `taco-haven:${timestamp}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Taco Haven",
+      slug: "taco-haven",
+      timestamp,
+      provisioningToken: createOrgToken,
+    });
+
+    const syncToken = await generateHmacSha256(TEST_SECRET, `taco-haven:${timestamp}`);
+
+    const result = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "taco-haven",
+      provisioningToken: syncToken,
+      timestamp,
+      defaultClerkId: "user_default_clerk_cashier_101",
+      firstName: "Mateo",
+      lastName: "Garcia",
+      email: "mateo@tacohaven.com",
+      phone: "+1 555-0144",
+      role: "cashier",
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.isExisting).toBe(false);
+
+    // Verify record in store database
+    const asCashier = t.withIdentity({ subject: "user_default_clerk_cashier_101" });
+    const member = await asCashier.query(api.organizationUsers.getByUserId, {
+      userId: "user_default_clerk_cashier_101",
+      organizationId: orgId,
+    });
+
+    expect(member !== null).toBe(true);
+    expect(member?.firstName).toBe("Mateo");
+    expect(member?.lastName).toBe("Garcia");
+    expect(member?.email).toBe("mateo@tacohaven.com");
+    expect(member?.userType).toEqual(["cashier"]);
+    expect(member?.userPermission?.cashier?.read).toBe(true);
+    expect(member?.userPermission?.cashier?.create).toBe(true);
+  });
+
+  // 19. syncStaffFromMaster rejects invalid signature, expired timestamp, or wrong slug
+  test("19. syncStaffFromMaster enforces HMAC signature verification and timestamp replay protection", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const createOrgToken = await generateHmacSha256(TEST_SECRET, `burger-spot:${now}`);
+
+    await t.mutation(api.organizations.create, {
+      name: "Burger Spot",
+      slug: "burger-spot",
+      timestamp: now,
+      provisioningToken: createOrgToken,
+    });
+
+    // Missing / invalid token
+    await expect(
+      t.mutation(api.organizationUsers.syncStaffFromMaster, {
+        slug: "burger-spot",
+        provisioningToken: "invalid_hmac_token",
+        timestamp: now,
+        defaultClerkId: "user_clerk_1",
+        role: "waiter",
+      })
+    ).rejects.toThrow("Invalid provisioning authentication token");
+
+    // Expired timestamp (10 minutes ago)
+    const expiredTimestamp = now - 10 * 60 * 1000;
+    const expiredToken = await generateHmacSha256(TEST_SECRET, `burger-spot:${expiredTimestamp}`);
+    await expect(
+      t.mutation(api.organizationUsers.syncStaffFromMaster, {
+        slug: "burger-spot",
+        provisioningToken: expiredToken,
+        timestamp: expiredTimestamp,
+        defaultClerkId: "user_clerk_1",
+        role: "waiter",
+      })
+    ).rejects.toThrow("Expired or invalid provisioning token timestamp");
+
+    // Store slug mismatch (token signed for other-slug)
+    const wrongSlugToken = await generateHmacSha256(TEST_SECRET, `other-store:${now}`);
+    await expect(
+      t.mutation(api.organizationUsers.syncStaffFromMaster, {
+        slug: "other-store",
+        provisioningToken: wrongSlugToken,
+        timestamp: now,
+        defaultClerkId: "user_clerk_1",
+        role: "waiter",
+      })
+    ).rejects.toThrow("Store slug mismatch");
+  });
+
+  // 20. syncStaffFromMaster is idempotent on retry / updates existing member
+  test("20. syncStaffFromMaster updates existing member idempotently without creating duplicates", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const timestamp1 = Date.now();
+    const createOrgToken = await generateHmacSha256(TEST_SECRET, `idempotent-pizza:${timestamp1}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Idempotent Pizza",
+      slug: "idempotent-pizza",
+      timestamp: timestamp1,
+      provisioningToken: createOrgToken,
+    });
+
+    const token1 = await generateHmacSha256(TEST_SECRET, `idempotent-pizza:${timestamp1}`);
+
+    // First call: create cashier
+    const res1 = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "idempotent-pizza",
+      provisioningToken: token1,
+      timestamp: timestamp1,
+      defaultClerkId: "user_clerk_pizza_staff_1",
+      firstName: "Luigi",
+      role: "cashier",
+    });
+    expect(res1.isExisting).toBe(false);
+
+    // Second call: update role to admin & chef
+    const timestamp2 = Date.now();
+    const token2 = await generateHmacSha256(TEST_SECRET, `idempotent-pizza:${timestamp2}`);
+
+    const res2 = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "idempotent-pizza",
+      provisioningToken: token2,
+      timestamp: timestamp2,
+      defaultClerkId: "user_clerk_pizza_staff_1",
+      firstName: "Luigi",
+      lastName: "Mario",
+      role: "chef",
+    });
+    expect(res2.isExisting).toBe(true);
+    expect(res2.id).toBe(res1.id);
+
+    // Verify only 1 member exists in organization
+    const asStaff = t.withIdentity({ subject: "user_clerk_pizza_staff_1" });
+    const members = await asStaff.query(api.organizationUsers.list, {
+      organizationId: orgId,
+    });
+    expect(members.length).toBe(1);
+    expect(members[0].lastName).toBe("Mario");
+    expect(members[0].userType).toEqual(["chef"]);
+  });
+
+  // 21. syncStaffFromMaster restores soft-deleted membership
+  test("21. syncStaffFromMaster restores soft-deleted membership on synchronization", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const createOrgToken = await generateHmacSha256(TEST_SECRET, `reactivate-cafe:${now}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Reactivate Cafe",
+      slug: "reactivate-cafe",
+      ownerClerkId: "user_owner_reactivate",
+      timestamp: now,
+      provisioningToken: createOrgToken,
+    });
+
+    const token = await generateHmacSha256(TEST_SECRET, `reactivate-cafe:${now}`);
+
+    const syncRes = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "reactivate-cafe",
+      provisioningToken: token,
+      timestamp: now,
+      defaultClerkId: "user_clerk_waiter_99",
+      role: "waiter",
+    });
+
+    // Owner soft-deletes the waiter
+    const asOwner = t.withIdentity({ subject: "user_owner_reactivate" });
+    await asOwner.mutation(api.organizationUsers.remove, {
+      id: syncRes.id,
+    });
+
+    // Re-syncing restores the waiter
+    const restoreToken = await generateHmacSha256(TEST_SECRET, `reactivate-cafe:${now + 1000}`);
+    const restoreRes = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "reactivate-cafe",
+      provisioningToken: restoreToken,
+      timestamp: now + 1000,
+      defaultClerkId: "user_clerk_waiter_99",
+      role: "waiter",
+    });
+
+    expect(restoreRes.isExisting).toBe(true);
+    expect(restoreRes.wasReactivated).toBe(true);
+
+    const asWaiter = t.withIdentity({ subject: "user_clerk_waiter_99" });
+    const restoredMember = await asWaiter.query(api.organizationUsers.getByUserId, {
+      userId: "user_clerk_waiter_99",
+      organizationId: orgId,
+    });
+    expect(restoredMember !== null).toBe(true);
+    expect(restoredMember?.deletedAt).toBeUndefined();
+  });
+
+  test("22. Existing mutations still require regular authentication and admin permissions", async () => {
+    delete process.env.PROVISIONING_SECRET;
+
+    const { orgId, asAdmin, t } = await setupStoreWithAdmin("user_store_admin");
+    const asCashier = t.withIdentity({ subject: "user_cashier_only" });
+
+    // Admin creates the cashier member
+    const memberId = await asAdmin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "user_cashier_only",
+      userType: ["cashier"],
+    });
+
+    await expect(
+      asCashier.mutation(api.organizationUsers.update, {
+        id: memberId,
+        userType: ["admin"],
+      })
+    ).rejects.toThrow("Forbidden. Admin access required.");
+  });
+
 });
+
