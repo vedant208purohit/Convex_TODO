@@ -248,6 +248,18 @@ export const createOrder = mutation({
       createdAt: now,
     });
 
+    // 8.5 Record Initial Order Credit Payment Entry
+    await ctx.db.insert("orderPayments", {
+      organizationId: args.organizationId,
+      orderId,
+      paymentModeName: args.paymentMode ?? "Cash",
+      paymentType: "Credit",
+      amount: totalAmount,
+      payAmount: totalAmount,
+      refundAmount: 0,
+      createdAt: now,
+    });
+
     // 9. Dine-In Table Locking
     if (args.tableId) {
       const table = await ctx.db.get(args.tableId);
@@ -322,9 +334,19 @@ export const listLiveOrders = query({
 });
 
 export const getOrderDetails = query({
-  args: { id: v.id("orders") },
+  args: { id: v.union(v.id("orders"), v.string()) },
   handler: async (ctx, args) => {
-    const order = await ctx.db.get(args.id);
+    let order = null;
+    const normalizedId = ctx.db.normalizeId("orders", args.id);
+    if (normalizedId) {
+      order = await ctx.db.get(normalizedId);
+    }
+    if (!order) {
+      order = await ctx.db
+        .query("orders")
+        .filter((q) => q.eq(q.field("orderNumber"), args.id))
+        .first();
+    }
     if (!order) return null;
 
     const items = await ctx.db
@@ -337,29 +359,63 @@ export const getOrderDetails = query({
       .withIndex("by_order", (q) => q.eq("orderId", order._id))
       .collect();
 
-    const payments = await ctx.db
-      .query("orderPayments")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
     let tableInfo: any = null;
     if (order.tableId) {
       tableInfo = await ctx.db.get(order.tableId);
     }
 
+    const payments = await ctx.db
+      .query("orderPayments")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+
+    const hasCredit = payments.some((p) => p.paymentType === "Credit");
+    const allPayments = [...payments];
+    if (!hasCredit) {
+      allPayments.unshift({
+        _id: `initial_credit_${order._id}` as any,
+        _creationTime: order.createdAt,
+        organizationId: order.organizationId,
+        orderId: order._id,
+        paymentModeName: order.paymentMode || "Cash",
+        paymentType: "Credit",
+        amount: order.totalAmount,
+        payAmount: order.totalAmount,
+        refundAmount: 0,
+        createdAt: order.createdAt,
+      });
+    }
+
+    let totalCredit = 0;
+    let totalDebit = 0;
+    for (const p of allPayments) {
+      if (p.paymentType === "Debit") {
+        totalDebit += p.amount;
+      } else {
+        totalCredit += p.amount;
+      }
+    }
+    const netPaid = totalCredit - totalDebit;
+
     return {
       ...order,
+      totalCredit,
+      totalDebit,
+      netPaid,
       display_sub_total: (order.subTotal / 100).toFixed(2),
       display_tax_total: (order.taxTotal / 100).toFixed(2),
       display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
       display_total_amount: (order.totalAmount / 100).toFixed(2),
+      display_credit_amount: (totalCredit / 100).toFixed(2),
+      display_debit_amount: (totalDebit / 100).toFixed(2),
+      display_net_paid: (netPaid / 100).toFixed(2),
       items: items.map((i) => ({
         ...i,
         display_item_price: (i.itemPrice / 100).toFixed(2),
         display_total_price: (i.totalPrice / 100).toFixed(2),
       })),
       activities: activities.sort((a, b) => a.position - b.position),
-      payments,
+      payments: allPayments,
       table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
     };
   },
@@ -701,7 +757,7 @@ export const listOrders = query({
 export const addOrderPayment = mutation({
   args: {
     orderId: v.id("orders"),
-    paymentModeId: v.optional(v.id("paymentModes")),
+    paymentModeId: v.optional(v.union(v.id("paymentModes"), v.string())),
     paymentModeName: v.string(),
     paymentType: v.union(v.literal("Credit"), v.literal("Debit")),
     amount: v.number(), // in minor units
@@ -712,12 +768,13 @@ export const addOrderPayment = mutation({
     if (!order) throw new Error("Order not found");
 
     const now = Date.now();
+    const paymentModeId = args.paymentModeId ? ctx.db.normalizeId("paymentModes", args.paymentModeId) : undefined;
 
     // 1. Insert transaction into orderPayments
     await ctx.db.insert("orderPayments", {
       organizationId: order.organizationId,
       orderId: order._id,
-      paymentModeId: args.paymentModeId,
+      paymentModeId: paymentModeId ?? undefined,
       paymentModeName: args.paymentModeName,
       paymentType: args.paymentType,
       amount: args.amount,
@@ -843,6 +900,15 @@ export const deleteMultipleOrderItems = mutation({
       totalAmount,
       isModify: true,
       updatedAt: now,
+    });
+
+    // Log modification activity
+    await ctx.db.insert("orderActivities", {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      processName: `Removed ${args.orderItemIds.length} item(s)`,
+      position: 50,
+      createdAt: now,
     });
 
     return {

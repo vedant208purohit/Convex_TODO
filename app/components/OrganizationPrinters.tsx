@@ -26,7 +26,9 @@ export function OrganizationPrinters() {
   const removePrinter = useMutation(api.organizationPrinters.remove);
 
   // Form State
-  const [editingId, setEditingId] = useState<Id<"organizationPrinters"> | null>(null);
+  const [editingId, setEditingId] = useState<Id<"organizationPrinters"> | null>(
+    null,
+  );
   const [formData, setFormData] = useState<PrinterFormData>({
     printerUrl: "192.168.1.100",
     printerPort: "9100",
@@ -37,7 +39,8 @@ export function OrganizationPrinters() {
 
   // Action / Feedback States
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRemovingId, setIsRemovingId] = useState<Id<"organizationPrinters"> | null>(null);
+  const [isRemovingId, setIsRemovingId] =
+    useState<Id<"organizationPrinters"> | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showFormModal, setShowFormModal] = useState(false);
@@ -83,8 +86,14 @@ export function OrganizationPrinters() {
       return;
     }
 
-    if (formData.printerType === "Lan" && formData.printerUseFor === "Station" && !formData.stationId.trim()) {
-      setErrorMessage("Station reference is required for LAN station printers.");
+    if (
+      formData.printerType === "Lan" &&
+      formData.printerUseFor === "Station" &&
+      !formData.stationId.trim()
+    ) {
+      setErrorMessage(
+        "Station reference is required for LAN station printers.",
+      );
       return;
     }
 
@@ -123,7 +132,8 @@ export function OrganizationPrinters() {
   };
 
   const handleRemove = async (id: Id<"organizationPrinters">) => {
-    if (!confirm("Are you sure you want to remove this printer configuration?")) return;
+    if (!confirm("Are you sure you want to remove this printer configuration?"))
+      return;
 
     setErrorMessage(null);
     setSuccessMessage(null);
@@ -145,7 +155,9 @@ export function OrganizationPrinters() {
       <div className="flex h-48 w-full items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-[#6f655e]">
           <div className="h-6 w-6 animate-spin rounded-full border-3 border-[#191513] border-t-transparent" />
-          <span className="text-xs font-medium">Loading store hardware printers...</span>
+          <span className="text-xs font-medium">
+            Loading store hardware printers...
+          </span>
         </div>
       </div>
     );
@@ -156,9 +168,12 @@ export function OrganizationPrinters() {
       {/* Header Bar */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="font-serif text-2xl font-light text-[#1f1a17]">Hardware Printers</h2>
+          <h2 className="font-serif text-2xl font-light text-[#1f1a17]">
+            Hardware Printers
+          </h2>
           <p className="mt-1 text-sm text-[#6f655e]">
-            Configure thermal receipt printers, kitchen prep station ticket printers (KOT), and workstation label printers.
+            Configure thermal receipt printers, kitchen prep station ticket
+            printers (KOT), and workstation label printers.
           </p>
         </div>
 
@@ -178,7 +193,10 @@ export function OrganizationPrinters() {
             <span>✓</span>
             <span>{successMessage}</span>
           </div>
-          <button onClick={() => setSuccessMessage(null)} className="text-emerald-600 hover:text-emerald-900">
+          <button
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-600 hover:text-emerald-900"
+          >
             ✕
           </button>
         </div>
@@ -190,7 +208,10 @@ export function OrganizationPrinters() {
             <span>⚠️</span>
             <span>{errorMessage}</span>
           </div>
-          <button onClick={() => setErrorMessage(null)} className="text-red-600 hover:text-red-900">
+          <button
+            onClick={() => setErrorMessage(null)}
+            className="text-red-600 hover:text-red-900"
+          >
             ✕
           </button>
         </div>
@@ -202,9 +223,12 @@ export function OrganizationPrinters() {
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-[#fdf8f7] text-3xl">
             🖨️
           </div>
-          <h3 className="mt-4 text-base font-medium text-[#1f1a17]">No Printers Configured</h3>
+          <h3 className="mt-4 text-base font-medium text-[#1f1a17]">
+            No Printers Configured
+          </h3>
           <p className="mt-1 text-xs text-[#6f655e]">
-            Add thermal printers for Cashier billing receipts, Kitchen station KOT tickets, or Workstation packaging labels.
+            Add thermal printers for Cashier billing receipts, Kitchen station
+            KOT tickets, or Workstation packaging labels.
           </p>
           <button
             type="button"
@@ -235,8 +259,8 @@ export function OrganizationPrinters() {
                         printer.printerType === "Lan"
                           ? "bg-blue-50 text-blue-700 border border-blue-200"
                           : printer.printerType === "Bluetooth"
-                          ? "bg-purple-50 text-purple-700 border border-purple-200"
-                          : "bg-amber-50 text-amber-700 border border-amber-200"
+                            ? "bg-purple-50 text-purple-700 border border-purple-200"
+                            : "bg-amber-50 text-amber-700 border border-amber-200"
                       }`}
                     >
                       {printer.printerType}
@@ -245,17 +269,29 @@ export function OrganizationPrinters() {
 
                   <div className="mt-4 space-y-2 text-xs text-[#6f655e]">
                     <div>
-                      <span className="font-semibold text-[#1f1a17]">IP / URL:</span>{" "}
-                      <span className="font-mono text-[#1f1a17]">{printer.printerUrl}</span>
+                      <span className="font-semibold text-[#1f1a17]">
+                        IP / URL:
+                      </span>{" "}
+                      <span className="font-mono text-[#1f1a17]">
+                        {printer.printerUrl}
+                      </span>
                     </div>
                     <div>
-                      <span className="font-semibold text-[#1f1a17]">Port:</span>{" "}
-                      <span className="font-mono text-[#1f1a17]">{printer.printerPort || "9100"}</span>
+                      <span className="font-semibold text-[#1f1a17]">
+                        Port:
+                      </span>{" "}
+                      <span className="font-mono text-[#1f1a17]">
+                        {printer.printerPort || "9100"}
+                      </span>
                     </div>
                     {printer.stationId && (
                       <div>
-                        <span className="font-semibold text-[#1f1a17]">Station Reference:</span>{" "}
-                        <span className="font-medium text-[#8c4a3b]">{printer.stationId}</span>
+                        <span className="font-semibold text-[#1f1a17]">
+                          Station Reference:
+                        </span>{" "}
+                        <span className="font-medium text-[#8c4a3b]">
+                          {printer.stationId}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -309,7 +345,9 @@ export function OrganizationPrinters() {
                 <input
                   type="text"
                   value={formData.printerUrl}
-                  onChange={(e) => setFormData((p) => ({ ...p, printerUrl: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({ ...p, printerUrl: e.target.value }))
+                  }
                   placeholder="e.g. 192.168.1.100"
                   required
                   className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
@@ -324,7 +362,12 @@ export function OrganizationPrinters() {
                   <input
                     type="text"
                     value={formData.printerPort}
-                    onChange={(e) => setFormData((p) => ({ ...p, printerPort: e.target.value }))}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        printerPort: e.target.value,
+                      }))
+                    }
                     placeholder="9100"
                     className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
                   />
@@ -336,7 +379,12 @@ export function OrganizationPrinters() {
                   </label>
                   <select
                     value={formData.printerType}
-                    onChange={(e) => setFormData((p) => ({ ...p, printerType: e.target.value as PrinterType }))}
+                    onChange={(e) =>
+                      setFormData((p) => ({
+                        ...p,
+                        printerType: e.target.value as PrinterType,
+                      }))
+                    }
                     className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
                   >
                     <option value="Lan">LAN (TCP/IP)</option>
@@ -352,33 +400,47 @@ export function OrganizationPrinters() {
                 </label>
                 <select
                   value={formData.printerUseFor}
-                  onChange={(e) => setFormData((p) => ({ ...p, printerUseFor: e.target.value as PrinterUseFor }))}
+                  onChange={(e) =>
+                    setFormData((p) => ({
+                      ...p,
+                      printerUseFor: e.target.value as PrinterUseFor,
+                    }))
+                  }
                   className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
                 >
-                  <option value="Cashier">Cashier Thermal Receipt Printer</option>
+                  <option value="Cashier">
+                    Cashier Thermal Receipt Printer
+                  </option>
                   <option value="Station">Kitchen Station Ticket (KOT)</option>
                   <option value="WorkStation">Workstation Label Printer</option>
                 </select>
                 <p className="mt-1 text-[11px] text-[#8a7e75]">
-                  Note: A store can have at most one active printer per purpose role.
+                  Note: A store can have at most one active printer per purpose
+                  role.
                 </p>
               </div>
 
-              {formData.printerType === "Lan" && formData.printerUseFor === "Station" && (
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                    Kitchen Station Reference ID *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.stationId}
-                    onChange={(e) => setFormData((p) => ({ ...p, stationId: e.target.value }))}
-                    placeholder="e.g. kitchen_station_1"
-                    required
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
-                  />
-                </div>
-              )}
+              {formData.printerType === "Lan" &&
+                formData.printerUseFor === "Station" && (
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                      Kitchen Station Reference ID *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.stationId}
+                      onChange={(e) =>
+                        setFormData((p) => ({
+                          ...p,
+                          stationId: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g. kitchen_station_1"
+                      required
+                      className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
+                    />
+                  </div>
+                )}
 
               <div className="flex justify-end gap-3 pt-4 border-t border-[#eadfd6]">
                 <button
@@ -394,7 +456,11 @@ export function OrganizationPrinters() {
                   disabled={isSubmitting}
                   className="flex h-10 items-center justify-center rounded-full bg-[#191513] px-6 text-xs font-medium text-white shadow-sm transition hover:bg-[#2e2824] disabled:opacity-40"
                 >
-                  {isSubmitting ? "Saving..." : editingId ? "Update Printer" : "Add Printer"}
+                  {isSubmitting
+                    ? "Saving..."
+                    : editingId
+                      ? "Update Printer"
+                      : "Add Printer"}
                 </button>
               </div>
             </form>

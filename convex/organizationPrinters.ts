@@ -17,11 +17,15 @@ import {
  */
 export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
-  explicitOrgId?: Id<"organizations">
+  explicitOrgId?: Id<"organizations">,
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  const callerMember = await getCallerMembership(
+    ctx,
+    identity.subject,
+    org._id,
+  );
 
   if (
     !callerMember ||
@@ -44,7 +48,7 @@ export async function requireAdminOrCashier(
 async function validateUniquePrinterUseFor(
   ctx: QueryCtx | MutationCtx,
   printerUseFor: "Cashier" | "Station" | "WorkStation",
-  excludeId?: Id<"organizationPrinters">
+  excludeId?: Id<"organizationPrinters">,
 ): Promise<void> {
   const existing = await ctx.db
     .query("organizationPrinters")
@@ -63,11 +67,13 @@ async function validateUniquePrinterUseFor(
 function validateStationRequirement(
   printerType: "Lan" | "Bluetooth" | "Usb",
   printerUseFor: "Cashier" | "Station" | "WorkStation",
-  stationId?: string
+  stationId?: string,
 ): void {
   if (printerType === "Lan" && printerUseFor === "Station") {
     if (!stationId || !stationId.trim()) {
-      throw new Error("Station reference is required for LAN station printers.");
+      throw new Error(
+        "Station reference is required for LAN station printers.",
+      );
     }
   }
 }
@@ -117,12 +123,12 @@ export const create = mutation({
     printerType: v.union(
       v.literal("Lan"),
       v.literal("Bluetooth"),
-      v.literal("Usb")
+      v.literal("Usb"),
     ),
     printerUseFor: v.union(
       v.literal("Cashier"),
       v.literal("Station"),
-      v.literal("WorkStation")
+      v.literal("WorkStation"),
     ),
     stationId: v.optional(v.string()),
     legacyId: v.optional(v.string()),
@@ -142,7 +148,11 @@ export const create = mutation({
     const trimmedStationId = args.stationId ? args.stationId.trim() : undefined;
 
     // 2. Validate conditional station requirement (Lan + Station requires stationId)
-    validateStationRequirement(args.printerType, args.printerUseFor, trimmedStationId);
+    validateStationRequirement(
+      args.printerType,
+      args.printerUseFor,
+      trimmedStationId,
+    );
 
     // 3. Validate active uniqueness of printerUseFor
     await validateUniquePrinterUseFor(ctx, args.printerUseFor);
@@ -174,10 +184,14 @@ export const update = mutation({
     printerUrl: v.optional(v.string()),
     printerPort: v.optional(v.string()),
     printerType: v.optional(
-      v.union(v.literal("Lan"), v.literal("Bluetooth"), v.literal("Usb"))
+      v.union(v.literal("Lan"), v.literal("Bluetooth"), v.literal("Usb")),
     ),
     printerUseFor: v.optional(
-      v.union(v.literal("Cashier"), v.literal("Station"), v.literal("WorkStation"))
+      v.union(
+        v.literal("Cashier"),
+        v.literal("Station"),
+        v.literal("WorkStation"),
+      ),
     ),
     stationId: v.optional(v.string()),
   },
@@ -197,8 +211,10 @@ export const update = mutation({
       trimmedUrl = args.printerUrl.trim();
     }
 
-    const trimmedPort = args.printerPort !== undefined ? args.printerPort.trim() : undefined;
-    const trimmedStationId = args.stationId !== undefined ? args.stationId.trim() : undefined;
+    const trimmedPort =
+      args.printerPort !== undefined ? args.printerPort.trim() : undefined;
+    const trimmedStationId =
+      args.stationId !== undefined ? args.stationId.trim() : undefined;
 
     const effectiveType = args.printerType ?? existing.printerType;
     const effectiveUseFor = args.printerUseFor ?? existing.printerUseFor;
@@ -206,10 +222,17 @@ export const update = mutation({
       args.stationId !== undefined ? trimmedStationId : existing.stationId;
 
     // Validate conditional station requirement on effective values
-    validateStationRequirement(effectiveType, effectiveUseFor, effectiveStationId);
+    validateStationRequirement(
+      effectiveType,
+      effectiveUseFor,
+      effectiveStationId,
+    );
 
     // Validate active uniqueness of printerUseFor if changing role
-    if (args.printerUseFor !== undefined && args.printerUseFor !== existing.printerUseFor) {
+    if (
+      args.printerUseFor !== undefined &&
+      args.printerUseFor !== existing.printerUseFor
+    ) {
       await validateUniquePrinterUseFor(ctx, args.printerUseFor, args.id);
     }
 

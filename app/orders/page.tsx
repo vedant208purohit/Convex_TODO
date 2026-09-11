@@ -1,10 +1,14 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import EditOrderDrawer from "../components/orders/EditOrderDrawer";
+import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
+import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
 
 // ==========================================
 // PIXEL-PERFECT SVG ICONS (PREST THEME)
@@ -12,7 +16,12 @@ import { Id } from "../../convex/_generated/dataModel";
 
 function CalendarIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
         strokeLinecap="round"
@@ -23,17 +32,43 @@ function CalendarIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
-function ChevronDownIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+function ChevronDownIcon({
+  className = "w-3.5 h-3.5",
+}: {
+  className?: string;
+}) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M19 9l-7 7-7-7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
     </svg>
   );
 }
 
-function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+function ChevronRightIcon({
+  className = "w-3.5 h-3.5",
+}: {
+  className?: string;
+}) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="9 18 15 12 9 6" />
     </svg>
   );
@@ -41,7 +76,12 @@ function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string })
 
 function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
         strokeLinecap="round"
@@ -54,7 +94,12 @@ function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ExportIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
       <path
         d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
         strokeLinecap="round"
@@ -67,8 +112,18 @@ function ExportIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function SortIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path d="M5 15l7-7 7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M5 15l7-7 7 7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
     </svg>
   );
 }
@@ -87,95 +142,213 @@ function CheckmarkIcon({ className = "w-3 h-3" }: { className?: string }) {
 
 function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M6 18L18 6M6 6l12 12"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
     </svg>
   );
 }
 
 function PrintIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <polyline points="6 9 6 2 18 2 18 9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <polyline
+        points="6 9 6 2 18 2 18 9"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
       <path
         d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <rect x="6" y="14" width="12" height="8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <rect
+        x="6"
+        y="14"
+        width="12"
+        height="8"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function ArrowLeftIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M10 19l-7-7m0 0l7-7m-7 7h18" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M10 19l-7-7m0 0l7-7m-7 7h18"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function UserIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function DocumentTextIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function CreditCardIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24">
-      <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function RefundIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M16 15v-1a4 4 0 00-4-4H4m0 0l3-3m-3 3l3 3m5 4v1a3 3 0 003 3h6a3 3 0 003-3V7a3 3 0 00-3-3h-6a3 3 0 00-3 3v1" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M16 15v-1a4 4 0 00-4-4H4m0 0l3-3m-3 3l3 3m5 4v1a3 3 0 003 3h6a3 3 0 003-3V7a3 3 0 00-3-3h-6a3 3 0 00-3 3v1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function EditIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function TrashIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function DownloadIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
 function TimelineIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-      <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
@@ -262,17 +435,22 @@ const DATE_RANGE_OPTIONS = [
 ] as const;
 
 export default function OrdersPage() {
+  const router = useRouter();
+
   // Query Organization
   const organizations = useQuery(api.organizations.list);
-  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const activeOrg =
+    organizations && organizations.length > 0 ? organizations[0] : null;
 
   // Query Real Store Order Processes from DB
-  const dbProcesses = useQuery(api.organizationOrderProcesses.list, { published: true });
+  const dbProcesses = useQuery(api.organizationOrderProcesses.list, {
+    published: true,
+  });
 
   // Query Real Store Payment Modes from DB
   const paymentModesList = useQuery(
     api.paymentModes.list,
-    activeOrg ? { organizationId: activeOrg._id } : {}
+    activeOrg ? { organizationId: activeOrg._id } : {},
   );
 
   // Filter States
@@ -283,13 +461,21 @@ export default function OrdersPage() {
 
   // Applied Date Filter
   const [appliedPreset, setAppliedPreset] = useState<string>("Today");
-  const [appliedStartDate, setAppliedStartDate] = useState<Date>(() => getPresetDateRange("Today").start);
-  const [appliedEndDate, setAppliedEndDate] = useState<Date>(() => getPresetDateRange("Today").end);
+  const [appliedStartDate, setAppliedStartDate] = useState<Date>(
+    () => getPresetDateRange("Today").start,
+  );
+  const [appliedEndDate, setAppliedEndDate] = useState<Date>(
+    () => getPresetDateRange("Today").end,
+  );
 
   // Draft Date Filter (while popover is open)
   const [draftPreset, setDraftPreset] = useState<string>("Today");
-  const [draftStartDate, setDraftStartDate] = useState<Date>(() => getPresetDateRange("Today").start);
-  const [draftEndDate, setDraftEndDate] = useState<Date>(() => getPresetDateRange("Today").end);
+  const [draftStartDate, setDraftStartDate] = useState<Date>(
+    () => getPresetDateRange("Today").start,
+  );
+  const [draftEndDate, setDraftEndDate] = useState<Date>(
+    () => getPresetDateRange("Today").end,
+  );
   const [viewMonth, setViewMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -303,10 +489,16 @@ export default function OrdersPage() {
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (dateDropdownRef.current && !dateDropdownRef.current.contains(e.target as Node)) {
+      if (
+        dateDropdownRef.current &&
+        !dateDropdownRef.current.contains(e.target as Node)
+      ) {
         setIsDateDropdownOpen(false);
       }
-      if (statusDropdownRef.current && !statusDropdownRef.current.contains(e.target as Node)) {
+      if (
+        statusDropdownRef.current &&
+        !statusDropdownRef.current.contains(e.target as Node)
+      ) {
         setIsStatusDropdownOpen(false);
       }
     };
@@ -318,28 +510,48 @@ export default function OrdersPage() {
     return `${formatDateDisplay(appliedStartDate)} - ${formatDateDisplay(appliedEndDate)}`;
   }, [appliedStartDate, appliedEndDate]);
 
-  const [sortField, setSortField] = useState<"createdAt" | "totalAmount">("createdAt");
+  const [sortField, setSortField] = useState<"createdAt" | "totalAmount">(
+    "createdAt",
+  );
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
   // Selected Order Detail View & Unified Drawer States
-  const [selectedOrderId, setSelectedOrderId] = useState<Id<"orders"> | null>(null);
-  const [drawerTab, setDrawerTab] = useState<"pay" | "timeline" | "refund" | null>(null);
-  const [paymentTenderMode, setPaymentTenderMode] = useState<"Cash" | "UPI QR" | "Card / POS" | "Split">("Cash");
+  const [selectedOrderId, setSelectedOrderId] = useState<Id<"orders"> | null>(
+    null,
+  );
+  const [drawerTab, setDrawerTab] = useState<
+    "pay" | "timeline" | "refund" | null
+  >(null);
+  const [paymentTenderMode, setPaymentTenderMode] = useState<
+    "Cash" | "UPI QR" | "Card / POS" | "Split"
+  >("Cash");
   const [tenderCashGiven, setTenderCashGiven] = useState("");
-  const [refundPaymentMode, setRefundPaymentMode] = useState<"Cash" | "UPI / Instant" | "Card Return">("Cash");
+  const [refundPaymentMode, setRefundPaymentMode] = useState<
+    "Cash" | "UPI / Instant" | "Card Return"
+  >("Cash");
   const [refundAmountInput, setRefundAmountInput] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
+  const [isEditOrderOpen, setIsEditOrderOpen] = useState(false);
 
   // Notification Toast
-  const [notificationMessage, setNotificationMessage] = useState<string | null>(null);
+  const [notificationMessage, setNotificationMessage] = useState<string | null>(
+    null,
+  );
 
   // Reset pagination to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [appliedStartDate, appliedEndDate, activeStage, searchQuery, priceFrom, priceTo]);
+  }, [
+    appliedStartDate,
+    appliedEndDate,
+    activeStage,
+    searchQuery,
+    priceFrom,
+    priceTo,
+  ]);
 
   // Backend Queries & Mutations
   const ordersResponse = useQuery(
@@ -351,17 +563,19 @@ export default function OrdersPage() {
           endDate: getEndOfDay(appliedEndDate).getTime(),
           stage: activeStage !== "All" ? activeStage : undefined,
           search: searchQuery.trim() || undefined,
-          minPrice: priceFrom ? Math.round(parseFloat(priceFrom) * 100) : undefined,
+          minPrice: priceFrom
+            ? Math.round(parseFloat(priceFrom) * 100)
+            : undefined,
           maxPrice: priceTo ? Math.round(parseFloat(priceTo) * 100) : undefined,
           page: currentPage,
           pageSize,
         }
-      : "skip"
+      : "skip",
   );
 
   const selectedOrderDetails = useQuery(
     api.orders.getOrderDetails,
-    selectedOrderId ? { id: selectedOrderId } : "skip"
+    selectedOrderId ? { id: selectedOrderId } : "skip",
   );
 
   const addPaymentMutation = useMutation(api.orders.addOrderPayment);
@@ -369,33 +583,71 @@ export default function OrdersPage() {
 
   // Live Gross Total Calculation from actual database orders matching the selected filter
   const totalGrossSales = useMemo(() => {
-    if (ordersResponse?.totalGrossAmount === undefined || ordersResponse.totalGrossAmount === null) return "₹0.00";
+    if (
+      ordersResponse?.totalGrossAmount === undefined ||
+      ordersResponse.totalGrossAmount === null
+    )
+      return "₹0.00";
     return `₹${(ordersResponse.totalGrossAmount / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }, [ordersResponse]);
 
   // Real Status Pipeline Stages matching defx-pos & defx-pos-frontend
   const pipelineStages = useMemo(() => {
-    const stages: Array<{ id: string; name: string; color: string; isSequence: boolean }> = [
-      { id: "all", name: "All", color: "#141010", isSequence: false },
-    ];
+    const stages: Array<{
+      id: string;
+      name: string;
+      color: string;
+      isSequence: boolean;
+    }> = [{ id: "all", name: "All", color: "#141010", isSequence: false }];
 
     if (dbProcesses && dbProcesses.length > 0) {
       for (const p of dbProcesses) {
         stages.push({
           id: p._id,
           name: p.name,
-          color: p.processColor || (p.name.toLowerCase().includes("ready") ? "#FC8019" : p.name.toLowerCase().includes("deliver") ? "#219653" : "#EA9C1B"),
+          color:
+            p.processColor ||
+            (p.name.toLowerCase().includes("ready")
+              ? "#FC8019"
+              : p.name.toLowerCase().includes("deliver")
+                ? "#219653"
+                : "#EA9C1B"),
           isSequence: p.isSequence,
         });
       }
     } else {
       // Standard fallback matching defx-pos default seed
       stages.push(
-        { id: "accepted", name: "Accepted", color: "#262626", isSequence: true },
-        { id: "in_progress", name: "In progress", color: "#EA9C1B", isSequence: true },
-        { id: "ready", name: "Ready to deliver", color: "#FC8019", isSequence: true },
-        { id: "delivered", name: "Delivered", color: "#219653", isSequence: true },
-        { id: "cancelled", name: "Cancelled", color: "#e11d48", isSequence: false }
+        {
+          id: "accepted",
+          name: "Accepted",
+          color: "#262626",
+          isSequence: true,
+        },
+        {
+          id: "in_progress",
+          name: "In progress",
+          color: "#EA9C1B",
+          isSequence: true,
+        },
+        {
+          id: "ready",
+          name: "Ready to deliver",
+          color: "#FC8019",
+          isSequence: true,
+        },
+        {
+          id: "delivered",
+          name: "Delivered",
+          color: "#219653",
+          isSequence: true,
+        },
+        {
+          id: "cancelled",
+          name: "Cancelled",
+          color: "#e11d48",
+          isSequence: false,
+        },
       );
     }
 
@@ -404,7 +656,9 @@ export default function OrdersPage() {
 
   // Dynamic status count map calculated directly from live database orders for the selected period
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { All: ordersResponse?.statusCounts?.All ?? ordersResponse?.totalCount ?? 0 };
+    const counts: Record<string, number> = {
+      All: ordersResponse?.statusCounts?.All ?? ordersResponse?.totalCount ?? 0,
+    };
 
     if (ordersResponse?.statusCounts) {
       for (const [key, val] of Object.entries(ordersResponse.statusCounts)) {
@@ -438,8 +692,15 @@ export default function OrdersPage() {
 
   const totalOrdersCount = ordersResponse?.totalCount ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalOrdersCount / pageSize));
-  const startOrderCount = totalOrdersCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
-  const endOrderCount = totalOrdersCount === 0 ? 0 : Math.min(totalOrdersCount, (currentPage - 1) * pageSize + displayedOrders.length);
+  const startOrderCount =
+    totalOrdersCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
+  const endOrderCount =
+    totalOrdersCount === 0
+      ? 0
+      : Math.min(
+          totalOrdersCount,
+          (currentPage - 1) * pageSize + displayedOrders.length,
+        );
 
   const toggleSort = (field: "createdAt" | "totalAmount") => {
     if (sortField === field) {
@@ -460,7 +721,9 @@ export default function OrdersPage() {
     setDraftPreset(appliedPreset);
     setDraftStartDate(new Date(appliedStartDate));
     setDraftEndDate(new Date(appliedEndDate));
-    setViewMonth(new Date(appliedStartDate.getFullYear(), appliedStartDate.getMonth(), 1));
+    setViewMonth(
+      new Date(appliedStartDate.getFullYear(), appliedStartDate.getMonth(), 1),
+    );
     setIsDateDropdownOpen(true);
     setIsStatusDropdownOpen(false);
   };
@@ -476,7 +739,9 @@ export default function OrdersPage() {
   };
 
   const handleNavigateMonth = (direction: -1 | 1) => {
-    setViewMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1));
+    setViewMonth(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1),
+    );
   };
 
   const handleDateCellClick = (clickedDate: Date) => {
@@ -513,14 +778,18 @@ export default function OrdersPage() {
     year: number,
     month: number,
     isFirstMonth: boolean,
-    isLastMonth: boolean
+    isLastMonth: boolean,
   ) => {
     const monthName = MONTH_NAMES[month];
     const firstDayOfWeek = new Date(year, month, 1).getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const daysInPrevMonth = new Date(year, month, 0).getDate();
 
-    const cells: Array<{ date: Date; isCurrentMonth: boolean; dayNum: number }> = [];
+    const cells: Array<{
+      date: Date;
+      isCurrentMonth: boolean;
+      dayNum: number;
+    }> = [];
 
     // Prev month trailing days
     for (let i = 0; i < firstDayOfWeek; i++) {
@@ -604,7 +873,9 @@ export default function OrdersPage() {
             const isToday = isSameDay(cell.date, new Date());
 
             let bgClass = "hover:bg-[#f1edec]";
-            let textClass = cell.isCurrentMonth ? "text-[#0c0a09]" : "text-[#b0a8a0]";
+            let textClass = cell.isCurrentMonth
+              ? "text-[#0c0a09]"
+              : "text-[#b0a8a0]";
 
             if (isSelectedStart || isSelectedEnd) {
               bgClass = "bg-[#0c0a09] text-white font-semibold rounded-full";
@@ -620,7 +891,9 @@ export default function OrdersPage() {
                 type="button"
                 onClick={() => handleDateCellClick(cell.date)}
                 className={`w-7 h-7 flex items-center justify-center mx-auto text-xs cursor-pointer transition-colors ${bgClass} ${textClass} ${
-                  isToday && !isSelectedStart && !isSelectedEnd ? "border border-[#0c0a09] font-bold" : ""
+                  isToday && !isSelectedStart && !isSelectedEnd
+                    ? "border border-[#0c0a09] font-bold"
+                    : ""
                 }`}
               >
                 {cell.dayNum}
@@ -663,7 +936,9 @@ export default function OrdersPage() {
       `"${new Date(o.createdAt).toLocaleString("en-IN")}"`,
     ]);
 
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -679,16 +954,22 @@ export default function OrdersPage() {
     if (!selectedOrderId || !selectedOrderDetails) return;
     try {
       const amountPaise = selectedOrderDetails.totalAmount;
+      const selectedMode = paymentModesList?.find(
+        (m) => m.name.toLowerCase() === paymentTenderMode.toLowerCase(),
+      );
       await addPaymentMutation({
         orderId: selectedOrderId,
-        paymentModeName: paymentTenderMode,
+        paymentModeId: selectedMode?._id,
+        paymentModeName: selectedMode?.name || paymentTenderMode,
         paymentType: "Credit",
         amount: amountPaise,
         transactionReference: `POS-PAY-${Date.now().toString().slice(-6)}`,
       });
       setDrawerTab(null);
       setTenderCashGiven("");
-      showToast(`Payment of ₹${selectedOrderDetails.display_total_amount} via ${paymentTenderMode} recorded successfully.`);
+      showToast(
+        `Payment of ₹${selectedOrderDetails.display_total_amount} via ${paymentTenderMode} recorded successfully.`,
+      );
     } catch (err: any) {
       showToast(err.message || "Failed to record payment");
     }
@@ -697,22 +978,30 @@ export default function OrdersPage() {
   // Refund Submission Handler
   const handleIssueRefund = async () => {
     if (!selectedOrderId || !selectedOrderDetails) return;
-    const amountVal = parseFloat(refundAmountInput || selectedOrderDetails.display_total_amount || "0");
+    const amountVal = parseFloat(
+      refundAmountInput || selectedOrderDetails.display_total_amount || "0",
+    );
     if (isNaN(amountVal) || amountVal <= 0) {
       showToast("Please enter a valid refund amount");
       return;
     }
     try {
+      const selectedMode = paymentModesList?.find(
+        (m) => m.name.toLowerCase() === refundPaymentMode.toLowerCase(),
+      );
       await addPaymentMutation({
         orderId: selectedOrderId,
-        paymentModeName: refundPaymentMode,
+        paymentModeId: selectedMode?._id,
+        paymentModeName: selectedMode?.name || refundPaymentMode,
         paymentType: "Debit",
         amount: Math.round(amountVal * 100),
         transactionReference: `REFUND-${Date.now().toString().slice(-6)}`,
       });
       setDrawerTab(null);
       setRefundAmountInput("");
-      showToast(`Refund of ₹${amountVal.toFixed(2)} processed successfully via ${refundPaymentMode}.`);
+      showToast(
+        `Refund of ₹${amountVal.toFixed(2)} processed successfully via ${refundPaymentMode}.`,
+      );
     } catch (err: any) {
       showToast(err.message || "Failed to process refund");
     }
@@ -728,7 +1017,9 @@ export default function OrdersPage() {
         reason: "Deleted by admin from Order Details",
       });
       setIsDeleteDialogOpen(false);
-      showToast(`Order ${selectedOrderDetails.orderNumber} deleted successfully.`);
+      showToast(
+        `Order ${selectedOrderDetails.orderNumber} deleted successfully.`,
+      );
       setSelectedOrderId(null);
     } catch (err: any) {
       showToast(err.message || "Failed to delete order");
@@ -739,251 +1030,25 @@ export default function OrdersPage() {
 
   // Print Thermal Receipt
   const handlePrintReceipt = () => {
-    showToast("Receipt sent to paired thermal POS printer.");
+    showToast("Opening print dialogue for thermal receipt...");
     if (typeof window !== "undefined") {
+      const origTitle = document.title;
+      document.title = "";
       window.print();
+      setTimeout(() => {
+        document.title = origTitle;
+      }, 1000);
     }
   };
 
-  // Download PDF Receipt (Opens formatted receipt in a new tab)
+  // Download PDF Receipt (Opens real PDF in native Chrome/Edge PDF viewer)
   const handleDownloadPDF = () => {
     if (!selectedOrderDetails) return;
-    showToast("Opening order receipt PDF in a new tab...");
-
-    const order = selectedOrderDetails;
-    const orderCreatedDate = order?.createdAt ? new Date(order.createdAt) : new Date();
-    const formattedOrderDate = formatDateDisplay(orderCreatedDate);
-    const formattedOrderTime = orderCreatedDate.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
+    showToast("Opening order receipt PDF in viewer...");
+    openReceiptPdfInNewTab({
+      order: selectedOrderDetails,
+      org: activeOrg,
     });
-
-    const receiptHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <title>Receipt - ${order.orderNumber}</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #f7f5f3;
-      color: #000;
-      padding: 40px 20px;
-    }
-    .receipt-container {
-      max-width: 760px;
-      margin: 0 auto;
-      background: #fff;
-      padding: 48px;
-      border-radius: 8px;
-      box-shadow: 0 4px 20px rgba(0,0,0,0.06);
-    }
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      border-bottom: 2px solid #e5e7eb;
-      padding-bottom: 20px;
-      margin-bottom: 24px;
-    }
-    .header h1 { font-size: 28px; font-weight: 700; margin-bottom: 6px; }
-    .header .meta { font-size: 13px; color: #4b5563; line-height: 1.5; }
-    .header .meta strong { color: #111; }
-    .logo-badge {
-      width: 44px;
-      height: 44px;
-      background: #000;
-      color: #fff;
-      border-radius: 6px;
-      font-size: 22px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-left: auto;
-      margin-bottom: 4px;
-    }
-    .store-name-top { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #111; text-align: right; }
-    .details-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 32px;
-      font-size: 13px;
-      border-bottom: 1px solid #e5e7eb;
-      padding-bottom: 20px;
-      margin-bottom: 24px;
-    }
-    .details-col strong { color: #000; font-size: 14px; }
-    .details-col p { margin-top: 3px; color: #4b5563; line-height: 1.4; }
-    .details-right { text-align: right; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 13px; }
-    th {
-      border-bottom: 2px solid #e5e7eb;
-      padding: 10px 8px;
-      font-weight: 600;
-      text-transform: uppercase;
-      font-size: 11px;
-      color: #4b5563;
-    }
-    td {
-      padding: 12px 8px;
-      border-bottom: 1px solid #f3f4f6;
-    }
-    .text-right { text-align: right; }
-    .item-name { font-weight: 600; color: #111; }
-    .item-custom { font-size: 11px; color: #6b7280; font-style: italic; margin-top: 2px; }
-    .summary-box {
-      display: flex;
-      justify-content: flex-end;
-      margin-bottom: 32px;
-    }
-    .summary-table { width: 280px; font-size: 13px; color: #4b5563; }
-    .summary-row { display: flex; justify-content: space-between; padding: 4px 0; }
-    .summary-row.total {
-      border-top: 2px solid #111;
-      margin-top: 8px;
-      padding-top: 8px;
-      font-size: 16px;
-      font-weight: 700;
-      color: #000;
-    }
-    .footer {
-      border-top: 1px solid #e5e7eb;
-      padding-top: 20px;
-      text-align: center;
-      font-size: 12px;
-      color: #6b7280;
-    }
-    .action-bar {
-      max-width: 760px;
-      margin: 0 auto 16px auto;
-      display: flex;
-      justify-content: flex-end;
-      gap: 12px;
-    }
-    .btn {
-      background: #0c0a09;
-      color: #fff;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    @media print {
-      body { background: #fff; padding: 0; }
-      .receipt-container { box-shadow: none; padding: 0; max-width: 100%; border-radius: 0; }
-      .action-bar { display: none !important; }
-      @page { size: A4; margin: 15mm; }
-    }
-  </style>
-</head>
-<body>
-  <div class="action-bar">
-    <button class="btn" onclick="window.print()">Print / Save as PDF</button>
-  </div>
-  <div class="receipt-container">
-    <div class="header">
-      <div>
-        <h1>Receipt</h1>
-        <div class="meta">
-          <p><strong>Receipt Number:</strong> ${order.orderNumber}</p>
-          <p><strong>Date:</strong> ${formattedOrderDate} ${formattedOrderTime} IST</p>
-        </div>
-      </div>
-      <div>
-        <div class="logo-badge">P</div>
-        <p class="store-name-top">${activeOrg?.name || "PREST POS"}</p>
-      </div>
-    </div>
-
-    <div class="details-grid">
-      <div class="details-col">
-        <strong>${activeOrg?.name || "Store Location"}</strong>
-        <p>${activeOrg?.address || "Main Street, Ground Floor, Commercial Arcade"}</p>
-        <p style="margin-top: 8px;"><span style="color: #6b7280;">Legal Entity:</span> ${activeOrg?.name || "Prest Retail Corp"}</p>
-        <p><span style="color: #6b7280;">GSTIN:</span> UNREGISTERED</p>
-        <p><span style="color: #6b7280;">FSSAI:</span> UNREGISTERED</p>
-      </div>
-      <div class="details-col details-right">
-        <strong>${order.customerName || "Walk-in Patron"}</strong>
-        <p>${order.customerPhone || "+91 98200 12345"}</p>
-        ${order.customerEmail ? `<p>${order.customerEmail}</p>` : ""}
-        <p style="margin-top: 8px;"><strong>Type:</strong> ${order.orderType || "DineIn"}${order.table ? ` • Table ${order.table.number}` : ""}</p>
-        <p><strong>Payment Mode:</strong> ${order.paymentMode || "Cash"}</p>
-      </div>
-    </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th style="text-align: left;">Particulars</th>
-          <th class="text-right">Gross value</th>
-          <th class="text-right">Net value</th>
-          <th class="text-right">Taxes (₹)</th>
-          <th class="text-right">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${(order.items || []).map((item: any) => `
-          <tr>
-            <td>
-              <div class="item-name">${item.quantity} x ${item.itemName}</div>
-              ${item.customizations && item.customizations.length > 0 ? `
-                <div class="item-custom">${item.customizations.map((c: any) => c.optionName).join(", ")}</div>
-              ` : ""}
-            </td>
-            <td class="text-right">₹${item.display_item_price}</td>
-            <td class="text-right">₹${item.display_item_price}</td>
-            <td class="text-right">₹${((parseFloat(item.display_total_price) * 0.05) || 0).toFixed(2)}</td>
-            <td class="text-right" style="font-weight: 600; color: #000;">₹${item.display_total_price}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>
-
-    <div class="summary-box">
-      <div class="summary-table">
-        <div class="summary-row">
-          <span>Sub Total:</span>
-          <span style="font-weight: 600; color: #000;">₹${order.display_sub_total || "0.00"}</span>
-        </div>
-        <div class="summary-row">
-          <span>GST (Tax Total):</span>
-          <span style="font-weight: 600; color: #000;">₹${order.display_tax_total || "0.00"}</span>
-        </div>
-        ${parseFloat(order.display_discount_amount || "0") > 0 ? `
-          <div class="summary-row" style="color: #059669;">
-            <span>Discount:</span>
-            <span style="font-weight: 600;">-₹${order.display_discount_amount}</span>
-          </div>
-        ` : ""}
-        <div class="summary-row total">
-          <span>Total:</span>
-          <span>₹${order.display_total_amount || "0.00"}</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="footer">
-      <p>Thanks for your business. Please contact us if you have any questions.</p>
-    </div>
-  </div>
-</body>
-</html>`;
-
-    const newWindow = window.open("", "_blank");
-    if (newWindow) {
-      newWindow.document.open();
-      newWindow.document.write(receiptHtml);
-      newWindow.document.close();
-    }
   };
 
   // =========================================================================
@@ -991,7 +1056,9 @@ export default function OrdersPage() {
   // =========================================================================
   if (selectedOrderId) {
     const order = selectedOrderDetails;
-    const orderCreatedDate = order?.createdAt ? new Date(order.createdAt) : new Date();
+    const orderCreatedDate = order?.createdAt
+      ? new Date(order.createdAt)
+      : new Date();
     const formattedOrderDate = formatDateDisplay(orderCreatedDate);
     const formattedOrderTime = orderCreatedDate.toLocaleTimeString("en-IN", {
       hour: "2-digit",
@@ -1015,7 +1082,10 @@ export default function OrdersPage() {
           <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
             <div className="flex flex-col md:flex-row md:items-end justify-between w-full gap-4">
               <div>
-                <nav aria-label="Breadcrumb" className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium">
+                <nav
+                  aria-label="Breadcrumb"
+                  className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
+                >
                   <button
                     type="button"
                     onClick={() => setSelectedOrderId(null)}
@@ -1032,7 +1102,8 @@ export default function OrdersPage() {
                   Order {order?.orderNumber || "Loading..."}
                 </h1>
                 <p className="text-[#5e5e5e] text-[14px] mt-1">
-                  View transaction details, line items, customer info, and manage order actions.
+                  View transaction details, line items, customer info, and
+                  manage order actions.
                 </p>
               </div>
 
@@ -1058,44 +1129,81 @@ export default function OrdersPage() {
           <main className="flex-1 overflow-y-auto px-8 py-6">
             <div className="max-w-[1600px] mx-auto space-y-6">
               {/* BEGIN: MetadataStrip */}
-              <section className="bg-white border border-[#e7e5e4] rounded-xl p-4 lg:px-6 shadow-xs" data-purpose="order-metadata-strip">
+              <section
+                className="bg-white border border-[#e7e5e4] rounded-xl p-4 lg:px-6 shadow-xs"
+                data-purpose="order-metadata-strip"
+              >
                 <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-[#e7e5e4]">
                   <div className="pt-2 sm:pt-0 sm:pr-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Order #</span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">{order?.orderNumber || "-"}</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Order #
+                    </span>
+                    <span className="text-xs font-semibold text-[#0c0a09]">
+                      {order?.orderNumber || "-"}
+                    </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:px-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Token #</span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">{order?.tokenNumber || "-"}</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Token #
+                    </span>
+                    <span className="text-xs font-semibold text-[#0c0a09]">
+                      {order?.tokenNumber || "-"}
+                    </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:px-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Order Type</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Order Type
+                    </span>
                     <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded bg-[#f1edec] text-[#0c0a09]">
                       {order?.orderType || "DineIn"}
                     </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:px-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Order Status</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Order Status
+                    </span>
                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-600" /> {order?.orderStatusName || "Accepted"}
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />{" "}
+                      {order?.orderStatusName || "Accepted"}
                     </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:px-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Date</span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">{formattedOrderDate}</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Date
+                    </span>
+                    <span className="text-xs font-semibold text-[#0c0a09]">
+                      {formattedOrderDate}
+                    </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:px-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Time</span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">{formattedOrderTime}</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Time
+                    </span>
+                    <span className="text-xs font-semibold text-[#0c0a09]">
+                      {formattedOrderTime}
+                    </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:px-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Source</span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">{order?.orderSource || "Prest Cashier"}</span>
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Source
+                    </span>
+                    <span className="text-xs font-semibold text-[#0c0a09]">
+                      {order?.orderSource || "Prest Cashier"}
+                    </span>
                   </div>
                   <div className="pt-2 sm:pt-0 sm:pl-4">
-                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">Table</span>
-                    <span className="text-xs font-semibold text-[#0c0a09] truncate block" title={order?.table ? `Table ${order.table.number}` : "N/A"}>
-                      {order?.table ? `Table ${order.table.number}` : "Counter / Takeaway"}
+                    <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
+                      Table
+                    </span>
+                    <span
+                      className="text-xs font-semibold text-[#0c0a09] truncate block"
+                      title={
+                        order?.table ? `Table ${order.table.number}` : "N/A"
+                      }
+                    >
+                      {order?.table
+                        ? `Table ${order.table.number}`
+                        : "Counter / Takeaway"}
                     </span>
                   </div>
                 </div>
@@ -1107,59 +1215,91 @@ export default function OrdersPage() {
                 {/* LEFT COLUMN: 65% (8 Cols) */}
                 <div className="lg:col-span-8 space-y-6">
                   {/* Card 1: Customer & Address Details */}
-                  <section className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs" data-purpose="customer-card">
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                    data-purpose="customer-card"
+                  >
                     <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3 mb-4">
                       <h2 className="text-[20px] font-semibold text-[#0c0a09] flex items-center gap-2">
                         <UserIcon className="w-4 h-4 text-[#7a716b]" />
                         Customer & Address Details
                       </h2>
                       <span className="text-[11px] uppercase font-semibold tracking-wider text-[#7a716b]">
-                        {order?.customerName ? "Registered Patron" : "Guest Customer"}
+                        {order?.customerName
+                          ? "Registered Patron"
+                          : "Guest Customer"}
                       </span>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                       <div>
-                        <span className="block text-[11px] font-semibold text-[#7a716b] tracking-wider uppercase">Customer Name</span>
-                        <p className="text-sm font-semibold text-[#0c0a09] mt-0.5">{order?.customerName || "Walk-in Customer"}</p>
-                        <p className="text-xs text-[#8c7662] mt-0.5">{order?.customerName ? "Patron Member" : "Direct Guest"}</p>
+                        <span className="block text-[11px] font-semibold text-[#7a716b] tracking-wider uppercase">
+                          Customer Name
+                        </span>
+                        <p className="text-sm font-semibold text-[#0c0a09] mt-0.5">
+                          {order?.customerName || "Walk-in Customer"}
+                        </p>
+                        <p className="text-xs text-[#8c7662] mt-0.5">
+                          {order?.customerName
+                            ? "Patron Member"
+                            : "Direct Guest"}
+                        </p>
                       </div>
                       <div>
-                        <span className="block text-[11px] font-semibold text-[#7a716b] tracking-wider uppercase">Contact Phone</span>
-                        <p className="text-sm font-semibold text-[#0c0a09] mt-0.5">{order?.customerPhone || "+91 98200 12345"}</p>
+                        <span className="block text-[11px] font-semibold text-[#7a716b] tracking-wider uppercase">
+                          Contact Phone
+                        </span>
+                        <p className="text-sm font-semibold text-[#0c0a09] mt-0.5">
+                          {order?.customerPhone || "+91 98200 12345"}
+                        </p>
                       </div>
                       <div>
-                        <span className="block text-[11px] font-semibold text-[#7a716b] tracking-wider uppercase">Email Address</span>
-                        <p className="text-sm text-[#0c0a09] mt-0.5">{order?.customerEmail || "customer@example.com"}</p>
+                        <span className="block text-[11px] font-semibold text-[#7a716b] tracking-wider uppercase">
+                          Email Address
+                        </span>
+                        <p className="text-sm text-[#0c0a09] mt-0.5">
+                          {order?.customerEmail || "customer@example.com"}
+                        </p>
                       </div>
                     </div>
                     <div className="mt-4 pt-3.5 border-t border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7]/60 -mx-6 -mb-6 px-6 py-3 rounded-b-xl">
                       <div className="flex items-center gap-2 text-xs text-[#0c0a09]">
                         <span className="font-semibold uppercase tracking-wider text-[10px] text-[#7a716b]">
-                          {order?.orderType === "Delivery" ? "Delivery Address:" : "Dine-In Note:"}
+                          {order?.orderType === "Delivery"
+                            ? "Delivery Address:"
+                            : "Dine-In Note:"}
                         </span>
                         <span className="font-medium">
                           {order?.deliveryAddress
                             ? `${order.deliveryAddress.addressLine1}, ${order.deliveryAddress.city || ""}`
                             : order?.table
-                            ? `Table ${order.table.number} (Ground Floor)`
-                            : "Standard Counter Pickup"}
+                              ? `Table ${order.table.number} (Ground Floor)`
+                              : "Standard Counter Pickup"}
                         </span>
                       </div>
                       <div className="text-xs text-[#7a716b]">
-                        Assigned Captain: <span className="font-semibold text-[#0c0a09]">Johan Coder</span>
+                        Assigned Captain:{" "}
+                        <span className="font-semibold text-[#0c0a09]">
+                          Johan Coder
+                        </span>
                       </div>
                     </div>
                   </section>
 
                   {/* Card 2: Ordered Items Details */}
-                  <section className="bg-white rounded-xl border border-[#e7e5e4] shadow-xs overflow-hidden" data-purpose="items-table-card">
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] shadow-xs overflow-hidden"
+                    data-purpose="items-table-card"
+                  >
                     <div className="p-6 pb-4 border-b border-[#e7e5e4] flex items-center justify-between">
                       <div>
                         <h2 className="text-[20px] font-semibold text-[#0c0a09] flex items-center gap-2">
                           <DocumentTextIcon className="w-4 h-4 text-[#7a716b]" />
                           Ordered Items Details
                         </h2>
-                        <p className="text-xs text-[#7a716b] mt-0.5">Manage line-items, modify selections, and adjust order quantities.</p>
+                        <p className="text-xs text-[#7a716b] mt-0.5">
+                          Manage line-items, modify selections, and adjust order
+                          quantities.
+                        </p>
                       </div>
                       <span className="text-xs font-semibold bg-[#f1edec] text-[#0c0a09] px-2.5 py-1 rounded">
                         {order?.items?.length || 0} Unique Items
@@ -1168,28 +1308,48 @@ export default function OrdersPage() {
 
                     {/* Table */}
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse" id="order-items-table">
+                      <table
+                        className="w-full text-left border-collapse"
+                        id="order-items-table"
+                      >
                         <thead>
                           <tr className="bg-[#faf8f5] border-b border-[#e7e5e4] text-[11px] font-semibold uppercase tracking-wider text-[#7a716b]">
-                            <th className="py-3 px-6" scope="col">Items</th>
-                            <th className="py-3 px-4 text-right" scope="col">Price</th>
-                            <th className="py-3 px-4 text-center" scope="col">Qty</th>
-                            <th className="py-3 px-6 text-right" scope="col">Sub Total</th>
+                            <th className="py-3 px-6" scope="col">
+                              Items
+                            </th>
+                            <th className="py-3 px-4 text-right" scope="col">
+                              Price
+                            </th>
+                            <th className="py-3 px-4 text-center" scope="col">
+                              Qty
+                            </th>
+                            <th className="py-3 px-6 text-right" scope="col">
+                              Sub Total
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#e7e5e4] text-sm">
                           {order?.items && order.items.length > 0 ? (
                             order.items.map((item: any, idx: number) => (
-                              <tr key={idx} className="hover:bg-[#fdfcf9] transition-colors">
+                              <tr
+                                key={idx}
+                                className="hover:bg-[#fdfcf9] transition-colors"
+                              >
                                 <td className="py-3.5 px-6">
-                                  <span className="font-semibold text-[#0c0a09] block">{item.itemName}</span>
-                                  {item.customizations && item.customizations.length > 0 && (
-                                    <span className="text-xs text-[#7a716b] italic block mt-0.5">
-                                      {item.customizations
-                                        .map((c: any) => `${c.optionName} ₹${(c.price / 100).toFixed(2)}`)
-                                        .join(", ")}
-                                    </span>
-                                  )}
+                                  <span className="font-semibold text-[#0c0a09] block">
+                                    {item.itemName}
+                                  </span>
+                                  {item.customizations &&
+                                    item.customizations.length > 0 && (
+                                      <span className="text-xs text-[#7a716b] italic block mt-0.5">
+                                        {item.customizations
+                                          .map(
+                                            (c: any) =>
+                                              `${c.optionName} ₹${(c.price / 100).toFixed(2)}`,
+                                          )
+                                          .join(", ")}
+                                      </span>
+                                    )}
                                 </td>
                                 <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
                                   ₹{item.display_item_price}
@@ -1206,7 +1366,10 @@ export default function OrdersPage() {
                             ))
                           ) : (
                             <tr>
-                              <td colSpan={4} className="py-6 text-center text-xs text-[#7a716b]">
+                              <td
+                                colSpan={4}
+                                className="py-6 text-center text-xs text-[#7a716b]"
+                              >
                                 No line items recorded for this order.
                               </td>
                             </tr>
@@ -1221,36 +1384,61 @@ export default function OrdersPage() {
                         <div className="w-full max-w-xs space-y-2 text-xs">
                           <div className="flex justify-between items-center text-[#7a716b]">
                             <span className="font-medium">Sub Total</span>
-                            <span className="font-semibold text-[#0c0a09]">₹{order?.display_sub_total || "0.00"}</span>
+                            <span className="font-semibold text-[#0c0a09]">
+                              ₹{order?.display_sub_total || "0.00"}
+                            </span>
                           </div>
 
-                          {order?.taxInfoSnapshot?.components && order.taxInfoSnapshot.components.length > 0 ? (
-                            order.taxInfoSnapshot.components.map((c: any, i: number) => (
-                              <div key={i} className="flex justify-between items-center text-[#7a716b]">
-                                <span>{c.name} ({c.rate}%)</span>
-                                <span className="font-semibold text-[#0c0a09]">
-                                  +₹{(((order.subTotal || 0) * c.rate) / 10000).toFixed(2)}
-                                </span>
-                              </div>
-                            ))
+                          {order?.taxInfoSnapshot?.components &&
+                          order.taxInfoSnapshot.components.length > 0 ? (
+                            order.taxInfoSnapshot.components.map(
+                              (c: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className="flex justify-between items-center text-[#7a716b]"
+                                >
+                                  <span>
+                                    {c.name} ({c.rate}%)
+                                  </span>
+                                  <span className="font-semibold text-[#0c0a09]">
+                                    +₹
+                                    {(
+                                      ((order.subTotal || 0) * c.rate) /
+                                      10000
+                                    ).toFixed(2)}
+                                  </span>
+                                </div>
+                              ),
+                            )
                           ) : (
                             <div className="flex justify-between items-center text-[#7a716b]">
                               <span>GST (Tax Total)</span>
-                              <span className="font-semibold text-[#0c0a09]">₹{order?.display_tax_total || "0.00"}</span>
+                              <span className="font-semibold text-[#0c0a09]">
+                                ₹{order?.display_tax_total || "0.00"}
+                              </span>
                             </div>
                           )}
 
-                          {parseFloat(order?.display_discount_amount || "0") > 0 && (
+                          {parseFloat(order?.display_discount_amount || "0") >
+                            0 && (
                             <div className="flex justify-between items-center text-emerald-700">
-                              <span className="font-medium">Discount Applied</span>
-                              <span className="font-semibold">-₹{order?.display_discount_amount}</span>
+                              <span className="font-medium">
+                                Discount Applied
+                              </span>
+                              <span className="font-semibold">
+                                -₹{order?.display_discount_amount}
+                              </span>
                             </div>
                           )}
 
                           <div className="border-t border-[#e7e5e4] pt-2.5 mt-2.5 flex justify-between items-baseline">
                             <div className="flex flex-col">
-                              <span className="text-[11px] uppercase tracking-wider font-semibold text-[#7a716b]">Grand Total</span>
-                              <span className="text-[10px] text-emerald-700 font-medium">Taxes &amp; levies included</span>
+                              <span className="text-[11px] uppercase tracking-wider font-semibold text-[#7a716b]">
+                                Grand Total
+                              </span>
+                              <span className="text-[10px] text-emerald-700 font-medium">
+                                Taxes &amp; levies included
+                              </span>
                             </div>
                             <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
                               ₹{order?.display_total_amount || "0.00"}
@@ -1262,18 +1450,25 @@ export default function OrdersPage() {
                   </section>
 
                   {/* Card 3: Payment Information (Transaction Ledger) */}
-                  <section className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs" data-purpose="transaction-ledger">
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                    data-purpose="transaction-ledger"
+                  >
                     <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3 mb-4">
                       <h2 className="text-[20px] font-semibold text-[#0c0a09] flex items-center gap-2">
                         <CreditCardIcon className="w-4 h-4 text-[#7a716b]" />
                         Payment Information
                       </h2>
-                      <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${
-                        isPaid
-                          ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
-                          : "text-amber-800 bg-amber-50 border border-amber-200"
-                      }`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${isPaid ? "bg-emerald-600" : "bg-amber-600"}`} />
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${
+                          isPaid
+                            ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
+                            : "text-amber-800 bg-amber-50 border border-amber-200"
+                        }`}
+                      >
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full ${isPaid ? "bg-emerald-600" : "bg-amber-600"}`}
+                        />
                         {isPaid ? "Fully Settled" : "Payment Due"}
                       </span>
                     </div>
@@ -1291,44 +1486,64 @@ export default function OrdersPage() {
                         <tbody className="divide-y divide-[#e7e5e4]">
                           {order?.payments && order.payments.length > 0 ? (
                             order.payments.map((p: any, idx: number) => {
-                              const pTime = new Date(p.createdAt).toLocaleTimeString("en-IN", {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                                hour12: true,
-                              });
+                              const pDate = new Date(p.createdAt);
+                              const pDateStr = formatDateDisplay(pDate);
+                              const pTimeStr = pDate.toLocaleTimeString(
+                                "en-IN",
+                                {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                  hour12: true,
+                                },
+                              );
                               const isCredit = p.paymentType === "Credit";
 
                               return (
                                 <tr key={p._id || idx}>
-                                  <td className="py-2.5 text-[#0c0a09] font-medium">{pTime}</td>
+                                  <td className="py-2.5 text-[#0c0a09] font-medium font-sans">
+                                    {pDateStr} {pTimeStr}
+                                  </td>
                                   <td className="py-2.5">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                      p.paymentModeName === "UPI"
-                                        ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
-                                        : p.paymentModeName === "Card"
-                                        ? "bg-purple-50 text-purple-700 border border-purple-200"
-                                        : "bg-gray-100 text-gray-800"
-                                    }`}>
+                                    <span
+                                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                                        p.paymentModeName === "UPI"
+                                          ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                                          : p.paymentModeName === "Card"
+                                            ? "bg-purple-50 text-purple-700 border border-purple-200"
+                                            : "bg-gray-100 text-gray-800"
+                                      }`}
+                                    >
                                       {p.paymentModeName || "Cash"}
                                     </span>
                                   </td>
-                                  <td className={`py-2.5 font-semibold ${isCredit ? "text-emerald-700" : "text-red-700"}`}>
+                                  <td
+                                    className={`py-2.5 font-semibold ${isCredit ? "text-emerald-700" : "text-red-700"}`}
+                                  >
                                     {p.paymentType}
                                   </td>
                                   <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                                    {isCredit ? "" : "-"}₹{((p.amount || 0) / 100).toFixed(2)}
+                                    {isCredit ? "" : "-"}₹
+                                    {((p.amount || 0) / 100).toFixed(2)}
                                   </td>
                                 </tr>
                               );
                             })
                           ) : (
                             <tr>
-                              <td className="py-2.5 text-[#0c0a09] font-medium">{formattedOrderTime}</td>
-                              <td className="py-2.5">
-                                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">{order?.paymentMode || "Cash"}</span>
+                              <td className="py-2.5 text-[#0c0a09] font-medium font-sans">
+                                {formattedOrderDate} {formattedOrderTime}
                               </td>
-                              <td className="py-2.5 text-emerald-700 font-semibold">Credit</td>
-                              <td className="py-2.5 text-right font-bold text-[#0c0a09]">₹{order?.display_total_amount || "0.00"}</td>
+                              <td className="py-2.5">
+                                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
+                                  {order?.paymentMode || "Cash"}
+                                </span>
+                              </td>
+                              <td className="py-2.5 text-emerald-700 font-semibold">
+                                Credit
+                              </td>
+                              <td className="py-2.5 text-right font-bold text-[#0c0a09]">
+                                ₹{order?.display_total_amount || "0.00"}
+                              </td>
                             </tr>
                           )}
                         </tbody>
@@ -1341,42 +1556,64 @@ export default function OrdersPage() {
                 {/* RIGHT COLUMN: 35% (4 Cols) */}
                 <div className="lg:col-span-4 space-y-6">
                   {/* Card 1: Billing & Tax Breakdown */}
-                  <section className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs" data-purpose="billing-breakdown">
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                    data-purpose="billing-breakdown"
+                  >
                     <h2 className="text-[20px] font-semibold text-[#0c0a09] border-b border-[#e7e5e4] pb-3 mb-4 flex items-center justify-between">
                       <span>Billing &amp; Tax Breakdown</span>
-                      <span className="text-xs font-semibold text-[#7a716b]">INR (₹)</span>
+                      <span className="text-xs font-semibold text-[#7a716b]">
+                        INR (₹)
+                      </span>
                     </h2>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between items-center text-[#7a716b]">
                         <span className="font-medium">Sub Total</span>
-                        <span className="font-semibold text-[#0c0a09]">₹{order?.display_sub_total || "0.00"}</span>
+                        <span className="font-semibold text-[#0c0a09]">
+                          ₹{order?.display_sub_total || "0.00"}
+                        </span>
                       </div>
                       <div className="flex justify-between items-center text-[#7a716b] text-xs">
                         <span>CGST (2.5%)</span>
                         <span className="font-semibold text-[#0c0a09]">
-                          ₹{order?.subTotal ? ((order.subTotal * 0.025) / 100).toFixed(2) : "0.00"}
+                          ₹
+                          {order?.subTotal
+                            ? ((order.subTotal * 0.025) / 100).toFixed(2)
+                            : "0.00"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-[#7a716b] text-xs">
                         <span>SGST (2.5%)</span>
                         <span className="font-semibold text-[#0c0a09]">
-                          ₹{order?.subTotal ? ((order.subTotal * 0.025) / 100).toFixed(2) : "0.00"}
+                          ₹
+                          {order?.subTotal
+                            ? ((order.subTotal * 0.025) / 100).toFixed(2)
+                            : "0.00"}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-[#7a716b] text-xs">
                         <span>Delivery / Service Charge</span>
-                        <span className="font-semibold text-[#0c0a09]">₹0.00</span>
+                        <span className="font-semibold text-[#0c0a09]">
+                          ₹0.00
+                        </span>
                       </div>
-                      {parseFloat(order?.display_discount_amount || "0") > 0 && (
+                      {parseFloat(order?.display_discount_amount || "0") >
+                        0 && (
                         <div className="flex justify-between items-center text-emerald-700 text-xs">
                           <span className="font-medium">Discount</span>
-                          <span className="font-semibold">-₹{order?.display_discount_amount}</span>
+                          <span className="font-semibold">
+                            -₹{order?.display_discount_amount}
+                          </span>
                         </div>
                       )}
                       <div className="border-t-2 border-[#0c0a09] pt-3 mt-4 flex justify-between items-baseline">
                         <div>
-                          <span className="block text-xs uppercase tracking-widest font-semibold text-[#7a716b]">Total Payable</span>
-                          <span className="text-[11px] text-emerald-700 font-medium">Includes all municipal levies</span>
+                          <span className="block text-xs uppercase tracking-widest font-semibold text-[#7a716b]">
+                            Total Payable
+                          </span>
+                          <span className="text-[11px] text-emerald-700 font-medium">
+                            Includes all municipal levies
+                          </span>
                         </div>
                         <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
                           ₹{order?.display_total_amount || "0.00"}
@@ -1386,69 +1623,93 @@ export default function OrdersPage() {
                   </section>
 
                   {/* Card 2: Issue Refund Card */}
-                  <section className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs" data-purpose="refund-widget">
-                    <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-[20px] font-semibold text-[#0c0a09]">Issue Refund</h3>
-                      <span className="text-[10px] font-semibold uppercase bg-amber-100 text-amber-900 px-2 py-0.5 rounded">Eligible</span>
-                    </div>
-                    <p className="text-xs text-[#7a716b] mb-4">Refund partial amount or adjust discarded item values.</p>
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                    data-purpose="refund-widget"
+                  >
+                    <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
+                      Issue Refund
+                    </h3>
 
-                    {/* Debit Amount Display Display Banner */}
-                    <div className="flex items-center justify-between bg-[#faf7f4] border border-[#e7e5e4] rounded-lg p-3 mb-4">
-                      <span className="text-xs font-semibold text-[#7a716b]">Calculated Debit Amount</span>
-                      <span className="text-base font-bold text-[#b91c1c] tracking-tight">
-                        -₹{order?.display_total_amount || "0.00"}
-                      </span>
+                    {/* Debit Amount Display Box matching screenshot */}
+                    <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
+                      <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
+                        Debit Amount
+                      </div>
+                      <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
+                        -₹
+                        {order?.display_debit_amount &&
+                        parseFloat(order.display_debit_amount) > 0
+                          ? parseFloat(order.display_debit_amount) % 1 === 0
+                            ? parseInt(order.display_debit_amount)
+                            : order.display_debit_amount
+                          : "0"}
+                      </div>
                     </div>
 
                     {/* Button triggering payment refund drawer */}
                     <button
                       type="button"
                       onClick={() => {
-                        setRefundAmountInput(order?.display_total_amount || "");
+                        const remainingRefundable = Math.max(
+                          0,
+                          parseFloat(
+                            order?.display_net_paid ||
+                              order?.display_total_amount ||
+                              "0",
+                          ),
+                        );
+                        setRefundAmountInput(
+                          remainingRefundable > 0
+                            ? remainingRefundable.toString()
+                            : order?.display_total_amount || "",
+                        );
                         setDrawerTab("refund");
                       }}
                       style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
-                      className="w-full py-2.5 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                      className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
                     >
-                      <RefundIcon className="w-4 h-4 !text-white text-white" />
-                      <span className="!text-white text-white font-semibold text-sm">Issue Refund</span>
+                      <span className="!text-white text-white font-semibold text-sm">
+                        Issue Refund
+                      </span>
                     </button>
                   </section>
 
                   {/* Card 3: Order Actions */}
-                  <section className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs" data-purpose="order-actions-grid">
-                    <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">Order Actions</h3>
-                    
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                    data-purpose="order-actions-grid"
+                  >
+                    <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
+                      Order Actions
+                    </h3>
+
                     {/* 2-Column Action Grid */}
                     <div className="grid grid-cols-2 gap-2.5 mb-5">
                       {/* Edit Order */}
                       <button
                         type="button"
-                        onClick={() => {
-                          const status = (order?.orderStatusName || "").trim().toLowerCase();
-                          if (status === "delivered" || status === "cancelled" || status === "reject") {
-                            showToast(`Cannot edit order: Order is already ${order?.orderStatusName || "completed"}.`);
-                          } else {
-                            showToast("Navigating to POS billing cart to edit line items...");
-                          }
-                        }}
-                        style={{ backgroundColor: "#4b4642", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#4b4642] hover:bg-[#383430] !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        onClick={() => setIsEditOrderOpen(true)}
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <EditIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">Edit Order</span>
+                        <span className="!text-white text-white font-semibold text-xs">
+                          Edit Order
+                        </span>
                       </button>
 
                       {/* Delete Order */}
                       <button
                         type="button"
                         onClick={() => setIsDeleteDialogOpen(true)}
-                        style={{ backgroundColor: "#78716c", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#78716c] hover:bg-[#57534e] !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">Delete Order</span>
+                        <span className="!text-white text-white font-semibold text-xs">
+                          Delete Order
+                        </span>
                       </button>
 
                       {/* Print Receipt */}
@@ -1459,7 +1720,9 @@ export default function OrdersPage() {
                         className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <PrintIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">Print Receipt</span>
+                        <span className="!text-white text-white font-semibold text-xs">
+                          Print Receipt
+                        </span>
                       </button>
 
                       {/* Download PDF */}
@@ -1470,7 +1733,9 @@ export default function OrdersPage() {
                         className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <DownloadIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">Download PDF</span>
+                        <span className="!text-white text-white font-semibold text-xs">
+                          Download PDF
+                        </span>
                       </button>
 
                       {/* Add Payment */}
@@ -1480,22 +1745,26 @@ export default function OrdersPage() {
                           setTenderCashGiven(order?.display_total_amount || "");
                           setDrawerTab("pay");
                         }}
-                        style={{ backgroundColor: "#292524", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#292524] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <CreditCardIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">Add Payment</span>
+                        <span className="!text-white text-white font-semibold text-xs">
+                          Add Payment
+                        </span>
                       </button>
 
                       {/* Order Timeline */}
                       <button
                         type="button"
                         onClick={() => setDrawerTab("timeline")}
-                        style={{ backgroundColor: "#292524", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#292524] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <TimelineIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">Order Timeline</span>
+                        <span className="!text-white text-white font-semibold text-xs">
+                          Order Timeline
+                        </span>
                       </button>
                     </div>
 
@@ -1519,16 +1788,22 @@ export default function OrdersPage() {
           </main>
 
           {/* ========================================================================= */}
-          {/* DEDICATED PRINTABLE RECEIPT TEMPLATE (FOR PRINT & PDF EXPORT)             */}
-          {/* Matches official PREST / defx-pos Receipt format                          */}
-          {/* ========================================================================= */}
+          {/* DEDICATED PRINTABLE RECEIPT TEMPLATE (FOR 80MM / 58MM THERMAL PRINTERS) */}
           <style jsx global>{`
+            @page {
+              size: 80mm auto;
+              margin: 0mm !important;
+            }
             @media print {
-              /* Hide all normal UI elements, sidebars, headers, action buttons */
+              html,
+              body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #ffffff !important;
+              }
               body * {
                 visibility: hidden !important;
               }
-              /* Show ONLY the receipt container */
               #printable-order-receipt,
               #printable-order-receipt * {
                 visibility: visible !important;
@@ -1538,135 +1813,35 @@ export default function OrdersPage() {
                 left: 0 !important;
                 top: 0 !important;
                 width: 100% !important;
+                max-width: 80mm !important;
                 margin: 0 !important;
-                padding: 32px !important;
+                padding: 0 !important;
                 background: #ffffff !important;
                 color: #000000 !important;
                 display: block !important;
+                font-family:
+                  "Courier New",
+                  Courier,
+                  monospace !important;
+                font-size: 11px !important;
+                font-weight: 500 !important;
+                line-height: 1.25 !important;
+                white-space: pre !important;
+                letter-spacing: 0 !important;
+                word-break: normal !important;
                 z-index: 999999 !important;
                 box-shadow: none !important;
-              }
-              @page {
-                size: A4;
-                margin: 15mm;
               }
             }
           `}</style>
 
-          <div id="printable-order-receipt" className="hidden print:block font-sans text-black bg-white p-8 max-w-3xl mx-auto">
-            {/* Receipt Top Header */}
-            <div className="flex justify-between items-start border-b border-gray-300 pb-4 mb-6">
-              <div>
-                <h1 className="text-3xl font-bold tracking-tight text-black font-sans mb-1">Receipt</h1>
-                <div className="text-xs space-y-1 text-gray-700">
-                  <p><span className="font-semibold text-black">Receipt Number:</span> {order?.orderNumber || "ORD#00000"}</p>
-                  <p><span className="font-semibold text-black">Date:</span> {formattedOrderDate} {formattedOrderTime} IST</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <div className="w-10 h-10 rounded bg-black text-white font-serif font-bold text-xl flex items-center justify-center ml-auto">
-                  P
-                </div>
-                <p className="text-xs font-semibold text-black mt-1 uppercase tracking-wider">{activeOrg?.name || "PREST POS"}</p>
-              </div>
-            </div>
-
-            {/* Store & Customer Details Grid */}
-            <div className="grid grid-cols-2 gap-8 text-xs text-gray-800 pb-4 border-b border-gray-200 mb-6">
-              <div>
-                <p className="font-bold text-black text-sm mb-1">{activeOrg?.name || "Store Location"}</p>
-                <p className="text-gray-600 leading-relaxed mb-3">
-                  {activeOrg?.address || "Main Street, Ground Floor, Commercial Arcade"}
-                </p>
-                <div className="space-y-0.5 text-[11px] text-gray-700">
-                  <p><span className="font-medium">Legal Entity Name:</span> {activeOrg?.name || "Prest Retail Corp"}</p>
-                  <p><span className="font-medium">GSTIN:</span> UNREGISTERED</p>
-                  <p><span className="font-medium">FSSAI:</span> UNREGISTERED</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <p className="font-bold text-black text-sm mb-1">{order?.customerName || "Walk-in Patron"}</p>
-                <p className="text-gray-600 font-mono mb-1">{order?.customerPhone || "+91 98200 12345"}</p>
-                {order?.customerEmail && <p className="text-gray-600 mb-1">{order.customerEmail}</p>}
-                <p className="text-gray-700 mt-2">
-                  <span className="font-semibold">Type:</span> {order?.orderType || "DineIn"} 
-                  {order?.table ? ` • Table ${order.table.number}` : ""}
-                </p>
-                <p className="text-gray-700">
-                  <span className="font-semibold">Payment Mode:</span> {order?.paymentMode || "Cash"}
-                </p>
-              </div>
-            </div>
-
-            {/* Line Items Table */}
-            <table className="w-full text-left border-collapse text-xs mb-6">
-              <thead>
-                <tr className="border-b-2 border-gray-300 text-gray-700 uppercase tracking-wider font-semibold">
-                  <th className="py-2.5 px-2">Particulars</th>
-                  <th className="py-2.5 px-2 text-right">Gross value</th>
-                  <th className="py-2.5 px-2 text-right">Net value</th>
-                  <th className="py-2.5 px-2 text-right">Taxes (₹)</th>
-                  <th className="py-2.5 px-2 text-right">Total</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {order?.items && order.items.length > 0 ? (
-                  order.items.map((item: any, idx: number) => (
-                    <tr key={idx}>
-                      <td className="py-2.5 px-2 font-medium text-black">
-                        {item.quantity} x {item.itemName}
-                        {item.customizations && item.customizations.length > 0 && (
-                          <span className="text-[10px] text-gray-500 block italic">
-                            {item.customizations.map((c: any) => `${c.optionName}`).join(", ")}
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-2.5 px-2 text-right text-gray-600 font-mono">₹{item.display_item_price}</td>
-                      <td className="py-2.5 px-2 text-right text-gray-600 font-mono">₹{item.display_item_price}</td>
-                      <td className="py-2.5 px-2 text-right text-gray-600 font-mono">
-                        ₹{(
-                          (parseFloat(item.display_total_price) * 0.05) || 0
-                        ).toFixed(2)}
-                      </td>
-                      <td className="py-2.5 px-2 text-right font-bold text-black font-mono">₹{item.display_total_price}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className="py-4 text-center text-gray-500">No items recorded.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-
-            {/* Summary Totals */}
-            <div className="flex justify-end mb-8">
-              <div className="w-64 space-y-1.5 text-xs text-gray-700">
-                <div className="flex justify-between">
-                  <span>Sub Total:</span>
-                  <span className="font-semibold text-black font-mono">₹{order?.display_sub_total || "0.00"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>GST (Tax Total):</span>
-                  <span className="font-semibold text-black font-mono">₹{order?.display_tax_total || "0.00"}</span>
-                </div>
-                {parseFloat(order?.display_discount_amount || "0") > 0 && (
-                  <div className="flex justify-between text-emerald-700">
-                    <span>Discount:</span>
-                    <span className="font-semibold font-mono">-₹{order?.display_discount_amount}</span>
-                  </div>
-                )}
-                <div className="border-t-2 border-black pt-2 mt-2 flex justify-between text-sm font-bold text-black">
-                  <span>Total:</span>
-                  <span className="text-base font-mono">₹{order?.display_total_amount || "0.00"}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Receipt Footer Message */}
-            <div className="border-t border-gray-300 pt-4 text-center text-xs text-gray-600">
-              <p className="font-medium">Thanks for your business. Please contact us if you have any questions.</p>
-            </div>
+          <div
+            id="printable-order-receipt"
+            className="hidden print:block font-mono text-black bg-white"
+          >
+            <pre className="font-mono text-black bg-white m-0 p-0 text-[11px] leading-[1.25] whitespace-pre font-medium">
+              {generateDefxReceiptPlainString(order, activeOrg, 48)}
+            </pre>
           </div>
         </div>
 
@@ -1688,18 +1863,21 @@ export default function OrdersPage() {
 
             {/* Slide-over Drawer Body (440px width) */}
             <div className="relative z-10 w-screen max-w-[440px] bg-white border-l border-[#e7e5e4] shadow-2xl flex flex-col justify-between h-full transform transition-transform ease-in-out duration-300 animate-slideLeft">
-              
               {/* Top Drawer Header with Stable Tab Switcher */}
               <div className="p-6 border-b border-[#e7e5e4] bg-white shrink-0 space-y-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="font-garamond text-2xl font-normal text-[#141010]" id="slide-over-title">
+                    <h3
+                      className="font-garamond text-2xl font-normal text-[#141010]"
+                      id="slide-over-title"
+                    >
                       {drawerTab === "pay" && "Order Payment"}
                       {drawerTab === "timeline" && "Order Timeline"}
                       {drawerTab === "refund" && "Payment Refund"}
                     </h3>
                     <p className="text-xs text-[#7a716b] mt-0.5 font-sans font-medium">
-                      {order.orderNumber} {order.tokenNumber ? `• Token ${order.tokenNumber}` : ""}
+                      {order.orderNumber}{" "}
+                      {order.tokenNumber ? `• Token ${order.tokenNumber}` : ""}
                     </p>
                   </div>
                   <button
@@ -1776,7 +1954,9 @@ export default function OrdersPage() {
                         Payment Type
                       </label>
                       <div className="grid grid-cols-4 gap-1.5">
-                        {(["Cash", "UPI QR", "Card / POS", "Split"] as const).map((mode) => (
+                        {(
+                          ["Cash", "UPI QR", "Card / POS", "Split"] as const
+                        ).map((mode) => (
                           <button
                             key={mode}
                             type="button"
@@ -1807,7 +1987,9 @@ export default function OrdersPage() {
                             className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#e7e5e4] rounded-lg focus:border-black focus:ring-black focus:outline-none bg-white"
                             type="number"
                             step="any"
-                            value={tenderCashGiven || order.display_total_amount}
+                            value={
+                              tenderCashGiven || order.display_total_amount
+                            }
                             onChange={(e) => setTenderCashGiven(e.target.value)}
                           />
                         </div>
@@ -1819,24 +2001,35 @@ export default function OrdersPage() {
                           <label className="text-xs font-semibold uppercase tracking-wider text-[#7a716b]">
                             Quick Tender
                           </label>
-                          <span className="text-[11px] text-[#7a716b]">Round shortcuts</span>
+                          <span className="text-[11px] text-[#7a716b]">
+                            Round shortcuts
+                          </span>
                         </div>
                         <div className="grid grid-cols-4 gap-2">
                           {(() => {
-                            const totalNum = parseFloat(order.display_total_amount || "0");
+                            const totalNum = parseFloat(
+                              order.display_total_amount || "0",
+                            );
                             const rounded1 = Math.ceil(totalNum);
                             const rounded2 = Math.ceil(totalNum / 10) * 10;
                             const rounded3 = Math.ceil(totalNum / 50) * 50;
-                            const rounded4 = Math.ceil(totalNum / 100) * 100 || 1000;
-                            const shortcuts = Array.from(new Set([rounded1, rounded2, rounded3, rounded4]));
+                            const rounded4 =
+                              Math.ceil(totalNum / 100) * 100 || 1000;
+                            const shortcuts = Array.from(
+                              new Set([rounded1, rounded2, rounded3, rounded4]),
+                            );
                             while (shortcuts.length < 4) {
-                              shortcuts.push((shortcuts[shortcuts.length - 1] || 100) + 100);
+                              shortcuts.push(
+                                (shortcuts[shortcuts.length - 1] || 100) + 100,
+                              );
                             }
                             return shortcuts.slice(0, 4).map((amt) => (
                               <button
                                 key={amt}
                                 type="button"
-                                onClick={() => setTenderCashGiven(amt.toString())}
+                                onClick={() =>
+                                  setTenderCashGiven(amt.toString())
+                                }
                                 className="py-2 text-xs font-medium font-sans bg-[#faf8f5] hover:bg-[#f4eee8] text-[#141010] border border-[#e7e5e4] rounded-md transition-colors text-center cursor-pointer"
                               >
                                 ₹{amt.toLocaleString("en-IN")}
@@ -1848,8 +2041,12 @@ export default function OrdersPage() {
 
                       {/* Return Amount Banner */}
                       {(() => {
-                        const givenNum = parseFloat(tenderCashGiven || order.display_total_amount || "0");
-                        const totalNum = parseFloat(order.display_total_amount || "0");
+                        const givenNum = parseFloat(
+                          tenderCashGiven || order.display_total_amount || "0",
+                        );
+                        const totalNum = parseFloat(
+                          order.display_total_amount || "0",
+                        );
                         const change = Math.max(0, givenNum - totalNum);
                         return (
                           <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg">
@@ -1879,18 +2076,53 @@ export default function OrdersPage() {
                           if (seq.length > 0) return seq;
                         }
                         return [
-                          { _id: "p1", name: "Accepted", position: 1, processColor: "#262626" },
-                          { _id: "p2", name: "Preparing", position: 2, processColor: "#EA9C1B" },
-                          { _id: "p3", name: "Cooking", position: 3, processColor: "#EA9C1B" },
-                          { _id: "p4", name: "Plating", position: 4, processColor: "#EA9C1B" },
-                          { _id: "p5", name: "Ready to deliver", position: 5, processColor: "#FC8019" },
-                          { _id: "p6", name: "Delivered", position: 6, processColor: "#219653" },
+                          {
+                            _id: "p1",
+                            name: "Accepted",
+                            position: 1,
+                            processColor: "#262626",
+                          },
+                          {
+                            _id: "p2",
+                            name: "Preparing",
+                            position: 2,
+                            processColor: "#EA9C1B",
+                          },
+                          {
+                            _id: "p3",
+                            name: "Cooking",
+                            position: 3,
+                            processColor: "#EA9C1B",
+                          },
+                          {
+                            _id: "p4",
+                            name: "Plating",
+                            position: 4,
+                            processColor: "#EA9C1B",
+                          },
+                          {
+                            _id: "p5",
+                            name: "Ready to deliver",
+                            position: 5,
+                            processColor: "#FC8019",
+                          },
+                          {
+                            _id: "p6",
+                            name: "Delivered",
+                            position: 6,
+                            processColor: "#219653",
+                          },
                         ];
                       })();
 
-                      const currentStatusName = (order.orderStatusName || "Accepted").trim().toLowerCase();
+                      const currentStatusName = (
+                        order.orderStatusName || "Accepted"
+                      )
+                        .trim()
+                        .toLowerCase();
                       const currentIdx = sequenceList.findIndex(
-                        (p) => p.name.trim().toLowerCase() === currentStatusName
+                        (p) =>
+                          p.name.trim().toLowerCase() === currentStatusName,
                       );
                       const activeIndex = currentIdx >= 0 ? currentIdx : 0;
 
@@ -1898,7 +2130,7 @@ export default function OrdersPage() {
                         <div className="relative flex flex-col items-center">
                           {/* Main Background Vertical Connector Line */}
                           <div className="absolute top-0 bottom-3 w-1 bg-[#262626] rounded-full" />
-                          
+
                           {/* Green Progress Overlay Line */}
                           {activeIndex > 0 && (
                             <div
@@ -1916,7 +2148,10 @@ export default function OrdersPage() {
                               const isCurrent = idx === activeIndex;
 
                               return (
-                                <div key={step._id || idx} className="flex items-center justify-between w-full">
+                                <div
+                                  key={step._id || idx}
+                                  className="flex items-center justify-between w-full"
+                                >
                                   {/* Left: Timestamp & Date for completed / active steps */}
                                   <div className="w-1/2 text-right pr-6">
                                     {isCompleted ? (
@@ -1983,7 +2218,7 @@ export default function OrdersPage() {
                         Payment type
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        {((paymentModesList && paymentModesList.length > 0)
+                        {(paymentModesList && paymentModesList.length > 0
                           ? paymentModesList
                           : [
                               { _id: "m1", name: "Cash" },
@@ -1994,7 +2229,10 @@ export default function OrdersPage() {
                               { _id: "m6", name: "Wallet" },
                             ]
                         ).map((pm: any) => {
-                          const isSelected = (refundPaymentMode || "Cash").trim().toLowerCase() === pm.name.trim().toLowerCase();
+                          const isSelected =
+                            (refundPaymentMode || "Cash")
+                              .trim()
+                              .toLowerCase() === pm.name.trim().toLowerCase();
                           return (
                             <button
                               key={pm._id || pm.name}
@@ -2022,7 +2260,11 @@ export default function OrdersPage() {
                         className="w-full px-3.5 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#141010] rounded-md focus:border-black focus:ring-black focus:outline-none bg-white"
                         type="number"
                         step="any"
-                        value={refundAmountInput || order.display_total_amount || "0.00"}
+                        value={
+                          refundAmountInput ||
+                          order.display_total_amount ||
+                          "0.00"
+                        }
                         onChange={(e) => setRefundAmountInput(e.target.value)}
                       />
                     </div>
@@ -2133,6 +2375,16 @@ export default function OrdersPage() {
             </div>
           </div>
         )}
+
+        {/* ========================================================================= */}
+        {/* EDIT ORDER SLIDE-OVER DRAWER (PARITY WITH DEFX-POS-FRONTEND)             */}
+        {/* ========================================================================= */}
+        <EditOrderDrawer
+          isOpen={isEditOrderOpen}
+          onClose={() => setIsEditOrderOpen(false)}
+          order={selectedOrderDetails || order}
+          onSuccess={(msg) => showToast(msg)}
+        />
       </PosShell>
     );
   }
@@ -2154,8 +2406,12 @@ export default function OrdersPage() {
         {/* BEGIN: PageTitleArea */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
-            <h1 className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight">Orders</h1>
-            <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal">Manage store orders, filter by channels, and view billing status.</p>
+            <h1 className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight">
+              Orders
+            </h1>
+            <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal">
+              Manage store orders, filter by channels, and view billing status.
+            </p>
           </div>
           {/* Metric summaries badge */}
           <div className="flex items-center gap-3">
@@ -2164,10 +2420,12 @@ export default function OrdersPage() {
                 {appliedPreset === "Today"
                   ? "Today's Gross Sales"
                   : appliedPreset === "Yesterday"
-                  ? "Yesterday's Gross Sales"
-                  : "Gross Sales"}
+                    ? "Yesterday's Gross Sales"
+                    : "Gross Sales"}
               </span>
-              <span className="text-xl font-bold text-[#0c0a09]">{totalGrossSales}</span>
+              <span className="text-xl font-bold text-[#0c0a09]">
+                {totalGrossSales}
+              </span>
             </div>
           </div>
         </div>
@@ -2237,13 +2495,21 @@ export default function OrdersPage() {
                         viewMonth.getFullYear(),
                         viewMonth.getMonth(),
                         true,
-                        false
+                        false,
                       )}
                       {renderMonthCalendar(
-                        new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1).getFullYear(),
-                        new Date(viewMonth.getFullYear(), viewMonth.getMonth() + 1, 1).getMonth(),
+                        new Date(
+                          viewMonth.getFullYear(),
+                          viewMonth.getMonth() + 1,
+                          1,
+                        ).getFullYear(),
+                        new Date(
+                          viewMonth.getFullYear(),
+                          viewMonth.getMonth() + 1,
+                          1,
+                        ).getMonth(),
                         false,
-                        true
+                        true,
                       )}
                     </div>
                   </div>
@@ -2251,7 +2517,8 @@ export default function OrdersPage() {
                   {/* Bottom Footer Bar */}
                   <div className="border-t border-[#e5e7eb] px-4 py-2.5 bg-white flex items-center justify-between">
                     <div className="text-xs font-medium text-stone-700">
-                      {formatDateDisplay(draftStartDate)} - {formatDateDisplay(draftEndDate)}
+                      {formatDateDisplay(draftStartDate)} -{" "}
+                      {formatDateDisplay(draftEndDate)}
                     </div>
                     <div className="flex items-center gap-2.5">
                       <button
@@ -2285,7 +2552,10 @@ export default function OrdersPage() {
                 className="inline-flex items-center justify-between gap-2 min-w-[130px] px-3.5 py-2.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-lg text-xs font-medium text-[#0c0a09] hover:bg-[#f1edec] transition-colors cursor-pointer"
               >
                 <span>
-                  Status: <strong className="font-semibold text-[#0c0a09]">{activeStage === "All" ? "Any" : activeStage}</strong>
+                  Status:{" "}
+                  <strong className="font-semibold text-[#0c0a09]">
+                    {activeStage === "All" ? "Any" : activeStage}
+                  </strong>
                 </span>
                 <ChevronDownIcon
                   className={`w-3.5 h-3.5 text-[#5e5e5e] transition-transform duration-150 ${
@@ -2316,10 +2586,14 @@ export default function OrdersPage() {
                           {stage.name !== "All" && (
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: stage.color || "#262626" }}
+                              style={{
+                                backgroundColor: stage.color || "#262626",
+                              }}
                             />
                           )}
-                          <span>{stage.name === "All" ? "Any" : stage.name}</span>
+                          <span>
+                            {stage.name === "All" ? "Any" : stage.name}
+                          </span>
                         </div>
                         {isSelected && <span className="text-xs">✓</span>}
                       </button>
@@ -2382,7 +2656,10 @@ export default function OrdersPage() {
         {/* END: FilterToolbar */}
 
         {/* BEGIN: PipelineStatusPills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1 text-xs select-none font-sans" data-purpose="status-pipeline">
+        <div
+          className="flex items-center gap-2 overflow-x-auto pb-1 text-xs select-none font-sans"
+          data-purpose="status-pipeline"
+        >
           {pipelineStages.map((stage) => {
             const isActive = activeStage === stage.name;
             const count = statusCounts[stage.name] ?? 0;
@@ -2394,13 +2671,17 @@ export default function OrdersPage() {
                   type="button"
                   onClick={() => setActiveStage("All")}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold shadow-sm flex-shrink-0 cursor-pointer transition-all ${
-                    isActive ? "bg-[#0c0a09] text-white" : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#fdf8f7]"
+                    isActive
+                      ? "bg-[#0c0a09] text-white"
+                      : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#fdf8f7]"
                   }`}
                 >
                   <span>All</span>
                   <span
                     className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${
-                      isActive ? "bg-white/20 text-white" : "bg-[#f1edec] text-[#5e5e5e]"
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-[#f1edec] text-[#5e5e5e]"
                     }`}
                   >
                     {count}
@@ -2425,7 +2706,9 @@ export default function OrdersPage() {
                   style={{ backgroundColor: stage.color || "#262626" }}
                 />
                 <span>{stage.name}</span>
-                <span className={`text-[11px] ${isActive ? "font-semibold text-[#0c0a09]" : "text-[#5e5e5e]"}`}>
+                <span
+                  className={`text-[11px] ${isActive ? "font-semibold text-[#0c0a09]" : "text-[#5e5e5e]"}`}
+                >
                   ({count})
                 </span>
               </button>
@@ -2435,7 +2718,10 @@ export default function OrdersPage() {
         {/* END: PipelineStatusPills */}
 
         {/* BEGIN: OrdersTableCard */}
-        <section className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-hidden font-sans" data-purpose="orders-table-container">
+        <section
+          className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-hidden font-sans"
+          data-purpose="orders-table-container"
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               {/* Table Header */}
@@ -2443,7 +2729,9 @@ export default function OrdersPage() {
                 <tr className="border-b border-[#e7e5e4] bg-[#fdf8f7] text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
                   <th className="py-3 px-5 font-semibold">Order Number</th>
                   <th className="py-3 px-5 font-semibold">Order Status</th>
-                  <th className="py-3 px-5 font-semibold">Customer Name / Phone Number</th>
+                  <th className="py-3 px-5 font-semibold">
+                    Customer Name / Phone Number
+                  </th>
                   <th className="py-3 px-5 font-semibold">Order Type</th>
                   <th
                     className="py-3 px-5 font-semibold cursor-pointer hover:text-[#0c0a09]"
@@ -2472,8 +2760,13 @@ export default function OrdersPage() {
                 {displayedOrders.length > 0 ? (
                   displayedOrders.map((order) => {
                     const isPaid = order.paymentStatus === "Paid";
-                    const isCod = (order.paymentMode || "").toLowerCase().includes("cash") && !isPaid;
-                    const orderDateStr = new Date(order.createdAt).toLocaleString("en-IN", {
+                    const isCod =
+                      (order.paymentMode || "")
+                        .toLowerCase()
+                        .includes("cash") && !isPaid;
+                    const orderDateStr = new Date(
+                      order.createdAt,
+                    ).toLocaleString("en-IN", {
                       day: "2-digit",
                       month: "2-digit",
                       year: "numeric",
@@ -2483,19 +2776,29 @@ export default function OrdersPage() {
                     });
 
                     // Format relative time
-                    const diffMins = Math.max(1, Math.round((Date.now() - order.createdAt) / 60000));
-                    const timeAgoText = diffMins < 60 ? `${diffMins} mins ago` : `${Math.round(diffMins / 60)}h ago`;
+                    const diffMins = Math.max(
+                      1,
+                      Math.round((Date.now() - order.createdAt) / 60000),
+                    );
+                    const timeAgoText =
+                      diffMins < 60
+                        ? `${diffMins} mins ago`
+                        : `${Math.round(diffMins / 60)}h ago`;
 
                     return (
                       <tr
                         key={order._id}
-                        onClick={() => setSelectedOrderId(order._id)}
+                        onClick={() => router.push(`/orders/${order._id}`)}
                         className="hover:bg-[#fdf8f7] transition-colors group cursor-pointer"
                       >
                         {/* 1. Order Number */}
                         <td className="py-4 px-5 text-[#0c0a09]">
                           <button
                             type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              router.push(`/orders/${order._id}`);
+                            }}
                             className="text-[#0c0a09] group-hover:text-amber-800 font-semibold cursor-pointer text-left"
                           >
                             {order.orderNumber}
@@ -2509,20 +2812,26 @@ export default function OrdersPage() {
                         <td className="py-4 px-5">
                           {(() => {
                             const matchedStage = pipelineStages.find(
-                              (st) => st.name.toLowerCase() === (order.orderStatusName || "").toLowerCase()
+                              (st) =>
+                                st.name.toLowerCase() ===
+                                (order.orderStatusName || "").toLowerCase(),
                             );
                             const dotColor =
                               matchedStage?.color ||
-                              (order.orderStatusName === "Cancelled" || order.isRejected
+                              (order.orderStatusName === "Cancelled" ||
+                              order.isRejected
                                 ? "#e11d48"
-                                : order.orderStatusName === "Completed" || order.isCompleted
-                                ? "#219653"
-                                : "#262626");
+                                : order.orderStatusName === "Completed" ||
+                                    order.isCompleted
+                                  ? "#219653"
+                                  : "#262626");
                             return (
                               <span className="inline-flex items-center gap-1.5 font-medium text-[#0c0a09]">
                                 <span
                                   className={`w-2 h-2 rounded-full shrink-0 ${
-                                    order.orderStatusName === "In progress" ? "animate-pulse" : ""
+                                    order.orderStatusName === "In progress"
+                                      ? "animate-pulse"
+                                      : ""
                                   }`}
                                   style={{ backgroundColor: dotColor }}
                                 />
@@ -2535,9 +2844,15 @@ export default function OrdersPage() {
                         {/* 3. Customer Name / Phone */}
                         <td className="py-4 px-5">
                           <div className="font-medium text-[#0c0a09]">
-                            {order.customerName || <span className="italic text-[#5e5e5e]">Walk-in Customer</span>}
+                            {order.customerName || (
+                              <span className="italic text-[#5e5e5e]">
+                                Walk-in Customer
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[12px] text-[#5e5e5e]">{order.customerPhone || "-"}</div>
+                          <div className="text-[12px] text-[#5e5e5e]">
+                            {order.customerPhone || "-"}
+                          </div>
                         </td>
 
                         {/* 4. Order Type */}
@@ -2547,7 +2862,9 @@ export default function OrdersPage() {
                             {order.table && (
                               <>
                                 <span className="text-[#5e5e5e]">•</span>
-                                <span className="font-semibold text-[#0c0a09]">Table {order.table.number}</span>
+                                <span className="font-semibold text-[#0c0a09]">
+                                  Table {order.table.number}
+                                </span>
                               </>
                             )}
                           </div>
@@ -2555,16 +2872,20 @@ export default function OrdersPage() {
 
                         {/* 5. Date & Time */}
                         <td className="py-4 px-5">
-                          <div className="text-[#0c0a09] font-medium">{orderDateStr}</div>
-                          <div className="text-[11px] text-[#5e5e5e]">{timeAgoText}</div>
+                          <div className="text-[#0c0a09] font-medium">
+                            {orderDateStr}
+                          </div>
+                          <div className="text-[11px] text-[#5e5e5e]">
+                            {timeAgoText}
+                          </div>
                         </td>
 
                         {/* 6. Payment Status */}
                         <td className="py-4 px-5">
                           {isPaid ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckmarkIcon className="w-3 h-3" />
-                              ₹{order.display_total_amount} Paid
+                              <CheckmarkIcon className="w-3 h-3" />₹
+                              {order.display_total_amount} Paid
                             </span>
                           ) : isCod ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
@@ -2588,8 +2909,12 @@ export default function OrdersPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-[#5e5e5e] text-xs">
-                      No orders found matching the current search and filter criteria.
+                    <td
+                      colSpan={7}
+                      className="py-12 text-center text-[#5e5e5e] text-xs"
+                    >
+                      No orders found matching the current search and filter
+                      criteria.
                     </td>
                   </tr>
                 )}
@@ -2603,8 +2928,17 @@ export default function OrdersPage() {
             data-purpose="table-pagination"
           >
             <div className="text-xs text-[#5e5e5e]">
-              Showing <strong className="text-[#0c0a09] font-semibold">{totalOrdersCount === 0 ? "0" : `${startOrderCount}–${endOrderCount}`}</strong> of{" "}
-              <strong className="text-[#0c0a09] font-semibold">{totalOrdersCount}</strong> Orders
+              Showing{" "}
+              <strong className="text-[#0c0a09] font-semibold">
+                {totalOrdersCount === 0
+                  ? "0"
+                  : `${startOrderCount}–${endOrderCount}`}
+              </strong>{" "}
+              of{" "}
+              <strong className="text-[#0c0a09] font-semibold">
+                {totalOrdersCount}
+              </strong>{" "}
+              Orders
             </div>
             <div className="flex items-center gap-1.5">
               {/* Previous Button */}
@@ -2618,29 +2952,33 @@ export default function OrdersPage() {
               </button>
 
               {/* Dynamic Page Numbers */}
-              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => {
-                const isCurrent = pageNum === currentPage;
-                return (
-                  <button
-                    key={pageNum}
-                    type="button"
-                    onClick={() => setCurrentPage(pageNum)}
-                    className={`w-8 h-8 flex items-center justify-center text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                      isCurrent
-                        ? "bg-[#0c0a09] text-white"
-                        : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#fdf8f7]"
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
+              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(
+                (pageNum) => {
+                  const isCurrent = pageNum === currentPage;
+                  return (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`w-8 h-8 flex items-center justify-center text-xs font-semibold rounded-md transition-colors cursor-pointer ${
+                        isCurrent
+                          ? "bg-[#0c0a09] text-white"
+                          : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#fdf8f7]"
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                },
+              )}
 
               {/* Next Button */}
               <button
                 type="button"
                 disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 className="px-3 py-1.5 text-xs font-medium text-[#0c0a09] bg-white border border-[#e7e5e4] rounded-md hover:bg-[#fdf8f7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Next

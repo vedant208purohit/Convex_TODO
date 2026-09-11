@@ -314,7 +314,7 @@ export async function requireMember(
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id, identity.email);
+  let callerMember = await getCallerMembership(ctx, identity.subject, org._id, identity.email);
 
   const allMembers = await ctx.db
     .query("organizationUsers")
@@ -326,6 +326,22 @@ export async function requireMember(
   const isTokenAdmin = isAdminRole(tokenRole);
 
   const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject || nonDeletedMembers.length === 0 || isTokenAdmin;
+
+  if (!callerMember && isOwnerOrUnowned && "insert" in ctx.db) {
+    const now = Date.now();
+    const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
+      organizationId: org._id,
+      userId: identity.subject,
+      email: identity.email,
+      userType: ["admin"],
+      userPermission: {
+        admin: { create: true, read: true, update: true, delete: true },
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+    callerMember = await ctx.db.get(newId);
+  }
 
   if (!callerMember && !isOwnerOrUnowned) {
     throw new Error("Forbidden. Active store membership required.");
