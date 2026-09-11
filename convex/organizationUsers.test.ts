@@ -627,4 +627,275 @@ describe("Organization Users Domain Unit & Business Logic Tests", () => {
       })
     ).rejects.toThrow("Forbidden. Admin access required.");
   });
+
+  // 23. Role Synchronization: cashier -> admin grants elevated permissions
+  test("23. syncStaffFromMaster updates role from cashier to admin and grants admin permissions", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const orgToken = await generateHmacSha256(TEST_SECRET, `role-sync-bistro:${now}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Role Sync Bistro",
+      slug: "role-sync-bistro",
+      ownerClerkId: "user_owner_role_sync",
+      timestamp: now,
+      provisioningToken: orgToken,
+    });
+
+    // 1. Initially provision as cashier
+    const token1 = await generateHmacSha256(TEST_SECRET, `role-sync-bistro:${now}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "role-sync-bistro",
+      provisioningToken: token1,
+      timestamp: now,
+      defaultClerkId: "user_clerk_promo_1",
+      role: "cashier",
+    });
+
+    // 2. Promote to admin
+    const token2 = await generateHmacSha256(TEST_SECRET, `role-sync-bistro:${now + 1000}`);
+    const updateRes = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "role-sync-bistro",
+      provisioningToken: token2,
+      timestamp: now + 1000,
+      defaultClerkId: "user_clerk_promo_1",
+      role: "admin",
+    });
+
+    expect(updateRes.isExisting).toBe(true);
+
+    const asUser = t.withIdentity({ subject: "user_clerk_promo_1" });
+    const member = await asUser.query(api.organizationUsers.getByUserId, {
+      userId: "user_clerk_promo_1",
+      organizationId: orgId,
+    });
+
+    expect(member?.userType).toEqual(["admin"]);
+    expect(member?.userPermission?.admin?.create).toBe(true);
+    expect(member?.userPermission?.admin?.delete).toBe(true);
+    // Old cashier permission pruned
+    expect(member?.userPermission?.cashier).toBeUndefined();
+  });
+
+  // 24. Role Synchronization: admin -> cashier prunes elevated permissions
+  test("24. syncStaffFromMaster demotes admin to cashier and prunes admin permissions", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const orgToken = await generateHmacSha256(TEST_SECRET, `demote-bistro:${now}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Demote Bistro",
+      slug: "demote-bistro",
+      ownerClerkId: "user_owner_demote",
+      timestamp: now,
+      provisioningToken: orgToken,
+    });
+
+    // 1. Initially provision as admin
+    const token1 = await generateHmacSha256(TEST_SECRET, `demote-bistro:${now}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "demote-bistro",
+      provisioningToken: token1,
+      timestamp: now,
+      defaultClerkId: "user_clerk_demote_1",
+      role: "admin",
+    });
+
+    // 2. Demote to cashier
+    const token2 = await generateHmacSha256(TEST_SECRET, `demote-bistro:${now + 1000}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "demote-bistro",
+      provisioningToken: token2,
+      timestamp: now + 1000,
+      defaultClerkId: "user_clerk_demote_1",
+      role: "cashier",
+    });
+
+    const asUser = t.withIdentity({ subject: "user_clerk_demote_1" });
+    const member = await asUser.query(api.organizationUsers.getByUserId, {
+      userId: "user_clerk_demote_1",
+      organizationId: orgId,
+    });
+
+    expect(member?.userType).toEqual(["cashier"]);
+    expect(member?.userPermission?.cashier?.read).toBe(true);
+    // Admin permissions strictly deleted
+    expect(member?.userPermission?.admin).toBeUndefined();
+  });
+
+  // 25. Role Synchronization: chef -> waiter
+  test("25. syncStaffFromMaster changes chef to waiter", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const orgToken = await generateHmacSha256(TEST_SECRET, `kitchen-bistro:${now}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Kitchen Bistro",
+      slug: "kitchen-bistro",
+      ownerClerkId: "user_owner_kitchen",
+      timestamp: now,
+      provisioningToken: orgToken,
+    });
+
+    const token1 = await generateHmacSha256(TEST_SECRET, `kitchen-bistro:${now}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "kitchen-bistro",
+      provisioningToken: token1,
+      timestamp: now,
+      defaultClerkId: "user_clerk_kitchen_1",
+      role: "chef",
+    });
+
+    const token2 = await generateHmacSha256(TEST_SECRET, `kitchen-bistro:${now + 1000}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "kitchen-bistro",
+      provisioningToken: token2,
+      timestamp: now + 1000,
+      defaultClerkId: "user_clerk_kitchen_1",
+      role: "waiter",
+    });
+
+    const asUser = t.withIdentity({ subject: "user_clerk_kitchen_1" });
+    const member = await asUser.query(api.organizationUsers.getByUserId, {
+      userId: "user_clerk_kitchen_1",
+      organizationId: orgId,
+    });
+
+    expect(member?.userType).toEqual(["waiter"]);
+    expect(member?.userPermission?.waiter).toBeDefined();
+    expect(member?.userPermission?.chef).toBeUndefined();
+  });
+
+  // 26. Role Synchronization: waiter -> captain
+  test("26. syncStaffFromMaster changes waiter to captain", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const orgToken = await generateHmacSha256(TEST_SECRET, `floor-bistro:${now}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Floor Bistro",
+      slug: "floor-bistro",
+      ownerClerkId: "user_owner_floor",
+      timestamp: now,
+      provisioningToken: orgToken,
+    });
+
+    const token1 = await generateHmacSha256(TEST_SECRET, `floor-bistro:${now}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "floor-bistro",
+      provisioningToken: token1,
+      timestamp: now,
+      defaultClerkId: "user_clerk_floor_1",
+      role: "waiter",
+    });
+
+    const token2 = await generateHmacSha256(TEST_SECRET, `floor-bistro:${now + 1000}`);
+    await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "floor-bistro",
+      provisioningToken: token2,
+      timestamp: now + 1000,
+      defaultClerkId: "user_clerk_floor_1",
+      role: "captain",
+    });
+
+    const asUser = t.withIdentity({ subject: "user_clerk_floor_1" });
+    const member = await asUser.query(api.organizationUsers.getByUserId, {
+      userId: "user_clerk_floor_1",
+      organizationId: orgId,
+    });
+
+    expect(member?.userType).toEqual(["captain"]);
+    expect(member?.userPermission?.captain).toBeDefined();
+    expect(member?.userPermission?.waiter).toBeUndefined();
+  });
+
+  // 27. Repeated role synchronization is idempotent
+  test("27. Repeated role synchronization with identical role is idempotent", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const orgToken = await generateHmacSha256(TEST_SECRET, `idem-bistro:${now}`);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Idem Bistro",
+      slug: "idem-bistro",
+      ownerClerkId: "user_owner_idem",
+      timestamp: now,
+      provisioningToken: orgToken,
+    });
+
+    const token1 = await generateHmacSha256(TEST_SECRET, `idem-bistro:${now}`);
+    const res1 = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "idem-bistro",
+      provisioningToken: token1,
+      timestamp: now,
+      defaultClerkId: "user_clerk_idem_1",
+      role: "cashier",
+    });
+
+    const token2 = await generateHmacSha256(TEST_SECRET, `idem-bistro:${now + 1000}`);
+    const res2 = await t.mutation(api.organizationUsers.syncStaffFromMaster, {
+      slug: "idem-bistro",
+      provisioningToken: token2,
+      timestamp: now + 1000,
+      defaultClerkId: "user_clerk_idem_1",
+      role: "cashier",
+    });
+
+    expect(res1.id).toBe(res2.id);
+    expect(res2.isExisting).toBe(true);
+
+    const asOwner = t.withIdentity({ subject: "user_owner_idem" });
+    const allMembers = await asOwner.query(api.organizationUsers.list, {
+      organizationId: orgId,
+    });
+    // Exactly 1 record for this staff member (plus the 1 auto-created owner)
+    const staffMembers = allMembers.filter((m) => m.userId === "user_clerk_idem_1");
+    expect(staffMembers.length).toBe(1);
+  });
+
+  // 28. Rejects cross-store slug mismatch
+  test("28. Rejects cross-store slug mismatch during synchronization", async () => {
+    const TEST_SECRET = "test-provisioning-secret-key-12345";
+    process.env.PROVISIONING_SECRET = TEST_SECRET;
+
+    const t = convexTest(schema, modules);
+    const now = Date.now();
+    const orgToken = await generateHmacSha256(TEST_SECRET, `store-alpha:${now}`);
+
+    await t.mutation(api.organizations.create, {
+      name: "Store Alpha",
+      slug: "store-alpha",
+      ownerClerkId: "user_owner_alpha",
+      timestamp: now,
+      provisioningToken: orgToken,
+    });
+
+    // Token signed for store-beta, but target store is store-alpha
+    const badToken = await generateHmacSha256(TEST_SECRET, `store-beta:${now}`);
+
+    await expect(
+      t.mutation(api.organizationUsers.syncStaffFromMaster, {
+        slug: "store-beta",
+        provisioningToken: badToken,
+        timestamp: now,
+        defaultClerkId: "user_clerk_cross_1",
+        role: "cashier",
+      })
+    ).rejects.toThrow('Store slug mismatch: target store "store-alpha" does not match provisioning token slug "store-beta".');
+  });
 });
