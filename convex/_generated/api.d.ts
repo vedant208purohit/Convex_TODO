@@ -21,6 +21,7 @@ import type * as organizationFeatures from "../organizationFeatures.js";
 import type * as organizationLanguages from "../organizationLanguages.js";
 import type * as organizationLayouts from "../organizationLayouts.js";
 import type * as organizationOrderProcesses from "../organizationOrderProcesses.js";
+import type * as organizationPaymentModes from "../organizationPaymentModes.js";
 import type * as organizationPrinters from "../organizationPrinters.js";
 import type * as organizationQrCodes from "../organizationQrCodes.js";
 import type * as organizationQueueConfigurations from "../organizationQueueConfigurations.js";
@@ -54,6 +55,7 @@ declare const fullApi: ApiFromModules<{
   organizationLanguages: typeof organizationLanguages;
   organizationLayouts: typeof organizationLayouts;
   organizationOrderProcesses: typeof organizationOrderProcesses;
+  organizationPaymentModes: typeof organizationPaymentModes;
   organizationPrinters: typeof organizationPrinters;
   organizationQrCodes: typeof organizationQrCodes;
   organizationQueueConfigurations: typeof organizationQueueConfigurations;

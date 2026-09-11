@@ -9,10 +9,20 @@ import { OrderProcessesView } from "../components/order-processes/OrderProcesses
 import { OrganizationEmployees } from "../components/OrganizationEmployees";
 import { OrganizationFeatures } from "../components/OrganizationFeatures";
 import { OrganizationWaiters } from "../components/OrganizationWaiters";
+import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
 // ==========================================
+
+function PaymentIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="20" height="14" x="2" y="5" rx="2" />
+      <line x1="2" x2="22" y1="10" y2="10" />
+    </svg>
+  );
+}
 
 function OrganizationIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -121,6 +131,7 @@ type SettingsTab =
   | "staff"
   | "waiters"
   | "orderProcesses"
+  | "payment"
   | "tables"
   | "qrCodes"
   | "liveScreens";
@@ -138,6 +149,7 @@ const SETTINGS_TABS: SettingsNavOption[] = [
   { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
   { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
   { id: "orderProcesses", label: "Order Processes", icon: <OrderProcessesIcon className="w-4 h-4" /> },
+  { id: "payment", label: "Payment", icon: <PaymentIcon className="w-4 h-4" /> },
   { id: "tables", label: "Tables & Layouts", icon: <TablesIcon className="w-4 h-4" /> },
   { id: "qrCodes", label: "QR Codes", icon: <QrCodesIcon className="w-4 h-4" /> },
   { id: "liveScreens", label: "Live Screens", icon: <LiveScreensIcon className="w-4 h-4" /> },
@@ -221,12 +233,14 @@ function SettingsContent() {
             {activeTab === "staff" && <OrganizationEmployees />}
             {activeTab === "waiters" && <OrganizationWaiters />}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
+            {activeTab === "payment" && <OrganizationPaymentModes />}
             {activeTab !== "organization" &&
               activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
-              activeTab !== "waiters" && (
+              activeTab !== "waiters" &&
+              activeTab !== "payment" && (
               <div className="py-12 text-center">
                 <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                   {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}
