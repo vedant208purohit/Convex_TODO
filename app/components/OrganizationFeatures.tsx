@@ -339,8 +339,9 @@ export function OrganizationFeatures() {
   // Generic Billing Type Toggle with minimum 1 payment mode guard per service mode
   const handleBillingTypeToggle = async (targetKey: string, oppositeKey: string) => {
     if (!org?._id) return;
-    const currentTarget = Boolean(org[targetKey]);
-    const currentOpposite = Boolean(org[oppositeKey]);
+    const orgRecord = org as Record<string, any>;
+    const currentTarget = Boolean(orgRecord[targetKey]);
+    const currentOpposite = Boolean(orgRecord[oppositeKey]);
 
     if (currentTarget && !currentOpposite) {
       showToast("At least one payment mode must remain enabled.", "error");
