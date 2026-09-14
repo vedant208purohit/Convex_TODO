@@ -247,7 +247,7 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireAuth } from "./organizationUsers";
+import { requireAuth, requireMember, requireAdmin } from "./organizationUsers";
 import { initializeDefaultsHelper } from "./organizationFeatures";
 import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
 import { resolveAssetOrStorageUrl } from "./assetResolver";
@@ -347,6 +347,26 @@ function stripSecrets(org: Doc<"organizations"> | null) {
   if (!org) return null;
   const { whatsappAccessToken, razorPayApiKey, stripeSecretKey, ...safeOrg } = org;
   return safeOrg;
+}
+
+// Helper: URL Validation & Normalization
+export function validateOptionalUrl(url?: string): string | undefined {
+  if (url === undefined) return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("Invalid URL protocol. Must start with http:// or https://");
+    }
+    return trimmed;
+  } catch (err: any) {
+    if (err.message && err.message.includes("Invalid URL protocol")) {
+      throw err;
+    }
+    throw new Error(`Invalid URL format: ${url}`);
+  }
 }
 
 // Helper: Country-Specific Phone Validation & Normalization
@@ -684,6 +704,56 @@ export const getWithSecrets = query({
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
     return await ctx.db.get(normalizedId);
+  },
+});
+
+/**
+ * Fetches the Digital Store / Online Storefront configuration for an organization.
+ * - Authenticates the caller.
+ * - Verifies caller's active organization membership.
+ * - Resolves aboutUsImageUrl from Convex storage if aboutUsImageStorageId is set.
+ * - Safe response: Never exposes sensitive payment secrets, bot tokens, or credentials.
+ */
+export const getDigitalStore = query({
+  args: {
+    id: v.optional(v.union(v.id("organizations"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    let orgId: Id<"organizations"> | undefined;
+    if (args.id && args.id.trim() !== "") {
+      const normalizedId = ctx.db.normalizeId("organizations", args.id);
+      if (!normalizedId) return null;
+      orgId = normalizedId;
+    }
+
+    const { org } = await requireMember(ctx, orgId);
+    if (!org || org.deletedAt !== undefined) {
+      return null;
+    }
+
+    let resolvedImageUrl: string | null = org.aboutUsImageUrl ?? null;
+    if (org.aboutUsImageStorageId) {
+      try {
+        const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
+        if (storageUrl) {
+          resolvedImageUrl = storageUrl;
+        }
+      } catch {
+        // Storage fallback
+      }
+    }
+
+    return {
+      digitalStoreStatus: org.digitalStoreStatus ?? false,
+      aboutUsContent: org.aboutUsContent ?? null,
+      facebookAccountLink: org.facebookAccountLink ?? null,
+      instagramAccountLink: org.instagramAccountLink ?? null,
+      policyLink: org.policyLink ?? null,
+      refundLink: org.refundLink ?? null,
+      termAndConditionLink: org.termAndConditionLink ?? null,
+      aboutUsImageStorageId: org.aboutUsImageStorageId ?? null,
+      aboutUsImageUrl: resolvedImageUrl,
+    };
   },
 });
 
@@ -1283,6 +1353,16 @@ export const update = mutation({
     isVeg: v.optional(v.boolean()),
     digitalStoreStatus: v.optional(v.boolean()),
 
+    // Digital Store Configuration
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
+
     // Payment Flags
     deliveryCashOnDelivery: v.optional(v.boolean()),
     dineinPrepaid: v.optional(v.boolean()),
@@ -1349,6 +1429,23 @@ export const update = mutation({
     if (updates.phone !== undefined) {
       const targetCountry = updates.country ?? existing.country;
       updates.phone = validatePhoneWithCountryCode(updates.phone, targetCountry);
+    }
+
+    // 3b. Digital Store Social & Legal URL Validations if updated
+    if (updates.facebookAccountLink !== undefined) {
+      updates.facebookAccountLink = validateOptionalUrl(updates.facebookAccountLink);
+    }
+    if (updates.instagramAccountLink !== undefined) {
+      updates.instagramAccountLink = validateOptionalUrl(updates.instagramAccountLink);
+    }
+    if (updates.policyLink !== undefined) {
+      updates.policyLink = validateOptionalUrl(updates.policyLink);
+    }
+    if (updates.refundLink !== undefined) {
+      updates.refundLink = validateOptionalUrl(updates.refundLink);
+    }
+    if (updates.termAndConditionLink !== undefined) {
+      updates.termAndConditionLink = validateOptionalUrl(updates.termAndConditionLink);
     }
 
     // 4. Operating Hours Normalization & Overlap Validation if updated
@@ -1469,6 +1566,108 @@ export const update = mutation({
         updatedAt: Date.now(),
       });
     }
+  },
+});
+
+/**
+ * Updates the Digital Store / Online Storefront configuration for an organization.
+ * - Requires Store Admin or Owner role.
+ * - Validates URL formats for social/legal links.
+ * - Preserves unsupplied fields (partial update semantics).
+ * - Resolves updated storage URL for response.
+ */
+export const updateDigitalStore = mutation({
+  args: {
+    id: v.optional(v.union(v.id("organizations"), v.string())),
+    digitalStoreStatus: v.optional(v.boolean()),
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let orgId: Id<"organizations"> | undefined;
+    if (args.id && args.id.trim() !== "") {
+      const normalizedId = ctx.db.normalizeId("organizations", args.id);
+      if (!normalizedId) {
+        throw new Error("Organization not found");
+      }
+      orgId = normalizedId;
+    }
+
+    const { org } = await requireAdmin(ctx, orgId);
+
+    const updates: Record<string, any> = {};
+
+    if (args.digitalStoreStatus !== undefined) {
+      updates.digitalStoreStatus = args.digitalStoreStatus;
+    }
+
+    if (args.aboutUsContent !== undefined) {
+      updates.aboutUsContent = args.aboutUsContent;
+    }
+
+    if (args.facebookAccountLink !== undefined) {
+      updates.facebookAccountLink = validateOptionalUrl(args.facebookAccountLink);
+    }
+
+    if (args.instagramAccountLink !== undefined) {
+      updates.instagramAccountLink = validateOptionalUrl(args.instagramAccountLink);
+    }
+
+    if (args.policyLink !== undefined) {
+      updates.policyLink = validateOptionalUrl(args.policyLink);
+    }
+
+    if (args.refundLink !== undefined) {
+      updates.refundLink = validateOptionalUrl(args.refundLink);
+    }
+
+    if (args.termAndConditionLink !== undefined) {
+      updates.termAndConditionLink = validateOptionalUrl(args.termAndConditionLink);
+    }
+
+    if (args.aboutUsImageStorageId !== undefined) {
+      updates.aboutUsImageStorageId = args.aboutUsImageStorageId;
+    }
+
+    if (args.aboutUsImageUrl !== undefined) {
+      updates.aboutUsImageUrl = args.aboutUsImageUrl;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = Date.now();
+      await ctx.db.patch(org._id, updates);
+    }
+
+    const updatedOrg = await ctx.db.get(org._id);
+    let resolvedImageUrl: string | null = updatedOrg?.aboutUsImageUrl ?? null;
+    if (updatedOrg?.aboutUsImageStorageId) {
+      try {
+        const storageUrl = await ctx.storage.getUrl(updatedOrg.aboutUsImageStorageId);
+        if (storageUrl) {
+          resolvedImageUrl = storageUrl;
+        }
+      } catch {
+        // Storage fallback
+      }
+    }
+
+    return {
+      digitalStoreStatus: updatedOrg?.digitalStoreStatus ?? false,
+      aboutUsContent: updatedOrg?.aboutUsContent ?? null,
+      facebookAccountLink: updatedOrg?.facebookAccountLink ?? null,
+      instagramAccountLink: updatedOrg?.instagramAccountLink ?? null,
+      policyLink: updatedOrg?.policyLink ?? null,
+      refundLink: updatedOrg?.refundLink ?? null,
+      termAndConditionLink: updatedOrg?.termAndConditionLink ?? null,
+      aboutUsImageStorageId: updatedOrg?.aboutUsImageStorageId ?? null,
+      aboutUsImageUrl: resolvedImageUrl,
+    };
   },
 });
 

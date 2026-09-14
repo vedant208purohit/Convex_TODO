@@ -110,6 +110,16 @@ export default defineSchema({
     isVeg: v.boolean(),
     digitalStoreStatus: v.boolean(),
 
+    // Digital Store Configuration
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
+
     // Payment Configuration
     deliveryCashOnDelivery: v.boolean(),
     dineinPrepaid: v.boolean(),
