@@ -1,6 +1,7 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
+import { requireProvisioningAuth } from "./organizations";
 
 // ----------------------------------------------------
 // VALID USER TYPES & DEFAULT PERMISSIONS
@@ -699,5 +700,127 @@ export const remove = mutation({
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Server-to-server provisioning mutation: Synchronizes staff from Master POS into this store's Convex deployment.
+ * Authenticated via PROVISIONING_SECRET HMAC SHA-256 token.
+ */
+export const syncStaffFromMaster = mutation({
+  args: {
+    // Provisioning Authentication Guard
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
+
+    // Store & Organization Identifiers
+    slug: v.string(),
+    organizationId: v.optional(v.id("organizations")),
+
+    // Staff Identity & Profile from Master
+    defaultClerkId: v.string(), // Default Clerk B User ID (persisted as userId)
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+
+    // Master Role & Permissions
+    role: v.string(),
+    userType: v.optional(v.array(v.string())),
+    userPermission: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    // 1. Authenticate Master -> Store Server Request via HMAC SHA-256
+    await requireProvisioningAuth(ctx, {
+      slug: args.slug,
+      provisioningToken: args.provisioningToken,
+      timestamp: args.timestamp,
+    });
+
+    // 2. Resolve Store Organization
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    // 3. Prevent Cross-Store Target Mismatch
+    if (org.slug !== args.slug) {
+      throw new Error(
+        `Store slug mismatch: target store "${org.slug}" does not match provisioning token slug "${args.slug}".`
+      );
+    }
+
+    if (!args.defaultClerkId || !args.defaultClerkId.trim()) {
+      throw new Error("Default Clerk User ID is required for staff synchronization.");
+    }
+
+    const defaultClerkId = args.defaultClerkId.trim();
+
+    // 4. Normalize Roles & Permissions
+    const rawTypes =
+      args.userType && args.userType.length > 0
+        ? args.userType
+        : [args.role.trim().toLowerCase()];
+    const normalizedTypes = validateAndNormalizeUserTypes(rawTypes);
+    const finalPermissions = syncPermissions(normalizedTypes, args.userPermission);
+
+    const now = Date.now();
+
+    // 5. Check if Member already exists in this store
+    const existingMember = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user_and_org", (q) =>
+        q.eq("userId", defaultClerkId).eq("organizationId", org._id)
+      )
+      .first();
+
+    if (existingMember) {
+      // Idempotent Update / Reactivation
+      const patchData: Record<string, any> = {
+        userType: normalizedTypes,
+        userPermission: finalPermissions,
+        updatedAt: now,
+      };
+
+      if (args.firstName !== undefined) patchData.firstName = args.firstName.trim();
+      if (args.lastName !== undefined) patchData.lastName = args.lastName.trim();
+      if (args.email !== undefined) patchData.email = args.email.trim();
+      if (args.phone !== undefined) patchData.phone = args.phone.trim();
+      if (args.avatarUrl !== undefined) patchData.avatarUrl = args.avatarUrl.trim();
+
+      // Restore if soft-deleted
+      if (existingMember.deletedAt !== undefined) {
+        patchData.deletedAt = undefined;
+      }
+
+      await ctx.db.patch(existingMember._id, patchData);
+
+      return {
+        success: true,
+        id: existingMember._id,
+        isExisting: true,
+        wasReactivated: existingMember.deletedAt !== undefined,
+      };
+    }
+
+    // 6. Create New OrganizationUser
+    const newId = await ctx.db.insert("organizationUsers", {
+      organizationId: org._id,
+      userId: defaultClerkId,
+      ...(args.firstName !== undefined ? { firstName: args.firstName.trim() } : {}),
+      ...(args.lastName !== undefined ? { lastName: args.lastName.trim() } : {}),
+      ...(args.email !== undefined ? { email: args.email.trim() } : {}),
+      ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
+      ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
+      userType: normalizedTypes,
+      userPermission: finalPermissions,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      id: newId,
+      isExisting: false,
+      wasReactivated: false,
+    };
   },
 });
