@@ -9,6 +9,7 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as digitalStoreImages from "../digitalStoreImages.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
 import type * as migrateStorageToR2 from "../migrateStorageToR2.js";
@@ -43,6 +44,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  digitalStoreImages: typeof digitalStoreImages;
   inventory: typeof inventory;
   menu: typeof menu;
   migrateStorageToR2: typeof migrateStorageToR2;
