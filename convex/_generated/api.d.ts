@@ -11,6 +11,7 @@
 import type * as assetResolver from "../assetResolver.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
+import type * as menuImport from "../menuImport.js";
 import type * as migrateStorageToR2 from "../migrateStorageToR2.js";
 import type * as migrateStorageToR2Db from "../migrateStorageToR2Db.js";
 import type * as orderPayments from "../orderPayments.js";
@@ -47,6 +48,7 @@ declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
   inventory: typeof inventory;
   menu: typeof menu;
+  menuImport: typeof menuImport;
   migrateStorageToR2: typeof migrateStorageToR2;
   migrateStorageToR2Db: typeof migrateStorageToR2Db;
   orderPayments: typeof orderPayments;
