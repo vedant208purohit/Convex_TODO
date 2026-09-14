@@ -636,10 +636,10 @@ export function OrganizationEmployees() {
   const selectedModules = formRoles.filter((m) => MODULE_ACCESS_CARDS.some((c) => c.key === m));
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1 min-h-0 h-full space-y-4">
       {/* Toast Feedback Alerts */}
       {successMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-3 text-xs text-emerald-800 shadow-sm animate-fade-in">
+        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-3 text-xs text-emerald-800 shadow-sm animate-fade-in shrink-0">
           <div className="flex items-center gap-2">
             <span>✓</span>
             <span className="font-medium">{successMessage}</span>
@@ -651,7 +651,7 @@ export function OrganizationEmployees() {
       )}
 
       {errorMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-5 py-3 text-xs text-red-800 shadow-sm animate-fade-in">
+        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-5 py-3 text-xs text-red-800 shadow-sm animate-fade-in shrink-0">
           <div className="flex items-center gap-2">
             <span>⚠️</span>
             <span className="font-medium">{errorMessage}</span>
@@ -663,7 +663,7 @@ export function OrganizationEmployees() {
       )}
 
       {/* TOP HEADER SECTION */}
-      <div className="space-y-4">
+      <div className="space-y-4 shrink-0">
         {/* Title & Subtitle */}
         <div className="border-b border-[#e7e5e4] pb-4">
           <h2 className="font-garamond text-2xl lg:text-3xl text-[#141010] font-normal leading-tight">
@@ -756,9 +756,9 @@ export function OrganizationEmployees() {
       </div>
 
       {/* MAIN EMPLOYEE TABLE CARD */}
-      <div className="rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden flex flex-col">
-        {/* Inner Scrollable Box with Sticky Table Header (Max 3 rows visible before scroll) */}
-        <div className="w-full overflow-x-auto max-h-[255px] overflow-y-auto custom-scrollbar">
+      <div className="flex-1 flex flex-col min-h-[400px] rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
+        {/* Inner Scrollable Box with Sticky Table Header */}
+        <div className="flex-1 w-full overflow-x-auto overflow-y-auto custom-scrollbar min-h-0">
           <table className="w-full min-w-[640px] text-left border-collapse table-fixed">
             <colgroup>
               <col className="w-[30%]" />

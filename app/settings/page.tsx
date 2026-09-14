@@ -10,6 +10,7 @@ import { OrganizationEmployees } from "../components/OrganizationEmployees";
 import { OrganizationFeatures } from "../components/OrganizationFeatures";
 import { OrganizationWaiters } from "../components/OrganizationWaiters";
 import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes";
+import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -226,7 +227,7 @@ function SettingsContent() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full overflow-hidden">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "features" && <OrganizationFeatures />}
@@ -234,13 +235,15 @@ function SettingsContent() {
             {activeTab === "waiters" && <OrganizationWaiters />}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
             {activeTab === "payment" && <OrganizationPaymentModes />}
+            {activeTab === "tables" && <OrganizationTablesSettings />}
             {activeTab !== "organization" &&
               activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
               activeTab !== "waiters" &&
-              activeTab !== "payment" && (
+              activeTab !== "payment" &&
+              activeTab !== "tables" && (
               <div className="py-12 text-center">
                 <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                   {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}

@@ -1617,21 +1617,21 @@ export function OrganizationSettings() {
                                   <input
                                     type="radio"
                                     name={`status-${day}`}
-                                    checked={dayConfig.is_open && dayConfig.is_open_all_day}
-                                    onChange={() => handleDayStatusChange(day, "open_all")}
-                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
-                                  />
-                                  <span className="text-sm font-medium text-[#1f1a17]">Open all day</span>
-                                </label>
-                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name={`status-${day}`}
                                     checked={dayConfig.is_open && !dayConfig.is_open_all_day}
                                     onChange={() => handleDayStatusChange(day, "open_part")}
                                     className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
                                   />
                                   <span className="text-sm font-medium text-[#1f1a17]">Open part day</span>
+                                </label>
+                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`status-${day}`}
+                                    checked={dayConfig.is_open && dayConfig.is_open_all_day}
+                                    onChange={() => handleDayStatusChange(day, "open_all")}
+                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                  />
+                                  <span className="text-sm font-medium text-[#1f1a17]">Open all day</span>
                                 </label>
                                 <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
                                   <input
@@ -1663,7 +1663,14 @@ export function OrganizationSettings() {
                             Store Open 24 Hours on {day}
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-3">
+                          <div className="flex flex-col gap-2">
+                            {/* Header labels above time inputs */}
+                            <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-[#6f655e]">
+                              <span className="flex-1">Start date</span>
+                              <span className="w-3 shrink-0 text-center"></span>
+                              <span className="flex-1">End date</span>
+                            </div>
+
                             {dayConfig.hours.map((slot, idx) => (
                               <div key={idx} className="flex items-center gap-2">
                                 <div className="flex-1 min-w-0 flex items-center justify-between rounded-xl border border-[#eadfd6] bg-white px-2.5 py-2 shadow-sm focus-within:border-[#1f1a17]">
