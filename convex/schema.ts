@@ -544,6 +544,76 @@ export default defineSchema({
     .index("by_order", ["orderId"])
     .index("by_status", ["status"]),
 
+  // Order Delivery / 3PL Logistics Domain Table (Migrated from legacy order_delivers)
+  orderDelivers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Relationship to Store Order
+    orderId: v.id("orders"),
+
+    // Delivery Provider & Status Classification
+    provider: v.union(
+      v.literal("porter"),
+      v.literal("internal"),
+      v.literal("custom")
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("open"),
+      v.literal("accepted"),
+      v.literal("live"),
+      v.literal("ended"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+
+    // External Provider Identifiers & Tracking
+    providerOrderId: v.optional(v.string()),
+    trackingUrl: v.optional(v.string()),
+
+    // Financials (Delivery Fee in Minor Units / Paise / Cents) - Optional for historical migration compatibility
+    fare: v.optional(v.number()),
+
+    // Assigned Delivery Partner / Driver Details
+    partnerInfo: v.optional(
+      v.object({
+        name: v.optional(v.string()),
+        vehicleNumber: v.optional(v.string()),
+        vehicleType: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        secondaryPhone: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
+      })
+    ),
+
+    // Timing Estimates & Actual Milestones
+    estimatedPickupTime: v.optional(v.number()),
+    orderTimings: v.optional(
+      v.object({
+        orderAcceptedTime: v.optional(v.number()),
+        pickupTime: v.optional(v.number()),
+        orderStartedTime: v.optional(v.number()),
+        orderEndedTime: v.optional(v.number()),
+      })
+    ),
+
+    // Outbound Request & Response Audit Snapshots
+    apiRequestSnapshot: v.optional(v.any()),
+    apiResponseSnapshot: v.optional(v.any()),
+    failureReason: v.optional(v.string()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_provider_order_id", ["providerOrderId"])
+    .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
+
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({
     legacyId: v.optional(v.string()),
