@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
@@ -290,7 +290,86 @@ export default function OrderDetailsDynamicPage() {
 
   // Query Real Store Printers from DB
   const printers = useQuery(api.organizationPrinters.list, {});
-  const isPrinterConnected = Boolean(printers && printers.length > 0);
+  const [printerStatus, setPrinterStatus] = useState<
+    "checking" | "connected" | "disconnected"
+  >("checking");
+
+  useEffect(() => {
+    let isMounted = true;
+    if (printers === undefined) return;
+    if (!printers || printers.length === 0) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const cashierPrinter =
+      printers.find((p) => p.printerUseFor === "Cashier") || printers[0];
+    if (!cashierPrinter || !cashierPrinter.printerUrl) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const checkStatus = async () => {
+      if (cashierPrinter.printerType === "Usb") {
+        if (typeof navigator !== "undefined" && "usb" in navigator) {
+          try {
+            const devices = await (navigator as any).usb.getDevices();
+            if (isMounted) {
+              setPrinterStatus(devices.length > 0 ? "connected" : "disconnected");
+            }
+            return;
+          } catch {
+            if (isMounted) setPrinterStatus("disconnected");
+            return;
+          }
+        }
+        if (isMounted) setPrinterStatus("disconnected");
+        return;
+      }
+
+      if (cashierPrinter.printerType === "Bluetooth") {
+        if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
+          try {
+            const devices = await (navigator as any).bluetooth.getDevices?.();
+            if (devices && devices.length > 0) {
+              if (isMounted) setPrinterStatus("connected");
+              return;
+            }
+          } catch {}
+        }
+        if (isMounted) setPrinterStatus("disconnected");
+        return;
+      }
+
+      // LAN Printer TCP ping
+      try {
+        const res = await fetch("/api/printers/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            printerUrl: cashierPrinter.printerUrl,
+            printerPort: cashierPrinter.printerPort || "9100",
+            printerType: cashierPrinter.printerType,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (isMounted) {
+          setPrinterStatus(data.online ? "connected" : "disconnected");
+        }
+      } catch {
+        if (isMounted) {
+          setPrinterStatus("disconnected");
+        }
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [printers]);
 
   // Query Order Details
   const order = useQuery(
@@ -1197,13 +1276,18 @@ export default function OrderDetailsDynamicPage() {
                   {/* Printer Status Widget */}
                   <div className="pt-3 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#7a716b]">
                     <span className="flex items-center gap-1.5 font-medium">
-                      <PrintIcon className={`w-3.5 h-3.5 ${isPrinterConnected ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
+                      <PrintIcon className={`w-3.5 h-3.5 ${printerStatus === "connected" ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
                       <span>Thermal Printer</span>
                     </span>
-                    {isPrinterConnected ? (
+                    {printerStatus === "connected" ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
                         Connected ●
+                      </span>
+                    ) : printerStatus === "checking" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Checking...
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] px-2 py-0.5 rounded-full border border-[#e7e5e4]">
