@@ -1783,58 +1783,45 @@ export default function OrdersPage() {
                     </div>
                   </section>
 
-                  {/* Card 2: Issue Refund Card */}
-                  <section
-                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
-                    data-purpose="refund-widget"
-                  >
-                    <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
-                      Issue Refund
-                    </h3>
-
-                    {/* Debit Amount Display Box matching screenshot */}
-                    <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
-                      <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
-                        Debit Amount
-                      </div>
-                      <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
-                        -₹
-                        {order?.display_debit_amount &&
-                        parseFloat(order.display_debit_amount) > 0
-                          ? parseFloat(order.display_debit_amount) % 1 === 0
-                            ? parseInt(order.display_debit_amount)
-                            : order.display_debit_amount
-                          : "0"}
-                      </div>
-                    </div>
-
-                    {/* Button triggering payment refund drawer */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const remainingRefundable = Math.max(
-                          0,
-                          parseFloat(
-                            order?.display_net_paid ||
-                              order?.display_total_amount ||
-                              "0",
-                          ),
-                        );
-                        setRefundAmountInput(
-                          remainingRefundable > 0
-                            ? remainingRefundable.toString()
-                            : order?.display_total_amount || "",
-                        );
-                        setDrawerTab("refund");
-                      }}
-                      style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
-                      className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                  {/* Card 2: Issue Refund Card (Visible only when eligible refund amount > 0, matching defx-pos-frontend) */}
+                  {((order?.totalCredit ?? 0) > (order?.totalDebit ?? 0)) && (
+                    <section
+                      className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                      data-purpose="refund-widget"
                     >
-                      <span className="!text-white text-white font-semibold text-sm">
+                      <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
                         Issue Refund
-                      </span>
-                    </button>
-                  </section>
+                      </h3>
+
+                      {/* Debit Amount Display Box matching defx-pos-frontend */}
+                      <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
+                        <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
+                          Debit Amount
+                        </div>
+                        <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
+                          ₹{order?.display_refundable_amount || (Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100).toFixed(2))}
+                        </div>
+                      </div>
+
+                      {/* Button triggering payment refund drawer */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const remainingRefundable =
+                            order?.display_refundable_amount ||
+                            (Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100).toFixed(2));
+                          setRefundAmountInput(remainingRefundable);
+                          setDrawerTab("refund");
+                        }}
+                        style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
+                        className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                      >
+                        <span className="!text-white text-white font-semibold text-sm">
+                          Issue Refund
+                        </span>
+                      </button>
+                    </section>
+                  )}
 
                   {/* Card 3: Order Actions */}
                   <section
