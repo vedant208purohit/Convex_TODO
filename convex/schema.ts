@@ -614,6 +614,43 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
 
+  // Order Delivery Status History Domain Table (Migrated from legacy order_deliver_statuses)
+  orderDeliverStatuses: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Delivery Attempt Relationship
+    deliveryId: v.id("orderDelivers"),
+
+    // Canonical Status
+    status: v.union(
+      v.literal("pending"),
+      v.literal("open"),
+      v.literal("accepted"),
+      v.literal("live"),
+      v.literal("ended"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+
+    // Provider Raw / Descriptive Status
+    providerStatus: v.optional(v.string()),
+
+    // Sanitized Webhook or API Payload Snapshot
+    payloadSnapshot: v.optional(v.any()),
+
+    // Optional Event Message / Error / Notes
+    notes: v.optional(v.string()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_delivery", ["deliveryId"])
+    .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
+
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({
     legacyId: v.optional(v.string()),

@@ -68,20 +68,36 @@ export function mapPorterStatusToCanonical(porterStatus: string): DeliveryStatus
     case "open":
     case "created":
     case "reopen":
+    case "order.reopen":
       return "open";
     case "accepted":
     case "driver_assigned":
+    case "order.accepted":
+    case "order_accepted":
       return "accepted";
     case "live":
     case "started":
     case "in_transit":
+    case "start_trip":
+    case "start-trip":
+    case "starttrip":
+    case "order.start_trip":
+    case "order_start_trip":
       return "live";
     case "ended":
     case "completed":
     case "delivered":
+    case "end_job":
+    case "end-job":
+    case "endjob":
+    case "order.end_job":
+    case "order_end_job":
       return "ended";
+    case "cancel":
     case "cancelled":
     case "canceled":
+    case "order.cancel":
+    case "order_cancel":
       return "cancelled";
     case "failure":
     case "failed":
