@@ -133,7 +133,21 @@ function twoColRow(left: string, right: string, width = DEFAULT_LINE_WIDTH): str
 }
 
 function getCurrencyPrefix(org?: ReceiptOrganization | null): string {
-  return "₹";
+  const sym = org?.currencySymbol || org?.defaultCurrency;
+  if (
+    !sym ||
+    sym === "₹" ||
+    sym === "INR" ||
+    sym === "AED" ||
+    sym.toLowerCase() === "rs" ||
+    sym.toLowerCase() === "rs."
+  ) {
+    // POS thermal printers (ESC/POS) use single-byte ASCII/CP437 code pages.
+    // The Unicode Rupee symbol '₹' (U+20B9) renders as '?' on thermal printers.
+    // 'Rs.' is the universally compatible POS standard across all thermal printers.
+    return "Rs.";
+  }
+  return sym;
 }
 
 export function generateDefxReceiptPlainString(
@@ -147,9 +161,9 @@ export function generateDefxReceiptPlainString(
   const curr = getCurrencyPrefix(org);
 
   // Calculate proportional column widths for item summary table
-  const qtyWidth = width >= 48 ? 6 : width >= 40 ? 4 : 3;
-  const priceWidth = width >= 48 ? 10 : width >= 40 ? 9 : 7;
-  const totalWidth = width >= 48 ? 10 : width >= 40 ? 9 : 8;
+  const qtyWidth = width >= 48 ? 5 : width >= 40 ? 4 : 3;
+  const priceWidth = width >= 48 ? 11 : width >= 40 ? 10 : 8;
+  const totalWidth = width >= 48 ? 11 : width >= 40 ? 10 : 8;
   const nameWidth = width - qtyWidth - priceWidth - totalWidth;
 
   // ==========================================
@@ -233,10 +247,9 @@ export function generateDefxReceiptPlainString(
     lines.push(twoColRow(`Order Type:`, orderTypeVal, width));
   }
 
-  // Bill # and Waiter / Server
+  // Bill #
   const billNum = order.orderNumber || "ORD-0000";
-  const waiterVal = order.waiterName || order.serverName || "-";
-  lines.push(twoColRow(`Bill #: ${billNum}`, `Waiter: ${waiterVal}`, width));
+  lines.push(`Bill #: ${billNum}`);
 
   // Date & Time
   const createdDate = order.createdAt ? new Date(order.createdAt) : new Date();
@@ -250,8 +263,7 @@ export function generateDefxReceiptPlainString(
     hour12: true,
   });
 
-  lines.push(twoColRow("", `Date: ${formattedDate}`, width));
-  lines.push(twoColRow("", `Time: ${formattedTime}`, width));
+  lines.push(twoColRow(`Date: ${formattedDate}`, `Time: ${formattedTime}`, width));
 
   // ==========================================
   // 4. ORDER SUMMARY (ITEMS TABLE)
@@ -357,16 +369,20 @@ export function generateDefxReceiptPlainString(
   lines.push(center("PAYMENT DETAILS", width));
   const pMode = (order.paymentMode || "CASH").toUpperCase();
   lines.push(twoColRow(`Payment Mode: ${pMode}`, `${curr} ${grandTotal}`, width));
+  lines.push("");
+  lines.push("");
   lines.push(center("Thank you for ordering and stay safe!", width));
-  lines.push(center("Please visit again.", width));
 
   // Trailing line feeds (paper feed) to push footer past the physical tear blade/cutter
   lines.push("");
-  lines.push("");
-  lines.push("");
-  lines.push("");
-  lines.push("");
-  lines.push("");
+  lines.push(" ");
+  lines.push(" ");
+  lines.push(" ");
+  lines.push(" ");
+  lines.push(" ");
+  lines.push(" ");
+  lines.push(" ");
+  lines.push(" ");
 
   return lines.join("\n");
 }

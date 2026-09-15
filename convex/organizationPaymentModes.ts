@@ -73,17 +73,15 @@ export async function validateUniqueName(
  * Safe for unauthenticated / loading callers.
  */
 export const list = query({
-  args: {
-    organizationId: v.optional(v.id("organizations")),
-  },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       return [];
     }
 
     try {
-      const org = await resolveStoreOrganization(ctx, args.organizationId);
+      const org = await resolveStoreOrganization(ctx);
       const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
       if (!callerMember) {
         return [];

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, type FormEvent, type ChangeEvent } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent, type ChangeEvent } from "react";
+import { useRouter, useParams, usePathname } from "next/navigation";
 import { useQuery, useMutation, useAction } from "convex/react";
-import { PosShell } from "../components/PosShell";
-import { api } from "../../convex/_generated/api";
-import { Id } from "../../convex/_generated/dataModel";
+import { PosShell } from "../../components/PosShell";
+import { Toast, type ToastMessage } from "../../components/Toast";
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 
 // ==========================================
 // PIXEL-PERFECT ICONS (PREST THEME)
@@ -683,19 +685,171 @@ export default function MenuPage() {
     ];
   }, [rawItemTypes]);
 
+  // Standard Notification Toast State
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" | "warning" = "success",
+    subtext?: string
+  ) => {
+    setToast({ message, type, subtext });
+  };
+
+  const router = useRouter();
+  const params = useParams();
+  const pathname = usePathname();
+
+  const slug = useMemo(() => {
+    if (!params?.slug) return [];
+    if (Array.isArray(params.slug)) return params.slug;
+    return [params.slug as string];
+  }, [params?.slug]);
+
+  // Derive route IDs from slug:
+  // Supports:
+  // 1) /menu/:menuId/category/:catId/item/:itemId/customization/:custId
+  // 2) /menu/:menuId/add-item/:itemId
+  // 3) /menu/category/:catId/item/:itemId/customization/:custId
+  const parsedRoute = useMemo(() => {
+    let menuId: Id<"menus"> | null = null;
+    let categoryId: Id<"categories"> | null = null;
+    let itemId: Id<"items"> | null = null;
+    let customizationId: Id<"customizations"> | null = null;
+    let isAddItem = false;
+    let editItemId: Id<"items"> | null = null;
+
+    if (!slug || slug.length === 0) {
+      return { menuId, categoryId, itemId, customizationId, isAddItem, editItemId };
+    }
+
+    let idx = 0;
+    // Check if first segment is a menuId (not "category", "add-item", "add-category", "menu")
+    if (slug[idx] !== "category" && slug[idx] !== "add-item" && slug[idx] !== "add-category") {
+      if (slug[idx] === "menu" && slug[idx + 1]) {
+        idx++;
+      }
+      menuId = slug[idx] as Id<"menus">;
+      idx++;
+    }
+
+    if (idx < slug.length) {
+      if (slug[idx] === "category" && slug[idx + 1]) {
+        categoryId = slug[idx + 1] as Id<"categories">;
+        idx += 2;
+        if (idx < slug.length && slug[idx] === "item" && slug[idx + 1]) {
+          itemId = slug[idx + 1] as Id<"items">;
+          idx += 2;
+          if (idx < slug.length && slug[idx] === "customization" && slug[idx + 1]) {
+            customizationId = slug[idx + 1] as Id<"customizations">;
+            idx += 2;
+          }
+        }
+      } else if (slug[idx] === "add-item") {
+        isAddItem = true;
+        if (slug[idx + 1]) {
+          editItemId = slug[idx + 1] as Id<"items">;
+        }
+      }
+    }
+
+    return { menuId, categoryId, itemId, customizationId, isAddItem, editItemId };
+  }, [slug]);
+
+  const routeMenuId = parsedRoute.menuId;
+  const routeCategoryId = parsedRoute.categoryId;
+  const routeItemId = parsedRoute.itemId;
+  const routeCustomizationId = parsedRoute.customizationId;
+  const isAddItemRoute = parsedRoute.isAddItem;
+  const editItemIdFromRoute = parsedRoute.editItemId;
+
+  const navigateToCategory = (catId?: Id<"categories"> | null, targetMenuId?: Id<"menus"> | null) => {
+    const mId = targetMenuId || selectedMenuId || activeMenu?._id;
+    if (mId && catId) {
+      router.push(`/menu/${mId}/category/${catId}`);
+    } else if (mId) {
+      router.push(`/menu/${mId}`);
+    } else if (catId) {
+      router.push(`/menu/category/${catId}`);
+    } else {
+      router.push(`/menu`);
+    }
+  };
+
+  const navigateToItem = (catId: Id<"categories">, itemId: Id<"items">, targetMenuId?: Id<"menus"> | null) => {
+    const mId = targetMenuId || selectedMenuId || activeMenu?._id;
+    if (mId) {
+      router.push(`/menu/${mId}/category/${catId}/item/${itemId}`);
+    } else {
+      router.push(`/menu/category/${catId}/item/${itemId}`);
+    }
+  };
+
+  const navigateToCustomization = (
+    catId: Id<"categories">,
+    itemId: Id<"items">,
+    customizationId: Id<"customizations">,
+    targetMenuId?: Id<"menus"> | null
+  ) => {
+    const mId = targetMenuId || selectedMenuId || activeMenu?._id;
+    if (mId) {
+      router.push(`/menu/${mId}/category/${catId}/item/${itemId}/customization/${customizationId}`);
+    } else {
+      router.push(`/menu/category/${catId}/item/${itemId}/customization/${customizationId}`);
+    }
+  };
+
+  const navigateToAddItem = (itemId?: Id<"items">, targetMenuId?: Id<"menus"> | null) => {
+    const mId = targetMenuId || selectedMenuId || activeMenu?._id;
+    if (mId) {
+      if (itemId) {
+        router.push(`/menu/${mId}/add-item/${itemId}`);
+      } else {
+        router.push(`/menu/${mId}/add-item`);
+      }
+    } else {
+      if (itemId) {
+        router.push(`/menu/add-item/${itemId}`);
+      } else {
+        router.push(`/menu/add-item`);
+      }
+    }
+  };
+
   // Active Selections
-  const [selectedMenuId, setSelectedMenuId] = useState<Id<"menus"> | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<Id<"categories"> | null>(null);
-  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(null);
-  const [selectedCustomizationId, setSelectedCustomizationId] = useState<Id<"customizations"> | null>(null);
+  const [selectedMenuId, setSelectedMenuId] = useState<Id<"menus"> | null>(routeMenuId);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<Id<"categories"> | null>(routeCategoryId);
+  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(routeItemId);
+  const [selectedCustomizationId, setSelectedCustomizationId] = useState<Id<"customizations"> | null>(routeCustomizationId);
+
+  // Sync state with URL params (browser back / forward / deep link)
+  useEffect(() => {
+    if (routeMenuId !== null) {
+      setSelectedMenuId(routeMenuId);
+    }
+    if (routeCategoryId !== null) {
+      setSelectedCategoryId(routeCategoryId);
+    }
+    setSelectedItemId(routeItemId);
+    setSelectedCustomizationId(routeCustomizationId);
+    if (isAddItemRoute) {
+      setIsAddItemOpen(true);
+    } else if (isAddItemOpen && !isAddItemRoute) {
+      setIsAddItemOpen(false);
+    }
+  }, [routeMenuId, routeCategoryId, routeItemId, routeCustomizationId, isAddItemRoute]);
 
   // Initialize Default Menu
   useEffect(() => {
-    if (menus && menus.length > 0 && !selectedMenuId) {
-      const def = menus.find((m) => m.isDefault) || menus[0];
-      setSelectedMenuId(def._id);
+    if (menus && menus.length > 0) {
+      if (routeMenuId && menus.some((m) => m._id === routeMenuId)) {
+        setSelectedMenuId(routeMenuId);
+      } else if (!selectedMenuId || !menus.some((m) => m._id === selectedMenuId)) {
+        const def = menus.find((m) => m.isDefault) || menus[0];
+        setSelectedMenuId(def._id);
+      }
     }
-  }, [menus, selectedMenuId]);
+  }, [menus, selectedMenuId, routeMenuId]);
 
   const activeMenu = useMemo(() => {
     return menus?.find((m) => m._id === selectedMenuId) || menus?.[0] || null;
@@ -711,12 +865,18 @@ export default function MenuPage() {
   useEffect(() => {
     if (categories && categories.length > 0) {
       if (!selectedCategoryId || !categories.some((c) => c._id === selectedCategoryId)) {
-        setSelectedCategoryId(categories[0]._id);
+        const defaultCatId = categories[0]._id;
+        setSelectedCategoryId(defaultCatId);
+        if (slug.length === 0 && activeMenu?._id) {
+          router.replace(`/menu/${activeMenu._id}/category/${defaultCatId}`);
+        } else if (slug.length === 1 && routeMenuId && activeMenu?._id) {
+          router.replace(`/menu/${activeMenu._id}/category/${defaultCatId}`);
+        }
       }
-    } else {
+    } else if (categories && categories.length === 0) {
       setSelectedCategoryId(null);
     }
-  }, [categories, selectedCategoryId]);
+  }, [categories, selectedCategoryId, slug, router, activeMenu?._id, routeMenuId]);
 
   const activeCategory = useMemo(() => {
     return categories?.find((c) => c._id === selectedCategoryId) || categories?.[0] || null;
@@ -808,14 +968,16 @@ export default function MenuPage() {
   const [isEditCustomizationOpen, setIsEditCustomizationOpen] = useState(false);
   const [editingCustomization, setEditingCustomization] = useState<any>(null);
   const [isDeleteCustomizationOpen, setIsDeleteCustomizationOpen] = useState(false);
-  const [deletingCustomizationId, setDeletingCustomizationId] = useState<Id<"customizations"> | null>(null);
+  const [targetDeleteCustomization, setTargetDeleteCustomization] = useState<any>(null);
+  const [isDeletingCustomization, setIsDeletingCustomization] = useState(false);
 
   // Customization Choice (Item) Drawers & Modals
   const [isAddChoiceOpen, setIsAddChoiceOpen] = useState(false);
   const [isEditChoiceOpen, setIsEditChoiceOpen] = useState(false);
   const [editingChoice, setEditingChoice] = useState<any>(null);
   const [isDeleteChoiceOpen, setIsDeleteChoiceOpen] = useState(false);
-  const [deletingChoiceId, setDeletingChoiceId] = useState<Id<"customizationItems"> | null>(null);
+  const [targetDeleteChoice, setTargetDeleteChoice] = useState<any>(null);
+  const [isDeletingChoice, setIsDeletingChoice] = useState(false);
 
   // Change Unavailability Modal State
   const [isUnavailabilityModalOpen, setIsUnavailabilityModalOpen] = useState(false);
@@ -842,6 +1004,11 @@ export default function MenuPage() {
   const [isDeleteCategoryModalOpen, setIsDeleteCategoryModalOpen] = useState(false);
   const [targetDeleteCategory, setTargetDeleteCategory] = useState<any>(null);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
+
+  // Delete Menu Modal State
+  const [isDeleteMenuModalOpen, setIsDeleteMenuModalOpen] = useState(false);
+  const [targetDeleteMenu, setTargetDeleteMenu] = useState<any>(null);
+  const [isDeletingMenu, setIsDeletingMenu] = useState(false);
 
   // Customization Form State
   const [customizationType, setCustomizationType] = useState<"AddOns" | "Preparations">("AddOns");
@@ -958,6 +1125,19 @@ export default function MenuPage() {
   const [itemDescription, setItemDescription] = useState("");
   const [itemIsVeg, setItemIsVeg] = useState(true);
   const [selectedDietaryType, setSelectedDietaryType] = useState("veg");
+
+  const isDietaryTypeSelected = useCallback((type: { id: string; name: string }) => {
+    if (selectedDietaryType === type.id) return true;
+    const sel = (selectedDietaryType || "").toLowerCase();
+    const name = type.name.toLowerCase();
+    if (sel === name) return true;
+    if ((sel === "veg" || sel === "vegetarian") && name.includes("veg") && !name.includes("non") && !name.includes("vegan")) return true;
+    if ((sel === "non_veg" || sel === "non-veg" || sel === "nonveg") && name.includes("non")) return true;
+    if (sel === "vegan" && name.includes("vegan")) return true;
+    if (sel === "jain" && name.includes("jain")) return true;
+    if ((sel === "egg" || sel === "contains egg") && name.includes("egg")) return true;
+    return false;
+  }, [selectedDietaryType]);
   const [itemShowItemType, setItemShowItemType] = useState(true);
   const [itemIsSpicy, setItemIsSpicy] = useState(false);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
@@ -1212,8 +1392,10 @@ export default function MenuPage() {
     try {
       const menuId = await seedSampleMenuMutation({ organizationId: organization._id });
       setSelectedMenuId(menuId);
-    } catch (err) {
+      showToast("Sample menu loaded successfully", "success");
+    } catch (err: any) {
       console.error("Failed to seed sample menu:", err);
+      showToast(err.message || "Failed to load sample menu", "error");
     }
   };
 
@@ -1236,8 +1418,10 @@ export default function MenuPage() {
     const categoryIds = newCategories.map((c) => c._id);
     try {
       await reorderCategoriesMutation({ categoryIds });
-    } catch (err) {
+      showToast("Category order updated successfully", "success");
+    } catch (err: any) {
       console.error("Failed to reorder categories:", err);
+      showToast(err.message || "Failed to reorder categories", "error");
     }
   };
 
@@ -1259,8 +1443,10 @@ export default function MenuPage() {
     const categoryItemIds = newCategoryItems.map((ci) => ci.categoryItemId);
     try {
       await reorderCategoryItemsMutation({ categoryItemIds });
-    } catch (err) {
+      showToast("Item display order updated successfully", "success");
+    } catch (err: any) {
       console.error("Failed to reorder items:", err);
+      showToast(err.message || "Failed to reorder items", "error");
     }
   };
 
@@ -1268,20 +1454,23 @@ export default function MenuPage() {
   const handleCreateMenuSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!organization?._id || !menuName.trim()) return;
+    const trimmedName = menuName.trim();
     setIsCreatingMenu(true);
     setCreateMenuError(null);
     try {
       const newMenuId = await createMenuMutation({
         organizationId: organization._id,
-        name: menuName.trim(),
+        name: trimmedName,
         description: menuDescription.trim() || undefined,
       });
       setSelectedMenuId(newMenuId);
       setIsCreateMenuOpen(false);
       setMenuName("");
       setMenuDescription("");
+      showToast(`Menu "${trimmedName}" created successfully`, "success");
     } catch (err: any) {
       setCreateMenuError(err.message || "Failed to create menu");
+      showToast(err.message || "Failed to create menu", "error");
     } finally {
       setIsCreatingMenu(false);
     }
@@ -1298,16 +1487,19 @@ export default function MenuPage() {
   const handleEditMenuSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!activeMenu?._id || !editMenuName.trim()) return;
+    const trimmedName = editMenuName.trim();
     setIsSavingMenu(true);
     try {
       await updateMenuMutation({
         id: activeMenu._id,
-        name: editMenuName.trim(),
+        name: trimmedName,
         description: editMenuDescription.trim() || undefined,
       });
       setIsEditMenuOpen(false);
-    } catch (err) {
+      showToast(`Menu "${trimmedName}" updated successfully`, "success");
+    } catch (err: any) {
       console.error("Failed to update menu:", err);
+      showToast(err.message || "Failed to update menu", "error");
     } finally {
       setIsSavingMenu(false);
     }
@@ -1317,42 +1509,73 @@ export default function MenuPage() {
   const handleSaveCategorySubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!organization?._id || !activeMenu?._id || !categoryName.trim()) return;
+    const trimmedName = categoryName.trim();
     setIsSavingCategory(true);
     try {
       if (editingCategory) {
         await updateCategoryMutation({
           id: editingCategory._id,
-          name: categoryName.trim(),
+          name: trimmedName,
           published: categoryPublished,
         });
+        showToast(`Category "${trimmedName}" updated successfully`, "success");
       } else {
         const newCatId = await createCategoryMutation({
           organizationId: organization._id,
           menuId: activeMenu._id,
-          name: categoryName.trim(),
+          name: trimmedName,
         });
         setSelectedCategoryId(newCatId);
+        showToast(`Category "${trimmedName}" created successfully`, "success");
       }
       setIsAddCategoryOpen(false);
       setEditingCategory(null);
       setCategoryName("");
       setCategoryPublished(true);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save category:", err);
+      showToast(err.message || "Failed to save category", "error");
     } finally {
       setIsSavingCategory(false);
     }
   };
 
-  const handleToggleCategory = async (e: React.MouseEvent, catId: Id<"categories">, currentPublished: boolean) => {
+  const handleToggleCategory = async (e: React.MouseEvent, catId: Id<"categories">, currentPublished: boolean, catName?: string) => {
     e.stopPropagation();
     try {
       await toggleCategoryPublishedMutation({
         id: catId,
         published: !currentPublished,
       });
-    } catch (err) {
+      const name = catName ? `Category "${catName}"` : "Category";
+      showToast(`${name} ${!currentPublished ? "published" : "unpublished"} successfully`, "success");
+    } catch (err: any) {
       console.error("Failed to toggle category published status:", err);
+      showToast(err.message || "Failed to update category status", "error");
+    }
+  };
+
+  const handleOpenDeleteMenu = (menu: any) => {
+    setTargetDeleteMenu(menu);
+    setIsDeleteMenuModalOpen(true);
+  };
+
+  const handleConfirmDeleteMenu = async () => {
+    if (!targetDeleteMenu?._id) return;
+    const menuName = targetDeleteMenu.name || "Menu";
+    setIsDeletingMenu(true);
+    try {
+      await deleteMenuMutation({ id: targetDeleteMenu._id });
+      setSelectedMenuId(null);
+      setIsDeleteMenuModalOpen(false);
+      setTargetDeleteMenu(null);
+      setIsEditMenuOpen(false);
+      showToast(`Menu "${menuName}" deleted successfully`, "success");
+    } catch (err: any) {
+      console.error("Failed to delete menu:", err);
+      showToast(err.message || "Failed to delete menu", "error");
+    } finally {
+      setIsDeletingMenu(false);
     }
   };
 
@@ -1363,6 +1586,7 @@ export default function MenuPage() {
 
   const handleConfirmDeleteCategory = async () => {
     if (!targetDeleteCategory?._id) return;
+    const catName = targetDeleteCategory.name || "Category";
     setIsDeletingCategory(true);
     try {
       await deleteCategoryMutation({ id: targetDeleteCategory._id });
@@ -1373,8 +1597,10 @@ export default function MenuPage() {
       setTargetDeleteCategory(null);
       setIsAddCategoryOpen(false);
       setEditingCategory(null);
-    } catch (err) {
+      showToast(`Category "${catName}" deleted successfully`, "success");
+    } catch (err: any) {
       console.error("Failed to delete category:", err);
+      showToast(err.message || "Failed to delete category", "error");
     } finally {
       setIsDeletingCategory(false);
     }
@@ -1436,7 +1662,13 @@ export default function MenuPage() {
     setItemPrice((item.price / 100).toFixed(2));
     setItemDescription(item.description || "");
     setItemIsVeg(item.isVeg ?? true);
-    setSelectedDietaryType(item.isVeg ? "veg" : "non_veg");
+    if (item.itemTypeIds && item.itemTypeIds.length > 0) {
+      setSelectedDietaryType(item.itemTypeIds[0]);
+    } else if (item.dietaryType) {
+      setSelectedDietaryType(item.dietaryType);
+    } else {
+      setSelectedDietaryType(item.isVeg === false ? "non_veg" : "veg");
+    }
     setItemShowItemType(item.showItemType ?? true);
     setItemIsSpicy(item.isSpicy ?? false);
     setItemIsAvailable(item.isAvailable ?? true);
@@ -1519,8 +1751,10 @@ export default function MenuPage() {
 
       setItemImageAssetId(uploadResult.assetId);
       setItemImageUrl(URL.createObjectURL(file));
+      showToast("Item image uploaded successfully", "success");
     } catch (err: any) {
       setItemError(err?.message || "Failed to upload item image.");
+      showToast(err?.message || "Failed to upload item image", "error");
     } finally {
       setIsUploadingItemImage(false);
     }
@@ -1551,16 +1785,28 @@ export default function MenuPage() {
     setIsSavingItem(true);
     setItemError(null);
 
+    const trimmedItemName = itemName.trim();
     try {
-      const isVegBool = selectedDietaryType === "veg" || selectedDietaryType === "vegan" || selectedDietaryType === "jain";
+      const isVegBool = (() => {
+        const matchedType = availableItemTypes.find((t) => isDietaryTypeSelected(t));
+        const name = (matchedType?.name || selectedDietaryType || "").toLowerCase();
+        if (name.includes("non") || name.includes("egg")) return false;
+        return true;
+      })();
+
+      const matchedTypeObj = availableItemTypes.find((t) => isDietaryTypeSelected(t));
+      const itemTypeIdsToSave = matchedTypeObj && matchedTypeObj.id && matchedTypeObj.id.length > 10
+        ? [matchedTypeObj.id as Id<"itemTypes">]
+        : undefined;
 
       if (editingItem) {
         await updateItemMutation({
           id: editingItem._id,
-          name: itemName.trim(),
+          name: trimmedItemName,
           price: priceCents,
           description: itemDescription.trim() || undefined,
           isVeg: isVegBool,
+          itemTypeIds: itemTypeIdsToSave,
           isSpicy: itemIsSpicy,
           showItemType: itemShowItemType,
           showQuantity: itemShowQuantity,
@@ -1586,13 +1832,15 @@ export default function MenuPage() {
           nutrients: itemNutrients,
           imageAssetId: itemImageAssetId ? (itemImageAssetId as Id<"organization_assets">) : undefined,
         });
+        showToast(`Item "${trimmedItemName}" updated successfully`, "success");
       } else {
         const newItemId = await createItemMutation({
           organizationId: organization._id,
-          name: itemName.trim(),
+          name: trimmedItemName,
           price: priceCents,
           description: itemDescription.trim() || undefined,
           isVeg: isVegBool,
+          itemTypeIds: itemTypeIdsToSave,
           isSpicy: itemIsSpicy,
           showItemType: itemShowItemType,
           isAvailable: itemIsAvailable,
@@ -1628,12 +1876,14 @@ export default function MenuPage() {
 
         // Set active item to newly created item to view its customizations!
         setSelectedItemId(newItemId);
+        showToast(`Item "${trimmedItemName}" created successfully`, "success");
       }
 
       setIsAddItemOpen(false);
       setEditingItem(null);
     } catch (err: any) {
       setItemError(err.message || "Failed to save item");
+      showToast(err.message || "Failed to save item", "error");
     } finally {
       setIsSavingItem(false);
     }
@@ -1663,30 +1913,34 @@ export default function MenuPage() {
 
   const handleConfirmDuplicateItem = async () => {
     if (!organization?._id || !targetDuplicateItem) return;
+    const trimmedNewName = duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`;
     setIsDuplicatingItem(true);
     try {
       if (duplicateTargetType === "choice") {
         await duplicateCustomizationItemMutation({
           organizationId: organization._id,
           customizationItemId: targetDuplicateItem._id,
-          newName: duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`,
+          newName: trimmedNewName,
         });
         setIsDuplicateItemModalOpen(false);
         setTargetDuplicateItem(null);
+        showToast(`Customization choice duplicated as "${trimmedNewName}"`, "success");
       } else {
         if (!activeCategory?._id) return;
         const duplicatedId = await duplicateItemMutation({
           organizationId: organization._id,
           itemId: targetDuplicateItem._id,
           categoryId: activeCategory._id,
-          newName: duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`,
+          newName: trimmedNewName,
         });
         setIsDuplicateItemModalOpen(false);
         setTargetDuplicateItem(null);
         setSelectedItemId(duplicatedId);
+        showToast(`Item duplicated as "${trimmedNewName}"`, "success");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to duplicate:", err);
+      showToast(err.message || "Failed to duplicate", "error");
     } finally {
       setIsDuplicatingItem(false);
     }
@@ -1704,6 +1958,7 @@ export default function MenuPage() {
   const handleAddExistingItemSubmit = async () => {
     if (!organization?._id || !activeCategory?._id || !selectedExistingItem) return;
 
+    const addedName = selectedExistingItem.name;
     setIsAddingExistingItem(true);
     setExistingItemError(null);
     try {
@@ -1714,8 +1969,10 @@ export default function MenuPage() {
       });
       setIsAddExistingItemOpen(false);
       setSelectedExistingItem(null);
+      showToast(`Item "${addedName}" added to category successfully`, "success");
     } catch (err: any) {
       setExistingItemError(err.message || "Failed to add existing item");
+      showToast(err.message || "Failed to add existing item", "error");
     } finally {
       setIsAddingExistingItem(false);
     }
@@ -1743,6 +2000,7 @@ export default function MenuPage() {
   const handleAddExistingCustomizationSubmit = async () => {
     if (!organization?._id || !selectedItemId || !selectedExistingCustomization) return;
 
+    const custName = selectedExistingCustomization.name;
     setIsCopyingCustomization(true);
     setExistingCustomizationError(null);
     try {
@@ -1753,8 +2011,10 @@ export default function MenuPage() {
       });
       setIsAddExistingCustomizationOpen(false);
       setSelectedExistingCustomization(null);
+      showToast(`Customization "${custName}" attached to item successfully`, "success");
     } catch (err: any) {
       setExistingCustomizationError(err.message || "Failed to add existing customization");
+      showToast(err.message || "Failed to add existing customization", "error");
     } finally {
       setIsCopyingCustomization(false);
     }
@@ -1771,25 +2031,31 @@ export default function MenuPage() {
     );
   }, [allExistingCustomizations, existingCustomizationSearchQuery]);
 
-  const handleToggleItemAvailability = async (itemId: Id<"items">, currentAvailable: boolean) => {
+  const handleToggleItemAvailability = async (itemId: Id<"items">, currentAvailable: boolean, name?: string) => {
     try {
       await toggleItemAvailabilityMutation({
         id: itemId,
         isAvailable: !currentAvailable,
       });
-    } catch (err) {
+      const label = name ? `"${name}"` : "Item";
+      showToast(`${label} marked as ${!currentAvailable ? "Available" : "Sold Out"}`, "success");
+    } catch (err: any) {
       console.error("Failed to toggle item availability:", err);
+      showToast(err.message || "Failed to update item availability", "error");
     }
   };
 
-  const handleToggleItemPublished = async (itemId: Id<"items">, currentPublished: boolean) => {
+  const handleToggleItemPublished = async (itemId: Id<"items">, currentPublished: boolean, name?: string) => {
     try {
       await toggleItemPublishedMutation({
         id: itemId,
         published: !currentPublished,
       });
-    } catch (err) {
+      const label = name ? `"${name}"` : "Item";
+      showToast(`${label} ${!currentPublished ? "published" : "unpublished"} successfully`, "success");
+    } catch (err: any) {
       console.error("Failed to toggle item published:", err);
+      showToast(err.message || "Failed to update item status", "error");
     }
   };
 
@@ -1835,6 +2101,7 @@ export default function MenuPage() {
 
   const handleSaveUnavailabilityConfirm = async () => {
     if (!targetUnavailabilityItem?._id) return;
+    const targetName = targetUnavailabilityItem.name || "Item";
     setIsSavingUnavailability(true);
     try {
       let days = 1;
@@ -1861,8 +2128,15 @@ export default function MenuPage() {
       }
       setIsUnavailabilityModalOpen(false);
       setTargetUnavailabilityItem(null);
-    } catch (err) {
+      showToast(
+        unavailabilityToggle
+          ? `"${targetName}" marked as unavailable`
+          : `"${targetName}" is now available`,
+        "success"
+      );
+    } catch (err: any) {
       console.error("Failed to update unavailability:", err);
+      showToast(err.message || "Failed to update unavailability status", "error");
     } finally {
       setIsSavingUnavailability(false);
     }
@@ -1877,6 +2151,7 @@ export default function MenuPage() {
 
   const handleConfirmDeleteItem = async () => {
     if (!targetDeleteItem) return;
+    const deletedName = targetDeleteItem.name || "Item";
     setIsDeletingItem(true);
     try {
       await deleteItemMutation({
@@ -1889,8 +2164,10 @@ export default function MenuPage() {
       }
       setIsDeleteItemModalOpen(false);
       setTargetDeleteItem(null);
-    } catch (err) {
+      showToast(`Item "${deletedName}" deleted successfully`, "success");
+    } catch (err: any) {
       console.error("Failed to delete item:", err);
+      showToast(err.message || "Failed to delete item", "error");
     } finally {
       setIsDeletingItem(false);
     }
@@ -1925,12 +2202,13 @@ export default function MenuPage() {
     e.preventDefault();
     if (!organization?._id || !selectedItemId || !customizationName.trim()) return;
 
+    const trimmedName = customizationName.trim();
     setIsSavingCustomization(true);
     try {
       if (editingCustomization) {
         await updateCustomizationMutation({
           id: editingCustomization._id,
-          name: customizationName.trim(),
+          name: trimmedName,
           customizationType,
           required: customizationRequired,
           maxSelected: customizationMaxSelected,
@@ -1938,11 +2216,12 @@ export default function MenuPage() {
         });
         setIsEditCustomizationOpen(false);
         setEditingCustomization(null);
+        showToast(`Customization "${trimmedName}" updated successfully`, "success");
       } else {
         const newCustId = await createCustomizationMutation({
           organizationId: organization._id,
           itemId: selectedItemId,
-          name: customizationName.trim(),
+          name: trimmedName,
           customizationType,
           required: customizationRequired,
           maxSelected: customizationMaxSelected,
@@ -1950,25 +2229,38 @@ export default function MenuPage() {
         });
         setIsAddCustomizationOpen(false);
         setSelectedCustomizationId(newCustId);
+        showToast(`Customization "${trimmedName}" created successfully`, "success");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save customization:", err);
+      showToast(err.message || "Failed to save customization", "error");
     } finally {
       setIsSavingCustomization(false);
     }
   };
 
+  const handleOpenDeleteCustomization = (cust: any) => {
+    setTargetDeleteCustomization(cust);
+    setIsDeleteCustomizationOpen(true);
+  };
+
   const handleDeleteCustomizationConfirm = async () => {
-    if (!deletingCustomizationId) return;
+    if (!targetDeleteCustomization?._id) return;
+    const custName = targetDeleteCustomization.name || "Customization";
+    setIsDeletingCustomization(true);
     try {
-      await deleteCustomizationMutation({ id: deletingCustomizationId });
-      if (selectedCustomizationId === deletingCustomizationId) {
+      await deleteCustomizationMutation({ id: targetDeleteCustomization._id });
+      if (selectedCustomizationId === targetDeleteCustomization._id) {
         setSelectedCustomizationId(null);
       }
       setIsDeleteCustomizationOpen(false);
-      setDeletingCustomizationId(null);
-    } catch (err) {
+      setTargetDeleteCustomization(null);
+      showToast(`Customization group "${custName}" deleted successfully`, "success");
+    } catch (err: any) {
       console.error("Failed to delete customization:", err);
+      showToast(err.message || "Failed to delete customization", "error");
+    } finally {
+      setIsDeletingCustomization(false);
     }
   };
 
@@ -1978,8 +2270,10 @@ export default function MenuPage() {
         id: cust._id,
         published: !cust.published,
       });
-    } catch (err) {
+      showToast(`Customization "${cust.name}" ${!cust.published ? "enabled" : "disabled"}`, "success");
+    } catch (err: any) {
       console.error("Failed to toggle customization published status:", err);
+      showToast(err.message || "Failed to update customization status", "error");
     }
   };
 
@@ -2018,8 +2312,10 @@ export default function MenuPage() {
       await reorderCustomizationsMutation({
         customizationIds: items.map((c) => c._id),
       });
-    } catch (err) {
+      showToast("Customization groups reordered successfully", "success");
+    } catch (err: any) {
       console.error("Failed to reorder customizations:", err);
+      showToast(err.message || "Failed to reorder customizations", "error");
     }
   };
 
@@ -2079,6 +2375,7 @@ export default function MenuPage() {
     e.preventDefault();
     if (!organization?._id || !selectedCustomizationId || !choiceName.trim()) return;
 
+    const trimmedName = choiceName.trim();
     const priceNum = parseFloat(choicePrice || "0");
     const priceCents = Math.round(priceNum * 100);
     const quantityNum = choiceShowQuantity && choiceQuantity ? parseFloat(choiceQuantity) : undefined;
@@ -2099,7 +2396,7 @@ export default function MenuPage() {
       if (editingChoice) {
         await updateCustomizationItemMutation({
           id: editingChoice._id,
-          name: choiceName.trim(),
+          name: trimmedName,
           price: priceCents,
           description: choiceDescription.trim() || undefined,
           isVeg,
@@ -2118,11 +2415,12 @@ export default function MenuPage() {
         });
         setIsEditChoiceOpen(false);
         setEditingChoice(null);
+        showToast(`Choice item "${trimmedName}" updated successfully`, "success");
       } else {
         await createCustomizationItemMutation({
           organizationId: organization._id,
           customizationId: selectedCustomizationId,
-          name: choiceName.trim(),
+          name: trimmedName,
           price: priceCents,
           description: choiceDescription.trim() || undefined,
           isVeg,
@@ -2140,25 +2438,38 @@ export default function MenuPage() {
           isAvailable: true,
         });
         setIsAddChoiceOpen(false);
+        showToast(`Choice item "${trimmedName}" added successfully`, "success");
       }
       setChoiceName("");
       setChoicePrice("0.00");
       setChoiceDescription("");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to save choice option:", err);
+      showToast(err.message || "Failed to save choice option", "error");
     } finally {
       setIsSavingChoice(false);
     }
   };
 
+  const handleOpenDeleteChoice = (choice: any) => {
+    setTargetDeleteChoice(choice);
+    setIsDeleteChoiceOpen(true);
+  };
+
   const handleDeleteChoiceConfirm = async () => {
-    if (!deletingChoiceId) return;
+    if (!targetDeleteChoice?._id) return;
+    const choiceName = targetDeleteChoice.name || "Customization item";
+    setIsDeletingChoice(true);
     try {
-      await deleteCustomizationItemMutation({ id: deletingChoiceId });
+      await deleteCustomizationItemMutation({ id: targetDeleteChoice._id });
       setIsDeleteChoiceOpen(false);
-      setDeletingChoiceId(null);
-    } catch (err) {
-      console.error("Failed to delete choice option:", err);
+      setTargetDeleteChoice(null);
+      showToast(`Customization item "${choiceName}" deleted successfully`, "success");
+    } catch (err: any) {
+      console.error("Failed to delete choice item:", err);
+      showToast(err.message || "Failed to delete choice item", "error");
+    } finally {
+      setIsDeletingChoice(false);
     }
   };
 
@@ -2168,8 +2479,10 @@ export default function MenuPage() {
         id: choice._id,
         isAvailable: !choice.isAvailable,
       });
-    } catch (err) {
+      showToast(`Choice "${choice.name}" marked as ${!choice.isAvailable ? "Available" : "Out of stock"}`, "success");
+    } catch (err: any) {
       console.error("Failed to toggle choice availability:", err);
+      showToast(err.message || "Failed to update choice availability", "error");
     }
   };
 
@@ -2208,8 +2521,10 @@ export default function MenuPage() {
       await reorderCustomizationItemsMutation({
         itemIds: items.map((i: any) => i._id),
       });
-    } catch (err) {
+      showToast("Customization items reordered successfully", "success");
+    } catch (err: any) {
       console.error("Failed to reorder customization items:", err);
+      showToast(err.message || "Failed to reorder items", "error");
     }
   };
 
@@ -2222,13 +2537,16 @@ export default function MenuPage() {
 
   return (
     <PosShell title="Menu Management" subtitle="Catalog, Categories & Customizations">
-      <div className="flex flex-col flex-1 min-w-0 bg-[#f5f5f5] text-[#1c1b1b] min-h-screen font-sans">
+      {/* Global Standard Toast Notification Banner */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
+      <div className="flex flex-col flex-1 min-w-0 bg-[#f5f5f5] text-[#1c1b1b] min-h-0 h-full font-sans overflow-hidden">
         
         {/* ======================================================== */}
         {/* VIEW 1: FULL SCREEN ADD / EDIT ITEM STUDIO (WITH TAXES) */}
         {/* ======================================================== */}
         {isAddItemOpen ? (
-          <div className="w-full flex-1 flex flex-col font-sans bg-[#fdf8f7]">
+          <div className="w-full flex-1 min-h-0 flex flex-col font-sans bg-[#fdf8f7]">
             {/* Top Workspace & Breadcrumb Header */}
             <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
               <div className="flex flex-col md:flex-row md:items-end justify-between w-full gap-4">
@@ -2239,8 +2557,7 @@ export default function MenuPage() {
                       onClick={() => {
                         setIsAddItemOpen(false);
                         setEditingItem(null);
-                        setSelectedItemId(null);
-                        setSelectedCustomizationId(null);
+                        navigateToCategory(activeCategory?._id || null);
                       }}
                       className="hover:text-[#141010] transition-colors cursor-pointer"
                     >
@@ -2252,8 +2569,7 @@ export default function MenuPage() {
                       onClick={() => {
                         setIsAddItemOpen(false);
                         setEditingItem(null);
-                        setSelectedItemId(null);
-                        setSelectedCustomizationId(null);
+                        navigateToCategory(activeCategory?._id || null);
                       }}
                       className="hover:text-[#141010] transition-colors cursor-pointer"
                     >
@@ -2265,8 +2581,7 @@ export default function MenuPage() {
                       onClick={() => {
                         setIsAddItemOpen(false);
                         setEditingItem(null);
-                        setSelectedItemId(null);
-                        setSelectedCustomizationId(null);
+                        navigateToCategory(activeCategory?._id || null);
                       }}
                       className="hover:text-[#141010] transition-colors cursor-pointer"
                     >
@@ -2287,8 +2602,8 @@ export default function MenuPage() {
               </div>
             </div>
 
-            {/* Two Column Form Grid */}
-            <div className="w-full p-6 lg:p-8 flex-1">
+            {/* Scrollable Form Content Area */}
+            <div className="flex-1 overflow-y-auto min-h-0 w-full p-6 lg:p-8">
               <form id="item-details-form" onSubmit={handleSaveItemSubmit}>
                 {itemError && (
                   <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
@@ -2556,21 +2871,24 @@ export default function MenuPage() {
                             <span>Dietary Category</span>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                            {availableItemTypes.map((type) => (
-                              <button
-                                key={type.id}
-                                type="button"
-                                onClick={() => setSelectedDietaryType(type.id)}
-                                className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
-                                  selectedDietaryType === type.id || selectedDietaryType === type.name.toLowerCase()
-                                    ? "border-[#141010] bg-[#f1edec] text-[#141010] ring-1 ring-[#141010]"
-                                    : "border-[#e7e5e4] bg-white hover:bg-[#f1edec] text-[#5e5e5e]"
-                                }`}
-                              >
-                                <span>{type.icon}</span>
-                                <span>{type.label}</span>
-                              </button>
-                            ))}
+                            {availableItemTypes.map((type) => {
+                              const isSelected = isDietaryTypeSelected(type);
+                              return (
+                                <button
+                                  key={type.id}
+                                  type="button"
+                                  onClick={() => setSelectedDietaryType(type.id)}
+                                  className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${
+                                    isSelected
+                                      ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-sm ring-1 ring-[#0c0a09]"
+                                      : "border-[#e7e5e4] bg-white hover:bg-[#f1edec] text-[#5e5e5e] hover:text-[#0c0a09]"
+                                  }`}
+                                >
+                                  <span>{type.icon}</span>
+                                  <span>{type.label}</span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -3037,8 +3355,8 @@ export default function MenuPage() {
                             </div>
                             {itemShowItemType && (
                               <span className="bg-black/75 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded flex items-center gap-1">
-                                <span>{availableItemTypes.find((d) => d.id === selectedDietaryType || d.name.toLowerCase() === selectedDietaryType.toLowerCase())?.icon || "🟢"}</span>
-                                <span>{availableItemTypes.find((d) => d.id === selectedDietaryType || d.name.toLowerCase() === selectedDietaryType.toLowerCase())?.label || "Vegetarian"}</span>
+                                <span>{availableItemTypes.find((d) => isDietaryTypeSelected(d))?.icon || "🟢"}</span>
+                                <span>{availableItemTypes.find((d) => isDietaryTypeSelected(d))?.label || "Vegetarian"}</span>
                               </span>
                             )}
                           </div>
@@ -3258,37 +3576,40 @@ export default function MenuPage() {
                   </div>
                 </div>
 
-                {/* Sticky Bottom Action Bar */}
-                <div className="sticky bottom-0 z-20 -mx-6 lg:-mx-8 -mb-6 lg:-mb-8 mt-12 bg-white/95 backdrop-blur-sm border-t border-[#e7e5e4] px-6 lg:px-8 py-4 flex items-center justify-between shadow-[0_-4px_16px_rgba(0,0,0,0.03)]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddItemOpen(false);
-                      setEditingItem(null);
-                    }}
-                    className="h-11 px-6 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-[15px] bg-white cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSavingItem}
-                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-                    className="h-11 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
-                  >
-                    {isSavingItem ? (
-                      <>
-                        <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : editingItem ? (
-                      "Save Changes"
-                    ) : (
-                      "Save & Create Item"
-                    )}
-                  </button>
-                </div>
               </form>
+            </div>
+
+            {/* Solid Docked Bottom Action Bar */}
+            <div className="shrink-0 bg-white border-t border-[#e7e5e4] px-6 lg:px-8 py-4 flex items-center justify-between z-10 shadow-[0_-2px_10px_rgba(0,0,0,0.04)]">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddItemOpen(false);
+                  setEditingItem(null);
+                  navigateToCategory(activeCategory?._id || null);
+                }}
+                className="h-11 px-6 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-[15px] bg-white cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="item-details-form"
+                disabled={isSavingItem}
+                style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                className="h-11 px-8 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50 flex items-center gap-2"
+              >
+                {isSavingItem ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : editingItem ? (
+                  "Save Changes"
+                ) : (
+                  "Save & Create Item"
+                )}
+              </button>
             </div>
           </div>
         ) : selectedCustomizationId && activeCustomization ? (
@@ -3296,17 +3617,13 @@ export default function MenuPage() {
           /* ======================================================== */
           /* VIEW 2: CUSTOMIZATION CHOICES (OPTIONS) SCREEN           */
           /* ======================================================== */
-          <div className="flex flex-col flex-1 min-w-0 bg-[#fdf8f7] font-sans">
+          <div className="flex flex-col flex-1 min-w-0 bg-[#fdf8f7] font-sans overflow-y-auto min-h-0 pb-12">
             {/* Breadcrumb Navigation */}
             <div className="px-6 lg:px-8 pt-6 pb-2">
               <nav className="flex items-center text-xs font-medium text-[#5e5e5e] gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedCustomizationId(null);
-                    setSelectedItemId(null);
-                    setSelectedCategoryId(null);
-                  }}
+                  onClick={() => navigateToCategory(null)}
                   className="hover:text-[#141010] transition-colors cursor-pointer"
                 >
                   {activeMenu?.name || "Main Menu"}
@@ -3314,10 +3631,7 @@ export default function MenuPage() {
                 <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedCustomizationId(null);
-                    setSelectedItemId(null);
-                  }}
+                  onClick={() => navigateToCategory(activeCategory?._id)}
                   className="hover:text-[#141010] transition-colors cursor-pointer"
                 >
                   {activeCategory?.name || "Category"}
@@ -3325,7 +3639,13 @@ export default function MenuPage() {
                 <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
                 <button
                   type="button"
-                  onClick={() => setSelectedCustomizationId(null)}
+                  onClick={() => {
+                    if (activeCategory?._id && activeItem?._id) {
+                      navigateToItem(activeCategory._id, activeItem._id);
+                    } else {
+                      setSelectedCustomizationId(null);
+                    }
+                  }}
                   className="hover:text-[#141010] transition-colors cursor-pointer"
                 >
                   {activeItem?.name || "Item"}
@@ -3573,6 +3893,14 @@ export default function MenuPage() {
                                       >
                                         <CopyIcon className="w-4 h-4" />
                                       </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleOpenDeleteChoice(choice)}
+                                        className="p-1.5 text-[#5e5e5e] hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                        title="Delete customization item"
+                                      >
+                                        <TrashIcon className="w-4 h-4" />
+                                      </button>
                                     </div>
                                   </td>
                                 </tr>
@@ -3627,7 +3955,7 @@ export default function MenuPage() {
           /* ======================================================== */
           /* VIEW 3: ITEM CUSTOMIZATIONS MANAGEMENT VIEW (PREST THEME)*/
           /* ======================================================== */
-          <div className="flex flex-col flex-1 min-w-0">
+          <div className="flex flex-col flex-1 min-w-0 overflow-y-auto min-h-0 pb-12">
             {/* Workspace Header (Consistent with PREST) */}
             <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
               <div className="flex items-end justify-between w-full">
@@ -3635,10 +3963,7 @@ export default function MenuPage() {
                   <nav className="flex items-center text-xs font-medium text-gray-500 mb-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedItemId(null);
-                        setSelectedCategoryId(null);
-                      }}
+                      onClick={() => navigateToCategory(null)}
                       className="hover:text-gray-900 transition-colors cursor-pointer"
                     >
                       {activeMenu?.name || "Main Menu"}
@@ -3646,7 +3971,7 @@ export default function MenuPage() {
                     <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400" />
                     <button
                       type="button"
-                      onClick={() => setSelectedItemId(null)}
+                      onClick={() => navigateToCategory(activeCategory?._id)}
                       className="hover:text-gray-900 transition-colors cursor-pointer"
                     >
                       {activeCategory?.name || "Category"}
@@ -3796,7 +4121,7 @@ export default function MenuPage() {
 
                       {/* Clean Availability badge */}
                       <div
-                        onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable)}
+                        onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable, activeItem.name)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold cursor-pointer transition select-none ${
                           activeItem.isAvailable
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100"
@@ -3810,7 +4135,7 @@ export default function MenuPage() {
                       {/* Published switch */}
                       <div className="flex items-center gap-2 pl-2 border-l border-gray-200 select-none">
                         <div
-                          onClick={() => handleToggleItemPublished(activeItem._id, !!activeItem.published)}
+                          onClick={() => handleToggleItemPublished(activeItem._id, !!activeItem.published, activeItem.name)}
                           className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${
                             activeItem.published ? "bg-black" : "bg-gray-300"
                           }`}
@@ -3902,7 +4227,13 @@ export default function MenuPage() {
                               onDragOver={(e) => handleCustomizationDragOver(e, index)}
                               onDrop={(e) => handleCustomizationDrop(e, index)}
                               onDragEnd={handleCustomizationDragEnd}
-                              onClick={() => setSelectedCustomizationId(cust._id)}
+                              onClick={() => {
+                                if (activeCategory?._id && activeItem?._id) {
+                                  navigateToCustomization(activeCategory._id, activeItem._id, cust._id);
+                                } else {
+                                  setSelectedCustomizationId(cust._id);
+                                }
+                              }}
                               className={`border-b border-[#e7e5e4] transition-all select-none cursor-pointer group ${
                                 isDragging
                                   ? "opacity-25 bg-[#f1edec]"
@@ -3991,8 +4322,7 @@ export default function MenuPage() {
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setDeletingCustomizationId(cust._id);
-                                    setIsDeleteCustomizationOpen(true);
+                                    handleOpenDeleteCustomization(cust);
                                   }}
                                   className="p-1.5 hover:bg-red-50 hover:text-red-600 rounded text-[#5e5e5e] transition cursor-pointer"
                                   title="Delete customization"
@@ -4062,7 +4392,11 @@ export default function MenuPage() {
                                 type="button"
                                 onClick={() => {
                                   setSelectedMenuId(m._id);
+                                  setSelectedCategoryId(null);
+                                  setSelectedItemId(null);
+                                  setSelectedCustomizationId(null);
                                   setIsMenuDropdownOpen(false);
+                                  navigateToCategory(null, m._id);
                                 }}
                                 className={`w-full text-left px-4 py-2.5 flex items-center justify-between text-sm transition-colors cursor-pointer ${
                                   isSelected ? "bg-[#f1edec] font-semibold text-[#141010]" : "hover:bg-[#fafafa] text-[#5e5e5e]"
@@ -4186,7 +4520,12 @@ export default function MenuPage() {
                             onDragStart={(e) => handleCategoryDragStart(e, index)}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleCategoryDrop(e, index)}
-                            onClick={() => setSelectedCategoryId(cat._id)}
+                            onClick={() => {
+                            setSelectedCategoryId(cat._id);
+                            setSelectedItemId(null);
+                            setSelectedCustomizationId(null);
+                            navigateToCategory(cat._id);
+                          }}
                             className={`flex items-center justify-between p-4 cursor-pointer transition-colors border-l-2 group ${
                               isSelected
                                 ? "bg-[#fafafa] border-b border-[#e7e5e4] border-l-[#0c0a09]"
@@ -4209,7 +4548,7 @@ export default function MenuPage() {
                             <div className="flex items-center gap-3 shrink-0">
                               {/* Toggle */}
                               <div
-                                onClick={(e) => handleToggleCategory(e, cat._id, cat.published)}
+                                onClick={(e) => handleToggleCategory(e, cat._id, cat.published, cat.name)}
                                 className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
                                   cat.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
                                 }`}
@@ -4325,7 +4664,13 @@ export default function MenuPage() {
                                     onDragStart={(e) => handleItemDragStart(e, index)}
                                     onDragOver={(e) => e.preventDefault()}
                                     onDrop={(e) => handleItemDrop(e, index)}
-                                    onClick={() => setSelectedItemId(item._id)}
+                                    onClick={() => {
+                                      if (activeCategory?._id) {
+                                        navigateToItem(activeCategory._id, item._id);
+                                      } else {
+                                        setSelectedItemId(item._id);
+                                      }
+                                    }}
                                     className={`border-b border-[#e7e5e4] hover:bg-[#fafafa] transition-colors group select-none cursor-pointer ${
                                       !item.isAvailable ? "opacity-60" : ""
                                     }`}
@@ -4381,7 +4726,7 @@ export default function MenuPage() {
                                       <div
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          handleToggleItemPublished(item._id, item.published ?? true);
+                                          handleToggleItemPublished(item._id, item.published ?? true, item.name);
                                         }}
                                         className={`w-8 h-4 rounded-full relative cursor-pointer inline-block transition-colors ${
                                           (item.published ?? true) ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
@@ -4550,8 +4895,14 @@ export default function MenuPage() {
                         type="button"
                         onClick={async () => {
                           if (!activeMenu?._id) return;
-                          await setDefaultMenuMutation({ id: activeMenu._id });
-                          setIsEditMenuOpen(false);
+                          try {
+                            const name = activeMenu.name;
+                            await setDefaultMenuMutation({ id: activeMenu._id });
+                            setIsEditMenuOpen(false);
+                            showToast(`Menu "${name}" set as default menu`, "success");
+                          } catch (err: any) {
+                            showToast(err.message || "Failed to set default menu", "error");
+                          }
                         }}
                         className="w-full py-2 px-3 text-xs font-medium text-[#141010] bg-[#f1edec] hover:bg-[#e7e5e4] rounded-lg transition cursor-pointer"
                       >
@@ -4562,12 +4913,9 @@ export default function MenuPage() {
                     {menus && menus.length > 1 && (
                       <button
                         type="button"
-                        onClick={async () => {
-                          if (!activeMenu?._id) return;
-                          if (!confirm(`Delete menu "${activeMenu.name}"?`)) return;
-                          await deleteMenuMutation({ id: activeMenu._id });
-                          setSelectedMenuId(null);
-                          setIsEditMenuOpen(false);
+                        onClick={() => {
+                          if (!activeMenu) return;
+                          handleOpenDeleteMenu(activeMenu);
                         }}
                         className="w-full py-2 px-3 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
                       >
@@ -5027,43 +5375,27 @@ export default function MenuPage() {
               </form>
 
               {/* Drawer Footer */}
-              <div className="p-6 border-t border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7] shrink-0 font-sans">
-                {isEditCustomizationOpen ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsEditCustomizationOpen(false);
-                      setDeletingCustomizationId(editingCustomization?._id);
-                      setIsDeleteCustomizationOpen(true);
-                    }}
-                    className="text-xs text-red-600 hover:text-red-700 font-semibold cursor-pointer"
-                  >
-                    Delete this customization
-                  </button>
-                ) : <div />}
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsAddCustomizationOpen(false);
-                      setIsEditCustomizationOpen(false);
-                      setEditingCustomization(null);
-                    }}
-                    className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[14px] hover:bg-[#f1edec] transition cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    form="customization-form"
-                    disabled={isSavingCustomization}
-                    style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-                    className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition shadow-sm cursor-pointer disabled:opacity-50"
-                  >
-                    {isSavingCustomization ? "Saving..." : isEditCustomizationOpen ? "Save changes" : "Create customization"}
-                  </button>
-                </div>
+              <div className="p-6 border-t border-[#e7e5e4] flex items-center justify-end gap-3 bg-[#fdf8f7] shrink-0 font-sans">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAddCustomizationOpen(false);
+                    setIsEditCustomizationOpen(false);
+                    setEditingCustomization(null);
+                  }}
+                  className="h-10 px-5 rounded-full border border-[#e7e5e4] bg-transparent text-[#141010] font-medium text-[14px] hover:bg-[#f1edec] transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  form="customization-form"
+                  disabled={isSavingCustomization}
+                  style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                  className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingCustomization ? "Saving..." : isEditCustomizationOpen ? "Save changes" : "Create customization"}
+                </button>
               </div>
             </div>
           </div>
@@ -5817,6 +6149,150 @@ export default function MenuPage() {
                   className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
                 >
                   {isDeletingCategory ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: DELETE MENU                                   */}
+        {/* ---------------------------------------------------- */}
+        {isDeleteMenuModalOpen && targetDeleteMenu && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isDeletingMenu) {
+                  setIsDeleteMenuModalOpen(false);
+                  setTargetDeleteMenu(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">Delete menu?</h4>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteMenu.name}</strong>? This action will remove this menu and its categories. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteMenuModalOpen(false);
+                    setTargetDeleteMenu(null);
+                  }}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteMenu}
+                  disabled={isDeletingMenu}
+                  className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingMenu ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: DELETE CUSTOMIZATION GROUP                    */}
+        {/* ---------------------------------------------------- */}
+        {isDeleteCustomizationOpen && targetDeleteCustomization && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isDeletingCustomization) {
+                  setIsDeleteCustomizationOpen(false);
+                  setTargetDeleteCustomization(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">Delete customization?</h4>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteCustomization.name}</strong>? This action will remove this customization group and all its modifier options.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteCustomizationOpen(false);
+                    setTargetDeleteCustomization(null);
+                  }}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteCustomizationConfirm}
+                  disabled={isDeletingCustomization}
+                  className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingCustomization ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: DELETE CHOICE / CUSTOMIZATION ITEM            */}
+        {/* ---------------------------------------------------- */}
+        {isDeleteChoiceOpen && targetDeleteChoice && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => {
+                if (!isDeletingChoice) {
+                  setIsDeleteChoiceOpen(false);
+                  setTargetDeleteChoice(null);
+                }
+              }}
+            />
+            <div className="relative w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <AlertTriangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">Delete customization item?</h4>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteChoice.name}</strong>? This action will remove this modifier item.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsDeleteChoiceOpen(false);
+                    setTargetDeleteChoice(null);
+                  }}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteChoiceConfirm}
+                  disabled={isDeletingChoice}
+                  className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  {isDeletingChoice ? "Deleting..." : "Delete"}
                 </button>
               </div>
             </div>

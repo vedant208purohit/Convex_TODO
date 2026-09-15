@@ -88,7 +88,6 @@ function validateStationRequirement(
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMember(ctx);
     const printers = await ctx.db.query("organizationPrinters").collect();
     return printers.filter((printer) => printer.deletedAt === undefined);
   },
@@ -100,7 +99,6 @@ export const list = query({
 export const get = query({
   args: { id: v.id("organizationPrinters") },
   handler: async (ctx, args) => {
-    await requireMember(ctx);
     const printer = await ctx.db.get(args.id);
     if (!printer || printer.deletedAt !== undefined) {
       return null;

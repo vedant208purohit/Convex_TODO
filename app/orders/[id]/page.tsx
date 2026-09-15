@@ -288,6 +288,10 @@ export default function OrderDetailsDynamicPage() {
     activeOrg ? { organizationId: activeOrg._id } : {},
   );
 
+  // Query Real Store Printers from DB
+  const printers = useQuery(api.organizationPrinters.list, {});
+  const isPrinterConnected = Boolean(printers && printers.length > 0);
+
   // Query Order Details
   const order = useQuery(
     api.orders.getOrderDetails,
@@ -1179,13 +1183,20 @@ export default function OrderDetailsDynamicPage() {
                   {/* Printer Status Widget */}
                   <div className="pt-3 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#7a716b]">
                     <span className="flex items-center gap-1.5 font-medium">
-                      <PrintIcon className="w-3.5 h-3.5" />
+                      <PrintIcon className={`w-3.5 h-3.5 ${isPrinterConnected ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
                       <span>Thermal Printer</span>
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
-                      Connected ●
-                    </span>
+                    {isPrinterConnected ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+                        Connected ●
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] px-2 py-0.5 rounded-full border border-[#e7e5e4]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#a8a29e]" />
+                        Disconnected
+                      </span>
+                    )}
                   </div>
                 </section>
               </div>
@@ -1224,7 +1235,8 @@ export default function OrderDetailsDynamicPage() {
               width: 100% !important;
               max-width: 80mm !important;
               margin: 0 !important;
-              padding: 0 !important;
+              padding-top: 2mm !important;
+              padding-bottom: 28mm !important;
               background: #ffffff !important;
               color: #000000 !important;
               display: block !important;
@@ -1241,6 +1253,9 @@ export default function OrderDetailsDynamicPage() {
               z-index: 999999 !important;
               box-shadow: none !important;
             }
+            #printable-order-receipt pre {
+              padding-bottom: 25mm !important;
+            }
           }
         `}</style>
 
@@ -1248,7 +1263,7 @@ export default function OrderDetailsDynamicPage() {
           id="printable-order-receipt"
           className="hidden print:block font-mono text-black bg-white"
         >
-          <pre className="font-mono text-black bg-white m-0 p-0 text-[11px] leading-[1.25] whitespace-pre font-medium">
+          <pre className="font-mono text-black bg-white m-0 p-0 pb-10 text-[11px] leading-[1.25] whitespace-pre font-medium">
             {generateDefxReceiptPlainString(order, activeOrg, 48)}
           </pre>
         </div>

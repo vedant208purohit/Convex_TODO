@@ -55,25 +55,25 @@ describe("defxReceiptFormatter", () => {
     expect(receipt).toContain("ORDER SUMMARY");
     expect(receipt).toContain("BILL DETAILS");
     expect(receipt).toContain("PAYMENT DETAILS");
-    expect(receipt).toContain("Please visit again.");
+    expect(receipt).toContain("Thank you for ordering and stay safe!");
     expect(receipt).toContain("Vadapav (Copy)");
     expect(receipt).toContain("Cheese Dabeli");
 
     // Verify currency symbols appear on line items and totals
-    expect(receipt).toContain("₹70.00");
-    expect(receipt).toContain("₹50.00");
-    expect(receipt).toContain("₹ 120.00");
-    expect(receipt).toContain("₹ 126.00");
+    expect(receipt).toContain("Rs.70.00");
+    expect(receipt).toContain("Rs.50.00");
+    expect(receipt).toContain("Rs. 120.00");
+    expect(receipt).toContain("Rs. 126.00");
   });
 
-  it("should always format amounts with ₹ currency symbol", () => {
+  it("should always format amounts with Rs. currency symbol for thermal printer compatibility", () => {
     const customOrg = {
       ...sampleOrg,
       currencySymbol: "₹",
     };
     const receipt = generateDefxReceiptPlainString(sampleOrder, customOrg, 48);
-    expect(receipt).toContain("₹70.00");
-    expect(receipt).toContain("₹ 126.00");
+    expect(receipt).toContain("Rs.70.00");
+    expect(receipt).toContain("Rs. 126.00");
   });
 
   it("should handle very long restaurant names and addresses gracefully with word-wrapping", () => {

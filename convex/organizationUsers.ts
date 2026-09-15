@@ -327,24 +327,40 @@ export async function requireMember(
 
   const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject || nonDeletedMembers.length === 0 || isTokenAdmin;
 
-  if (!callerMember && isOwnerOrUnowned && "insert" in ctx.db) {
-    const now = Date.now();
-    const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
-      organizationId: org._id,
-      userId: identity.subject,
-      email: identity.email,
-      userType: ["admin"],
-      userPermission: {
-        admin: { create: true, read: true, update: true, delete: true },
-      },
-      createdAt: now,
-      updatedAt: now,
-    });
-    callerMember = await ctx.db.get(newId);
-  }
-
   if (!callerMember && !isOwnerOrUnowned) {
     throw new Error("Forbidden. Active store membership required.");
+  }
+
+  if (!callerMember && isOwnerOrUnowned) {
+    if ("insert" in ctx.db) {
+      const now = Date.now();
+      const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
+        organizationId: org._id,
+        userId: identity.subject,
+        email: identity.email,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      callerMember = await ctx.db.get(newId);
+    } else {
+      callerMember = {
+        _id: `temp_${identity.subject}` as any,
+        _creationTime: Date.now(),
+        organizationId: org._id,
+        userId: identity.subject,
+        email: identity.email,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as Doc<"organizationUsers">;
+    }
   }
 
   return {
