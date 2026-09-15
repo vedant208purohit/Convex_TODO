@@ -270,6 +270,14 @@ export const dispatchOrderDelivery = mutation({
       updatedAt: now,
     });
 
+    await ctx.db.insert("orderDeliverStatuses", {
+      deliveryId,
+      status: "pending",
+      providerStatus: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+
     return { deliveryId, success: true };
   },
 });
@@ -306,6 +314,15 @@ export const cancelOrderDelivery = mutation({
     await ctx.db.patch(delivery._id, {
       status: "cancelled",
       failureReason: args.reason || "Cancelled by store staff",
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("orderDeliverStatuses", {
+      deliveryId: delivery._id,
+      status: "cancelled",
+      providerStatus: "cancelled",
+      notes: args.reason || "Cancelled by store staff",
+      createdAt: now,
       updatedAt: now,
     });
 
@@ -374,6 +391,14 @@ export const retryOrderDelivery = mutation({
       orderId: args.orderId,
       provider,
       status: "pending",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("orderDeliverStatuses", {
+      deliveryId,
+      status: "pending",
+      providerStatus: "pending",
       createdAt: now,
       updatedAt: now,
     });
@@ -588,6 +613,15 @@ export const finalizePorterDispatchSuccess = internalMutation({
       updatedAt: now,
     });
 
+    await ctx.db.insert("orderDeliverStatuses", {
+      deliveryId: delivery._id,
+      status: "open",
+      providerStatus: "open",
+      payloadSnapshot: args.apiResponseSnapshot,
+      createdAt: now,
+      updatedAt: now,
+    });
+
     // Update order delivery charge if fare is provided
     if (args.fare && args.fare > 0) {
       const order = await ctx.db.get(delivery.orderId);
@@ -627,6 +661,16 @@ export const finalizePorterDispatchFailure = internalMutation({
       failureReason: args.failureReason,
       apiRequestSnapshot: args.apiRequestSnapshot,
       apiResponseSnapshot: args.apiResponseSnapshot,
+      updatedAt: now,
+    });
+
+    await ctx.db.insert("orderDeliverStatuses", {
+      deliveryId: delivery._id,
+      status: "failed",
+      providerStatus: "failed",
+      notes: args.failureReason,
+      payloadSnapshot: args.apiResponseSnapshot,
+      createdAt: now,
       updatedAt: now,
     });
 
@@ -721,6 +765,18 @@ export const processPorterWebhook = internalMutation({
       orderTimings,
       updatedAt: now,
     });
+
+    // 5b. Append status history record if canonical transition occurred
+    if (nextStatus !== currentStatus) {
+      await ctx.db.insert("orderDeliverStatuses", {
+        deliveryId: delivery._id,
+        status: nextStatus,
+        providerStatus: rawStatus || targetStatus,
+        payloadSnapshot: sanitizePayload(payload),
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
 
     // 6. Handle Side Effects (e.g. cancellation removes delivery charge from order)
     if (targetStatus === "cancelled") {
