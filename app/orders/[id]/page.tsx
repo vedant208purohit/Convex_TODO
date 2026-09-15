@@ -1135,12 +1135,6 @@ export default function OrderDetailsDynamicPage() {
                           : "0.00"}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                      <span>Delivery / Service Charge</span>
-                      <span className="font-semibold text-[#0c0a09]">
-                        ₹0.00
-                      </span>
-                    </div>
                     {parseFloat(order.display_discount_amount || "0") > 0 && (
                       <div className="flex justify-between items-center text-emerald-700 text-xs">
                         <span className="font-medium">Discount</span>
