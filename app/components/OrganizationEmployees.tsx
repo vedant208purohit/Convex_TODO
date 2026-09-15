@@ -315,9 +315,36 @@ const MODULE_ACCESS_CARDS = [
 ];
 
 export function OrganizationEmployees() {
-  // Query Convex Database for Employees / Staff List
+  // Query Convex Database for Employees / Staff List & Backend Role Module Mapping
   const employees = useQuery(api.organizationUsers.list, {});
   const currentMembership = useQuery(api.organizationUsers.getCurrentMembership, {});
+  const getRoleModuleMappingFn = (api.organizationUsers as any).getRoleModuleMapping;
+  const backendRoleModules = useQuery(
+    getRoleModuleMappingFn ? getRoleModuleMappingFn : "skip"
+  );
+
+  const roleModuleMapping = useMemo<Record<string, string[]>>(() => {
+    return (
+      backendRoleModules || {
+        admin: [
+          "customer_data",
+          "dashboard",
+          "orders",
+          "menu",
+          "kds",
+          "queue",
+          "inventory",
+          "report",
+          "survey",
+        ],
+        cashier: ["orders", "customer_data", "dashboard", "report"],
+        captain: ["orders", "queue", "dashboard", "menu"],
+        waiter: ["orders", "queue"],
+        chef: ["kds", "inventory"],
+        worker: ["orders", "kds"],
+      }
+    );
+  }, [backendRoleModules]);
 
   // Convex Mutations
   const createEmployeeMutation = useMutation(api.organizationUsers.create);
@@ -340,10 +367,8 @@ export function OrganizationEmployees() {
   // Form Fields State
   const [formFirstName, setFormFirstName] = useState("");
   const [formLastName, setFormLastName] = useState("");
-  const [formCountryCode, setFormCountryCode] = useState("+91");
-  const [formPhone, setFormPhone] = useState("");
   const [formUserIdentifier, setFormUserIdentifier] = useState("");
-  const [formRoles, setFormRoles] = useState<string[]>(["cashier", "orders"]);
+  const [formRoles, setFormRoles] = useState<string[]>([]);
   const [customPermissions, setCustomPermissions] = useState<
     Record<string, { create: boolean; read: boolean; update: boolean; delete: boolean }>
   >({});
@@ -457,16 +482,29 @@ export function OrganizationEmployees() {
     return filteredEmployees.slice(start, start + itemsPerPage);
   }, [filteredEmployees, currentPage]);
 
+  // Select staff role -> automatically assign backend-defined module access & clear previous role permissions
+  const handleSelectRole = (roleKey: string) => {
+    const modulesForRole = roleModuleMapping[roleKey] || [];
+    setFormRoles([roleKey, ...modulesForRole]);
+  };
+
+  // Toggle individual module access manually
+  const handleToggleModule = (modKey: string) => {
+    setFormRoles((prev) =>
+      prev.includes(modKey) ? prev.filter((m) => m !== modKey) : [...prev, modKey]
+    );
+  };
+
   // Drawer Handlers
   const handleOpenAddDrawer = () => {
     setDrawerMode("add");
     setEditingId(null);
     setFormFirstName("");
     setFormLastName("");
-    setFormPhone("");
-    setFormCountryCode("+91");
     setFormUserIdentifier("");
-    setFormRoles(["cashier", "orders"]);
+    const defaultRole = "cashier";
+    const defaultModules = roleModuleMapping[defaultRole] || ["orders", "customer_data", "dashboard", "report"];
+    setFormRoles([defaultRole, ...defaultModules]);
     setCustomPermissions({});
     setIsAdvancedOpen(false);
     setErrorMessage(null);
@@ -488,12 +526,15 @@ export function OrganizationEmployees() {
       setFormLastName(nameParts.slice(1).join(" ") || "");
     }
 
-    const rawPhone = emp.phone || meta.phone || "";
-    const cleanPhoneInput = rawPhone.replace(/^\+91\s*/, "");
-    setFormPhone(cleanPhoneInput);
-
     setFormUserIdentifier(emp.userId);
-    setFormRoles(emp.userType.length > 0 ? emp.userType : ["cashier"]);
+    if (emp.userType && emp.userType.length > 0) {
+      setFormRoles(emp.userType);
+    } else {
+      const defaultRole = "cashier";
+      const defaultModules = roleModuleMapping[defaultRole] || [];
+      setFormRoles([defaultRole, ...defaultModules]);
+    }
+
     setCustomPermissions(emp.userPermission || {});
     setIsAdvancedOpen(false);
     setErrorMessage(null);
@@ -504,12 +545,6 @@ export function OrganizationEmployees() {
   const handleCloseDrawer = () => {
     setIsDrawerVisible(false);
     setTimeout(() => setIsDrawerOpen(false), 300);
-  };
-
-  const handleToggleItem = (key: string) => {
-    setFormRoles((prev) =>
-      prev.includes(key) ? prev.filter((r) => r !== key) : [...prev, key]
-    );
   };
 
   const handleTogglePermission = (
@@ -537,13 +572,8 @@ export function OrganizationEmployees() {
       setErrorMessage("Last name is required.");
       return;
     }
-    const cleanPhoneDigits = formPhone.trim().replace(/\D/g, "");
-    if (!cleanPhoneDigits) {
-      setErrorMessage("Phone number is required.");
-      return;
-    }
-    if (cleanPhoneDigits.length !== 10) {
-      setErrorMessage("Please enter a valid 10-digit mobile number.");
+    if (!formUserIdentifier.trim()) {
+      setErrorMessage("User identifier / Email is required.");
       return;
     }
     if (formRoles.length === 0) {
@@ -555,26 +585,15 @@ export function OrganizationEmployees() {
     setIsSaving(true);
 
     try {
-      let effectiveUserId = formUserIdentifier.trim();
-      if (!effectiveUserId) {
-        const cleanPhone = formPhone.trim().replace(/\s+/g, "");
-        effectiveUserId = `${cleanPhone}@phone.user`;
-      }
-
+      const effectiveUserId = formUserIdentifier.trim();
       const permissionPayload =
         Object.keys(customPermissions).length > 0 ? customPermissions : undefined;
-
-      const trimmedPhone = formPhone.trim();
-      const fullPhone = trimmedPhone.startsWith("+")
-        ? trimmedPhone
-        : `${formCountryCode} ${trimmedPhone}`;
 
       if (drawerMode === "add") {
         await createEmployeeMutation({
           userId: effectiveUserId,
           firstName: formFirstName.trim(),
           lastName: formLastName.trim(),
-          phone: fullPhone,
           ...(effectiveUserId.includes("@") ? { email: effectiveUserId } : {}),
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
@@ -585,7 +604,6 @@ export function OrganizationEmployees() {
           id: editingId,
           firstName: formFirstName.trim(),
           lastName: formLastName.trim(),
-          phone: fullPhone,
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
@@ -636,10 +654,10 @@ export function OrganizationEmployees() {
   const selectedModules = formRoles.filter((m) => MODULE_ACCESS_CARDS.some((c) => c.key === m));
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col flex-1 min-h-0 h-full space-y-4">
       {/* Toast Feedback Alerts */}
       {successMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-3 text-xs text-emerald-800 shadow-sm animate-fade-in">
+        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-3 text-xs text-emerald-800 shadow-sm animate-fade-in shrink-0">
           <div className="flex items-center gap-2">
             <span>✓</span>
             <span className="font-medium">{successMessage}</span>
@@ -651,7 +669,7 @@ export function OrganizationEmployees() {
       )}
 
       {errorMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-5 py-3 text-xs text-red-800 shadow-sm animate-fade-in">
+        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-5 py-3 text-xs text-red-800 shadow-sm animate-fade-in shrink-0">
           <div className="flex items-center gap-2">
             <span>⚠️</span>
             <span className="font-medium">{errorMessage}</span>
@@ -663,7 +681,7 @@ export function OrganizationEmployees() {
       )}
 
       {/* TOP HEADER SECTION */}
-      <div className="space-y-4">
+      <div className="space-y-4 shrink-0">
         {/* Title & Subtitle */}
         <div className="border-b border-[#e7e5e4] pb-4">
           <h2 className="font-garamond text-2xl lg:text-3xl text-[#141010] font-normal leading-tight">
@@ -756,9 +774,9 @@ export function OrganizationEmployees() {
       </div>
 
       {/* MAIN EMPLOYEE TABLE CARD */}
-      <div className="rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden flex flex-col">
-        {/* Inner Scrollable Box with Sticky Table Header (Max 3 rows visible before scroll) */}
-        <div className="w-full overflow-x-auto max-h-[255px] overflow-y-auto custom-scrollbar">
+      <div className="flex-1 flex flex-col min-h-[400px] rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
+        {/* Inner Scrollable Box with Sticky Table Header */}
+        <div className="flex-1 w-full overflow-x-auto overflow-y-auto custom-scrollbar min-h-0">
           <table className="w-full min-w-[640px] text-left border-collapse table-fixed">
             <colgroup>
               <col className="w-[30%]" />
@@ -994,10 +1012,12 @@ export function OrganizationEmployees() {
                               <EnvelopeIcon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
                               <span className="font-mono text-neutral-700">{meta.email}</span>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <PhoneIcon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                              <span className="font-mono text-neutral-700">{meta.phone}</span>
-                            </div>
+                            {meta.phone && (
+                              <div className="flex items-center gap-2">
+                                <PhoneIcon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                                <span className="font-mono text-neutral-700">{meta.phone}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1319,31 +1339,6 @@ export function OrganizationEmployees() {
                   </div>
                 </div>
 
-                {/* Phone number input */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-neutral-700" htmlFor="phone-number">
-                    Phone number <span className="text-rose-500">*</span>
-                  </label>
-                  <div className="flex rounded-md border border-neutral-300 overflow-hidden focus-within:border-black focus-within:ring-1 focus-within:ring-black bg-white transition">
-                    <div className="flex items-center gap-1 bg-neutral-50 px-3 py-2 border-r border-neutral-200 text-xs text-neutral-700 select-none shrink-0 font-medium">
-                      <span className="text-base leading-none">🇮🇳</span>
-                      <span className="ml-1">{formCountryCode}</span>
-                    </div>
-                    <input
-                      id="phone-number"
-                      type="tel"
-                      maxLength={10}
-                      value={formPhone}
-                      onChange={(e) => {
-                        const numericOnly = e.target.value.replace(/\D/g, "").slice(0, 10);
-                        setFormPhone(numericOnly);
-                      }}
-                      placeholder="9876543210"
-                      className="flex-1 text-sm border-0 bg-transparent px-3 py-2 focus:ring-0 text-neutral-900 font-mono tracking-wide focus:outline-none"
-                    />
-                  </div>
-                </div>
-
                 {/* User identifier / Email */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-neutral-700" htmlFor="user-identifier">
@@ -1375,7 +1370,7 @@ export function OrganizationEmployees() {
                     STAFF ROLES
                   </h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Select one or more roles based on what this employee does.
+                    Select a staff role to automatically assign backend-defined module access.
                   </p>
                 </div>
 
@@ -1387,7 +1382,7 @@ export function OrganizationEmployees() {
                     return (
                       <label
                         key={card.key}
-                        onClick={() => handleToggleItem(card.key)}
+                        onClick={() => handleSelectRole(card.key)}
                         className={`flex flex-col justify-between p-3 rounded-lg cursor-pointer select-none transition ${
                           isChecked
                             ? "border-2 border-black bg-neutral-50 shadow-sm"
@@ -1403,10 +1398,11 @@ export function OrganizationEmployees() {
                               </span>
                             </div>
                             <input
-                              type="checkbox"
+                              type="radio"
+                              name="staffRole"
                               checked={isChecked}
                               onChange={() => {}}
-                              className="h-4 w-4 rounded border-neutral-400 text-black focus:ring-black cursor-pointer"
+                              className="h-4 w-4 rounded-full border-neutral-400 text-black focus:ring-black cursor-pointer"
                             />
                           </div>
                           <p className="text-[11px] text-neutral-600 mt-1.5 leading-tight">
@@ -1433,19 +1429,18 @@ export function OrganizationEmployees() {
                     MODULE ACCESS
                   </h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Give this employee access to additional POS modules.
+                    Module access automatically populated based on backend role configuration.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
                   {MODULE_ACCESS_CARDS.map((mod) => {
                     const isChecked = formRoles.includes(mod.key);
-                    const ModIcon = mod.icon;
 
                     return (
                       <label
                         key={mod.key}
-                        onClick={() => handleToggleItem(mod.key)}
+                        onClick={() => handleToggleModule(mod.key)}
                         className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer select-none transition ${
                           isChecked
                             ? "border-2 border-black bg-neutral-50 shadow-sm"
@@ -1481,17 +1476,6 @@ export function OrganizationEmployees() {
                       return (
                         <span key={rk} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-black text-white text-xs font-medium shadow-sm">
                           <span>{rObj?.label || rk}</span>
-                          <button
-                            type="button"
-                            aria-label={`Remove ${rObj?.label || rk} role`}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleToggleItem(rk);
-                            }}
-                            className="text-neutral-300 hover:text-white ml-0.5 focus:outline-none cursor-pointer"
-                          >
-                            ✕
-                          </button>
                         </span>
                       );
                     })}
@@ -1506,7 +1490,7 @@ export function OrganizationEmployees() {
                             aria-label={`Remove ${mObj?.label || mk} module`}
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleToggleItem(mk);
+                              handleToggleModule(mk);
                             }}
                             className="text-neutral-300 hover:text-white ml-0.5 focus:outline-none cursor-pointer"
                           >
