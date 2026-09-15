@@ -9,6 +9,7 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as customers from "../customers.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
 import type * as features from "../features.js";
 import type * as inventory from "../inventory.js";
@@ -49,6 +50,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  customers: typeof customers;
   digitalStoreImages: typeof digitalStoreImages;
   features: typeof features;
   inventory: typeof inventory;
