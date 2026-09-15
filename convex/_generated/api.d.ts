@@ -9,11 +9,14 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as deliveryProvider from "../deliveryProvider.js";
+import type * as http from "../http.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
 import type * as menuImport from "../menuImport.js";
 import type * as migrateStorageToR2 from "../migrateStorageToR2.js";
 import type * as migrateStorageToR2Db from "../migrateStorageToR2Db.js";
+import type * as orderDelivers from "../orderDelivers.js";
 import type * as orderPayments from "../orderPayments.js";
 import type * as orders from "../orders.js";
 import type * as organizationAssets from "../organizationAssets.js";
@@ -46,11 +49,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  deliveryProvider: typeof deliveryProvider;
+  http: typeof http;
   inventory: typeof inventory;
   menu: typeof menu;
   menuImport: typeof menuImport;
   migrateStorageToR2: typeof migrateStorageToR2;
   migrateStorageToR2Db: typeof migrateStorageToR2Db;
+  orderDelivers: typeof orderDelivers;
   orderPayments: typeof orderPayments;
   orders: typeof orders;
   organizationAssets: typeof organizationAssets;
