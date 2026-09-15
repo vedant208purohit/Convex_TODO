@@ -110,6 +110,16 @@ export default defineSchema({
     isVeg: v.boolean(),
     digitalStoreStatus: v.boolean(),
 
+    // Digital Store Configuration
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
+
     // Payment Configuration
     deliveryCashOnDelivery: v.boolean(),
     dineinPrepaid: v.boolean(),
@@ -503,6 +513,36 @@ export default defineSchema({
     .index("by_layout", ["layoutId"])
     .index("by_table_number", ["tableNumber"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Postpaid Order Requests Domain Table
+  postpaidOrderRequests: defineTable({
+    tableId: v.id("organizationTables"),
+    userId: v.string(),
+    orderId: v.optional(v.id("orders")),
+
+    status: v.union(
+      v.literal("requested"),
+      v.literal("approved"),
+      v.literal("declined"),
+      v.literal("completed")
+    ),
+
+    statusActionById: v.optional(v.string()),
+
+    otpHash: v.optional(v.string()),
+    otpExpiresAt: v.optional(v.number()),
+    otpVerifiedAt: v.optional(v.number()),
+    otpAttempts: v.optional(v.number()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_table", ["tableId"])
+    .index("by_table_and_status", ["tableId", "status"])
+    .index("by_user", ["userId"])
+    .index("by_order", ["orderId"])
+    .index("by_status", ["status"]),
 
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({

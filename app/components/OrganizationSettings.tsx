@@ -22,6 +22,7 @@ type WeeklySchedule = Record<string, DaySchedule>;
 
 interface TaxComponentRow {
   id: string;
+  compId?: Id<"taxComponents">;
   name: string;
   code: string;
   rate: string;
@@ -155,7 +156,9 @@ export function OrganizationSettings() {
   );
 
   const createTaxGroupMutation = useMutation(api.taxation.createTaxGroup);
+  const updateTaxGroupMutation = useMutation(api.taxation.updateTaxGroup);
   const createTaxComponentMutation = useMutation(api.taxation.createTaxComponent);
+  const updateTaxComponentMutation = useMutation(api.taxation.updateTaxComponent);
   const removeTaxGroupMutation = useMutation(api.taxation.removeTaxGroup);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +175,7 @@ export function OrganizationSettings() {
   const [isTaxGroupDrawerOpen, setIsTaxGroupDrawerOpen] = useState(false);
   const [isTaxGroupDrawerVisible, setIsTaxGroupDrawerVisible] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"add" | "edit">("add");
+  const [editingGroupId, setEditingGroupId] = useState<Id<"taxGroups"> | null>(null);
   const [taxGroupName, setTaxGroupName] = useState("");
   const [taxGroupMode, setTaxGroupMode] = useState<"Inclusive" | "Exclusive">("Exclusive");
   const [taxComponents, setTaxComponents] = useState<TaxComponentRow[]>([
@@ -342,10 +346,10 @@ export function OrganizationSettings() {
 
   // Map Convex DB Tax Components for display lookup
   const taxComponentMap = useMemo(() => {
-    const map = new Map<string, { name: string; code?: string; rate: number }>();
+    const map = new Map<string, { compId: Id<"taxComponents">; name: string; code?: string; rate: number }>();
     if (dbTaxComponents) {
       dbTaxComponents.forEach((comp) => {
-        map.set(comp._id, { name: comp.name, code: comp.code, rate: comp.rate });
+        map.set(comp._id, { compId: comp._id, name: comp.name, code: comp.code, rate: comp.rate });
       });
     }
     return map;
@@ -478,6 +482,7 @@ export function OrganizationSettings() {
   // Tax Group Drawer Smooth Open & Close Handlers
   const handleOpenAddTaxGroup = () => {
     setDrawerMode("add");
+    setEditingGroupId(null);
     setTaxGroupName("");
     setTaxGroupMode(formData.inclusiveGst ? "Inclusive" : "Exclusive");
     setTaxComponents([{ id: "1", name: "", code: "", rate: "" }]);
@@ -485,12 +490,23 @@ export function OrganizationSettings() {
     setTimeout(() => setIsTaxGroupDrawerVisible(true), 20);
   };
 
-  const handleOpenEditTaxGroup = (name: string, comps: { name: string; code: string; rate: string }[]) => {
+  const handleOpenEditTaxGroup = (
+    name: string,
+    comps: { compId?: Id<"taxComponents">; name: string; code: string; rate: string }[],
+    groupId?: Id<"taxGroups">
+  ) => {
     setDrawerMode("edit");
+    setEditingGroupId(groupId ?? null);
     setTaxGroupName(name);
     setTaxGroupMode(formData.inclusiveGst ? "Inclusive" : "Exclusive");
     setTaxComponents(
-      comps.map((c, i) => ({ id: (i + 1).toString(), name: c.name, code: c.code, rate: c.rate }))
+      comps.map((c, i) => ({
+        id: c.compId ? c.compId : (i + 1).toString(),
+        compId: c.compId,
+        name: c.name,
+        code: c.code,
+        rate: c.rate,
+      }))
     );
     setIsTaxGroupDrawerOpen(true);
     setTimeout(() => setIsTaxGroupDrawerVisible(true), 20);
@@ -553,30 +569,59 @@ export function OrganizationSettings() {
 
     setIsSaving(true);
     try {
-      const createdCompIds: Id<"taxComponents">[] = [];
+      const finalCompIds: Id<"taxComponents">[] = [];
 
       for (const comp of taxComponents) {
-        if (comp.name.trim() && comp.rate) {
+        if (comp.name.trim() && comp.rate !== "") {
           const rateVal = parseFloat(comp.rate);
-          const compId = await createTaxComponentMutation({
-            organizationId: org._id,
-            name: comp.name.trim(),
-            rate: isNaN(rateVal) ? 0 : rateVal,
-            code: comp.code.trim() || undefined,
-          });
-          createdCompIds.push(compId);
+          const numericRate = isNaN(rateVal) ? 0 : rateVal;
+
+          if (comp.compId) {
+            // Update existing tax component in Convex DB
+            await updateTaxComponentMutation({
+              id: comp.compId,
+              name: comp.name.trim(),
+              rate: numericRate,
+              code: comp.code.trim() || undefined,
+            });
+            finalCompIds.push(comp.compId);
+          } else {
+            // Create new tax component in Convex DB
+            const newCompId = await createTaxComponentMutation({
+              organizationId: org._id,
+              name: comp.name.trim(),
+              rate: numericRate,
+              code: comp.code.trim() || undefined,
+            });
+            finalCompIds.push(newCompId);
+          }
         }
       }
 
-      await createTaxGroupMutation({
-        organizationId: org._id,
-        name: taxGroupName.trim(),
-        taxMode: taxGroupMode === "Inclusive" ? "inclusive" : "exclusive",
-        componentIds: createdCompIds,
-      });
+      if (drawerMode === "edit" && editingGroupId) {
+        // Update existing tax group in Convex DB
+        await updateTaxGroupMutation({
+          id: editingGroupId,
+          name: taxGroupName.trim(),
+          taxMode: taxGroupMode === "Inclusive" ? "inclusive" : "exclusive",
+          componentIds: finalCompIds,
+        });
+        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) updated in Convex Database successfully.`);
+      } else {
+        // Create new tax group in Convex DB
+        await createTaxGroupMutation({
+          organizationId: org._id,
+          name: taxGroupName.trim(),
+          taxMode: taxGroupMode === "Inclusive" ? "inclusive" : "exclusive",
+          componentIds: finalCompIds,
+        });
+        if (drawerMode === "edit") {
+          setHiddenFallbackGroups((prev) => [...prev, taxGroupName.trim()]);
+        }
+        const actionText = drawerMode === "add" ? "created" : "updated";
+        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) ${actionText} in Convex Database successfully.`);
+      }
 
-      const actionText = drawerMode === "add" ? "created" : "updated";
-      setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) ${actionText} in Convex Database successfully.`);
       handleCloseTaxGroupDrawer();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
@@ -657,8 +702,8 @@ export function OrganizationSettings() {
         await updateOrg({
           id: org._id,
           logoUrl: "",
-          logoStorageId: undefined,
-          logoAssetId: undefined,
+          logoStorageId: "",
+          logoAssetId: "",
         });
         setFormData((prev) => ({
           ...prev,
@@ -819,6 +864,8 @@ export function OrganizationSettings() {
         await updateOrg({
           id: org._id,
           fssaiDocumentUrl: "",
+          fssaiDocumentAssetId: "",
+          fssaiDocumentStorageId: "",
         });
         setSuccessMessage("FSSAI document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
@@ -837,6 +884,8 @@ export function OrganizationSettings() {
         await updateOrg({
           id: org._id,
           gstDocumentUrl: "",
+          gstDocumentAssetId: "",
+          gstDocumentStorageId: "",
         });
         setSuccessMessage("GST document removed successfully.");
         setTimeout(() => setSuccessMessage(null), 3000);
@@ -898,9 +947,13 @@ export function OrganizationSettings() {
           updatePayload.gstDocumentStorageId = formData.gstDocumentStorageId;
         } else {
           updatePayload.gstDocumentUrl = "";
+          updatePayload.gstDocumentAssetId = "";
+          updatePayload.gstDocumentStorageId = "";
         }
       } else {
         updatePayload.gstDocumentUrl = "";
+        updatePayload.gstDocumentAssetId = "";
+        updatePayload.gstDocumentStorageId = "";
       }
 
       if (formData.isFssai) {
@@ -910,9 +963,13 @@ export function OrganizationSettings() {
           updatePayload.fssaiDocumentStorageId = formData.fssaiDocumentStorageId;
         } else {
           updatePayload.fssaiDocumentUrl = "";
+          updatePayload.fssaiDocumentAssetId = "";
+          updatePayload.fssaiDocumentStorageId = "";
         }
       } else {
         updatePayload.fssaiDocumentUrl = "";
+        updatePayload.fssaiDocumentAssetId = "";
+        updatePayload.fssaiDocumentStorageId = "";
       }
 
       if (formData.legalEntityName.trim()) updatePayload.legalEntityName = formData.legalEntityName.trim();
@@ -1190,15 +1247,21 @@ export function OrganizationSettings() {
               <h3 className="text-base font-medium text-[#1f1a17]">City & Region</h3>
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                    City*
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                      City*
+                    </label>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
+                      Read-only
+                    </span>
+                  </div>
                   <input
                     type="text"
                     value={formData.city || ""}
-                    onChange={(e) => updateField("city", e.target.value)}
+                    disabled
+                    readOnly
                     placeholder="New Delhi"
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] transition focus:border-[#1f1a17] focus:outline-none"
+                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                   />
                 </div>
 
@@ -1216,28 +1279,39 @@ export function OrganizationSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                    State*
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                      State*
+                    </label>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
+                      Read-only
+                    </span>
+                  </div>
                   <input
                     type="text"
                     value={formData.state || ""}
-                    onChange={(e) => updateField("state", e.target.value)}
+                    disabled
+                    readOnly
                     placeholder="Delhi"
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] transition focus:border-[#1f1a17] focus:outline-none"
+                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                    Country*
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                      Country*
+                    </label>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
+                      Read-only
+                    </span>
+                  </div>
                   <select
                     value={formData.country || "India"}
-                    onChange={(e) => updateField("country", e.target.value)}
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none cursor-pointer"
+                    disabled
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                     style={{
-                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundPosition: "right 1rem center",
                       backgroundRepeat: "no-repeat",
                       backgroundSize: "1.5em 1.5em"
@@ -1257,15 +1331,20 @@ export function OrganizationSettings() {
               <h3 className="text-base font-medium text-[#1f1a17]">Regional Settings</h3>
               <div className="mt-4 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                    Timezone
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                      Timezone
+                    </label>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
+                      Read-only
+                    </span>
+                  </div>
                   <select
                     value={formData.organizationTimeZone || "Asia/Kolkata"}
-                    onChange={(e) => updateField("organizationTimeZone", e.target.value)}
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none cursor-pointer"
+                    disabled
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                     style={{
-                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundPosition: "right 1rem center",
                       backgroundRepeat: "no-repeat",
                       backgroundSize: "1.5em 1.5em"
@@ -1280,29 +1359,26 @@ export function OrganizationSettings() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                    Currency
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                      Currency
+                    </label>
+                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
+                      Read-only
+                    </span>
+                  </div>
                   <select
                     value={formData.defaultCurrency}
-                    onChange={(e) => {
-                      const curr = e.target.value;
-                      const opt = CURRENCY_OPTIONS.find((c) => c.currency === curr);
-                      setFormData((prev) => ({
-                        ...prev,
-                        defaultCurrency: curr,
-                        defaultCurrencySymbol: opt?.symbol || prev.defaultCurrencySymbol,
-                      }));
-                    }}
+                    disabled
                     style={{
-                      backgroundColor: "#fdf8f7",
-                      color: "#1f1a17",
-                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                      backgroundColor: "#f5efeb",
+                      color: "#6f655e",
+                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundPosition: "right 1rem center",
                       backgroundRepeat: "no-repeat",
                       backgroundSize: "1.5em 1.5em"
                     }}
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none cursor-pointer"
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                   >
                     {CURRENCY_OPTIONS.map((c) => (
                       <option key={c.currency} value={c.currency}>
@@ -1617,21 +1693,21 @@ export function OrganizationSettings() {
                                   <input
                                     type="radio"
                                     name={`status-${day}`}
-                                    checked={dayConfig.is_open && dayConfig.is_open_all_day}
-                                    onChange={() => handleDayStatusChange(day, "open_all")}
-                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
-                                  />
-                                  <span className="text-sm font-medium text-[#1f1a17]">Open all day</span>
-                                </label>
-                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
-                                  <input
-                                    type="radio"
-                                    name={`status-${day}`}
                                     checked={dayConfig.is_open && !dayConfig.is_open_all_day}
                                     onChange={() => handleDayStatusChange(day, "open_part")}
                                     className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
                                   />
                                   <span className="text-sm font-medium text-[#1f1a17]">Open part day</span>
+                                </label>
+                                <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
+                                  <input
+                                    type="radio"
+                                    name={`status-${day}`}
+                                    checked={dayConfig.is_open && dayConfig.is_open_all_day}
+                                    onChange={() => handleDayStatusChange(day, "open_all")}
+                                    className="h-4 w-4 border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                  />
+                                  <span className="text-sm font-medium text-[#1f1a17]">Open all day</span>
                                 </label>
                                 <label className="flex items-center gap-3 rounded-lg px-3 py-2.5 hover:bg-[#fdf8f7] cursor-pointer">
                                   <input
@@ -1663,7 +1739,14 @@ export function OrganizationSettings() {
                             Store Open 24 Hours on {day}
                           </div>
                         ) : (
-                          <div className="flex flex-col gap-3">
+                          <div className="flex flex-col gap-2">
+                            {/* Header labels above time inputs */}
+                            <div className="flex items-center gap-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-[#6f655e]">
+                              <span className="flex-1">Start date</span>
+                              <span className="w-3 shrink-0 text-center"></span>
+                              <span className="flex-1">End date</span>
+                            </div>
+
                             {dayConfig.hours.map((slot, idx) => (
                               <div key={idx} className="flex items-center gap-2">
                                 <div className="flex-1 min-w-0 flex items-center justify-between rounded-xl border border-[#eadfd6] bg-white px-2.5 py-2 shadow-sm focus-within:border-[#1f1a17]">
@@ -1827,7 +1910,7 @@ export function OrganizationSettings() {
                     dbTaxGroups.map((group) => {
                       const comps = group.componentIds
                         .map((id) => taxComponentMap.get(id))
-                        .filter(Boolean);
+                        .filter((c): c is { compId: Id<"taxComponents">; name: string; code?: string; rate: number } => Boolean(c));
                       const totalRate = comps.reduce((s, c) => s + (c?.rate || 0), 0);
 
                       return (
@@ -1859,10 +1942,12 @@ export function OrganizationSettings() {
                                   handleOpenEditTaxGroup(
                                     group.name,
                                     comps.map((c) => ({
+                                      compId: c.compId,
                                       name: c?.name || "",
                                       code: c?.code || "",
                                       rate: (c?.rate || 0).toString(),
-                                    }))
+                                    })),
+                                    group._id
                                   )
                                 }
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"

@@ -63,6 +63,36 @@ export const createOrder = mutation({
     const now = Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
+    // 0. Postpaid QR Verification Guard
+    const reqTableId = args.tableId;
+    if (reqTableId && !args.cashierUserId && !args.waiterUserId) {
+      const org = await ctx.db.get(args.organizationId);
+      if (org && org.dineinPospaid) {
+        const identity = await ctx.auth.getUserIdentity();
+        if (identity) {
+          const activeReqs = await ctx.db
+            .query("postpaidOrderRequests")
+            .withIndex("by_table_and_status", (q) =>
+              q.eq("tableId", reqTableId).eq("status", "approved")
+            )
+            .collect();
+
+          const validReq = activeReqs.find(
+            (r) =>
+              r.deletedAt === undefined &&
+              r.userId === identity.subject &&
+              r.otpVerifiedAt !== undefined
+          );
+
+          if (!validReq) {
+            throw new Error(
+              "Unverified postpaid order request. OTP verification is required before placing a QR dine-in order."
+            );
+          }
+        }
+      }
+    }
+
     // 1. Calculate Daily Token Number (#01, #02, #03...)
     const todayOrders = await ctx.db
       .query("orders")
@@ -260,15 +290,32 @@ export const createOrder = mutation({
       createdAt: now,
     });
 
-    // 9. Dine-In Table Locking
-    if (args.tableId) {
-      const table = await ctx.db.get(args.tableId);
+    // 9. Dine-In Table Locking & Postpaid Request Linking
+    if (reqTableId) {
+      const table = await ctx.db.get(reqTableId);
       if (table) {
-        await ctx.db.patch(args.tableId, {
+        await ctx.db.patch(reqTableId, {
           currentOrderId: orderId,
           isRequested: false,
           updatedAt: now,
         });
+      }
+
+      // Link orderId to active approved postpaid request for this table
+      const activePostpaidReqs = await ctx.db
+        .query("postpaidOrderRequests")
+        .withIndex("by_table_and_status", (q) =>
+          q.eq("tableId", reqTableId).eq("status", "approved")
+        )
+        .collect();
+
+      for (const req of activePostpaidReqs) {
+        if (req.deletedAt === undefined) {
+          await ctx.db.patch(req._id, {
+            orderId,
+            updatedAt: now,
+          });
+        }
       }
     }
 
@@ -523,12 +570,41 @@ export const completeOrder = mutation({
       createdAt: now,
     });
 
-    // 3. Clear Dine-In Table Occupancy
-    if (order.tableId) {
-      const table = await ctx.db.get(order.tableId);
+    // 3. Clear Dine-In Table Occupancy & Complete Postpaid Order Request
+    const orderTableId = order.tableId;
+    if (orderTableId) {
+      const postpaidByOrder = await ctx.db
+        .query("postpaidOrderRequests")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const toComplete =
+        postpaidByOrder.length > 0
+          ? postpaidByOrder
+          : await ctx.db
+              .query("postpaidOrderRequests")
+              .withIndex("by_table_and_status", (q) =>
+                q.eq("tableId", orderTableId).eq("status", "approved")
+              )
+              .collect();
+
+      for (const req of toComplete) {
+        if (
+          req.deletedAt === undefined &&
+          (req.status === "approved" || req.status === "requested")
+        ) {
+          await ctx.db.patch(req._id, {
+            status: "completed",
+            updatedAt: now,
+          });
+        }
+      }
+
+      const table = await ctx.db.get(orderTableId);
       if (table && table.currentOrderId === order._id.toString()) {
-        await ctx.db.patch(order.tableId, {
+        await ctx.db.patch(orderTableId, {
           currentOrderId: undefined,
+          isRequested: false,
           updatedAt: now,
         });
       }
