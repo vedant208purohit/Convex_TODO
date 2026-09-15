@@ -1050,17 +1050,21 @@ export const seedSampleOrders = mutation({
     organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
-    let orgId = args.organizationId;
-    if (!orgId) {
-      const orgs = await ctx.db.query("organizations").collect();
+    let orgs = [];
+    if (args.organizationId) {
+      const singleOrg = await ctx.db.get(args.organizationId);
+      if (!singleOrg) throw new Error("Organization not found");
+      orgs.push(singleOrg);
+    } else {
+      orgs = await ctx.db.query("organizations").collect();
       if (!orgs.length) throw new Error("No organization found to seed orders");
-      orgId = orgs[0]._id;
     }
 
-    const org = await ctx.db.get(orgId);
-    if (!org) throw new Error("Organization not found");
+    let totalSeeded = 0;
 
-    const now = Date.now();
+    for (const org of orgs) {
+      const orgId = org._id;
+      const now = Date.now();
 
     // 1. Ensure at least one Menu, Category & Items exist
     let items = await ctx.db
@@ -1392,13 +1396,17 @@ export const seedSampleOrders = mutation({
           createdAt: orderCreatedAt,
         });
       }
+      totalSeeded += 1;
     }
+  }
 
     return {
       success: true,
-      message: `Successfully seeded ${seededOrderIds.length} realistic temporary orders with full defx-pos parity.`,
-      orderCount: seededOrderIds.length,
+      message: `Successfully seeded ${totalSeeded} realistic manual orders across all store organizations with full defx-pos parity.`,
+      orderCount: totalSeeded,
     };
   },
 });
+
+
 

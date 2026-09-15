@@ -133,20 +133,25 @@ function twoColRow(left: string, right: string, width = DEFAULT_LINE_WIDTH): str
 }
 
 function getCurrencyPrefix(org?: ReceiptOrganization | null): string {
+  const currency = org?.defaultCurrency?.toUpperCase();
   const sym = org?.currencySymbol || org?.defaultCurrency;
-  if (
-    !sym ||
-    sym === "₹" ||
-    sym === "INR" ||
-    sym === "AED" ||
-    sym.toLowerCase() === "rs" ||
-    sym.toLowerCase() === "rs."
-  ) {
+
+  if (!sym || sym === "₹" || currency === "INR" || sym.toLowerCase() === "rs" || sym.toLowerCase() === "rs.") {
     // POS thermal printers (ESC/POS) use single-byte ASCII/CP437 code pages.
-    // The Unicode Rupee symbol '₹' (U+20B9) renders as '?' on thermal printers.
-    // 'Rs.' is the universally compatible POS standard across all thermal printers.
+    // The Unicode Rupee symbol '₹' (U+20B9) renders as '?' on physical printers.
+    // 'Rs.' is the universally compatible POS standard across all thermal hardware in India.
     return "Rs.";
   }
+
+  // International currencies (e.g. AED, $, SAR, QAR, EUR, GBP)
+  if (currency === "AED" || sym === "AED") return "AED";
+  if (currency === "USD" || sym === "$") return "$";
+  if (currency === "SAR" || sym === "SAR") return "SAR";
+  if (currency === "QAR" || sym === "QAR") return "QAR";
+  if (currency === "KWD" || sym === "KWD") return "KWD";
+  if (currency === "OMR" || sym === "OMR") return "OMR";
+  if (currency === "BHD" || sym === "BHD") return "BHD";
+
   return sym;
 }
 

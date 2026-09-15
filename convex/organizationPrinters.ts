@@ -6,6 +6,7 @@ import {
   resolveStoreOrganization,
   getCallerMembership,
   requireMember,
+  requireAdmin,
 } from "./organizationUsers";
 
 // ----------------------------------------------------
@@ -13,7 +14,7 @@ import {
 // ----------------------------------------------------
 
 /**
- * Requires caller to be an active Store Admin or Cashier in the target organization
+ * Requires caller to be an active Store Admin, Cashier, or Store Owner in the target organization
  */
 export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
@@ -25,17 +26,38 @@ export async function requireAdminOrCashier(
     ctx,
     identity.subject,
     org._id,
+    identity.email,
   );
 
-  if (
-    !callerMember ||
-    (!callerMember.userType.includes("admin") &&
-      !callerMember.userType.includes("cashier"))
-  ) {
+  if (callerMember) {
+    const types = callerMember.userType.map((t) => t.toLowerCase());
+    if (
+      types.includes("admin") ||
+      types.includes("store_admin") ||
+      types.includes("org_admin") ||
+      types.includes("super_admin") ||
+      types.includes("cashier")
+    ) {
+      return { identity, org, callerMember };
+    }
     throw new Error("Forbidden. Admin or Cashier access required.");
   }
 
-  return { identity, org, callerMember };
+  // Fallback: If caller has NO membership record yet, check if store owner or auto-bootstrap initial admin
+  const allMembers = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const activeAdmins = allMembers.filter(
+    (m) => m.deletedAt === undefined && m.userType.some((r) => ["admin", "store_admin"].includes(r.toLowerCase()))
+  );
+
+  if (!org.ownerClerkId || org.ownerClerkId === identity.subject || activeAdmins.length === 0) {
+    const adminRes = await requireAdmin(ctx, explicitOrgId);
+    return { identity, org, callerMember: adminRes.callerMember };
+  }
+
+  throw new Error("Forbidden. Admin or Cashier access required.");
 }
 
 // ----------------------------------------------------
@@ -90,6 +112,16 @@ export const list = query({
   handler: async (ctx) => {
     const printers = await ctx.db.query("organizationPrinters").collect();
     return printers.filter((printer) => printer.deletedAt === undefined);
+  },
+});
+
+/**
+ * Lists all stations for the store
+ */
+export const listStations = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("stations").collect();
   },
 });
 

@@ -76,6 +76,26 @@ describe("defxReceiptFormatter", () => {
     expect(receipt).toContain("Rs. 126.00");
   });
 
+  it("should dynamically format amounts for international store currencies (e.g. AED, USD)", () => {
+    const uaeOrg = {
+      ...sampleOrg,
+      defaultCurrency: "AED",
+      currencySymbol: "AED",
+    };
+    const uaeReceipt = generateDefxReceiptPlainString(sampleOrder, uaeOrg, 48);
+    expect(uaeReceipt).toContain("AED70.00");
+    expect(uaeReceipt).toContain("AED 126.00");
+
+    const usOrg = {
+      ...sampleOrg,
+      defaultCurrency: "USD",
+      currencySymbol: "$",
+    };
+    const usReceipt = generateDefxReceiptPlainString(sampleOrder, usOrg, 48);
+    expect(usReceipt).toContain("$70.00");
+    expect(usReceipt).toContain("$ 126.00");
+  });
+
   it("should handle very long restaurant names and addresses gracefully with word-wrapping", () => {
     const longOrg = {
       name: "VERY LONG RESTAURANT AND CAFE NAME THAT EXCEEDS FORTY EIGHT CHARACTERS EASILY AND NICELY",

@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent, type ChangeEvent } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  type FormEvent,
+  type ChangeEvent,
+} from "react";
 import { useRouter, useParams, usePathname } from "next/navigation";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { PosShell } from "../../components/PosShell";
@@ -14,7 +22,15 @@ import { Id } from "../../../convex/_generated/dataModel";
 
 function EditPencilIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
       <path d="m15 5 4 4" />
     </svg>
@@ -23,7 +39,15 @@ function EditPencilIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
@@ -32,15 +56,35 @@ function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
 }
 
-function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+function ChevronRightIcon({
+  className = "w-3.5 h-3.5",
+}: {
+  className?: string;
+}) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="9 18 15 12 9 6" />
     </svg>
   );
@@ -61,7 +105,15 @@ function DragHandleIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -70,7 +122,15 @@ function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M3 6h18" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
       <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
@@ -80,10 +140,17 @@ function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
-
 function CopyIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
       <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
     </svg>
@@ -92,7 +159,15 @@ function CopyIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -101,7 +176,15 @@ function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function AlertTriangleIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
       <line x1="12" y1="9" x2="12" y2="13" />
       <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -111,7 +194,15 @@ function AlertTriangleIcon({ className = "w-5 h-5" }: { className?: string }) {
 
 function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
       <circle cx="8.5" cy="8.5" r="1.5" />
       <polyline points="21 15 16 10 5 21" />
@@ -121,7 +212,15 @@ function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ClockIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <polyline points="12 6 12 12 16 14" />
     </svg>
@@ -130,7 +229,15 @@ function ClockIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PowerIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
       <line x1="12" y1="2" x2="12" y2="12" />
     </svg>
@@ -139,7 +246,15 @@ function PowerIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -149,7 +264,15 @@ function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function CheckIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
@@ -243,7 +366,9 @@ function RichTextDescriptionEditor({
 
       let currentBlock = "";
       try {
-        currentBlock = (document.queryCommandValue("formatBlock") || "").replace(/[<>]/g, "").toLowerCase();
+        currentBlock = (document.queryCommandValue("formatBlock") || "")
+          .replace(/[<>]/g, "")
+          .toLowerCase();
       } catch (e) {}
 
       // Fallback ancestor check
@@ -262,7 +387,14 @@ function RichTextDescriptionEditor({
         }
       }
 
-      const format = currentBlock === "h1" ? "h1" : currentBlock === "h2" ? "h2" : currentBlock === "h3" ? "h3" : "normal";
+      const format =
+        currentBlock === "h1"
+          ? "h1"
+          : currentBlock === "h2"
+            ? "h2"
+            : currentBlock === "h3"
+              ? "h3"
+              : "normal";
 
       setActiveStates({
         bold: isBold,
@@ -313,7 +445,11 @@ function RichTextDescriptionEditor({
         if (!success) document.execCommand("formatBlock", false, "p");
       } else {
         // Toggle heading on
-        const success = document.execCommand("formatBlock", false, `<${level}>`);
+        const success = document.execCommand(
+          "formatBlock",
+          false,
+          `<${level}>`,
+        );
         if (!success) document.execCommand("formatBlock", false, level);
       }
     } catch (e) {
@@ -328,13 +464,17 @@ function RichTextDescriptionEditor({
     focusEditor();
     try {
       if (format === "h1") {
-        document.execCommand("formatBlock", false, "<h1>") || document.execCommand("formatBlock", false, "h1");
+        document.execCommand("formatBlock", false, "<h1>") ||
+          document.execCommand("formatBlock", false, "h1");
       } else if (format === "h2") {
-        document.execCommand("formatBlock", false, "<h2>") || document.execCommand("formatBlock", false, "h2");
+        document.execCommand("formatBlock", false, "<h2>") ||
+          document.execCommand("formatBlock", false, "h2");
       } else if (format === "h3") {
-        document.execCommand("formatBlock", false, "<h3>") || document.execCommand("formatBlock", false, "h3");
+        document.execCommand("formatBlock", false, "<h3>") ||
+          document.execCommand("formatBlock", false, "h3");
       } else {
-        document.execCommand("formatBlock", false, "<p>") || document.execCommand("formatBlock", false, "p");
+        document.execCommand("formatBlock", false, "<p>") ||
+          document.execCommand("formatBlock", false, "p");
       }
     } catch (e) {}
     notifyChange();
@@ -361,7 +501,9 @@ function RichTextDescriptionEditor({
               exec("bold");
             }}
             className={`w-7 h-7 rounded flex items-center justify-center transition-colors font-bold text-sm cursor-pointer ${
-              activeStates.bold ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.bold
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Bold"
           >
@@ -374,7 +516,9 @@ function RichTextDescriptionEditor({
               exec("italic");
             }}
             className={`w-7 h-7 rounded flex items-center justify-center transition-colors italic font-serif text-sm cursor-pointer ${
-              activeStates.italic ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.italic
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Italic"
           >
@@ -387,7 +531,9 @@ function RichTextDescriptionEditor({
               exec("underline");
             }}
             className={`w-7 h-7 rounded flex items-center justify-center transition-colors underline text-sm cursor-pointer ${
-              activeStates.underline ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.underline
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Underline"
           >
@@ -400,7 +546,9 @@ function RichTextDescriptionEditor({
               exec("strikeThrough");
             }}
             className={`w-7 h-7 rounded flex items-center justify-center transition-colors line-through text-sm cursor-pointer ${
-              activeStates.strike ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.strike
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Strikethrough"
           >
@@ -416,7 +564,9 @@ function RichTextDescriptionEditor({
               toggleHeading("h1");
             }}
             className={`w-8 h-7 rounded flex items-center justify-center transition-colors font-bold text-xs cursor-pointer ${
-              activeStates.h1 ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.h1
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Heading 1"
           >
@@ -429,7 +579,9 @@ function RichTextDescriptionEditor({
               toggleHeading("h2");
             }}
             className={`w-8 h-7 rounded flex items-center justify-center transition-colors font-bold text-xs cursor-pointer ${
-              activeStates.h2 ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.h2
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Heading 2"
           >
@@ -445,7 +597,9 @@ function RichTextDescriptionEditor({
               exec("insertOrderedList");
             }}
             className={`w-7 h-7 rounded flex items-center justify-center transition-colors text-xs cursor-pointer ${
-              activeStates.orderedList ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.orderedList
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Numbered List"
           >
@@ -458,7 +612,9 @@ function RichTextDescriptionEditor({
               exec("insertUnorderedList");
             }}
             className={`w-7 h-7 rounded flex items-center justify-center transition-colors text-xs cursor-pointer ${
-              activeStates.unorderedList ? "bg-[#0c0a09] text-white" : "hover:bg-[#e7e5e4] text-[#0c0a09]"
+              activeStates.unorderedList
+                ? "bg-[#0c0a09] text-white"
+                : "hover:bg-[#e7e5e4] text-[#0c0a09]"
             }`}
             title="Bullet List"
           >
@@ -476,7 +632,13 @@ function RichTextDescriptionEditor({
             className="w-7 h-7 rounded flex items-center justify-center hover:bg-[#e7e5e4] transition-colors text-xs cursor-pointer text-[#0c0a09]"
             title="Outdent"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="21" y1="4" x2="11" y2="4" />
               <line x1="21" y1="12" x2="11" y2="12" />
               <line x1="21" y1="20" x2="11" y2="20" />
@@ -492,7 +654,13 @@ function RichTextDescriptionEditor({
             className="w-7 h-7 rounded flex items-center justify-center hover:bg-[#e7e5e4] transition-colors text-xs cursor-pointer text-[#0c0a09]"
             title="Indent"
           >
-            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="21" y1="4" x2="11" y2="4" />
               <line x1="21" y1="12" x2="11" y2="12" />
               <line x1="21" y1="20" x2="11" y2="20" />
@@ -536,7 +704,8 @@ function RichTextDescriptionEditor({
             className="px-2 py-1 hover:bg-[#e7e5e4] rounded text-xs font-semibold text-[#5e5e5e] hover:text-[#0c0a09] transition-colors flex items-center gap-1 cursor-pointer"
             title="Clear Formatting"
           >
-            <span className="font-serif italic text-sm">T</span><sub className="text-[9px]">x</sub>
+            <span className="font-serif italic text-sm">T</span>
+            <sub className="text-[9px]">x</sub>
           </button>
         </div>
       </div>
@@ -572,7 +741,10 @@ const DIETARY_TYPES = [
 ];
 
 // Helper to generate next copy name e.g. Vadapav(1), Vadapav(2)
-function getNextDuplicateName(baseName: string, existingNames: string[]): string {
+function getNextDuplicateName(
+  baseName: string,
+  existingNames: string[],
+): string {
   const match = baseName.match(/^(.*?)(?:\s*\(\d+\))?$/);
   const rootName = match && match[1] ? match[1].trim() : baseName;
 
@@ -596,15 +768,15 @@ export default function MenuPage() {
   // Tax & Currency Configuration
   const taxSettings = useQuery(
     api.taxation.getStoreTaxSettings,
-    organization?._id ? { organizationId: organization._id } : "skip"
+    organization?._id ? { organizationId: organization._id } : "skip",
   );
   const taxGroups = useQuery(
     api.taxation.listTaxGroups,
-    organization?._id ? { organizationId: organization._id } : "skip"
+    organization?._id ? { organizationId: organization._id } : "skip",
   );
   const taxComponents = useQuery(
     api.taxation.listTaxComponents,
-    organization?._id ? { organizationId: organization._id } : "skip"
+    organization?._id ? { organizationId: organization._id } : "skip",
   );
 
   const currencySymbol = taxSettings?.currencySymbol || "₹";
@@ -612,7 +784,7 @@ export default function MenuPage() {
   // Multi-Menu Queries & Mutations
   const menus = useQuery(
     api.menu.listMenus,
-    organization?._id ? { organizationId: organization._id } : "skip"
+    organization?._id ? { organizationId: organization._id } : "skip",
   );
   const createMenuMutation = useMutation(api.menu.createMenu);
   const updateMenuMutation = useMutation(api.menu.updateMenu);
@@ -623,7 +795,9 @@ export default function MenuPage() {
   // Category Mutations
   const createCategoryMutation = useMutation(api.menu.createCategory);
   const updateCategoryMutation = useMutation(api.menu.updateCategory);
-  const toggleCategoryPublishedMutation = useMutation(api.menu.toggleCategoryPublished);
+  const toggleCategoryPublishedMutation = useMutation(
+    api.menu.toggleCategoryPublished,
+  );
   const deleteCategoryMutation = useMutation(api.menu.deleteCategory);
   const reorderCategoriesMutation = useMutation(api.menu.reorderCategories);
 
@@ -633,37 +807,67 @@ export default function MenuPage() {
   const updateItemMutation = useMutation(api.menu.updateItem);
   const createAssetUpload = useAction(api.r2.createAssetUpload);
   const confirmAssetUpload = useAction(api.r2.confirmAssetUpload);
-  const toggleItemAvailabilityMutation = useMutation(api.menu.toggleItemAvailability);
+  const toggleItemAvailabilityMutation = useMutation(
+    api.menu.toggleItemAvailability,
+  );
   const toggleItemPublishedMutation = useMutation(api.menu.toggleItemPublished);
   const deleteItemMutation = useMutation(api.menu.deleteItem);
-  const reorderCategoryItemsMutation = useMutation(api.menu.reorderCategoryItems);
-  const addExistingItemToCategoryMutation = useMutation(api.menu.addExistingItemToCategory);
+  const reorderCategoryItemsMutation = useMutation(
+    api.menu.reorderCategoryItems,
+  );
+  const addExistingItemToCategoryMutation = useMutation(
+    api.menu.addExistingItemToCategory,
+  );
   const duplicateItemMutation = useMutation(api.menu.duplicateItem);
-  const setItemUnavailabilityMutation = useMutation(api.menu.setItemUnavailability);
+  const setItemUnavailabilityMutation = useMutation(
+    api.menu.setItemUnavailability,
+  );
 
   // Customization Mutations
   const createCustomizationMutation = useMutation(api.menu.createCustomization);
   const updateCustomizationMutation = useMutation(api.menu.updateCustomization);
   const deleteCustomizationMutation = useMutation(api.menu.deleteCustomization);
-  const createCustomizationItemMutation = useMutation(api.menu.createCustomizationItem);
-  const updateCustomizationItemMutation = useMutation(api.menu.updateCustomizationItem);
-  const deleteCustomizationItemMutation = useMutation(api.menu.deleteCustomizationItem);
-  const duplicateCustomizationItemMutation = useMutation(api.menu.duplicateCustomizationItem);
-  const setCustomizationItemUnavailabilityMutation = useMutation(api.menu.setCustomizationItemUnavailability);
-  const reorderCustomizationItemsMutation = useMutation(api.menu.reorderCustomizationItems);
-  const reorderCustomizationsMutation = useMutation(api.menu.reorderCustomizations);
-  const copyCustomizationToItemMutation = useMutation(api.menu.copyCustomizationToItem);
+  const createCustomizationItemMutation = useMutation(
+    api.menu.createCustomizationItem,
+  );
+  const updateCustomizationItemMutation = useMutation(
+    api.menu.updateCustomizationItem,
+  );
+  const deleteCustomizationItemMutation = useMutation(
+    api.menu.deleteCustomizationItem,
+  );
+  const duplicateCustomizationItemMutation = useMutation(
+    api.menu.duplicateCustomizationItem,
+  );
+  const setCustomizationItemUnavailabilityMutation = useMutation(
+    api.menu.setCustomizationItemUnavailability,
+  );
+  const reorderCustomizationItemsMutation = useMutation(
+    api.menu.reorderCustomizationItems,
+  );
+  const reorderCustomizationsMutation = useMutation(
+    api.menu.reorderCustomizations,
+  );
+  const copyCustomizationToItemMutation = useMutation(
+    api.menu.copyCustomizationToItem,
+  );
 
   // Dynamic Item Types from Convex itemTypes table
   const rawItemTypes = useQuery(
     api.menu.listItemTypes,
-    organization?._id ? { organizationId: organization._id } : "skip"
+    organization?._id ? { organizationId: organization._id } : "skip",
   );
   const ensureItemTypesMutation = useMutation(api.menu.ensureDefaultItemTypes);
 
   useEffect(() => {
-    if (organization?._id && rawItemTypes !== undefined && rawItemTypes.length === 0) {
-      ensureItemTypesMutation({ organizationId: organization._id }).catch(console.error);
+    if (
+      organization?._id &&
+      rawItemTypes !== undefined &&
+      rawItemTypes.length === 0
+    ) {
+      ensureItemTypesMutation({ organizationId: organization._id }).catch(
+        console.error,
+      );
     }
   }, [organization?._id, rawItemTypes, ensureItemTypesMutation]);
 
@@ -673,7 +877,17 @@ export default function MenuPage() {
         id: t._id,
         name: t.name,
         label: t.name,
-        icon: t.icon || (t.name.toLowerCase().includes("non") ? "🔴" : t.name.toLowerCase().includes("vegan") ? "🌿" : t.name.toLowerCase().includes("jain") ? "🟡" : t.name.toLowerCase().includes("egg") ? "🥚" : "🟢"),
+        icon:
+          t.icon ||
+          (t.name.toLowerCase().includes("non")
+            ? "🔴"
+            : t.name.toLowerCase().includes("vegan")
+              ? "🌿"
+              : t.name.toLowerCase().includes("jain")
+                ? "🟡"
+                : t.name.toLowerCase().includes("egg")
+                  ? "🥚"
+                  : "🟢"),
       }));
     }
     return [
@@ -691,7 +905,7 @@ export default function MenuPage() {
   const showToast = (
     message: string,
     type: "success" | "error" | "info" | "warning" = "success",
-    subtext?: string
+    subtext?: string,
   ) => {
     setToast({ message, type, subtext });
   };
@@ -720,12 +934,23 @@ export default function MenuPage() {
     let editItemId: Id<"items"> | null = null;
 
     if (!slug || slug.length === 0) {
-      return { menuId, categoryId, itemId, customizationId, isAddItem, editItemId };
+      return {
+        menuId,
+        categoryId,
+        itemId,
+        customizationId,
+        isAddItem,
+        editItemId,
+      };
     }
 
     let idx = 0;
     // Check if first segment is a menuId (not "category", "add-item", "add-category", "menu")
-    if (slug[idx] !== "category" && slug[idx] !== "add-item" && slug[idx] !== "add-category") {
+    if (
+      slug[idx] !== "category" &&
+      slug[idx] !== "add-item" &&
+      slug[idx] !== "add-category"
+    ) {
       if (slug[idx] === "menu" && slug[idx + 1]) {
         idx++;
       }
@@ -740,7 +965,11 @@ export default function MenuPage() {
         if (idx < slug.length && slug[idx] === "item" && slug[idx + 1]) {
           itemId = slug[idx + 1] as Id<"items">;
           idx += 2;
-          if (idx < slug.length && slug[idx] === "customization" && slug[idx + 1]) {
+          if (
+            idx < slug.length &&
+            slug[idx] === "customization" &&
+            slug[idx + 1]
+          ) {
             customizationId = slug[idx + 1] as Id<"customizations">;
             idx += 2;
           }
@@ -753,7 +982,14 @@ export default function MenuPage() {
       }
     }
 
-    return { menuId, categoryId, itemId, customizationId, isAddItem, editItemId };
+    return {
+      menuId,
+      categoryId,
+      itemId,
+      customizationId,
+      isAddItem,
+      editItemId,
+    };
   }, [slug]);
 
   const routeMenuId = parsedRoute.menuId;
@@ -763,7 +999,10 @@ export default function MenuPage() {
   const isAddItemRoute = parsedRoute.isAddItem;
   const editItemIdFromRoute = parsedRoute.editItemId;
 
-  const navigateToCategory = (catId?: Id<"categories"> | null, targetMenuId?: Id<"menus"> | null) => {
+  const navigateToCategory = (
+    catId?: Id<"categories"> | null,
+    targetMenuId?: Id<"menus"> | null,
+  ) => {
     const mId = targetMenuId || selectedMenuId || activeMenu?._id;
     if (mId && catId) {
       router.push(`/menu/${mId}/category/${catId}`);
@@ -776,7 +1015,11 @@ export default function MenuPage() {
     }
   };
 
-  const navigateToItem = (catId: Id<"categories">, itemId: Id<"items">, targetMenuId?: Id<"menus"> | null) => {
+  const navigateToItem = (
+    catId: Id<"categories">,
+    itemId: Id<"items">,
+    targetMenuId?: Id<"menus"> | null,
+  ) => {
     const mId = targetMenuId || selectedMenuId || activeMenu?._id;
     if (mId) {
       router.push(`/menu/${mId}/category/${catId}/item/${itemId}`);
@@ -789,17 +1032,24 @@ export default function MenuPage() {
     catId: Id<"categories">,
     itemId: Id<"items">,
     customizationId: Id<"customizations">,
-    targetMenuId?: Id<"menus"> | null
+    targetMenuId?: Id<"menus"> | null,
   ) => {
     const mId = targetMenuId || selectedMenuId || activeMenu?._id;
     if (mId) {
-      router.push(`/menu/${mId}/category/${catId}/item/${itemId}/customization/${customizationId}`);
+      router.push(
+        `/menu/${mId}/category/${catId}/item/${itemId}/customization/${customizationId}`,
+      );
     } else {
-      router.push(`/menu/category/${catId}/item/${itemId}/customization/${customizationId}`);
+      router.push(
+        `/menu/category/${catId}/item/${itemId}/customization/${customizationId}`,
+      );
     }
   };
 
-  const navigateToAddItem = (itemId?: Id<"items">, targetMenuId?: Id<"menus"> | null) => {
+  const navigateToAddItem = (
+    itemId?: Id<"items">,
+    targetMenuId?: Id<"menus"> | null,
+  ) => {
     const mId = targetMenuId || selectedMenuId || activeMenu?._id;
     if (mId) {
       if (itemId) {
@@ -817,10 +1067,16 @@ export default function MenuPage() {
   };
 
   // Active Selections
-  const [selectedMenuId, setSelectedMenuId] = useState<Id<"menus"> | null>(routeMenuId);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<Id<"categories"> | null>(routeCategoryId);
-  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(routeItemId);
-  const [selectedCustomizationId, setSelectedCustomizationId] = useState<Id<"customizations"> | null>(routeCustomizationId);
+  const [selectedMenuId, setSelectedMenuId] = useState<Id<"menus"> | null>(
+    routeMenuId,
+  );
+  const [selectedCategoryId, setSelectedCategoryId] =
+    useState<Id<"categories"> | null>(routeCategoryId);
+  const [selectedItemId, setSelectedItemId] = useState<Id<"items"> | null>(
+    routeItemId,
+  );
+  const [selectedCustomizationId, setSelectedCustomizationId] =
+    useState<Id<"customizations"> | null>(routeCustomizationId);
 
   // Sync state with URL params (browser back / forward / deep link)
   useEffect(() => {
@@ -837,14 +1093,23 @@ export default function MenuPage() {
     } else if (isAddItemOpen && !isAddItemRoute) {
       setIsAddItemOpen(false);
     }
-  }, [routeMenuId, routeCategoryId, routeItemId, routeCustomizationId, isAddItemRoute]);
+  }, [
+    routeMenuId,
+    routeCategoryId,
+    routeItemId,
+    routeCustomizationId,
+    isAddItemRoute,
+  ]);
 
   // Initialize Default Menu
   useEffect(() => {
     if (menus && menus.length > 0) {
       if (routeMenuId && menus.some((m) => m._id === routeMenuId)) {
         setSelectedMenuId(routeMenuId);
-      } else if (!selectedMenuId || !menus.some((m) => m._id === selectedMenuId)) {
+      } else if (
+        !selectedMenuId ||
+        !menus.some((m) => m._id === selectedMenuId)
+      ) {
         const def = menus.find((m) => m.isDefault) || menus[0];
         setSelectedMenuId(def._id);
       }
@@ -858,13 +1123,16 @@ export default function MenuPage() {
   // Categories query
   const categories = useQuery(
     api.menu.listCategories,
-    activeMenu?._id ? { menuId: activeMenu._id } : "skip"
+    activeMenu?._id ? { menuId: activeMenu._id } : "skip",
   );
 
   // Initialize Default Category
   useEffect(() => {
     if (categories && categories.length > 0) {
-      if (!selectedCategoryId || !categories.some((c) => c._id === selectedCategoryId)) {
+      if (
+        !selectedCategoryId ||
+        !categories.some((c) => c._id === selectedCategoryId)
+      ) {
         const defaultCatId = categories[0]._id;
         setSelectedCategoryId(defaultCatId);
         if (slug.length === 0 && activeMenu?._id) {
@@ -876,42 +1144,65 @@ export default function MenuPage() {
     } else if (categories && categories.length === 0) {
       setSelectedCategoryId(null);
     }
-  }, [categories, selectedCategoryId, slug, router, activeMenu?._id, routeMenuId]);
+  }, [
+    categories,
+    selectedCategoryId,
+    slug,
+    router,
+    activeMenu?._id,
+    routeMenuId,
+  ]);
 
   const activeCategory = useMemo(() => {
-    return categories?.find((c) => c._id === selectedCategoryId) || categories?.[0] || null;
+    return (
+      categories?.find((c) => c._id === selectedCategoryId) ||
+      categories?.[0] ||
+      null
+    );
   }, [categories, selectedCategoryId]);
 
   // Category Items query
   const categoryItems = useQuery(
     api.menu.listCategoryItems,
-    activeCategory?._id ? { categoryId: activeCategory._id } : "skip"
+    activeCategory?._id ? { categoryId: activeCategory._id } : "skip",
   );
 
   // Active selected item for customizations view
   const activeItem = useMemo(() => {
     if (!selectedItemId) return null;
-    return categoryItems?.find((ci) => ci.item._id === selectedItemId)?.item || null;
+    return (
+      categoryItems?.find((ci) => ci.item._id === selectedItemId)?.item || null
+    );
   }, [categoryItems, selectedItemId]);
 
   // Customizations for Active Item
   const itemCustomizations = useQuery(
     api.menu.listCustomizations,
-    selectedItemId ? { itemId: selectedItemId } : "skip"
+    selectedItemId ? { itemId: selectedItemId } : "skip",
   );
 
   // Active selected customization for choices / options view
   const activeCustomization = useMemo(() => {
     if (!selectedCustomizationId) return null;
-    return itemCustomizations?.find((c) => c._id === selectedCustomizationId) || null;
+    return (
+      itemCustomizations?.find((c) => c._id === selectedCustomizationId) || null
+    );
   }, [itemCustomizations, selectedCustomizationId]);
 
   // Choice Item Search Query State
   const [choiceSearchQuery, setChoiceSearchQuery] = useState("");
-  const [draggedChoiceIndex, setDraggedChoiceIndex] = useState<number | null>(null);
-  const [dragOverChoiceIndex, setDragOverChoiceIndex] = useState<number | null>(null);
-  const [draggedCustomizationIndex, setDraggedCustomizationIndex] = useState<number | null>(null);
-  const [dragOverCustomizationIndex, setDragOverCustomizationIndex] = useState<number | null>(null);
+  const [draggedChoiceIndex, setDraggedChoiceIndex] = useState<number | null>(
+    null,
+  );
+  const [dragOverChoiceIndex, setDragOverChoiceIndex] = useState<number | null>(
+    null,
+  );
+  const [draggedCustomizationIndex, setDraggedCustomizationIndex] = useState<
+    number | null
+  >(null);
+  const [dragOverCustomizationIndex, setDragOverCustomizationIndex] = useState<
+    number | null
+  >(null);
 
   const filteredChoices = useMemo(() => {
     if (!activeCustomization?.items) return [];
@@ -920,7 +1211,7 @@ export default function MenuPage() {
     return activeCustomization.items.filter(
       (c: any) =>
         c.name.toLowerCase().includes(q) ||
-        (c.description && c.description.toLowerCase().includes(q))
+        (c.description && c.description.toLowerCase().includes(q)),
     );
   }, [activeCustomization, choiceSearchQuery]);
 
@@ -932,7 +1223,7 @@ export default function MenuPage() {
           organizationId: organization._id,
           categoryId: activeCategory?._id,
         }
-      : "skip"
+      : "skip",
   );
 
   // All existing customizations for 'Add Existing Customization' Drawer
@@ -943,13 +1234,14 @@ export default function MenuPage() {
           organizationId: organization._id,
           currentItemId: selectedItemId || undefined,
         }
-      : "skip"
+      : "skip",
   );
 
   // Dropdown States
   const [isMenuDropdownOpen, setIsMenuDropdownOpen] = useState(false);
   const [isAddItemDropdownOpen, setIsAddItemDropdownOpen] = useState(false);
-  const [isAddCustomizationDropdownOpen, setIsAddCustomizationDropdownOpen] = useState(false);
+  const [isAddCustomizationDropdownOpen, setIsAddCustomizationDropdownOpen] =
+    useState(false);
 
   // Drawer & Modal States
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false);
@@ -960,15 +1252,24 @@ export default function MenuPage() {
 
   // Customization Group Drawers & Modals
   const [isAddCustomizationOpen, setIsAddCustomizationOpen] = useState(false);
-  const [isAddExistingCustomizationOpen, setIsAddExistingCustomizationOpen] = useState(false);
-  const [selectedExistingCustomization, setSelectedExistingCustomization] = useState<any>(null);
-  const [existingCustomizationSearchQuery, setExistingCustomizationSearchQuery] = useState("");
+  const [isAddExistingCustomizationOpen, setIsAddExistingCustomizationOpen] =
+    useState(false);
+  const [selectedExistingCustomization, setSelectedExistingCustomization] =
+    useState<any>(null);
+  const [
+    existingCustomizationSearchQuery,
+    setExistingCustomizationSearchQuery,
+  ] = useState("");
   const [isCopyingCustomization, setIsCopyingCustomization] = useState(false);
-  const [existingCustomizationError, setExistingCustomizationError] = useState<string | null>(null);
+  const [existingCustomizationError, setExistingCustomizationError] = useState<
+    string | null
+  >(null);
   const [isEditCustomizationOpen, setIsEditCustomizationOpen] = useState(false);
   const [editingCustomization, setEditingCustomization] = useState<any>(null);
-  const [isDeleteCustomizationOpen, setIsDeleteCustomizationOpen] = useState(false);
-  const [targetDeleteCustomization, setTargetDeleteCustomization] = useState<any>(null);
+  const [isDeleteCustomizationOpen, setIsDeleteCustomizationOpen] =
+    useState(false);
+  const [targetDeleteCustomization, setTargetDeleteCustomization] =
+    useState<any>(null);
   const [isDeletingCustomization, setIsDeletingCustomization] = useState(false);
 
   // Customization Choice (Item) Drawers & Modals
@@ -980,18 +1281,27 @@ export default function MenuPage() {
   const [isDeletingChoice, setIsDeletingChoice] = useState(false);
 
   // Change Unavailability Modal State
-  const [isUnavailabilityModalOpen, setIsUnavailabilityModalOpen] = useState(false);
-  const [targetUnavailabilityItem, setTargetUnavailabilityItem] = useState<any>(null);
-  const [unavailabilityTargetType, setUnavailabilityTargetType] = useState<"item" | "choice">("item");
+  const [isUnavailabilityModalOpen, setIsUnavailabilityModalOpen] =
+    useState(false);
+  const [targetUnavailabilityItem, setTargetUnavailabilityItem] =
+    useState<any>(null);
+  const [unavailabilityTargetType, setUnavailabilityTargetType] = useState<
+    "item" | "choice"
+  >("item");
   const [unavailabilityToggle, setUnavailabilityToggle] = useState(true);
-  const [unavailabilityDuration, setUnavailabilityDuration] = useState<"12" | "24" | "48" | "custom">("24");
+  const [unavailabilityDuration, setUnavailabilityDuration] = useState<
+    "12" | "24" | "48" | "custom"
+  >("24");
   const [customDurationHours, setCustomDurationHours] = useState("72");
   const [isSavingUnavailability, setIsSavingUnavailability] = useState(false);
 
   // Duplicate Item Modal State
-  const [isDuplicateItemModalOpen, setIsDuplicateItemModalOpen] = useState(false);
+  const [isDuplicateItemModalOpen, setIsDuplicateItemModalOpen] =
+    useState(false);
   const [targetDuplicateItem, setTargetDuplicateItem] = useState<any>(null);
-  const [duplicateTargetType, setDuplicateTargetType] = useState<"item" | "choice">("item");
+  const [duplicateTargetType, setDuplicateTargetType] = useState<
+    "item" | "choice"
+  >("item");
   const [duplicateItemNewName, setDuplicateItemNewName] = useState("");
   const [isDuplicatingItem, setIsDuplicatingItem] = useState(false);
 
@@ -1001,7 +1311,8 @@ export default function MenuPage() {
   const [isDeletingItem, setIsDeletingItem] = useState(false);
 
   // Delete Category Modal State
-  const [isDeleteCategoryModalOpen, setIsDeleteCategoryModalOpen] = useState(false);
+  const [isDeleteCategoryModalOpen, setIsDeleteCategoryModalOpen] =
+    useState(false);
   const [targetDeleteCategory, setTargetDeleteCategory] = useState<any>(null);
   const [isDeletingCategory, setIsDeletingCategory] = useState(false);
 
@@ -1011,7 +1322,9 @@ export default function MenuPage() {
   const [isDeletingMenu, setIsDeletingMenu] = useState(false);
 
   // Customization Form State
-  const [customizationType, setCustomizationType] = useState<"AddOns" | "Preparations">("AddOns");
+  const [customizationType, setCustomizationType] = useState<
+    "AddOns" | "Preparations"
+  >("AddOns");
   const [customizationName, setCustomizationName] = useState("");
   const [customizationDesc, setCustomizationDesc] = useState("");
   const [customizationRequired, setCustomizationRequired] = useState(false);
@@ -1032,8 +1345,11 @@ export default function MenuPage() {
   const [choiceCalorie, setChoiceCalorie] = useState("");
   const [choiceCalorieMetric, setChoiceCalorieMetric] = useState("kcal");
   const [choiceIsGst, setChoiceIsGst] = useState(false);
-  const [choiceSelectedTaxGroupId, setChoiceSelectedTaxGroupId] = useState<string>("");
-  const [choiceTaxMode, setChoiceTaxMode] = useState<"inclusive" | "exclusive">("inclusive");
+  const [choiceSelectedTaxGroupId, setChoiceSelectedTaxGroupId] =
+    useState<string>("");
+  const [choiceTaxMode, setChoiceTaxMode] = useState<"inclusive" | "exclusive">(
+    "inclusive",
+  );
   const [isChoiceAdvancedOpen, setIsChoiceAdvancedOpen] = useState(false);
   const [isSavingChoice, setIsSavingChoice] = useState(false);
 
@@ -1049,17 +1365,30 @@ export default function MenuPage() {
   // Choice Tax Breakdown computation
   const choiceTaxBreakdown = useMemo(() => {
     const rawPrice = parseFloat(choicePrice || "0");
-    if (isNaN(rawPrice) || rawPrice <= 0 || !choiceIsGst || !resolvedChoiceTaxGroup) {
+    if (
+      isNaN(rawPrice) ||
+      rawPrice <= 0 ||
+      !choiceIsGst ||
+      !resolvedChoiceTaxGroup
+    ) {
       return null;
     }
 
     let components = (taxComponents || []).filter((c) =>
-      resolvedChoiceTaxGroup.componentIds?.includes(c._id)
+      resolvedChoiceTaxGroup.componentIds?.includes(c._id),
     );
 
     if (components.length === 0) {
       components = [
-        { _id: "tax_demo" as any, _creationTime: 0, name: "Tax", code: "TAX", rate: 5.0, organizationId: "" as any, createdAt: 0 },
+        {
+          _id: "tax_demo" as any,
+          _creationTime: 0,
+          name: "Tax",
+          code: "TAX",
+          rate: 5.0,
+          organizationId: "" as any,
+          createdAt: 0,
+        },
       ];
     }
     const totalRate = components.reduce((sum, c) => sum + c.rate, 0) || 5;
@@ -1089,7 +1418,10 @@ export default function MenuPage() {
         rate: c.rate,
         amount: ((base * c.rate) / 100).toFixed(2),
       }));
-      const totalTax = computedComponents.reduce((sum, c) => sum + parseFloat(c.amount), 0);
+      const totalTax = computedComponents.reduce(
+        (sum, c) => sum + parseFloat(c.amount),
+        0,
+      );
       const finalPrice = base + totalTax;
       return {
         mode: "exclusive" as const,
@@ -1100,7 +1432,13 @@ export default function MenuPage() {
         components: computedComponents,
       };
     }
-  }, [choicePrice, choiceIsGst, resolvedChoiceTaxGroup, taxComponents, choiceTaxMode]);
+  }, [
+    choicePrice,
+    choiceIsGst,
+    resolvedChoiceTaxGroup,
+    taxComponents,
+    choiceTaxMode,
+  ]);
 
   // Menu Form State
   const [menuName, setMenuName] = useState("");
@@ -1126,18 +1464,32 @@ export default function MenuPage() {
   const [itemIsVeg, setItemIsVeg] = useState(true);
   const [selectedDietaryType, setSelectedDietaryType] = useState("veg");
 
-  const isDietaryTypeSelected = useCallback((type: { id: string; name: string }) => {
-    if (selectedDietaryType === type.id) return true;
-    const sel = (selectedDietaryType || "").toLowerCase();
-    const name = type.name.toLowerCase();
-    if (sel === name) return true;
-    if ((sel === "veg" || sel === "vegetarian") && name.includes("veg") && !name.includes("non") && !name.includes("vegan")) return true;
-    if ((sel === "non_veg" || sel === "non-veg" || sel === "nonveg") && name.includes("non")) return true;
-    if (sel === "vegan" && name.includes("vegan")) return true;
-    if (sel === "jain" && name.includes("jain")) return true;
-    if ((sel === "egg" || sel === "contains egg") && name.includes("egg")) return true;
-    return false;
-  }, [selectedDietaryType]);
+  const isDietaryTypeSelected = useCallback(
+    (type: { id: string; name: string }) => {
+      if (selectedDietaryType === type.id) return true;
+      const sel = (selectedDietaryType || "").toLowerCase();
+      const name = type.name.toLowerCase();
+      if (sel === name) return true;
+      if (
+        (sel === "veg" || sel === "vegetarian") &&
+        name.includes("veg") &&
+        !name.includes("non") &&
+        !name.includes("vegan")
+      )
+        return true;
+      if (
+        (sel === "non_veg" || sel === "non-veg" || sel === "nonveg") &&
+        name.includes("non")
+      )
+        return true;
+      if (sel === "vegan" && name.includes("vegan")) return true;
+      if (sel === "jain" && name.includes("jain")) return true;
+      if ((sel === "egg" || sel === "contains egg") && name.includes("egg"))
+        return true;
+      return false;
+    },
+    [selectedDietaryType],
+  );
   const [itemShowItemType, setItemShowItemType] = useState(true);
   const [itemIsSpicy, setItemIsSpicy] = useState(false);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
@@ -1165,20 +1517,28 @@ export default function MenuPage() {
   const [itemSugar, setItemSugar] = useState("");
   const [itemSodium, setItemSodium] = useState("");
   const [itemShowAllergens, setItemShowAllergens] = useState(false);
-  const [itemSelectedAllergens, setItemSelectedAllergens] = useState<string[]>([]);
+  const [itemSelectedAllergens, setItemSelectedAllergens] = useState<string[]>(
+    [],
+  );
   const [itemNutrients, setItemNutrients] = useState<NutrientItem[]>([]);
   const [newNutrientName, setNewNutrientName] = useState("");
-  const [activeNutrientMenuId, setActiveNutrientMenuId] = useState<string | null>(null);
-  const [editingNutrientId, setEditingNutrientId] = useState<string | null>(null);
+  const [activeNutrientMenuId, setActiveNutrientMenuId] = useState<
+    string | null
+  >(null);
+  const [editingNutrientId, setEditingNutrientId] = useState<string | null>(
+    null,
+  );
   const [editingNutrientName, setEditingNutrientName] = useState("");
-  const [addingChildForNutrientId, setAddingChildForNutrientId] = useState<string | null>(null);
+  const [addingChildForNutrientId, setAddingChildForNutrientId] = useState<
+    string | null
+  >(null);
   const [childNutrientNameInput, setChildNutrientNameInput] = useState("");
 
   const handleToggleAllergen = (allergenName: string) => {
     setItemSelectedAllergens((prev) =>
       prev.includes(allergenName)
         ? prev.filter((a) => a !== allergenName)
-        : [...prev, allergenName]
+        : [...prev, allergenName],
     );
   };
 
@@ -1195,9 +1555,13 @@ export default function MenuPage() {
     setNewNutrientName("");
   };
 
-  const handleUpdateNutrient = (id: string, field: "name" | "quantity" | "dailyValue", val: string) => {
+  const handleUpdateNutrient = (
+    id: string,
+    field: "name" | "quantity" | "dailyValue",
+    val: string,
+  ) => {
     setItemNutrients((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, [field]: val } : n))
+      prev.map((n) => (n.id === id ? { ...n, [field]: val } : n)),
     );
   };
 
@@ -1217,8 +1581,8 @@ export default function MenuPage() {
       prev.map((n) =>
         n.id === parentId
           ? { ...n, children: [...(n.children || []), newChild] }
-          : n
-      )
+          : n,
+      ),
     );
   };
 
@@ -1226,7 +1590,7 @@ export default function MenuPage() {
     parentId: string,
     childId: string,
     field: "name" | "quantity" | "dailyValue",
-    val: string
+    val: string,
   ) => {
     setItemNutrients((prev) =>
       prev.map((n) => {
@@ -1234,10 +1598,10 @@ export default function MenuPage() {
         return {
           ...n,
           children: (n.children || []).map((c) =>
-            c.id === childId ? { ...c, [field]: val } : c
+            c.id === childId ? { ...c, [field]: val } : c,
           ),
         };
-      })
+      }),
     );
   };
 
@@ -1249,15 +1613,17 @@ export default function MenuPage() {
           ...n,
           children: (n.children || []).filter((c) => c.id !== childId),
         };
-      })
+      }),
     );
   };
 
   // AI Assistant & Suggestions State
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
-  const [aiNameSuggestion, setAiNameSuggestion] = useState("Truffle Umami Burger");
+  const [aiNameSuggestion, setAiNameSuggestion] = useState(
+    "Truffle Umami Burger",
+  );
   const [aiDescSuggestion, setAiDescSuggestion] = useState(
-    "A decadent blend of wagyu beef, black truffle aioli, and aged gruyère on a toasted brioche bun."
+    "A decadent blend of wagyu beef, black truffle aioli, and aged gruyère on a toasted brioche bun.",
   );
   const [aiNutritionSuggestion, setAiNutritionSuggestion] = useState({
     calories: "520 kcal",
@@ -1269,28 +1635,71 @@ export default function MenuPage() {
 
   const handleGenerateAiSuggestions = () => {
     setIsGeneratingAi(true);
-    const baseName = itemName.trim() || activeCategory?.name || "Specialty Item";
+    const baseName =
+      itemName.trim() || activeCategory?.name || "Specialty Item";
     setTimeout(() => {
-      if (baseName.toLowerCase().includes("vadapav") || baseName.toLowerCase().includes("vada")) {
+      if (
+        baseName.toLowerCase().includes("vadapav") ||
+        baseName.toLowerCase().includes("vada")
+      ) {
         setAiNameSuggestion("Artisanal Spiced Vadapav");
-        setAiDescSuggestion("Crispy spiced potato dumpling encased in golden chickpea batter, served in a butter-toasted brioche pav with signature dry garlic chutney and mint relish.");
-        setAiNutritionSuggestion({ calories: "290 kcal", protein: "7", carbs: "38", fat: "12" });
+        setAiDescSuggestion(
+          "Crispy spiced potato dumpling encased in golden chickpea batter, served in a butter-toasted brioche pav with signature dry garlic chutney and mint relish.",
+        );
+        setAiNutritionSuggestion({
+          calories: "290 kcal",
+          protein: "7",
+          carbs: "38",
+          fat: "12",
+        });
       } else if (baseName.toLowerCase().includes("burger")) {
         setAiNameSuggestion("Truffle Umami Burger");
-        setAiDescSuggestion("A decadent blend of premium patty, black truffle aioli, caramelized onions, and aged melted cheese on a toasted brioche bun.");
-        setAiNutritionSuggestion({ calories: "520 kcal", protein: "24", carbs: "42", fat: "28" });
+        setAiDescSuggestion(
+          "A decadent blend of premium patty, black truffle aioli, caramelized onions, and aged melted cheese on a toasted brioche bun.",
+        );
+        setAiNutritionSuggestion({
+          calories: "520 kcal",
+          protein: "24",
+          carbs: "42",
+          fat: "28",
+        });
       } else if (baseName.toLowerCase().includes("pizza")) {
         setAiNameSuggestion("Charred Sourdough Margherita");
-        setAiDescSuggestion("Wood-fired 48-hour fermented sourdough crust topped with San Marzano tomatoes, fresh buffalo mozzarella, and fragrant sweet basil.");
-        setAiNutritionSuggestion({ calories: "680 kcal", protein: "28", carbs: "78", fat: "22" });
-      } else if (baseName.toLowerCase().includes("coffee") || baseName.toLowerCase().includes("beverage") || baseName.toLowerCase().includes("shake")) {
+        setAiDescSuggestion(
+          "Wood-fired 48-hour fermented sourdough crust topped with San Marzano tomatoes, fresh buffalo mozzarella, and fragrant sweet basil.",
+        );
+        setAiNutritionSuggestion({
+          calories: "680 kcal",
+          protein: "28",
+          carbs: "78",
+          fat: "22",
+        });
+      } else if (
+        baseName.toLowerCase().includes("coffee") ||
+        baseName.toLowerCase().includes("beverage") ||
+        baseName.toLowerCase().includes("shake")
+      ) {
         setAiNameSuggestion("Velvet Cold Brew Latte");
-        setAiDescSuggestion("Slow-steeped single-origin Arabica cold brew infused with organic oat milk and a touch of Madagascar vanilla bean.");
-        setAiNutritionSuggestion({ calories: "140 kcal", protein: "4", carbs: "18", fat: "5" });
+        setAiDescSuggestion(
+          "Slow-steeped single-origin Arabica cold brew infused with organic oat milk and a touch of Madagascar vanilla bean.",
+        );
+        setAiNutritionSuggestion({
+          calories: "140 kcal",
+          protein: "4",
+          carbs: "18",
+          fat: "5",
+        });
       } else {
         setAiNameSuggestion(`${baseName} Gourmet Supreme`);
-        setAiDescSuggestion(`Signature chef-crafted ${baseName} prepared with premium fresh ingredients, balanced aromatic seasonings, and cooked to perfection.`);
-        setAiNutritionSuggestion({ calories: "380 kcal", protein: "18", carbs: "32", fat: "14" });
+        setAiDescSuggestion(
+          `Signature chef-crafted ${baseName} prepared with premium fresh ingredients, balanced aromatic seasonings, and cooked to perfection.`,
+        );
+        setAiNutritionSuggestion({
+          calories: "380 kcal",
+          protein: "18",
+          carbs: "32",
+          fat: "14",
+        });
       }
       setIsGeneratingAi(false);
     }, 450);
@@ -1304,14 +1713,19 @@ export default function MenuPage() {
 
   // Tax Settings on Item Form
   const [itemIsGst, setItemIsGst] = useState(true);
-  const [itemSelectedTaxGroupId, setItemSelectedTaxGroupId] = useState<string>("");
-  const [itemTaxMode, setItemTaxMode] = useState<"inclusive" | "exclusive">("inclusive");
+  const [itemSelectedTaxGroupId, setItemSelectedTaxGroupId] =
+    useState<string>("");
+  const [itemTaxMode, setItemTaxMode] = useState<"inclusive" | "exclusive">(
+    "inclusive",
+  );
 
   // Add Existing Item State
   const [existingItemSearchQuery, setExistingItemSearchQuery] = useState("");
   const [selectedExistingItem, setSelectedExistingItem] = useState<any>(null);
   const [isAddingExistingItem, setIsAddingExistingItem] = useState(false);
-  const [existingItemError, setExistingItemError] = useState<string | null>(null);
+  const [existingItemError, setExistingItemError] = useState<string | null>(
+    null,
+  );
 
   // Active Tax Group resolved for item tax calculations
   const resolvedTaxGroup = useMemo(() => {
@@ -1333,16 +1747,25 @@ export default function MenuPage() {
     const effectivePrice = isDemo ? 100 : rawPrice;
 
     let matchedComponents = (taxComponents || []).filter((c) =>
-      resolvedTaxGroup?.componentIds?.includes(c._id)
+      resolvedTaxGroup?.componentIds?.includes(c._id),
     );
 
     if (matchedComponents.length === 0) {
       matchedComponents = [
-        { _id: "tax_demo" as any, _creationTime: 0, name: "Tax", code: "TAX", rate: 5.0, organizationId: "" as any, createdAt: 0 },
+        {
+          _id: "tax_demo" as any,
+          _creationTime: 0,
+          name: "Tax",
+          code: "TAX",
+          rate: 5.0,
+          organizationId: "" as any,
+          createdAt: 0,
+        },
       ];
     }
 
-    const totalTaxRate = matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 5;
+    const totalTaxRate =
+      matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 5;
 
     if (itemTaxMode === "inclusive") {
       const basePrice = effectivePrice / (1 + totalTaxRate / 100);
@@ -1371,7 +1794,10 @@ export default function MenuPage() {
         rate: c.rate,
         amount: (basePrice * (c.rate / 100)).toFixed(2),
       }));
-      const totalTaxAmount = componentSplits.reduce((sum, c) => sum + parseFloat(c.amount), 0);
+      const totalTaxAmount = componentSplits.reduce(
+        (sum, c) => sum + parseFloat(c.amount),
+        0,
+      );
       const finalPrice = basePrice + totalTaxAmount;
 
       return {
@@ -1390,7 +1816,9 @@ export default function MenuPage() {
   const handleSeedSample = async () => {
     if (!organization?._id) return;
     try {
-      const menuId = await seedSampleMenuMutation({ organizationId: organization._id });
+      const menuId = await seedSampleMenuMutation({
+        organizationId: organization._id,
+      });
       setSelectedMenuId(menuId);
       showToast("Sample menu loaded successfully", "success");
     } catch (err: any) {
@@ -1540,7 +1968,12 @@ export default function MenuPage() {
     }
   };
 
-  const handleToggleCategory = async (e: React.MouseEvent, catId: Id<"categories">, currentPublished: boolean, catName?: string) => {
+  const handleToggleCategory = async (
+    e: React.MouseEvent,
+    catId: Id<"categories">,
+    currentPublished: boolean,
+    catName?: string,
+  ) => {
     e.stopPropagation();
     try {
       await toggleCategoryPublishedMutation({
@@ -1548,7 +1981,10 @@ export default function MenuPage() {
         published: !currentPublished,
       });
       const name = catName ? `Category "${catName}"` : "Category";
-      showToast(`${name} ${!currentPublished ? "published" : "unpublished"} successfully`, "success");
+      showToast(
+        `${name} ${!currentPublished ? "published" : "unpublished"} successfully`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to toggle category published status:", err);
       showToast(err.message || "Failed to update category status", "error");
@@ -1606,7 +2042,11 @@ export default function MenuPage() {
     }
   };
 
-  const handleDeleteCategory = async (e: React.MouseEvent, catId: Id<"categories">, name: string) => {
+  const handleDeleteCategory = async (
+    e: React.MouseEvent,
+    catId: Id<"categories">,
+    name: string,
+  ) => {
     e.stopPropagation();
     handleOpenDeleteCategory({ _id: catId, name });
   };
@@ -1715,7 +2155,9 @@ export default function MenuPage() {
 
     const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
     if (!validTypes.includes(file.type)) {
-      setItemError("Invalid file format. Only JPG, PNG, and WEBP files are allowed.");
+      setItemError(
+        "Invalid file format. Only JPG, PNG, and WEBP files are allowed.",
+      );
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -1742,7 +2184,9 @@ export default function MenuPage() {
       });
 
       if (!putResult.ok) {
-        throw new Error(`Failed to upload item image to R2 (Status: ${putResult.status})`);
+        throw new Error(
+          `Failed to upload item image to R2 (Status: ${putResult.status})`,
+        );
       }
 
       await confirmAssetUpload({
@@ -1775,7 +2219,8 @@ export default function MenuPage() {
     }
 
     const priceCents = Math.round(priceNum * 100);
-    const targetCatId = (itemSelectedCategoryId || activeCategory?._id) as Id<"categories">;
+    const targetCatId = (itemSelectedCategoryId ||
+      activeCategory?._id) as Id<"categories">;
 
     if (!targetCatId && !editingItem) {
       setItemError("Please select or create a category first.");
@@ -1788,16 +2233,25 @@ export default function MenuPage() {
     const trimmedItemName = itemName.trim();
     try {
       const isVegBool = (() => {
-        const matchedType = availableItemTypes.find((t) => isDietaryTypeSelected(t));
-        const name = (matchedType?.name || selectedDietaryType || "").toLowerCase();
+        const matchedType = availableItemTypes.find((t) =>
+          isDietaryTypeSelected(t),
+        );
+        const name = (
+          matchedType?.name ||
+          selectedDietaryType ||
+          ""
+        ).toLowerCase();
         if (name.includes("non") || name.includes("egg")) return false;
         return true;
       })();
 
-      const matchedTypeObj = availableItemTypes.find((t) => isDietaryTypeSelected(t));
-      const itemTypeIdsToSave = matchedTypeObj && matchedTypeObj.id && matchedTypeObj.id.length > 10
-        ? [matchedTypeObj.id as Id<"itemTypes">]
-        : undefined;
+      const matchedTypeObj = availableItemTypes.find((t) =>
+        isDietaryTypeSelected(t),
+      );
+      const itemTypeIdsToSave =
+        matchedTypeObj && matchedTypeObj.id && matchedTypeObj.id.length > 10
+          ? [matchedTypeObj.id as Id<"itemTypes">]
+          : undefined;
 
       if (editingItem) {
         await updateItemMutation({
@@ -1810,7 +2264,10 @@ export default function MenuPage() {
           isSpicy: itemIsSpicy,
           showItemType: itemShowItemType,
           showQuantity: itemShowQuantity,
-          quantity: itemShowQuantity && itemQuantity ? parseFloat(itemQuantity) : undefined,
+          quantity:
+            itemShowQuantity && itemQuantity
+              ? parseFloat(itemQuantity)
+              : undefined,
           quantityUnit: itemShowQuantity ? itemQuantityUnit : undefined,
           isGst: itemIsGst,
           taxGroupId: (itemSelectedTaxGroupId as any) || undefined,
@@ -1830,7 +2287,9 @@ export default function MenuPage() {
           showAllergenContents: itemShowAllergens,
           allergens: itemSelectedAllergens,
           nutrients: itemNutrients,
-          imageAssetId: itemImageAssetId ? (itemImageAssetId as Id<"organization_assets">) : undefined,
+          imageAssetId: itemImageAssetId
+            ? (itemImageAssetId as Id<"organization_assets">)
+            : undefined,
         });
         showToast(`Item "${trimmedItemName}" updated successfully`, "success");
       } else {
@@ -1848,7 +2307,10 @@ export default function MenuPage() {
           taxGroupId: (itemSelectedTaxGroupId as any) || undefined,
           taxMode: itemTaxMode,
           showQuantity: itemShowQuantity,
-          quantity: itemShowQuantity && itemQuantity ? parseFloat(itemQuantity) : undefined,
+          quantity:
+            itemShowQuantity && itemQuantity
+              ? parseFloat(itemQuantity)
+              : undefined,
           quantityUnit: itemShowQuantity ? itemQuantityUnit : undefined,
           skuNumber: itemSkuNumber.trim() || undefined,
           markAsBestseller: itemMarkAsBestseller,
@@ -1865,7 +2327,9 @@ export default function MenuPage() {
           showAllergenContents: itemShowAllergens,
           allergens: itemSelectedAllergens,
           nutrients: itemNutrients,
-          imageAssetId: itemImageAssetId ? (itemImageAssetId as Id<"organization_assets">) : undefined,
+          imageAssetId: itemImageAssetId
+            ? (itemImageAssetId as Id<"organization_assets">)
+            : undefined,
         });
 
         await addCategoryItemMutation({
@@ -1892,7 +2356,9 @@ export default function MenuPage() {
   // Open Duplicate Item Modal
   const handleOpenDuplicateItem = (item: any) => {
     if (!item) return;
-    const existingNames = (categoryItems || []).map((ci: any) => ci.item?.name || "");
+    const existingNames = (categoryItems || []).map(
+      (ci: any) => ci.item?.name || "",
+    );
     const nextName = getNextDuplicateName(item.name, existingNames);
     setTargetDuplicateItem(item);
     setDuplicateTargetType("item");
@@ -1903,7 +2369,9 @@ export default function MenuPage() {
   // Open Duplicate Customization Item Modal
   const handleOpenDuplicateChoice = (choice: any) => {
     if (!choice) return;
-    const existingNames = (activeCustomization?.items || []).map((c: any) => c.name || "");
+    const existingNames = (activeCustomization?.items || []).map(
+      (c: any) => c.name || "",
+    );
     const nextName = getNextDuplicateName(choice.name, existingNames);
     setTargetDuplicateItem(choice);
     setDuplicateTargetType("choice");
@@ -1913,7 +2381,8 @@ export default function MenuPage() {
 
   const handleConfirmDuplicateItem = async () => {
     if (!organization?._id || !targetDuplicateItem) return;
-    const trimmedNewName = duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`;
+    const trimmedNewName =
+      duplicateItemNewName.trim() || `${targetDuplicateItem.name}(1)`;
     setIsDuplicatingItem(true);
     try {
       if (duplicateTargetType === "choice") {
@@ -1924,7 +2393,10 @@ export default function MenuPage() {
         });
         setIsDuplicateItemModalOpen(false);
         setTargetDuplicateItem(null);
-        showToast(`Customization choice duplicated as "${trimmedNewName}"`, "success");
+        showToast(
+          `Customization choice duplicated as "${trimmedNewName}"`,
+          "success",
+        );
       } else {
         if (!activeCategory?._id) return;
         const duplicatedId = await duplicateItemMutation({
@@ -1956,7 +2428,8 @@ export default function MenuPage() {
   };
 
   const handleAddExistingItemSubmit = async () => {
-    if (!organization?._id || !activeCategory?._id || !selectedExistingItem) return;
+    if (!organization?._id || !activeCategory?._id || !selectedExistingItem)
+      return;
 
     const addedName = selectedExistingItem.name;
     setIsAddingExistingItem(true);
@@ -1969,7 +2442,10 @@ export default function MenuPage() {
       });
       setIsAddExistingItemOpen(false);
       setSelectedExistingItem(null);
-      showToast(`Item "${addedName}" added to category successfully`, "success");
+      showToast(
+        `Item "${addedName}" added to category successfully`,
+        "success",
+      );
     } catch (err: any) {
       setExistingItemError(err.message || "Failed to add existing item");
       showToast(err.message || "Failed to add existing item", "error");
@@ -1984,7 +2460,7 @@ export default function MenuPage() {
     return allExistingItems.filter(
       (item) =>
         item.name.toLowerCase().includes(query) ||
-        (item.categoryName && item.categoryName.toLowerCase().includes(query))
+        (item.categoryName && item.categoryName.toLowerCase().includes(query)),
     );
   }, [allExistingItems, existingItemSearchQuery]);
 
@@ -1998,7 +2474,8 @@ export default function MenuPage() {
   };
 
   const handleAddExistingCustomizationSubmit = async () => {
-    if (!organization?._id || !selectedItemId || !selectedExistingCustomization) return;
+    if (!organization?._id || !selectedItemId || !selectedExistingCustomization)
+      return;
 
     const custName = selectedExistingCustomization.name;
     setIsCopyingCustomization(true);
@@ -2011,9 +2488,14 @@ export default function MenuPage() {
       });
       setIsAddExistingCustomizationOpen(false);
       setSelectedExistingCustomization(null);
-      showToast(`Customization "${custName}" attached to item successfully`, "success");
+      showToast(
+        `Customization "${custName}" attached to item successfully`,
+        "success",
+      );
     } catch (err: any) {
-      setExistingCustomizationError(err.message || "Failed to add existing customization");
+      setExistingCustomizationError(
+        err.message || "Failed to add existing customization",
+      );
       showToast(err.message || "Failed to add existing customization", "error");
     } finally {
       setIsCopyingCustomization(false);
@@ -2021,38 +2503,54 @@ export default function MenuPage() {
   };
 
   const filteredExistingCustomizations = useMemo(() => {
-    if (!allExistingCustomizations || !existingCustomizationSearchQuery.trim()) return [];
+    if (!allExistingCustomizations || !existingCustomizationSearchQuery.trim())
+      return [];
     const query = existingCustomizationSearchQuery.toLowerCase();
     return allExistingCustomizations.filter(
       (cust: any) =>
         cust.name.toLowerCase().includes(query) ||
         (cust.itemName && cust.itemName.toLowerCase().includes(query)) ||
-        (cust.customizationType && cust.customizationType.toLowerCase().includes(query))
+        (cust.customizationType &&
+          cust.customizationType.toLowerCase().includes(query)),
     );
   }, [allExistingCustomizations, existingCustomizationSearchQuery]);
 
-  const handleToggleItemAvailability = async (itemId: Id<"items">, currentAvailable: boolean, name?: string) => {
+  const handleToggleItemAvailability = async (
+    itemId: Id<"items">,
+    currentAvailable: boolean,
+    name?: string,
+  ) => {
     try {
       await toggleItemAvailabilityMutation({
         id: itemId,
         isAvailable: !currentAvailable,
       });
       const label = name ? `"${name}"` : "Item";
-      showToast(`${label} marked as ${!currentAvailable ? "Available" : "Sold Out"}`, "success");
+      showToast(
+        `${label} marked as ${!currentAvailable ? "Available" : "Sold Out"}`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to toggle item availability:", err);
       showToast(err.message || "Failed to update item availability", "error");
     }
   };
 
-  const handleToggleItemPublished = async (itemId: Id<"items">, currentPublished: boolean, name?: string) => {
+  const handleToggleItemPublished = async (
+    itemId: Id<"items">,
+    currentPublished: boolean,
+    name?: string,
+  ) => {
     try {
       await toggleItemPublishedMutation({
         id: itemId,
         published: !currentPublished,
       });
       const label = name ? `"${name}"` : "Item";
-      showToast(`${label} ${!currentPublished ? "published" : "unpublished"} successfully`, "success");
+      showToast(
+        `${label} ${!currentPublished ? "published" : "unpublished"} successfully`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to toggle item published:", err);
       showToast(err.message || "Failed to update item status", "error");
@@ -2132,11 +2630,14 @@ export default function MenuPage() {
         unavailabilityToggle
           ? `"${targetName}" marked as unavailable`
           : `"${targetName}" is now available`,
-        "success"
+        "success",
       );
     } catch (err: any) {
       console.error("Failed to update unavailability:", err);
-      showToast(err.message || "Failed to update unavailability status", "error");
+      showToast(
+        err.message || "Failed to update unavailability status",
+        "error",
+      );
     } finally {
       setIsSavingUnavailability(false);
     }
@@ -2200,7 +2701,8 @@ export default function MenuPage() {
 
   const handleSaveCustomizationSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!organization?._id || !selectedItemId || !customizationName.trim()) return;
+    if (!organization?._id || !selectedItemId || !customizationName.trim())
+      return;
 
     const trimmedName = customizationName.trim();
     setIsSavingCustomization(true);
@@ -2216,7 +2718,10 @@ export default function MenuPage() {
         });
         setIsEditCustomizationOpen(false);
         setEditingCustomization(null);
-        showToast(`Customization "${trimmedName}" updated successfully`, "success");
+        showToast(
+          `Customization "${trimmedName}" updated successfully`,
+          "success",
+        );
       } else {
         const newCustId = await createCustomizationMutation({
           organizationId: organization._id,
@@ -2229,7 +2734,10 @@ export default function MenuPage() {
         });
         setIsAddCustomizationOpen(false);
         setSelectedCustomizationId(newCustId);
-        showToast(`Customization "${trimmedName}" created successfully`, "success");
+        showToast(
+          `Customization "${trimmedName}" created successfully`,
+          "success",
+        );
       }
     } catch (err: any) {
       console.error("Failed to save customization:", err);
@@ -2255,7 +2763,10 @@ export default function MenuPage() {
       }
       setIsDeleteCustomizationOpen(false);
       setTargetDeleteCustomization(null);
-      showToast(`Customization group "${custName}" deleted successfully`, "success");
+      showToast(
+        `Customization group "${custName}" deleted successfully`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to delete customization:", err);
       showToast(err.message || "Failed to delete customization", "error");
@@ -2270,10 +2781,16 @@ export default function MenuPage() {
         id: cust._id,
         published: !cust.published,
       });
-      showToast(`Customization "${cust.name}" ${!cust.published ? "enabled" : "disabled"}`, "success");
+      showToast(
+        `Customization "${cust.name}" ${!cust.published ? "enabled" : "disabled"}`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to toggle customization published status:", err);
-      showToast(err.message || "Failed to update customization status", "error");
+      showToast(
+        err.message || "Failed to update customization status",
+        "error",
+      );
     }
   };
 
@@ -2291,9 +2808,15 @@ export default function MenuPage() {
     }
   };
 
-  const handleCustomizationDrop = async (e: React.DragEvent, targetIndex: number) => {
+  const handleCustomizationDrop = async (
+    e: React.DragEvent,
+    targetIndex: number,
+  ) => {
     e.preventDefault();
-    if (draggedCustomizationIndex === null || draggedCustomizationIndex === targetIndex) {
+    if (
+      draggedCustomizationIndex === null ||
+      draggedCustomizationIndex === targetIndex
+    ) {
       setDraggedCustomizationIndex(null);
       setDragOverCustomizationIndex(null);
       return;
@@ -2355,7 +2878,9 @@ export default function MenuPage() {
     setChoicePrice((choice.price / 100).toFixed(2));
     setChoiceDescription(choice.description || "");
     setChoiceIsAvailable(choice.isAvailable ?? true);
-    setChoiceDietaryType(choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg"));
+    setChoiceDietaryType(
+      choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg"),
+    );
     setChoiceShowQuantity(!!choice.showQuantity);
     setChoiceQuantity(choice.quantity ? String(choice.quantity) : "");
     setChoiceQuantityUnit(choice.quantityUnit || "g");
@@ -2363,31 +2888,53 @@ export default function MenuPage() {
     setChoiceCalorie(choice.calorie || "");
     setChoiceCalorieMetric(choice.calorieMetric || "kcal");
     setChoiceIsGst(!!choice.isGst);
-    setChoiceSelectedTaxGroupId(choice.taxGroupId || taxGroups?.find((g) => g.isDefault)?._id || taxGroups?.[0]?._id || "");
+    setChoiceSelectedTaxGroupId(
+      choice.taxGroupId ||
+        taxGroups?.find((g) => g.isDefault)?._id ||
+        taxGroups?.[0]?._id ||
+        "",
+    );
     setChoiceTaxMode(choice.taxMode || "inclusive");
     setIsChoiceAdvancedOpen(
-      !!(choice.description || choice.isGst || choice.showQuantity || choice.showCalorie || (choice.dietaryType && choice.dietaryType !== "veg"))
+      !!(
+        choice.description ||
+        choice.isGst ||
+        choice.showQuantity ||
+        choice.showCalorie ||
+        (choice.dietaryType && choice.dietaryType !== "veg")
+      ),
     );
     setIsEditChoiceOpen(true);
   };
 
   const handleSaveChoiceSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!organization?._id || !selectedCustomizationId || !choiceName.trim()) return;
+    if (!organization?._id || !selectedCustomizationId || !choiceName.trim())
+      return;
 
     const trimmedName = choiceName.trim();
     const priceNum = parseFloat(choicePrice || "0");
     const priceCents = Math.round(priceNum * 100);
-    const quantityNum = choiceShowQuantity && choiceQuantity ? parseFloat(choiceQuantity) : undefined;
-    const isVeg = choiceDietaryType === "veg" || choiceDietaryType === "vegan" || choiceDietaryType === "jain";
+    const quantityNum =
+      choiceShowQuantity && choiceQuantity
+        ? parseFloat(choiceQuantity)
+        : undefined;
+    const isVeg =
+      choiceDietaryType === "veg" ||
+      choiceDietaryType === "vegan" ||
+      choiceDietaryType === "jain";
     const matchedType = availableItemTypes.find(
       (t) =>
         t.id === choiceDietaryType ||
         t.name.toLowerCase() === choiceDietaryType.toLowerCase() ||
-        (choiceDietaryType === "veg" && t.name.toLowerCase().includes("veg") && !t.name.toLowerCase().includes("non"))
+        (choiceDietaryType === "veg" &&
+          t.name.toLowerCase().includes("veg") &&
+          !t.name.toLowerCase().includes("non")),
     );
     const resolvedItemTypeIds =
-      matchedType && matchedType.id && !["veg", "non_veg", "vegan", "jain", "egg"].includes(matchedType.id)
+      matchedType &&
+      matchedType.id &&
+      !["veg", "non_veg", "vegan", "jain", "egg"].includes(matchedType.id)
         ? [matchedType.id as any]
         : undefined;
 
@@ -2406,16 +2953,24 @@ export default function MenuPage() {
           quantity: quantityNum,
           quantityUnit: choiceShowQuantity ? choiceQuantityUnit : undefined,
           showCalorie: choiceShowCalorie,
-          calorie: choiceShowCalorie ? choiceCalorie.trim() || undefined : undefined,
+          calorie: choiceShowCalorie
+            ? choiceCalorie.trim() || undefined
+            : undefined,
           calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
           isGst: choiceIsGst,
-          taxGroupId: choiceIsGst && choiceSelectedTaxGroupId ? (choiceSelectedTaxGroupId as any) : undefined,
+          taxGroupId:
+            choiceIsGst && choiceSelectedTaxGroupId
+              ? (choiceSelectedTaxGroupId as any)
+              : undefined,
           taxMode: choiceIsGst ? choiceTaxMode : undefined,
           isAvailable: choiceIsAvailable,
         });
         setIsEditChoiceOpen(false);
         setEditingChoice(null);
-        showToast(`Choice item "${trimmedName}" updated successfully`, "success");
+        showToast(
+          `Choice item "${trimmedName}" updated successfully`,
+          "success",
+        );
       } else {
         await createCustomizationItemMutation({
           organizationId: organization._id,
@@ -2430,10 +2985,15 @@ export default function MenuPage() {
           quantity: quantityNum,
           quantityUnit: choiceShowQuantity ? choiceQuantityUnit : undefined,
           showCalorie: choiceShowCalorie,
-          calorie: choiceShowCalorie ? choiceCalorie.trim() || undefined : undefined,
+          calorie: choiceShowCalorie
+            ? choiceCalorie.trim() || undefined
+            : undefined,
           calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
           isGst: choiceIsGst,
-          taxGroupId: choiceIsGst && choiceSelectedTaxGroupId ? (choiceSelectedTaxGroupId as any) : undefined,
+          taxGroupId:
+            choiceIsGst && choiceSelectedTaxGroupId
+              ? (choiceSelectedTaxGroupId as any)
+              : undefined,
           taxMode: choiceIsGst ? choiceTaxMode : undefined,
           isAvailable: true,
         });
@@ -2464,7 +3024,10 @@ export default function MenuPage() {
       await deleteCustomizationItemMutation({ id: targetDeleteChoice._id });
       setIsDeleteChoiceOpen(false);
       setTargetDeleteChoice(null);
-      showToast(`Customization item "${choiceName}" deleted successfully`, "success");
+      showToast(
+        `Customization item "${choiceName}" deleted successfully`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to delete choice item:", err);
       showToast(err.message || "Failed to delete choice item", "error");
@@ -2479,7 +3042,10 @@ export default function MenuPage() {
         id: choice._id,
         isAvailable: !choice.isAvailable,
       });
-      showToast(`Choice "${choice.name}" marked as ${!choice.isAvailable ? "Available" : "Out of stock"}`, "success");
+      showToast(
+        `Choice "${choice.name}" marked as ${!choice.isAvailable ? "Available" : "Out of stock"}`,
+        "success",
+      );
     } catch (err: any) {
       console.error("Failed to toggle choice availability:", err);
       showToast(err.message || "Failed to update choice availability", "error");
@@ -2533,15 +3099,18 @@ export default function MenuPage() {
     setDragOverChoiceIndex(null);
   };
 
-  const activeItemsCount = categoryItems?.filter((ci) => (ci.item.published ?? true)).length || 0;
+  const activeItemsCount =
+    categoryItems?.filter((ci) => ci.item.published ?? true).length || 0;
 
   return (
-    <PosShell title="Menu Management" subtitle="Catalog, Categories & Customizations">
+    <PosShell
+      title="Menu Management"
+      subtitle="Catalog, Categories & Customizations"
+    >
       {/* Global Standard Toast Notification Banner */}
       <Toast toast={toast} onClose={() => setToast(null)} />
 
       <div className="flex flex-col flex-1 min-w-0 bg-[#f5f5f5] text-[#1c1b1b] min-h-0 h-full font-sans overflow-hidden">
-        
         {/* ======================================================== */}
         {/* VIEW 1: FULL SCREEN ADD / EDIT ITEM STUDIO (WITH TAXES) */}
         {/* ======================================================== */}
@@ -2596,7 +3165,8 @@ export default function MenuPage() {
                     {editingItem ? "Edit Item" : "Add New Item"}
                   </h1>
                   <p className="text-[#5e5e5e] text-[14px] mt-1">
-                    Configure details, taxes, dietary classification, and base pricing.
+                    Configure details, taxes, dietary classification, and base
+                    pricing.
                   </p>
                 </div>
               </div>
@@ -2614,10 +3184,11 @@ export default function MenuPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                   {/* Left Column (Forms) */}
                   <div className="lg:col-span-7 xl:col-span-8 space-y-8">
-                    
                     {/* Card 1: Item Details & Pricing */}
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
-                      <h2 className="text-[20px] font-semibold text-[#0c0a09]">Item Details & Pricing</h2>
+                      <h2 className="text-[20px] font-semibold text-[#0c0a09]">
+                        Item Details & Pricing
+                      </h2>
 
                       {/* Image Upload Area */}
                       <input
@@ -2634,22 +3205,31 @@ export default function MenuPage() {
                         {isUploadingItemImage ? (
                           <div className="flex flex-col items-center gap-2 py-4">
                             <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#141010] border-t-transparent"></div>
-                            <span className="text-sm font-medium text-[#141010]">Uploading item image to R2...</span>
+                            <span className="text-sm font-medium text-[#141010]">
+                              Uploading item image to R2...
+                            </span>
                           </div>
-                        ) : (itemImageUrl || itemImageAssetId) ? (
+                        ) : itemImageUrl || itemImageAssetId ? (
                           <div className="flex flex-col items-center gap-3">
                             <div className="w-24 h-24 rounded-lg overflow-hidden border border-[#e7e5e4] shadow-xs">
-                              <img src={itemImageUrl} alt="Item Preview" className="w-full h-full object-cover" />
+                              <img
+                                src={itemImageUrl}
+                                alt="Item Preview"
+                                className="w-full h-full object-cover"
+                              />
                             </div>
                             <div className="flex items-center gap-3">
-                              <span className="text-xs font-medium text-[#141010] hover:underline">Change Image</span>
+                              <span className="text-xs font-medium text-[#141010] hover:underline">
+                                Change Image
+                              </span>
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setItemImageAssetId("");
                                   setItemImageUrl("");
-                                  if (itemFileInputRef.current) itemFileInputRef.current.value = "";
+                                  if (itemFileInputRef.current)
+                                    itemFileInputRef.current.value = "";
                                 }}
                                 className="text-xs font-medium text-rose-600 hover:underline cursor-pointer"
                               >
@@ -2662,8 +3242,13 @@ export default function MenuPage() {
                             <div className="w-16 h-16 rounded-full bg-[#f0efed] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform border border-[#e7e5e4]">
                               <ImageIcon className="w-7 h-7 text-[#141010]" />
                             </div>
-                            <h3 className="font-medium text-[15px] text-[#0c0a09] mb-1">Click to upload item image</h3>
-                            <p className="text-xs text-[#5e5e5e] mb-4">or drag and drop. Supports JPG, PNG, WEBP (Max 10MB)</p>
+                            <h3 className="font-medium text-[15px] text-[#0c0a09] mb-1">
+                              Click to upload item image
+                            </h3>
+                            <p className="text-xs text-[#5e5e5e] mb-4">
+                              or drag and drop. Supports JPG, PNG, WEBP (Max
+                              10MB)
+                            </p>
                           </>
                         )}
                       </div>
@@ -2671,11 +3256,19 @@ export default function MenuPage() {
                       {/* Category & Search Code / SKU */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                         <div className="space-y-2">
-                          <label className="block text-sm font-medium text-[#0c0a09]">Category *</label>
+                          <label className="block text-sm font-medium text-[#0c0a09]">
+                            Category *
+                          </label>
                           <div className="relative">
                             <select
-                              value={itemSelectedCategoryId || activeCategory?._id || ""}
-                              onChange={(e) => setItemSelectedCategoryId(e.target.value)}
+                              value={
+                                itemSelectedCategoryId ||
+                                activeCategory?._id ||
+                                ""
+                              }
+                              onChange={(e) =>
+                                setItemSelectedCategoryId(e.target.value)
+                              }
                               className="w-full bg-white border border-[#e7e5e4] rounded-lg px-4 py-2.5 appearance-none focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm"
                             >
                               {categories?.map((cat) => (
@@ -2689,7 +3282,9 @@ export default function MenuPage() {
                         </div>
 
                         <div className="space-y-2">
-                          <label className="block text-sm font-medium text-[#0c0a09]">Search Code / SKU (Optional)</label>
+                          <label className="block text-sm font-medium text-[#0c0a09]">
+                            Search Code / SKU (Optional)
+                          </label>
                           <input
                             type="text"
                             value={itemSkuNumber}
@@ -2702,7 +3297,9 @@ export default function MenuPage() {
 
                       {/* Item Name */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-[#0c0a09]">Item Name *</label>
+                        <label className="block text-sm font-medium text-[#0c0a09]">
+                          Item Name *
+                        </label>
                         <input
                           type="text"
                           required
@@ -2715,9 +3312,13 @@ export default function MenuPage() {
 
                       {/* Price */}
                       <div className="space-y-2">
-                        <label className="block text-sm font-medium text-[#0c0a09]">Base Price *</label>
+                        <label className="block text-sm font-medium text-[#0c0a09]">
+                          Base Price *
+                        </label>
                         <div className="relative">
-                          <span className="absolute left-4 top-2.5 text-[#5e5e5e] text-sm font-semibold">{currencySymbol}</span>
+                          <span className="absolute left-4 top-2.5 text-[#5e5e5e] text-sm font-semibold">
+                            {currencySymbol}
+                          </span>
                           <input
                             type="number"
                             step="0.01"
@@ -2733,7 +3334,9 @@ export default function MenuPage() {
                       {/* Description */}
                       <div className="space-y-2">
                         <div className="flex justify-between items-center">
-                          <label className="block text-sm font-medium text-[#0c0a09]">Enter description</label>
+                          <label className="block text-sm font-medium text-[#0c0a09]">
+                            Enter description
+                          </label>
                           <button
                             type="button"
                             onClick={() => {
@@ -2757,9 +3360,12 @@ export default function MenuPage() {
                     {/* Card 2: Item Settings (Toggle Grid & Contextual Configuration) */}
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
                       <div>
-                        <h2 className="text-[20px] font-semibold text-[#0c0a09]">Item Settings</h2>
+                        <h2 className="text-[20px] font-semibold text-[#0c0a09]">
+                          Item Settings
+                        </h2>
                         <p className="text-xs text-[#5e5e5e] mt-0.5">
-                          Enable attributes, portion sizes, dietary types, and tax configurations for this item.
+                          Enable attributes, portion sizes, dietary types, and
+                          tax configurations for this item.
                         </p>
                       </div>
 
@@ -2770,9 +3376,15 @@ export default function MenuPage() {
                           onClick={() => setItemShowQuantity(!itemShowQuantity)}
                           className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
                         >
-                          <span className="text-sm font-medium text-[#0c0a09]">Show quantity</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemShowQuantity ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowQuantity ? "right-0.5" : "left-0.5"}`} />
+                          <span className="text-sm font-medium text-[#0c0a09]">
+                            Show quantity
+                          </span>
+                          <div
+                            className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemShowQuantity ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowQuantity ? "right-0.5" : "left-0.5"}`}
+                            />
                           </div>
                         </div>
 
@@ -2781,9 +3393,15 @@ export default function MenuPage() {
                           onClick={() => setItemShowItemType(!itemShowItemType)}
                           className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
                         >
-                          <span className="text-sm font-medium text-[#0c0a09]">Show item type</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemShowItemType ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowItemType ? "right-0.5" : "left-0.5"}`} />
+                          <span className="text-sm font-medium text-[#0c0a09]">
+                            Show item type
+                          </span>
+                          <div
+                            className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemShowItemType ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemShowItemType ? "right-0.5" : "left-0.5"}`}
+                            />
                           </div>
                         </div>
 
@@ -2792,20 +3410,34 @@ export default function MenuPage() {
                           onClick={() => setItemIsGst(!itemIsGst)}
                           className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
                         >
-                          <span className="text-sm font-medium text-[#0c0a09]">Is this item taxable?</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemIsGst ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsGst ? "right-0.5" : "left-0.5"}`} />
+                          <span className="text-sm font-medium text-[#0c0a09]">
+                            Is this item taxable?
+                          </span>
+                          <div
+                            className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemIsGst ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsGst ? "right-0.5" : "left-0.5"}`}
+                            />
                           </div>
                         </div>
 
                         {/* 4. Mark as Bestseller */}
                         <div
-                          onClick={() => setItemMarkAsBestseller(!itemMarkAsBestseller)}
+                          onClick={() =>
+                            setItemMarkAsBestseller(!itemMarkAsBestseller)
+                          }
                           className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
                         >
-                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Bestseller</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemMarkAsBestseller ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemMarkAsBestseller ? "right-0.5" : "left-0.5"}`} />
+                          <span className="text-sm font-medium text-[#0c0a09]">
+                            Mark as Bestseller
+                          </span>
+                          <div
+                            className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemMarkAsBestseller ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemMarkAsBestseller ? "right-0.5" : "left-0.5"}`}
+                            />
                           </div>
                         </div>
 
@@ -2814,9 +3446,15 @@ export default function MenuPage() {
                           onClick={() => setItemIsSpicy(!itemIsSpicy)}
                           className="flex items-center justify-between p-3.5 bg-[#f8f6f5] hover:bg-[#f2efee] rounded-xl border border-[#e7e5e4] cursor-pointer transition select-none"
                         >
-                          <span className="text-sm font-medium text-[#0c0a09]">Mark as Spicy</span>
-                          <div className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemIsSpicy ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsSpicy ? "right-0.5" : "left-0.5"}`} />
+                          <span className="text-sm font-medium text-[#0c0a09]">
+                            Mark as Spicy
+                          </span>
+                          <div
+                            className={`w-9 h-5 rounded-full relative transition-colors shrink-0 ${itemIsSpicy ? "bg-[#0c0a09]" : "bg-[#d1c4c1]"}`}
+                          >
+                            <div
+                              className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-transform ${itemIsSpicy ? "right-0.5" : "left-0.5"}`}
+                            />
                           </div>
                         </div>
                       </div>
@@ -2830,21 +3468,29 @@ export default function MenuPage() {
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div className="space-y-1.5">
-                              <label className="block text-xs font-medium text-[#5e5e5e]">Quantity / Portion Size</label>
+                              <label className="block text-xs font-medium text-[#5e5e5e]">
+                                Quantity / Portion Size
+                              </label>
                               <input
                                 type="number"
                                 step="any"
                                 value={itemQuantity}
-                                onChange={(e) => setItemQuantity(e.target.value)}
+                                onChange={(e) =>
+                                  setItemQuantity(e.target.value)
+                                }
                                 placeholder="e.g. 250, 1, 500"
                                 className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 text-sm font-medium text-[#0c0a09] focus:outline-none focus:border-[#141010]"
                               />
                             </div>
                             <div className="space-y-1.5">
-                              <label className="block text-xs font-medium text-[#5e5e5e]">Unit of Measure</label>
+                              <label className="block text-xs font-medium text-[#5e5e5e]">
+                                Unit of Measure
+                              </label>
                               <select
                                 value={itemQuantityUnit}
-                                onChange={(e) => setItemQuantityUnit(e.target.value)}
+                                onChange={(e) =>
+                                  setItemQuantityUnit(e.target.value)
+                                }
                                 className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 text-sm font-medium text-[#0c0a09] focus:outline-none focus:border-[#141010]"
                               >
                                 <option value="g">Grams (g)</option>
@@ -2877,7 +3523,9 @@ export default function MenuPage() {
                                 <button
                                   key={type.id}
                                   type="button"
-                                  onClick={() => setSelectedDietaryType(type.id)}
+                                  onClick={() =>
+                                    setSelectedDietaryType(type.id)
+                                  }
                                   className={`flex items-center justify-center gap-2 p-2.5 rounded-lg border text-xs font-semibold transition cursor-pointer ${
                                     isSelected
                                       ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-sm ring-1 ring-[#0c0a09]"
@@ -2903,17 +3551,24 @@ export default function MenuPage() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {/* Tax Group Selector */}
                             <div className="space-y-1.5">
-                              <label className="block text-xs font-medium text-[#5e5e5e]">Tax Group / Rate</label>
+                              <label className="block text-xs font-medium text-[#5e5e5e]">
+                                Tax Group / Rate
+                              </label>
                               <div className="relative">
                                 <select
                                   value={itemSelectedTaxGroupId}
-                                  onChange={(e) => setItemSelectedTaxGroupId(e.target.value)}
+                                  onChange={(e) =>
+                                    setItemSelectedTaxGroupId(e.target.value)
+                                  }
                                   className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 appearance-none focus:outline-none focus:border-[#141010] text-[#0c0a09] text-xs font-medium"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
                                     taxGroups.map((tg) => (
                                       <option key={tg._id} value={tg._id}>
-                                        {tg.name} {tg.isDefault ? "⭐ (Store Default)" : ""}
+                                        {tg.name}{" "}
+                                        {tg.isDefault
+                                          ? "⭐ (Store Default)"
+                                          : ""}
                                       </option>
                                     ))
                                   ) : (
@@ -2926,7 +3581,9 @@ export default function MenuPage() {
 
                             {/* Tax Calculation Mode */}
                             <div className="space-y-1.5">
-                              <label className="block text-xs font-medium text-[#5e5e5e]">Tax Calculation Mode</label>
+                              <label className="block text-xs font-medium text-[#5e5e5e]">
+                                Tax Calculation Mode
+                              </label>
                               <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
@@ -2938,7 +3595,9 @@ export default function MenuPage() {
                                   }`}
                                 >
                                   Tax Inclusive
-                                  <span className="block text-[9px] font-normal opacity-80 mt-0.5">Price includes tax</span>
+                                  <span className="block text-[9px] font-normal opacity-80 mt-0.5">
+                                    Price includes tax
+                                  </span>
                                 </button>
 
                                 <button
@@ -2951,7 +3610,9 @@ export default function MenuPage() {
                                   }`}
                                 >
                                   Tax Exclusive
-                                  <span className="block text-[9px] font-normal opacity-80 mt-0.5">Tax added at checkout</span>
+                                  <span className="block text-[9px] font-normal opacity-80 mt-0.5">
+                                    Tax added at checkout
+                                  </span>
                                 </button>
                               </div>
                             </div>
@@ -2963,34 +3624,55 @@ export default function MenuPage() {
                               <div className="flex items-center justify-between font-semibold text-[#141010] border-b border-[#e7e5e4] pb-2 flex-wrap gap-2">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-sm">🧾</span>
-                                  <span className="text-xs font-bold">Receipt Split Preview ({taxBreakdown.totalRate}% Total Tax):</span>
+                                  <span className="text-xs font-bold">
+                                    Receipt Split Preview (
+                                    {taxBreakdown.totalRate}% Total Tax):
+                                  </span>
                                   {taxBreakdown.isDemo && (
                                     <span className="text-[10px] bg-neutral-100 text-neutral-600 px-1.5 py-0.5 rounded font-medium">
                                       Demo for {currencySymbol}100
                                     </span>
                                   )}
                                 </div>
-                                <span className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${
-                                  taxBreakdown.mode === "inclusive"
-                                    ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                                    : "text-blue-700 bg-blue-50 border-blue-200"
-                                }`}>
-                                  {taxBreakdown.mode === "inclusive" ? "Inclusive Pricing" : "Exclusive Pricing"}
+                                <span
+                                  className={`text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border ${
+                                    taxBreakdown.mode === "inclusive"
+                                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                      : "text-blue-700 bg-blue-50 border-blue-200"
+                                  }`}
+                                >
+                                  {taxBreakdown.mode === "inclusive"
+                                    ? "Inclusive Pricing"
+                                    : "Exclusive Pricing"}
                                 </span>
                               </div>
                               <div className="flex justify-between text-[#5e5e5e] text-xs">
                                 <span>Base Item Price:</span>
-                                <span className="font-semibold text-[#141010]">{currencySymbol}{taxBreakdown.basePrice}</span>
+                                <span className="font-semibold text-[#141010]">
+                                  {currencySymbol}
+                                  {taxBreakdown.basePrice}
+                                </span>
                               </div>
                               {taxBreakdown.components.map((c, idx) => (
-                                <div key={idx} className="flex justify-between text-[#5e5e5e] text-xs">
-                                  <span>• {c.name} ({c.rate}%):</span>
-                                  <span className="font-medium text-[#141010]">+{currencySymbol}{c.amount}</span>
+                                <div
+                                  key={idx}
+                                  className="flex justify-between text-[#5e5e5e] text-xs"
+                                >
+                                  <span>
+                                    • {c.name} ({c.rate}%):
+                                  </span>
+                                  <span className="font-medium text-[#141010]">
+                                    +{currencySymbol}
+                                    {c.amount}
+                                  </span>
                                 </div>
                               ))}
                               <div className="flex justify-between text-[#141010] font-bold pt-1.5 border-t border-[#e7e5e4] text-xs">
                                 <span>Total Customer Pays:</span>
-                                <span className="text-xs font-bold text-[#0c0a09]">{currencySymbol}{taxBreakdown.finalPrice}</span>
+                                <span className="text-xs font-bold text-[#0c0a09]">
+                                  {currencySymbol}
+                                  {taxBreakdown.finalPrice}
+                                </span>
                               </div>
                             </div>
                           )}
@@ -3004,39 +3686,55 @@ export default function MenuPage() {
                         {/* Card Header with Show Allergen Contents Checkbox */}
                         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#e7e5e4] pb-4 gap-3">
                           <div>
-                            <h2 className="text-[20px] font-semibold text-[#0c0a09]">Nutrition Information</h2>
-                            <p className="text-xs text-[#5e5e5e] mt-0.5">Configure nutritional breakdown, portion metrics, and allergen contents.</p>
+                            <h2 className="text-[20px] font-semibold text-[#0c0a09]">
+                              Nutrition Information
+                            </h2>
+                            <p className="text-xs text-[#5e5e5e] mt-0.5">
+                              Configure nutritional breakdown, portion metrics,
+                              and allergen contents.
+                            </p>
                           </div>
                           <label className="flex items-center gap-2 cursor-pointer select-none">
                             <input
                               type="checkbox"
                               checked={itemShowAllergens}
-                              onChange={(e) => setItemShowAllergens(e.target.checked)}
+                              onChange={(e) =>
+                                setItemShowAllergens(e.target.checked)
+                              }
                               className="w-4 h-4 rounded text-[#0c0a09] focus:ring-[#0c0a09] border-[#d1c4c1] cursor-pointer"
                             />
-                            <span className="text-xs text-[#0c0a09] font-medium">Show allergen contents</span>
+                            <span className="text-xs text-[#0c0a09] font-medium">
+                              Show allergen contents
+                            </span>
                           </label>
                         </div>
 
                         {/* Allergen Pills Grid (when itemShowAllergens is checked) */}
                         {itemShowAllergens && (
                           <div className="space-y-2 pt-1">
-                            <p className="text-xs font-medium text-[#5e5e5e]">Allergen Contents (Select all that apply)</p>
+                            <p className="text-xs font-medium text-[#5e5e5e]">
+                              Allergen Contents (Select all that apply)
+                            </p>
                             <div className="flex flex-wrap gap-2.5">
                               {ALLERGEN_OPTIONS.map((allergen) => {
-                                const isSelected = itemSelectedAllergens.includes(allergen.name);
+                                const isSelected =
+                                  itemSelectedAllergens.includes(allergen.name);
                                 return (
                                   <button
                                     key={allergen.id}
                                     type="button"
-                                    onClick={() => handleToggleAllergen(allergen.name)}
+                                    onClick={() =>
+                                      handleToggleAllergen(allergen.name)
+                                    }
                                     className={`px-3.5 py-2 rounded-lg border text-sm font-medium flex items-center gap-2 transition-all cursor-pointer ${
                                       isSelected
                                         ? "bg-[#1c1b1b] text-white border-[#1c1b1b] shadow-xs"
                                         : "bg-white text-[#1c1b1b] border-[#e7e5e4] hover:bg-[#f7f3f2]"
                                     }`}
                                   >
-                                    <span className="text-base leading-none">{allergen.icon}</span>
+                                    <span className="text-base leading-none">
+                                      {allergen.icon}
+                                    </span>
                                     <span>{allergen.name}</span>
                                   </button>
                                 );
@@ -3048,17 +3746,23 @@ export default function MenuPage() {
                         {/* Base Serving Metrics */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-[#5e5e5e]">Serving size</label>
+                            <label className="text-xs font-medium text-[#5e5e5e]">
+                              Serving size
+                            </label>
                             <input
                               type="text"
                               value={itemServingSize}
-                              onChange={(e) => setItemServingSize(e.target.value)}
+                              onChange={(e) =>
+                                setItemServingSize(e.target.value)
+                              }
                               className="w-full bg-[#f7f3f2] border-0 rounded-lg px-3 py-2 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
                               placeholder="Enter the serving size"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-[#5e5e5e]">Servings</label>
+                            <label className="text-xs font-medium text-[#5e5e5e]">
+                              Servings
+                            </label>
                             <input
                               type="text"
                               value={itemServing}
@@ -3068,11 +3772,15 @@ export default function MenuPage() {
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-xs font-medium text-[#5e5e5e]">Calories per serving</label>
+                            <label className="text-xs font-medium text-[#5e5e5e]">
+                              Calories per serving
+                            </label>
                             <input
                               type="text"
                               value={itemCaloriesPerServing}
-                              onChange={(e) => setItemCaloriesPerServing(e.target.value)}
+                              onChange={(e) =>
+                                setItemCaloriesPerServing(e.target.value)
+                              }
                               className="w-full bg-[#f7f3f2] border-0 rounded-lg px-3 py-2 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
                               placeholder="Enter the quantity"
                             />
@@ -3082,12 +3790,16 @@ export default function MenuPage() {
                         {/* Dynamic Nutrients Builder */}
                         <div className="space-y-4 pt-2 border-t border-[#e7e5e4]">
                           <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-[#5e5e5e]">Nutrient name</label>
+                            <label className="text-xs font-medium text-[#5e5e5e]">
+                              Nutrient name
+                            </label>
                             <div className="flex gap-2">
                               <input
                                 type="text"
                                 value={newNutrientName}
-                                onChange={(e) => setNewNutrientName(e.target.value)}
+                                onChange={(e) =>
+                                  setNewNutrientName(e.target.value)
+                                }
                                 onKeyDown={(e) => {
                                   if (e.key === "Enter") {
                                     e.preventDefault();
@@ -3110,9 +3822,12 @@ export default function MenuPage() {
                           {/* Nutrients List */}
                           <div className="space-y-3">
                             {itemNutrients.map((nutrient) => {
-                              const isMenuOpen = activeNutrientMenuId === nutrient.id;
-                              const isRenaming = editingNutrientId === nutrient.id;
-                              const isAddingChild = addingChildForNutrientId === nutrient.id;
+                              const isMenuOpen =
+                                activeNutrientMenuId === nutrient.id;
+                              const isRenaming =
+                                editingNutrientId === nutrient.id;
+                              const isAddingChild =
+                                addingChildForNutrientId === nutrient.id;
 
                               return (
                                 <div
@@ -3126,7 +3841,11 @@ export default function MenuPage() {
                                         <input
                                           type="text"
                                           value={editingNutrientName}
-                                          onChange={(e) => setEditingNutrientName(e.target.value)}
+                                          onChange={(e) =>
+                                            setEditingNutrientName(
+                                              e.target.value,
+                                            )
+                                          }
                                           className="bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-sm text-[#0c0a09] flex-1"
                                           autoFocus
                                         />
@@ -3134,7 +3853,11 @@ export default function MenuPage() {
                                           type="button"
                                           onClick={() => {
                                             if (editingNutrientName.trim()) {
-                                              handleUpdateNutrient(nutrient.id, "name", editingNutrientName.trim());
+                                              handleUpdateNutrient(
+                                                nutrient.id,
+                                                "name",
+                                                editingNutrientName.trim(),
+                                              );
                                             }
                                             setEditingNutrientId(null);
                                           }}
@@ -3144,20 +3867,28 @@ export default function MenuPage() {
                                         </button>
                                         <button
                                           type="button"
-                                          onClick={() => setEditingNutrientId(null)}
+                                          onClick={() =>
+                                            setEditingNutrientId(null)
+                                          }
                                           className="px-2.5 py-1 text-[#5e5e5e] text-xs hover:text-[#0c0a09]"
                                         >
                                           Cancel
                                         </button>
                                       </div>
                                     ) : (
-                                      <span className="font-semibold text-sm text-[#0c0a09]">{nutrient.name}</span>
+                                      <span className="font-semibold text-sm text-[#0c0a09]">
+                                        {nutrient.name}
+                                      </span>
                                     )}
 
                                     <div className="relative">
                                       <button
                                         type="button"
-                                        onClick={() => setActiveNutrientMenuId(isMenuOpen ? null : nutrient.id)}
+                                        onClick={() =>
+                                          setActiveNutrientMenuId(
+                                            isMenuOpen ? null : nutrient.id,
+                                          )
+                                        }
                                         className="p-1 text-[#5e5e5e] hover:text-[#0c0a09] rounded hover:bg-[#f0efed] cursor-pointer"
                                       >
                                         <MoreVerticalIcon className="w-4 h-4" />
@@ -3169,7 +3900,9 @@ export default function MenuPage() {
                                             type="button"
                                             onClick={() => {
                                               setEditingNutrientId(nutrient.id);
-                                              setEditingNutrientName(nutrient.name);
+                                              setEditingNutrientName(
+                                                nutrient.name,
+                                              );
                                               setActiveNutrientMenuId(null);
                                             }}
                                             className="w-full text-left px-3 py-2 text-[#0c0a09] hover:bg-[#f7f3f2] flex items-center gap-2 cursor-pointer"
@@ -3196,21 +3929,37 @@ export default function MenuPage() {
                                   {/* Quantity & %DV */}
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                      <label className="text-xs font-medium text-[#5e5e5e]">Quantity</label>
+                                      <label className="text-xs font-medium text-[#5e5e5e]">
+                                        Quantity
+                                      </label>
                                       <input
                                         type="text"
                                         value={nutrient.quantity || ""}
-                                        onChange={(e) => handleUpdateNutrient(nutrient.id, "quantity", e.target.value)}
+                                        onChange={(e) =>
+                                          handleUpdateNutrient(
+                                            nutrient.id,
+                                            "quantity",
+                                            e.target.value,
+                                          )
+                                        }
                                         placeholder="Ex: 20g"
                                         className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-1.5 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
                                       />
                                     </div>
                                     <div className="space-y-1">
-                                      <label className="text-xs font-medium text-[#5e5e5e]">%DV</label>
+                                      <label className="text-xs font-medium text-[#5e5e5e]">
+                                        %DV
+                                      </label>
                                       <input
                                         type="text"
                                         value={nutrient.dailyValue || ""}
-                                        onChange={(e) => handleUpdateNutrient(nutrient.id, "dailyValue", e.target.value)}
+                                        onChange={(e) =>
+                                          handleUpdateNutrient(
+                                            nutrient.id,
+                                            "dailyValue",
+                                            e.target.value,
+                                          )
+                                        }
                                         placeholder="Ex: 2%"
                                         className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-1.5 text-sm text-[#0c0a09] focus:ring-1 focus:ring-[#141010]"
                                       />
@@ -3218,40 +3967,65 @@ export default function MenuPage() {
                                   </div>
 
                                   {/* Child Nutrients List */}
-                                  {nutrient.children && nutrient.children.length > 0 && (
-                                    <div className="space-y-2 pt-2 border-t border-[#f0efed]">
-                                      {nutrient.children.map((child) => (
-                                        <div key={child.id} className="pl-3 border-l-2 border-[#d1c4c1] space-y-2 bg-[#f7f6f5] p-2.5 rounded-r-lg">
-                                          <div className="flex items-center justify-between">
-                                            <span className="text-xs font-semibold text-[#0c0a09]">{child.name}</span>
-                                            <button
-                                              type="button"
-                                              onClick={() => handleRemoveChildNutrient(nutrient.id, child.id)}
-                                              className="text-[#928c8a] hover:text-red-600 p-0.5 cursor-pointer"
-                                            >
-                                              <TrashIcon className="w-3.5 h-3.5" />
-                                            </button>
+                                  {nutrient.children &&
+                                    nutrient.children.length > 0 && (
+                                      <div className="space-y-2 pt-2 border-t border-[#f0efed]">
+                                        {nutrient.children.map((child) => (
+                                          <div
+                                            key={child.id}
+                                            className="pl-3 border-l-2 border-[#d1c4c1] space-y-2 bg-[#f7f6f5] p-2.5 rounded-r-lg"
+                                          >
+                                            <div className="flex items-center justify-between">
+                                              <span className="text-xs font-semibold text-[#0c0a09]">
+                                                {child.name}
+                                              </span>
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleRemoveChildNutrient(
+                                                    nutrient.id,
+                                                    child.id,
+                                                  )
+                                                }
+                                                className="text-[#928c8a] hover:text-red-600 p-0.5 cursor-pointer"
+                                              >
+                                                <TrashIcon className="w-3.5 h-3.5" />
+                                              </button>
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-3">
+                                              <input
+                                                type="text"
+                                                value={child.quantity || ""}
+                                                onChange={(e) =>
+                                                  handleUpdateChildNutrient(
+                                                    nutrient.id,
+                                                    child.id,
+                                                    "quantity",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                placeholder="Ex: 5g"
+                                                className="w-full bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09]"
+                                              />
+                                              <input
+                                                type="text"
+                                                value={child.dailyValue || ""}
+                                                onChange={(e) =>
+                                                  handleUpdateChildNutrient(
+                                                    nutrient.id,
+                                                    child.id,
+                                                    "dailyValue",
+                                                    e.target.value,
+                                                  )
+                                                }
+                                                placeholder="Ex: 1%"
+                                                className="w-full bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09]"
+                                              />
+                                            </div>
                                           </div>
-                                          <div className="grid grid-cols-2 gap-3">
-                                            <input
-                                              type="text"
-                                              value={child.quantity || ""}
-                                              onChange={(e) => handleUpdateChildNutrient(nutrient.id, child.id, "quantity", e.target.value)}
-                                              placeholder="Ex: 5g"
-                                              className="w-full bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09]"
-                                            />
-                                            <input
-                                              type="text"
-                                              value={child.dailyValue || ""}
-                                              onChange={(e) => handleUpdateChildNutrient(nutrient.id, child.id, "dailyValue", e.target.value)}
-                                              placeholder="Ex: 1%"
-                                              className="w-full bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09]"
-                                            />
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                                        ))}
+                                      </div>
+                                    )}
 
                                   {/* Add Child Nutrient Inline Adder */}
                                   {isAddingChild ? (
@@ -3260,17 +4034,28 @@ export default function MenuPage() {
                                         <input
                                           type="text"
                                           value={childNutrientNameInput}
-                                          onChange={(e) => setChildNutrientNameInput(e.target.value)}
+                                          onChange={(e) =>
+                                            setChildNutrientNameInput(
+                                              e.target.value,
+                                            )
+                                          }
                                           placeholder="Enter child nutrient name"
                                           className="bg-white border border-[#e7e5e4] rounded px-2.5 py-1 text-xs text-[#0c0a09] flex-1"
                                           autoFocus
                                           onKeyDown={(e) => {
                                             if (e.key === "Enter") {
                                               e.preventDefault();
-                                              if (childNutrientNameInput.trim()) {
-                                                handleAddChildNutrient(nutrient.id, childNutrientNameInput.trim());
+                                              if (
+                                                childNutrientNameInput.trim()
+                                              ) {
+                                                handleAddChildNutrient(
+                                                  nutrient.id,
+                                                  childNutrientNameInput.trim(),
+                                                );
                                                 setChildNutrientNameInput("");
-                                                setAddingChildForNutrientId(null);
+                                                setAddingChildForNutrientId(
+                                                  null,
+                                                );
                                               }
                                             }
                                           }}
@@ -3279,7 +4064,10 @@ export default function MenuPage() {
                                           type="button"
                                           onClick={() => {
                                             if (childNutrientNameInput.trim()) {
-                                              handleAddChildNutrient(nutrient.id, childNutrientNameInput.trim());
+                                              handleAddChildNutrient(
+                                                nutrient.id,
+                                                childNutrientNameInput.trim(),
+                                              );
                                               setChildNutrientNameInput("");
                                               setAddingChildForNutrientId(null);
                                             }
@@ -3305,7 +4093,9 @@ export default function MenuPage() {
                                       <button
                                         type="button"
                                         onClick={() => {
-                                          setAddingChildForNutrientId(nutrient.id);
+                                          setAddingChildForNutrientId(
+                                            nutrient.id,
+                                          );
                                           setChildNutrientNameInput("");
                                         }}
                                         className="px-3 py-1.5 bg-[#0c0a09] text-white rounded-lg text-xs font-medium hover:bg-[#252626] transition-colors cursor-pointer"
@@ -3327,18 +4117,29 @@ export default function MenuPage() {
                   <div className="lg:col-span-5 xl:col-span-4 space-y-6 sticky top-6">
                     {/* Item Preview Card */}
                     <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-sm">
-                      <h2 className="text-[16px] font-semibold text-[#0c0a09] mb-4">Live Menu Preview Card</h2>
+                      <h2 className="text-[16px] font-semibold text-[#0c0a09] mb-4">
+                        Live Menu Preview Card
+                      </h2>
                       <div className="border border-[#e7e5e4] rounded-xl overflow-hidden bg-white shadow-sm">
                         <div className="aspect-[4/3] bg-[#f0efed] flex items-center justify-center relative overflow-hidden">
                           {itemImageUrl ? (
-                            <img src={itemImageUrl} alt={itemName || "Preview"} className="w-full h-full object-cover" />
+                            <img
+                              src={itemImageUrl}
+                              alt={itemName || "Preview"}
+                              className="w-full h-full object-cover"
+                            />
                           ) : (
                             <ImageIcon className="w-12 h-12 text-[#928c8a]" />
                           )}
                           <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent flex items-end p-4 justify-between">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="bg-white/90 backdrop-blur-sm text-[#0c0a09] text-xs font-semibold px-2.5 py-1 rounded-md shadow-sm">
-                                {categories?.find((c) => c._id === (itemSelectedCategoryId || activeCategory?._id))?.name || "Category"}
+                                {categories?.find(
+                                  (c) =>
+                                    c._id ===
+                                    (itemSelectedCategoryId ||
+                                      activeCategory?._id),
+                                )?.name || "Category"}
                               </span>
                               {itemMarkAsBestseller && (
                                 <span className="bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-xs flex items-center gap-1">
@@ -3355,8 +4156,16 @@ export default function MenuPage() {
                             </div>
                             {itemShowItemType && (
                               <span className="bg-black/75 backdrop-blur-sm text-white text-xs px-2 py-0.5 rounded flex items-center gap-1">
-                                <span>{availableItemTypes.find((d) => isDietaryTypeSelected(d))?.icon || "🟢"}</span>
-                                <span>{availableItemTypes.find((d) => isDietaryTypeSelected(d))?.label || "Vegetarian"}</span>
+                                <span>
+                                  {availableItemTypes.find((d) =>
+                                    isDietaryTypeSelected(d),
+                                  )?.icon || "🟢"}
+                                </span>
+                                <span>
+                                  {availableItemTypes.find((d) =>
+                                    isDietaryTypeSelected(d),
+                                  )?.label || "Vegetarian"}
+                                </span>
                               </span>
                             )}
                           </div>
@@ -3375,13 +4184,18 @@ export default function MenuPage() {
                               )}
                             </div>
                             <span className="font-semibold text-[16px] text-[#0c0a09]">
-                              {currencySymbol}{itemPrice ? parseFloat(itemPrice).toFixed(2) : "0.00"}
+                              {currencySymbol}
+                              {itemPrice
+                                ? parseFloat(itemPrice).toFixed(2)
+                                : "0.00"}
                             </span>
                           </div>
                           {itemDescription ? (
                             <div
                               className="text-sm text-[#5e5e5e] rich-text-content line-clamp-3 overflow-hidden"
-                              dangerouslySetInnerHTML={{ __html: itemDescription }}
+                              dangerouslySetInnerHTML={{
+                                __html: itemDescription,
+                              }}
                             />
                           ) : (
                             <p className="text-sm text-[#5e5e5e] italic">
@@ -3390,35 +4204,60 @@ export default function MenuPage() {
                           )}
                           {itemIsGst && taxBreakdown && (
                             <div className="text-[11px] text-[#5e5e5e] pt-1 border-t border-[#f0efed] mt-2">
-                              Tax: {taxBreakdown.mode === "inclusive" ? "Included" : `+${currencySymbol}${taxBreakdown.totalTaxAmount}`} ({taxBreakdown.totalRate}% Tax)
+                              Tax:{" "}
+                              {taxBreakdown.mode === "inclusive"
+                                ? "Included"
+                                : `+${currencySymbol}${taxBreakdown.totalTaxAmount}`}{" "}
+                              ({taxBreakdown.totalRate}% Tax)
                             </div>
                           )}
 
                           {/* Allergen Contents Preview */}
-                          {itemShowAllergens && itemSelectedAllergens.length > 0 && (
-                            <div className="text-[11px] text-amber-950 bg-amber-50/80 rounded-lg p-2 border border-amber-200/80 mt-2 flex items-start gap-1.5">
-                              <span className="font-semibold shrink-0">⚠️ Allergens:</span>
-                              <span className="truncate">{itemSelectedAllergens.join(", ")}</span>
-                            </div>
-                          )}
+                          {itemShowAllergens &&
+                            itemSelectedAllergens.length > 0 && (
+                              <div className="text-[11px] text-amber-950 bg-amber-50/80 rounded-lg p-2 border border-amber-200/80 mt-2 flex items-start gap-1.5">
+                                <span className="font-semibold shrink-0">
+                                  ⚠️ Allergens:
+                                </span>
+                                <span className="truncate">
+                                  {itemSelectedAllergens.join(", ")}
+                                </span>
+                              </div>
+                            )}
 
                           {/* Nutrition Preview */}
-                          {(itemCaloriesPerServing || itemProtein || itemCarbs || itemFat || itemNutrients.length > 0) && (
+                          {(itemCaloriesPerServing ||
+                            itemProtein ||
+                            itemCarbs ||
+                            itemFat ||
+                            itemNutrients.length > 0) && (
                             <div className="mt-4 pt-3 border-t border-[#e7e5e4]">
-                              <p className="text-[10px] uppercase tracking-wider text-[#5e5e5e] font-semibold mb-1">Nutrition Preview</p>
+                              <p className="text-[10px] uppercase tracking-wider text-[#5e5e5e] font-semibold mb-1">
+                                Nutrition Preview
+                              </p>
                               <p className="text-xs text-[#5e5e5e]">
                                 {[
                                   itemCaloriesPerServing || "520 kcal",
-                                  itemProtein ? `${itemProtein}g Protein` : null,
+                                  itemProtein
+                                    ? `${itemProtein}g Protein`
+                                    : null,
                                   itemCarbs ? `${itemCarbs}g Carbs` : null,
                                   itemFat ? `${itemFat}g Fat` : null,
-                                ].filter(Boolean).join(" | ")}
+                                ]
+                                  .filter(Boolean)
+                                  .join(" | ")}
                               </p>
                               {itemNutrients.length > 0 && (
                                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-[#5e5e5e] mt-1.5 pt-1.5 border-t border-[#f0efed]">
                                   {itemNutrients.map((n) => (
                                     <span key={n.id}>
-                                      <strong className="text-[#0c0a09]">{n.name}</strong>: {n.quantity || "-"}{n.dailyValue ? ` (${n.dailyValue} DV)` : ""}
+                                      <strong className="text-[#0c0a09]">
+                                        {n.name}
+                                      </strong>
+                                      : {n.quantity || "-"}
+                                      {n.dailyValue
+                                        ? ` (${n.dailyValue} DV)`
+                                        : ""}
                                     </span>
                                   ))}
                                 </div>
@@ -3436,7 +4275,8 @@ export default function MenuPage() {
                         <span>AI Assistant</span>
                       </h2>
                       <p className="text-sm text-[#5e5e5e] mb-4">
-                        Use AI to improve your item information and estimate nutrition values.
+                        Use AI to improve your item information and estimate
+                        nutrition values.
                       </p>
                       <button
                         type="button"
@@ -3465,9 +4305,13 @@ export default function MenuPage() {
                       <div className="space-y-4">
                         {/* Suggested Name */}
                         <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">Suggested Name</p>
+                          <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                            Suggested Name
+                          </p>
                           <div className="p-3 bg-white rounded-lg border border-[#e7e5e4] flex justify-between items-center gap-2 shadow-xs">
-                            <span className="text-sm font-medium text-[#0c0a09] truncate">{aiNameSuggestion}</span>
+                            <span className="text-sm font-medium text-[#0c0a09] truncate">
+                              {aiNameSuggestion}
+                            </span>
                             <div className="flex items-center gap-2 shrink-0">
                               <button
                                 type="button"
@@ -3478,7 +4322,9 @@ export default function MenuPage() {
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCopyAiText(aiNameSuggestion, "name")}
+                                onClick={() =>
+                                  handleCopyAiText(aiNameSuggestion, "name")
+                                }
                                 className="text-xs text-[#5e5e5e] hover:text-[#0c0a09] cursor-pointer"
                               >
                                 {aiCopiedKey === "name" ? "Copied!" : "Copy"}
@@ -3489,20 +4335,28 @@ export default function MenuPage() {
 
                         {/* Suggested Description */}
                         <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">Suggested Description</p>
+                          <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                            Suggested Description
+                          </p>
                           <div className="p-3 bg-white rounded-lg border border-[#e7e5e4] space-y-2 shadow-xs">
-                            <p className="text-xs text-[#0c0a09] leading-relaxed">{aiDescSuggestion}</p>
+                            <p className="text-xs text-[#0c0a09] leading-relaxed">
+                              {aiDescSuggestion}
+                            </p>
                             <div className="flex justify-end gap-3 pt-1 border-t border-[#f0efed]">
                               <button
                                 type="button"
-                                onClick={() => setItemDescription(aiDescSuggestion)}
+                                onClick={() =>
+                                  setItemDescription(aiDescSuggestion)
+                                }
                                 className="text-xs text-[#0c0a09] font-semibold hover:underline cursor-pointer"
                               >
                                 Use
                               </button>
                               <button
                                 type="button"
-                                onClick={() => handleCopyAiText(aiDescSuggestion, "desc")}
+                                onClick={() =>
+                                  handleCopyAiText(aiDescSuggestion, "desc")
+                                }
                                 className="text-xs text-[#5e5e5e] hover:text-[#0c0a09] cursor-pointer"
                               >
                                 {aiCopiedKey === "desc" ? "Copied!" : "Copy"}
@@ -3514,11 +4368,15 @@ export default function MenuPage() {
                         {/* Nutrition Estimate */}
                         <div className="space-y-1.5">
                           <div className="flex justify-between items-center">
-                            <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">Nutrition Estimate</p>
+                            <p className="text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                              Nutrition Estimate
+                            </p>
                             <button
                               type="button"
                               onClick={() => {
-                                setItemCaloriesPerServing(aiNutritionSuggestion.calories);
+                                setItemCaloriesPerServing(
+                                  aiNutritionSuggestion.calories,
+                                );
                                 setItemProtein(aiNutritionSuggestion.protein);
                                 setItemCarbs(aiNutritionSuggestion.carbs);
                                 setItemFat(aiNutritionSuggestion.fat);
@@ -3530,40 +4388,66 @@ export default function MenuPage() {
                           </div>
                           <div className="bg-white rounded-lg border border-[#e7e5e4] overflow-hidden divide-y divide-[#e7e5e4] shadow-xs">
                             <div className="flex justify-between items-center p-2.5 text-xs">
-                              <span className="text-[#0c0a09]">Calories: <strong>{aiNutritionSuggestion.calories}</strong></span>
+                              <span className="text-[#0c0a09]">
+                                Calories:{" "}
+                                <strong>
+                                  {aiNutritionSuggestion.calories}
+                                </strong>
+                              </span>
                               <button
                                 type="button"
-                                onClick={() => setItemCaloriesPerServing(aiNutritionSuggestion.calories)}
+                                onClick={() =>
+                                  setItemCaloriesPerServing(
+                                    aiNutritionSuggestion.calories,
+                                  )
+                                }
                                 className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
                               >
                                 Use
                               </button>
                             </div>
                             <div className="flex justify-between items-center p-2.5 text-xs">
-                              <span className="text-[#0c0a09]">Protein: <strong>{aiNutritionSuggestion.protein}g</strong></span>
+                              <span className="text-[#0c0a09]">
+                                Protein:{" "}
+                                <strong>
+                                  {aiNutritionSuggestion.protein}g
+                                </strong>
+                              </span>
                               <button
                                 type="button"
-                                onClick={() => setItemProtein(aiNutritionSuggestion.protein)}
+                                onClick={() =>
+                                  setItemProtein(aiNutritionSuggestion.protein)
+                                }
                                 className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
                               >
                                 Use
                               </button>
                             </div>
                             <div className="flex justify-between items-center p-2.5 text-xs">
-                              <span className="text-[#0c0a09]">Carbs: <strong>{aiNutritionSuggestion.carbs}g</strong></span>
+                              <span className="text-[#0c0a09]">
+                                Carbs:{" "}
+                                <strong>{aiNutritionSuggestion.carbs}g</strong>
+                              </span>
                               <button
                                 type="button"
-                                onClick={() => setItemCarbs(aiNutritionSuggestion.carbs)}
+                                onClick={() =>
+                                  setItemCarbs(aiNutritionSuggestion.carbs)
+                                }
                                 className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
                               >
                                 Use
                               </button>
                             </div>
                             <div className="flex justify-between items-center p-2.5 text-xs">
-                              <span className="text-[#0c0a09]">Total Fat: <strong>{aiNutritionSuggestion.fat}g</strong></span>
+                              <span className="text-[#0c0a09]">
+                                Total Fat:{" "}
+                                <strong>{aiNutritionSuggestion.fat}g</strong>
+                              </span>
                               <button
                                 type="button"
-                                onClick={() => setItemFat(aiNutritionSuggestion.fat)}
+                                onClick={() =>
+                                  setItemFat(aiNutritionSuggestion.fat)
+                                }
                                 className="text-[#0c0a09] font-semibold hover:underline cursor-pointer"
                               >
                                 Use
@@ -3575,7 +4459,6 @@ export default function MenuPage() {
                     </div>
                   </div>
                 </div>
-
               </form>
             </div>
 
@@ -3613,7 +4496,6 @@ export default function MenuPage() {
             </div>
           </div>
         ) : selectedCustomizationId && activeCustomization ? (
-
           /* ======================================================== */
           /* VIEW 2: CUSTOMIZATION CHOICES (OPTIONS) SCREEN           */
           /* ======================================================== */
@@ -3651,7 +4533,9 @@ export default function MenuPage() {
                   {activeItem?.name || "Item"}
                 </button>
                 <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
-                <span className="text-[#141010] font-bold uppercase">{activeCustomization.name}</span>
+                <span className="text-[#141010] font-bold uppercase">
+                  {activeCustomization.name}
+                </span>
               </nav>
             </div>
 
@@ -3667,10 +4551,14 @@ export default function MenuPage() {
                         {activeCustomization.name}
                       </h1>
                       <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[#f1edec] text-[#141010] border border-[#e7e5e4]">
-                        {activeCustomization.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                        {activeCustomization.customizationType === "AddOns"
+                          ? "Add-Ons"
+                          : "Preparations"}
                       </span>
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                        {activeCustomization.maxSelected === 1 ? "Single Selection Modifier" : `Multiple Selection Modifier (Max ${activeCustomization.maxSelected ?? 1})`}
+                        {activeCustomization.maxSelected === 1
+                          ? "Single Selection Modifier"
+                          : `Multiple Selection Modifier (Max ${activeCustomization.maxSelected ?? 1})`}
                       </span>
                     </div>
                     {/* Parameters summary line */}
@@ -3679,14 +4567,22 @@ export default function MenuPage() {
                         {activeCustomization.required ? "Required" : "Optional"}
                       </span>
                       <span className="text-[#e7e5e4]">•</span>
-                      <span>Maximum {activeCustomization.maxSelected ?? 1} selection</span>
+                      <span>
+                        Maximum {activeCustomization.maxSelected ?? 1} selection
+                      </span>
                       <span className="text-[#e7e5e4]">•</span>
                       <span className="font-medium text-[#141010]">
-                        {(activeCustomization.items || []).length} customization items configured
+                        {(activeCustomization.items || []).length} customization
+                        items configured
                       </span>
                       <span className="text-[#e7e5e4]">•</span>
                       <span className="text-emerald-700 font-medium">
-                        {(activeCustomization.items || []).filter((i: any) => i.isAvailable).length} Available to customers
+                        {
+                          (activeCustomization.items || []).filter(
+                            (i: any) => i.isAvailable,
+                          ).length
+                        }{" "}
+                        Available to customers
                       </span>
                     </p>
                   </div>
@@ -3695,16 +4591,26 @@ export default function MenuPage() {
                   <div className="flex items-center gap-3 self-start sm:self-center">
                     {/* Published Toggle */}
                     <div className="flex items-center gap-2.5 bg-[#f7f3f2] px-3.5 py-1.5 rounded-xl border border-[#e7e5e4]">
-                      <span className="text-xs font-medium text-[#141010]">Group Published</span>
+                      <span className="text-xs font-medium text-[#141010]">
+                        Group Published
+                      </span>
                       <div
-                        onClick={() => handleToggleCustomizationPublished(activeCustomization)}
+                        onClick={() =>
+                          handleToggleCustomizationPublished(
+                            activeCustomization,
+                          )
+                        }
                         className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${
-                          activeCustomization.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1]"
+                          activeCustomization.published
+                            ? "bg-[#0c0a09]"
+                            : "bg-[#e6e1e1]"
                         }`}
                       >
                         <div
                           className={`absolute top-[2px] w-4 h-4 bg-white rounded-full transition-transform ${
-                            activeCustomization.published ? "right-[2px]" : "left-[2px]"
+                            activeCustomization.published
+                              ? "right-[2px]"
+                              : "left-[2px]"
                           }`}
                         />
                       </div>
@@ -3713,7 +4619,9 @@ export default function MenuPage() {
                     {/* Edit Customization Settings */}
                     <button
                       type="button"
-                      onClick={() => handleOpenEditCustomization(activeCustomization)}
+                      onClick={() =>
+                        handleOpenEditCustomization(activeCustomization)
+                      }
                       className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-[#141010] bg-white border border-[#e7e5e4] rounded-xl hover:bg-[#f1edec] transition-colors cursor-pointer"
                     >
                       <EditPencilIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
@@ -3728,7 +4636,15 @@ export default function MenuPage() {
               <div className="bg-[#eff6ff] border border-[#dbeafe] rounded-xl p-4 flex items-center gap-3 text-xs text-[#1e40af]">
                 <InfoIcon className="w-4 h-4 text-[#2563eb] shrink-0" />
                 <p className="font-normal">
-                  <span className="font-semibold text-[#1e3a8a]">Customization Live:</span> Customization items configured here will be presented directly to cashier staff &amp; diners when adding <span className="underline decoration-blue-300 font-medium">{activeItem.name}</span> to orders. Reorder items using the drag handles on the left.
+                  <span className="font-semibold text-[#1e3a8a]">
+                    Customization Live:
+                  </span>{" "}
+                  Customization items configured here will be presented directly
+                  to cashier staff &amp; diners when adding{" "}
+                  <span className="underline decoration-blue-300 font-medium">
+                    {activeItem.name}
+                  </span>{" "}
+                  to orders. Reorder items using the drag handles on the left.
                 </p>
               </div>
 
@@ -3737,8 +4653,13 @@ export default function MenuPage() {
                 {/* Table Section Header & Add Action */}
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
                   <div>
-                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Customization Items</h2>
-                    <p className="text-xs text-[#5e5e5e] mt-0.5">Manage, price, and toggle availability of items under this customization group.</p>
+                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+                      Customization Items
+                    </h2>
+                    <p className="text-xs text-[#5e5e5e] mt-0.5">
+                      Manage, price, and toggle availability of items under this
+                      customization group.
+                    </p>
                   </div>
                   <div className="flex items-center gap-2.5">
                     {/* Search / Quick Filter */}
@@ -3750,8 +4671,18 @@ export default function MenuPage() {
                         placeholder="Filter customization items..."
                         className="text-xs pl-8 pr-3 py-2 rounded-xl border border-[#e7e5e4] bg-[#f7f3f2] focus:bg-white focus:border-[#141010] text-[#141010] w-52 placeholder-[#928c8a] outline-none font-medium transition"
                       />
-                      <svg className="w-3.5 h-3.5 text-[#928c8a] absolute left-2.5 top-2.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" strokeLinecap="round" strokeLinejoin="round" />
+                      <svg
+                        className="w-3.5 h-3.5 text-[#928c8a] absolute left-2.5 top-2.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
                       </svg>
                     </div>
                     {/* Primary Action Button: + Add customization item */}
@@ -3762,7 +4693,9 @@ export default function MenuPage() {
                       className="inline-flex items-center gap-1.5 px-5 py-2 text-xs font-semibold text-white bg-[#0c0a09] hover:bg-[#252626] rounded-xl shadow-xs transition-colors cursor-pointer"
                     >
                       <PlusIcon className="w-4 h-4 text-white" />
-                      <span className="text-white font-semibold">Add customization item</span>
+                      <span className="text-white font-semibold">
+                        Add customization item
+                      </span>
                     </button>
                   </div>
                 </div>
@@ -3771,187 +4704,276 @@ export default function MenuPage() {
                 <div className="bg-white border border-[#e7e5e4] rounded-2xl shadow-none overflow-hidden">
                   <div className="overflow-x-auto">
                     <table className="w-full text-left border-collapse text-xs">
-                        <thead>
-                          <tr className="border-b border-[#e7e5e4] bg-[#fdf8f7] text-[#5e5e5e] uppercase tracking-wider font-semibold text-[11px]">
-                            <th className="py-3.5 pl-5 pr-2 w-14 text-center" scope="col">#</th>
-                            <th className="py-3.5 px-4" scope="col">Customization Item Name</th>
-                            <th className="py-3.5 px-4" scope="col">Additional Price</th>
-                            <th className="py-3.5 px-4" scope="col">Dietary Attributes</th>
-                            <th className="py-3.5 px-4" scope="col">Availability</th>
-                            <th className="py-3.5 pr-6 pl-4 text-right" scope="col">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-[#f1edec] text-[#141010] font-normal">
-                          {filteredChoices && filteredChoices.length > 0 ? (
-                            filteredChoices.map((choice: any, index: number) => {
-                              const isSnoozed = !choice.isAvailable;
-                              const isDragging = draggedChoiceIndex === index;
-                              const isDragOver = dragOverChoiceIndex === index;
-                              return (
-                                <tr
-                                  key={choice._id}
-                                  draggable
-                                  onDragStart={(e) => handleChoiceDragStart(e, index)}
-                                  onDragOver={(e) => handleChoiceDragOver(e, index)}
-                                  onDrop={(e) => handleChoiceDrop(e, index)}
-                                  onDragEnd={handleChoiceDragEnd}
-                                  className={`transition-all duration-150 group select-none ${
-                                    isDragging
-                                      ? "opacity-25 bg-[#f1edec] scale-[0.99]"
-                                      : isDragOver
+                      <thead>
+                        <tr className="border-b border-[#e7e5e4] bg-[#fdf8f7] text-[#5e5e5e] uppercase tracking-wider font-semibold text-[11px]">
+                          <th
+                            className="py-3.5 pl-5 pr-2 w-14 text-center"
+                            scope="col"
+                          >
+                            #
+                          </th>
+                          <th className="py-3.5 px-4" scope="col">
+                            Customization Item Name
+                          </th>
+                          <th className="py-3.5 px-4" scope="col">
+                            Additional Price
+                          </th>
+                          <th className="py-3.5 px-4" scope="col">
+                            Dietary Attributes
+                          </th>
+                          <th className="py-3.5 px-4" scope="col">
+                            Availability
+                          </th>
+                          <th
+                            className="py-3.5 pr-6 pl-4 text-right"
+                            scope="col"
+                          >
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#f1edec] text-[#141010] font-normal">
+                        {filteredChoices && filteredChoices.length > 0 ? (
+                          filteredChoices.map((choice: any, index: number) => {
+                            const isSnoozed = !choice.isAvailable;
+                            const isDragging = draggedChoiceIndex === index;
+                            const isDragOver = dragOverChoiceIndex === index;
+                            return (
+                              <tr
+                                key={choice._id}
+                                draggable
+                                onDragStart={(e) =>
+                                  handleChoiceDragStart(e, index)
+                                }
+                                onDragOver={(e) =>
+                                  handleChoiceDragOver(e, index)
+                                }
+                                onDrop={(e) => handleChoiceDrop(e, index)}
+                                onDragEnd={handleChoiceDragEnd}
+                                className={`transition-all duration-150 group select-none ${
+                                  isDragging
+                                    ? "opacity-25 bg-[#f1edec] scale-[0.99]"
+                                    : isDragOver
                                       ? "bg-[#f1edec] border-t-2 border-[#141010]"
                                       : isSnoozed
-                                      ? "bg-amber-50/30 hover:bg-amber-50/50"
-                                      : "hover:bg-[#fafafa]"
-                                  }`}
-                                >
-                                  {/* Handle & Index */}
-                                  <td className="py-4 pl-5 pr-2 text-center cursor-grab active:cursor-grabbing">
-                                    <div className="flex items-center justify-center gap-1 text-[#928c8a] group-hover:text-[#141010]">
-                                      <DragHandleIcon className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
-                                      <span className="text-[11px] font-mono font-medium text-[#928c8a]">{index + 1}</span>
-                                    </div>
-                                  </td>
-                                  {/* Customization Item Name */}
-                                  <td className="py-4 px-4">
-                                    <div className="font-semibold text-[#141010] text-sm flex items-center gap-2">
-                                      <span>{choice.name}</span>
-                                      {isSnoozed && (
-                                        <span className="text-[10px] bg-amber-100 text-amber-900 font-medium px-1.5 py-0.5 rounded border border-amber-200">
-                                          Snoozed
-                                        </span>
-                                      )}
-                                    </div>
-                                    {choice.description && (
-                                      <div className="text-[11px] text-[#5e5e5e] mt-0.5">{choice.description}</div>
+                                        ? "bg-amber-50/30 hover:bg-amber-50/50"
+                                        : "hover:bg-[#fafafa]"
+                                }`}
+                              >
+                                {/* Handle & Index */}
+                                <td className="py-4 pl-5 pr-2 text-center cursor-grab active:cursor-grabbing">
+                                  <div className="flex items-center justify-center gap-1 text-[#928c8a] group-hover:text-[#141010]">
+                                    <DragHandleIcon className="w-3.5 h-3.5 opacity-40 group-hover:opacity-100" />
+                                    <span className="text-[11px] font-mono font-medium text-[#928c8a]">
+                                      {index + 1}
+                                    </span>
+                                  </div>
+                                </td>
+                                {/* Customization Item Name */}
+                                <td className="py-4 px-4">
+                                  <div className="font-semibold text-[#141010] text-sm flex items-center gap-2">
+                                    <span>{choice.name}</span>
+                                    {isSnoozed && (
+                                      <span className="text-[10px] bg-amber-100 text-amber-900 font-medium px-1.5 py-0.5 rounded border border-amber-200">
+                                        Snoozed
+                                      </span>
                                     )}
-                                  </td>
-                                  {/* Additional Price */}
-                                  <td className="py-4 px-4 font-semibold text-[#141010] text-sm">
-                                    {choice.price > 0 ? `+${currencySymbol}${(choice.price / 100).toFixed(0)}` : `${currencySymbol}0`}
-                                  </td>
-                                  {/* Dietary / Attributes */}
-                                  <td className="py-4 px-4">
-                                    {(() => {
-                                      const dtype = choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg");
-                                      const dietaryObj = availableItemTypes.find((d) =>
+                                  </div>
+                                  {choice.description && (
+                                    <div className="text-[11px] text-[#5e5e5e] mt-0.5">
+                                      {choice.description}
+                                    </div>
+                                  )}
+                                </td>
+                                {/* Additional Price */}
+                                <td className="py-4 px-4 font-semibold text-[#141010] text-sm">
+                                  {choice.price > 0
+                                    ? `+${currencySymbol}${(choice.price / 100).toFixed(0)}`
+                                    : `${currencySymbol}0`}
+                                </td>
+                                {/* Dietary / Attributes */}
+                                <td className="py-4 px-4">
+                                  {(() => {
+                                    const dtype =
+                                      choice.dietaryType ||
+                                      (choice.isVeg === false
+                                        ? "non_veg"
+                                        : "veg");
+                                    const dietaryObj = availableItemTypes.find(
+                                      (d) =>
                                         d.id === dtype ||
-                                        d.name.toLowerCase() === dtype.toLowerCase() ||
-                                        (dtype === "veg" && d.name.toLowerCase().includes("veg") && !d.name.toLowerCase().includes("non"))
-                                      );
-                                      const isVegType = !dietaryObj?.name?.toLowerCase().includes("non");
-                                      return (
-                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium border ${
+                                        d.name.toLowerCase() ===
+                                          dtype.toLowerCase() ||
+                                        (dtype === "veg" &&
+                                          d.name
+                                            .toLowerCase()
+                                            .includes("veg") &&
+                                          !d.name
+                                            .toLowerCase()
+                                            .includes("non")),
+                                    );
+                                    const isVegType = !dietaryObj?.name
+                                      ?.toLowerCase()
+                                      .includes("non");
+                                    return (
+                                      <span
+                                        className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-medium border ${
                                           isVegType
                                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                             : "bg-red-50 text-red-700 border-red-200"
-                                        }`}>
-                                          <span>{dietaryObj?.icon || "🟢"}</span>
-                                          <span>{dietaryObj?.label || "Veg"}</span>
+                                        }`}
+                                      >
+                                        <span>{dietaryObj?.icon || "🟢"}</span>
+                                        <span>
+                                          {dietaryObj?.label || "Veg"}
                                         </span>
-                                      );
-                                    })()}
-                                  </td>
-                                  {/* Availability Pill */}
-                                  <td className="py-4 px-4">
-                                    {choice.isAvailable ? (
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                                        Available
                                       </span>
-                                    ) : (
-                                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
-                                        <ClockIcon className="w-3.5 h-3.5 text-amber-600" />
-                                        <span>Out of stock</span>
-                                      </span>
-                                    )}
-                                  </td>
-                                  {/* Actions */}
-                                  <td className="py-4 pr-6 pl-4 text-right">
-                                    <div className="flex items-center justify-end gap-1">
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenChoiceUnavailabilityModal(choice)}
-                                        className="p-1.5 text-[#5e5e5e] hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
-                                        title="Quick restock / snooze timer"
-                                      >
-                                        <ClockIcon className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenEditChoice(choice)}
-                                        className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded transition-colors cursor-pointer"
-                                        title="Edit customization item details"
-                                      >
-                                        <EditPencilIcon className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenDuplicateChoice(choice)}
-                                        className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded transition-colors cursor-pointer"
-                                        title="Duplicate customization item"
-                                      >
-                                        <CopyIcon className="w-4 h-4" />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => handleOpenDeleteChoice(choice)}
-                                        className="p-1.5 text-[#5e5e5e] hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
-                                        title="Delete customization item"
-                                      >
-                                        <TrashIcon className="w-4 h-4" />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })
-                          ) : (
-                            <tr>
-                              <td colSpan={6} className="py-12 text-center text-[#5e5e5e] text-xs">
-                                No customization items found. Click <strong>+ Add customization item</strong> to add items.
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                    {/* Bottom Table Footer Summary */}
-                    <div className="px-6 py-3.5 bg-[#fdf8f7] border-t border-[#e7e5e4] flex flex-col sm:flex-row items-center justify-between text-xs text-[#5e5e5e] gap-2">
-                      <div className="flex items-center gap-4">
-                        <span>Showing <strong className="font-medium text-[#141010]">{filteredChoices.length}</strong> of {(activeCustomization.items || []).length} customization items</span>
-                        <span className="text-[#e7e5e4]">•</span>
-                        <span>All changes automatically synced with terminal registers</span>
-                      </div>
+                                    );
+                                  })()}
+                                </td>
+                                {/* Availability Pill */}
+                                <td className="py-4 px-4">
+                                  {choice.isAvailable ? (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                      Available
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200">
+                                      <ClockIcon className="w-3.5 h-3.5 text-amber-600" />
+                                      <span>Out of stock</span>
+                                    </span>
+                                  )}
+                                </td>
+                                {/* Actions */}
+                                <td className="py-4 pr-6 pl-4 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleOpenChoiceUnavailabilityModal(
+                                          choice,
+                                        )
+                                      }
+                                      className="p-1.5 text-[#5e5e5e] hover:text-blue-600 hover:bg-blue-50 rounded transition-colors cursor-pointer"
+                                      title="Quick restock / snooze timer"
+                                    >
+                                      <ClockIcon className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleOpenEditChoice(choice)
+                                      }
+                                      className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded transition-colors cursor-pointer"
+                                      title="Edit customization item details"
+                                    >
+                                      <EditPencilIcon className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleOpenDuplicateChoice(choice)
+                                      }
+                                      className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded transition-colors cursor-pointer"
+                                      title="Duplicate customization item"
+                                    >
+                                      <CopyIcon className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleOpenDeleteChoice(choice)
+                                      }
+                                      className="p-1.5 text-[#5e5e5e] hover:text-red-600 hover:bg-red-50 rounded transition-colors cursor-pointer"
+                                      title="Delete customization item"
+                                    >
+                                      <TrashIcon className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        ) : (
+                          <tr>
+                            <td
+                              colSpan={6}
+                              className="py-12 text-center text-[#5e5e5e] text-xs"
+                            >
+                              No customization items found. Click{" "}
+                              <strong>+ Add customization item</strong> to add
+                              items.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  {/* Bottom Table Footer Summary */}
+                  <div className="px-6 py-3.5 bg-[#fdf8f7] border-t border-[#e7e5e4] flex flex-col sm:flex-row items-center justify-between text-xs text-[#5e5e5e] gap-2">
+                    <div className="flex items-center gap-4">
+                      <span>
+                        Showing{" "}
+                        <strong className="font-medium text-[#141010]">
+                          {filteredChoices.length}
+                        </strong>{" "}
+                        of {(activeCustomization.items || []).length}{" "}
+                        customization items
+                      </span>
+                      <span className="text-[#e7e5e4]">•</span>
+                      <span>
+                        All changes automatically synced with terminal registers
+                      </span>
                     </div>
                   </div>
-                </section>
-                {/* END: ChoicesSection */}
+                </div>
+              </section>
+              {/* END: ChoicesSection */}
 
-                {/* Advanced Technical Rules Box */}
-                <section className="bg-white rounded-2xl border border-[#e7e5e4] p-5 shadow-none">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-[#f1edec] flex items-center justify-center text-[#141010]">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" strokeLinecap="round" strokeLinejoin="round" />
-                          <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </div>
-                      <div>
-                        <h3 className="font-garamond text-[18px] text-[#141010] font-normal leading-tight">Customization Tax &amp; Inventory Calculation</h3>
-                        <p className="text-xs text-[#5e5e5e]">Tax calculation is configured for all customization items under this group. Stock deductions trigger recipe level debits on order fulfillment.</p>
-                      </div>
+              {/* Advanced Technical Rules Box */}
+              <section className="bg-white rounded-2xl border border-[#e7e5e4] p-5 shadow-none">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-[#f1edec] flex items-center justify-center text-[#141010]">
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <path
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
                     </div>
-                    <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
-                      Tax Configured
-                    </span>
+                    <div>
+                      <h3 className="font-garamond text-[18px] text-[#141010] font-normal leading-tight">
+                        Customization Tax &amp; Inventory Calculation
+                      </h3>
+                      <p className="text-xs text-[#5e5e5e]">
+                        Tax calculation is configured for all customization
+                        items under this group. Stock deductions trigger recipe
+                        level debits on order fulfillment.
+                      </p>
+                    </div>
                   </div>
-                </section>
-              </main>
-            </div>
-          ) : selectedItemId && activeItem ? (
-          
+                  <span className="text-xs font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                    Tax Configured
+                  </span>
+                </div>
+              </section>
+            </main>
+          </div>
+        ) : selectedItemId && activeItem ? (
           /* ======================================================== */
           /* VIEW 3: ITEM CUSTOMIZATIONS MANAGEMENT VIEW (PREST THEME)*/
           /* ======================================================== */
@@ -3977,12 +4999,15 @@ export default function MenuPage() {
                       {activeCategory?.name || "Category"}
                     </button>
                     <ChevronRightIcon className="w-3.5 h-3.5 text-gray-400" />
-                    <span className="text-gray-900 font-bold uppercase">{activeItem.name}</span>
+                    <span className="text-gray-900 font-bold uppercase">
+                      {activeItem.name}
+                    </span>
                   </nav>
                   <h1 className="font-garamond text-[32px] text-[#141010] font-normal leading-tight flex items-center gap-3">
                     <span>{activeItem.name}</span>
                     <span className="text-2xl font-normal text-[#5e5e5e]">
-                      {currencySymbol}{(activeItem.price / 100).toFixed(2)}
+                      {currencySymbol}
+                      {(activeItem.price / 100).toFixed(2)}
                     </span>
                   </h1>
                 </div>
@@ -4000,12 +5025,18 @@ export default function MenuPage() {
                   <div className="relative">
                     <button
                       type="button"
-                      onClick={() => setIsAddCustomizationDropdownOpen(!isAddCustomizationDropdownOpen)}
+                      onClick={() =>
+                        setIsAddCustomizationDropdownOpen(
+                          !isAddCustomizationDropdownOpen,
+                        )
+                      }
                       style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
                       className="h-10 px-5 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                     >
                       <PlusIcon className="w-4 h-4 text-white" />
-                      <span className="text-white font-medium text-[14px]">Add Customization</span>
+                      <span className="text-white font-medium text-[14px]">
+                        Add Customization
+                      </span>
                       <ChevronDownIcon className="w-4 h-4 text-white opacity-80" />
                     </button>
 
@@ -4039,12 +5070,13 @@ export default function MenuPage() {
 
             {/* Two Column Layout: Left Item Switcher, Right Customizations Table */}
             <main className="flex-1 flex flex-row w-full px-4 lg:px-6 py-5 gap-5 items-start font-sans min-h-[calc(100vh-210px)]">
-              
               {/* Left Items Column in Category */}
               <div className="w-60 lg:w-64 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden sticky top-6 shadow-xs">
                 <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="text-[18px] font-medium text-[#141010]">Items</h2>
+                    <h2 className="text-[18px] font-medium text-[#141010]">
+                      Items
+                    </h2>
                     <span className="px-2 py-0.5 rounded-full bg-[#f1edec] text-[#5e5e5e] text-xs font-semibold border border-[#e7e5e4]">
                       {categoryItems?.length || 0}
                     </span>
@@ -4063,7 +5095,9 @@ export default function MenuPage() {
                   {categoryItems && categoryItems.length > 0 ? (
                     categoryItems.map(({ item }) => {
                       const isSelected = item._id === selectedItemId;
-                      const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
+                      const initialLetter = item.name
+                        ? item.name.charAt(0).toUpperCase()
+                        : "I";
                       return (
                         <div
                           key={item._id}
@@ -4078,15 +5112,21 @@ export default function MenuPage() {
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0 pr-2">
-                            <span className={`cursor-grab text-[#5e5e5e] text-[18px] transition-opacity ${
-                              isSelected ? "opacity-50 group-hover:opacity-100" : "opacity-0 group-hover:opacity-50"
-                            }`}>
+                            <span
+                              className={`cursor-grab text-[#5e5e5e] text-[18px] transition-opacity ${
+                                isSelected
+                                  ? "opacity-50 group-hover:opacity-100"
+                                  : "opacity-0 group-hover:opacity-50"
+                              }`}
+                            >
                               <DragHandleIcon className="w-4 h-4" />
                             </span>
                             <div className="w-7 h-7 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center font-bold text-[11px] text-[#141010] shrink-0">
                               {initialLetter}
                             </div>
-                            <span className={`text-[15px] truncate ${isSelected ? "font-semibold text-[#141010]" : "text-[#5e5e5e]"}`}>
+                            <span
+                              className={`text-[15px] truncate ${isSelected ? "font-semibold text-[#141010]" : "text-[#5e5e5e]"}`}
+                            >
                               {item.name}
                             </span>
                           </div>
@@ -4107,7 +5147,6 @@ export default function MenuPage() {
 
               {/* Right Customizations Workspace */}
               <div className="flex-1 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden min-h-[500px] shadow-xs">
-                
                 {/* Item Hero Banner */}
                 <div className="p-6 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="space-y-1">
@@ -4116,41 +5155,63 @@ export default function MenuPage() {
                         {activeItem.name}
                       </h2>
                       <span className="text-xl font-medium text-[#5e5e5e]">
-                        {currencySymbol}{(activeItem.price / 100).toFixed(0)}
+                        {currencySymbol}
+                        {(activeItem.price / 100).toFixed(0)}
                       </span>
 
                       {/* Clean Availability badge */}
                       <div
-                        onClick={() => handleToggleItemAvailability(activeItem._id, activeItem.isAvailable, activeItem.name)}
+                        onClick={() =>
+                          handleToggleItemAvailability(
+                            activeItem._id,
+                            activeItem.isAvailable,
+                            activeItem.name,
+                          )
+                        }
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-semibold cursor-pointer transition select-none ${
                           activeItem.isAvailable
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200/80 hover:bg-emerald-100"
                             : "bg-[#e6e1e1] text-[#5e5e5e] border-[#e7e5e4] hover:bg-[#ddd9d8]"
                         }`}
                       >
-                        <span className={`w-2 h-2 rounded-full ${activeItem.isAvailable ? "bg-emerald-500" : "bg-gray-400"}`} />
-                        <span>{activeItem.isAvailable ? "Available" : "Sold Out"}</span>
+                        <span
+                          className={`w-2 h-2 rounded-full ${activeItem.isAvailable ? "bg-emerald-500" : "bg-gray-400"}`}
+                        />
+                        <span>
+                          {activeItem.isAvailable ? "Available" : "Sold Out"}
+                        </span>
                       </div>
 
                       {/* Published switch */}
                       <div className="flex items-center gap-2 pl-2 border-l border-gray-200 select-none">
                         <div
-                          onClick={() => handleToggleItemPublished(activeItem._id, !!activeItem.published, activeItem.name)}
+                          onClick={() =>
+                            handleToggleItemPublished(
+                              activeItem._id,
+                              !!activeItem.published,
+                              activeItem.name,
+                            )
+                          }
                           className={`w-9 h-5 rounded-full relative cursor-pointer transition-colors ${
                             activeItem.published ? "bg-black" : "bg-gray-300"
                           }`}
                         >
                           <div
                             className={`absolute top-[2px] w-4 h-4 bg-white rounded-full transition-transform ${
-                              activeItem.published ? "right-[2px]" : "left-[2px]"
+                              activeItem.published
+                                ? "right-[2px]"
+                                : "left-[2px]"
                             }`}
                           />
                         </div>
-                        <span className="text-xs font-medium text-gray-700">Published</span>
+                        <span className="text-xs font-medium text-gray-700">
+                          Published
+                        </span>
                       </div>
                     </div>
                     <p className="text-xs text-gray-500 mt-1.5">
-                      Manage add-ons, availability, and customizations available for this item.
+                      Manage add-ons, availability, and customizations available
+                      for this item.
                     </p>
                   </div>
 
@@ -4217,19 +5278,29 @@ export default function MenuPage() {
                       {itemCustomizations && itemCustomizations.length > 0 ? (
                         itemCustomizations.map((cust, index) => {
                           const choicesCount = cust.items?.length || 0;
-                          const isDragging = draggedCustomizationIndex === index;
-                          const isDragOver = dragOverCustomizationIndex === index;
+                          const isDragging =
+                            draggedCustomizationIndex === index;
+                          const isDragOver =
+                            dragOverCustomizationIndex === index;
                           return (
                             <tr
                               key={cust._id}
                               draggable
-                              onDragStart={(e) => handleCustomizationDragStart(e, index)}
-                              onDragOver={(e) => handleCustomizationDragOver(e, index)}
+                              onDragStart={(e) =>
+                                handleCustomizationDragStart(e, index)
+                              }
+                              onDragOver={(e) =>
+                                handleCustomizationDragOver(e, index)
+                              }
                               onDrop={(e) => handleCustomizationDrop(e, index)}
                               onDragEnd={handleCustomizationDragEnd}
                               onClick={() => {
                                 if (activeCategory?._id && activeItem?._id) {
-                                  navigateToCustomization(activeCategory._id, activeItem._id, cust._id);
+                                  navigateToCustomization(
+                                    activeCategory._id,
+                                    activeItem._id,
+                                    cust._id,
+                                  );
                                 } else {
                                   setSelectedCustomizationId(cust._id);
                                 }
@@ -4238,8 +5309,8 @@ export default function MenuPage() {
                                 isDragging
                                   ? "opacity-25 bg-[#f1edec]"
                                   : isDragOver
-                                  ? "bg-[#f1edec] border-t-2 border-[#141010]"
-                                  : "hover:bg-[#fafafa]"
+                                    ? "bg-[#f1edec] border-t-2 border-[#141010]"
+                                    : "hover:bg-[#fafafa]"
                               }`}
                               title="Click to manage customization items or drag to reorder"
                             >
@@ -4251,7 +5322,9 @@ export default function MenuPage() {
                                   {cust.name}
                                 </span>
                                 <span className="text-[11px] text-[#5e5e5e] block">
-                                  {cust.customizationType === "AddOns" ? "Add-on modifier group" : "Kitchen cook instruction"}
+                                  {cust.customizationType === "AddOns"
+                                    ? "Add-on modifier group"
+                                    : "Kitchen cook instruction"}
                                 </span>
                               </td>
                               <td className="px-3 py-3">
@@ -4262,7 +5335,9 @@ export default function MenuPage() {
                                       : "bg-blue-50 text-blue-700 border-blue-200"
                                   }`}
                                 >
-                                  {cust.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                                  {cust.customizationType === "AddOns"
+                                    ? "Add-Ons"
+                                    : "Preparations"}
                                 </span>
                               </td>
                               <td className="px-3 py-3 text-[#5e5e5e]">
@@ -4276,12 +5351,14 @@ export default function MenuPage() {
                                   {cust.required ? "Required" : "Optional"}
                                 </span>
                                 <span className="text-[11px] text-[#5e5e5e] ml-1">
-                                  · Max {cust.maxSelected ?? 1} {cust.maxSelected === 1 ? "item" : "items"}
+                                  · Max {cust.maxSelected ?? 1}{" "}
+                                  {cust.maxSelected === 1 ? "item" : "items"}
                                 </span>
                               </td>
                               <td className="px-3 py-3">
                                 <span className="font-medium text-[#141010] hover:underline">
-                                  {choicesCount} {choicesCount === 1 ? "item" : "items"}
+                                  {choicesCount}{" "}
+                                  {choicesCount === 1 ? "item" : "items"}
                                 </span>
                               </td>
                               <td className="px-2 py-3 text-center">
@@ -4292,16 +5369,22 @@ export default function MenuPage() {
                                       handleToggleCustomizationPublished(cust);
                                     }}
                                     className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
-                                      cust.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                      cust.published
+                                        ? "bg-[#0c0a09]"
+                                        : "bg-[#e6e1e1] border border-[#e7e5e4]"
                                     }`}
                                   >
                                     <div
                                       className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
-                                        cust.published ? "right-[2px]" : "left-[2px]"
+                                        cust.published
+                                          ? "right-[2px]"
+                                          : "left-[2px]"
                                       }`}
                                     />
                                   </div>
-                                  <span className={`text-[11px] font-semibold w-7 text-left ${cust.published ? "text-[#141010]" : "text-[#5e5e5e]"}`}>
+                                  <span
+                                    className={`text-[11px] font-semibold w-7 text-left ${cust.published ? "text-[#141010]" : "text-[#5e5e5e]"}`}
+                                  >
                                     {cust.published ? "ON" : "OFF"}
                                   </span>
                                 </div>
@@ -4335,8 +5418,13 @@ export default function MenuPage() {
                         })
                       ) : (
                         <tr>
-                          <td colSpan={7} className="py-12 text-center text-[#5e5e5e] text-xs">
-                            No customizations configured for this item. Click <strong>+ Add Customization</strong> to add modifiers, portion sizes, or kitchen instructions.
+                          <td
+                            colSpan={7}
+                            className="py-12 text-center text-[#5e5e5e] text-xs"
+                          >
+                            No customizations configured for this item. Click{" "}
+                            <strong>+ Add Customization</strong> to add
+                            modifiers, portion sizes, or kitchen instructions.
                           </td>
                         </tr>
                       )}
@@ -4347,7 +5435,6 @@ export default function MenuPage() {
             </main>
           </div>
         ) : (
-          
           /* ======================================================== */
           /* VIEW 4: TWO-PANEL INTERFACE (EXACT PREST MOCKUP)         */
           /* ======================================================== */
@@ -4399,7 +5486,9 @@ export default function MenuPage() {
                                   navigateToCategory(null, m._id);
                                 }}
                                 className={`w-full text-left px-4 py-2.5 flex items-center justify-between text-sm transition-colors cursor-pointer ${
-                                  isSelected ? "bg-[#f1edec] font-semibold text-[#141010]" : "hover:bg-[#fafafa] text-[#5e5e5e]"
+                                  isSelected
+                                    ? "bg-[#f1edec] font-semibold text-[#141010]"
+                                    : "hover:bg-[#fafafa] text-[#5e5e5e]"
                                 }`}
                               >
                                 <span>{m.name}</span>
@@ -4450,7 +5539,9 @@ export default function MenuPage() {
                     className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                   >
                     <PlusIcon className="w-4 h-4 text-white" />
-                    <span className="text-white font-medium text-[15px]">Create Menu</span>
+                    <span className="text-white font-medium text-[15px]">
+                      Create Menu
+                    </span>
                   </button>
                 </div>
               </div>
@@ -4460,9 +5551,12 @@ export default function MenuPage() {
             {(!menus || menus.length === 0) && (
               <div className="w-full p-8 text-center bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] mt-6">
                 <div className="text-4xl">🍽</div>
-                <h2 className="mt-3 font-garamond text-2xl font-normal text-[#141010]">No Menus Created Yet</h2>
+                <h2 className="mt-3 font-garamond text-2xl font-normal text-[#141010]">
+                  No Menus Created Yet
+                </h2>
                 <p className="mt-1 text-sm text-[#5e5e5e]">
-                  Get started by creating a new menu or loading sample categories (Viral Food, Starters, Mains).
+                  Get started by creating a new menu or loading sample
+                  categories (Viral Food, Starters, Mains).
                 </p>
                 <div className="mt-6 flex justify-center gap-3">
                   <button
@@ -4487,13 +5581,14 @@ export default function MenuPage() {
             {/* Two Panel Layout */}
             {activeMenu && (
               <main className="flex-1 flex flex-row w-full px-4 lg:px-6 py-5 gap-5 items-start font-sans min-h-[calc(100vh-210px)]">
-                
                 {/* ---------------------------------------------------- */}
                 {/* LEFT PANEL (Categories)                              */}
                 {/* ---------------------------------------------------- */}
                 <div className="w-60 lg:w-64 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden sticky top-6 shadow-xs">
                   <div className="p-4 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
-                    <h2 className="text-[18px] font-medium text-[#141010]">Categories</h2>
+                    <h2 className="text-[18px] font-medium text-[#141010]">
+                      Categories
+                    </h2>
                     <button
                       type="button"
                       onClick={() => {
@@ -4517,15 +5612,17 @@ export default function MenuPage() {
                           <div
                             key={cat._id}
                             draggable
-                            onDragStart={(e) => handleCategoryDragStart(e, index)}
+                            onDragStart={(e) =>
+                              handleCategoryDragStart(e, index)
+                            }
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => handleCategoryDrop(e, index)}
                             onClick={() => {
-                            setSelectedCategoryId(cat._id);
-                            setSelectedItemId(null);
-                            setSelectedCustomizationId(null);
-                            navigateToCategory(cat._id);
-                          }}
+                              setSelectedCategoryId(cat._id);
+                              setSelectedItemId(null);
+                              setSelectedCustomizationId(null);
+                              navigateToCategory(cat._id);
+                            }}
                             className={`flex items-center justify-between p-4 cursor-pointer transition-colors border-l-2 group ${
                               isSelected
                                 ? "bg-[#fafafa] border-b border-[#e7e5e4] border-l-[#0c0a09]"
@@ -4535,12 +5632,16 @@ export default function MenuPage() {
                             <div className="flex items-center gap-3 min-w-0 pr-2">
                               <span
                                 className={`cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] transition-opacity ${
-                                  isSelected ? "opacity-50 group-hover:opacity-100" : "opacity-0 group-hover:opacity-50"
+                                  isSelected
+                                    ? "opacity-50 group-hover:opacity-100"
+                                    : "opacity-0 group-hover:opacity-50"
                                 }`}
                               >
                                 <DragHandleIcon className="w-4 h-4" />
                               </span>
-                              <span className={`text-[15px] truncate ${isSelected ? "font-semibold text-[#141010]" : "text-[#5e5e5e]"}`}>
+                              <span
+                                className={`text-[15px] truncate ${isSelected ? "font-semibold text-[#141010]" : "text-[#5e5e5e]"}`}
+                              >
                                 {cat.name}
                               </span>
                             </div>
@@ -4548,14 +5649,25 @@ export default function MenuPage() {
                             <div className="flex items-center gap-3 shrink-0">
                               {/* Toggle */}
                               <div
-                                onClick={(e) => handleToggleCategory(e, cat._id, cat.published, cat.name)}
+                                onClick={(e) =>
+                                  handleToggleCategory(
+                                    e,
+                                    cat._id,
+                                    cat.published,
+                                    cat.name,
+                                  )
+                                }
                                 className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
-                                  cat.published ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                                  cat.published
+                                    ? "bg-[#0c0a09]"
+                                    : "bg-[#e6e1e1] border border-[#e7e5e4]"
                                 }`}
                               >
                                 <div
                                   className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
-                                    cat.published ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                                    cat.published
+                                      ? "right-[2px]"
+                                      : "left-[2px] bg-[#5e5e5e]"
                                   }`}
                                 />
                               </div>
@@ -4581,7 +5693,8 @@ export default function MenuPage() {
                       })
                     ) : (
                       <div className="p-8 text-center text-xs text-[#5e5e5e]">
-                        No categories found. Click <strong>+</strong> to create one.
+                        No categories found. Click <strong>+</strong> to create
+                        one.
                       </div>
                     )}
                   </div>
@@ -4608,12 +5721,19 @@ export default function MenuPage() {
                         <div className="relative">
                           <button
                             type="button"
-                            onClick={() => setIsAddItemDropdownOpen(!isAddItemDropdownOpen)}
-                            style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
+                            onClick={() =>
+                              setIsAddItemDropdownOpen(!isAddItemDropdownOpen)
+                            }
+                            style={{
+                              backgroundColor: "#0c0a09",
+                              color: "#ffffff",
+                            }}
                             className="h-10 px-5 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm flex items-center gap-2 cursor-pointer"
                           >
                             <PlusIcon className="w-4 h-4 text-white" />
-                            <span className="text-white font-medium text-[15px]">Add Item</span>
+                            <span className="text-white font-medium text-[15px]">
+                              Add Item
+                            </span>
                             <ChevronDownIcon className="w-4 h-4 ml-1 text-white opacity-80" />
                           </button>
 
@@ -4648,120 +5768,165 @@ export default function MenuPage() {
                             <tr>
                               <th className="w-12 px-4 py-3"></th>
                               <th className="px-4 py-3">Item Details</th>
-                              <th className="px-4 py-3 w-32 text-right">Base Price</th>
-                              <th className="px-4 py-3 w-20 text-center">Status</th>
+                              <th className="px-4 py-3 w-32 text-right">
+                                Base Price
+                              </th>
+                              <th className="px-4 py-3 w-20 text-center">
+                                Status
+                              </th>
                               <th className="w-16 px-4 py-3 text-right"></th>
                             </tr>
                           </thead>
                           <tbody className="text-[14px] text-[#1c1b1b]">
                             {categoryItems && categoryItems.length > 0 ? (
-                              categoryItems.map(({ categoryItemId, item }, index) => {
-                                const initialLetter = item.name ? item.name.charAt(0).toUpperCase() : "I";
-                                return (
-                                  <tr
-                                    key={categoryItemId}
-                                    draggable
-                                    onDragStart={(e) => handleItemDragStart(e, index)}
-                                    onDragOver={(e) => e.preventDefault()}
-                                    onDrop={(e) => handleItemDrop(e, index)}
-                                    onClick={() => {
-                                      if (activeCategory?._id) {
-                                        navigateToItem(activeCategory._id, item._id);
-                                      } else {
-                                        setSelectedItemId(item._id);
+                              categoryItems.map(
+                                ({ categoryItemId, item }, index) => {
+                                  const initialLetter = item.name
+                                    ? item.name.charAt(0).toUpperCase()
+                                    : "I";
+                                  return (
+                                    <tr
+                                      key={categoryItemId}
+                                      draggable
+                                      onDragStart={(e) =>
+                                        handleItemDragStart(e, index)
                                       }
-                                    }}
-                                    className={`border-b border-[#e7e5e4] hover:bg-[#fafafa] transition-colors group select-none cursor-pointer ${
-                                      !item.isAvailable ? "opacity-60" : ""
-                                    }`}
-                                    title="Click to manage item customizations"
-                                  >
-                                    {/* Drag Handle */}
-                                    <td className="px-4 py-3 text-center">
-                                      <span
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] opacity-0 group-hover:opacity-50 transition-opacity"
-                                      >
-                                        <DragHandleIcon className="w-4 h-4 mx-auto" />
-                                      </span>
-                                    </td>
+                                      onDragOver={(e) => e.preventDefault()}
+                                      onDrop={(e) => handleItemDrop(e, index)}
+                                      onClick={() => {
+                                        if (activeCategory?._id) {
+                                          navigateToItem(
+                                            activeCategory._id,
+                                            item._id,
+                                          );
+                                        } else {
+                                          setSelectedItemId(item._id);
+                                        }
+                                      }}
+                                      className={`border-b border-[#e7e5e4] hover:bg-[#fafafa] transition-colors group select-none cursor-pointer ${
+                                        !item.isAvailable ? "opacity-60" : ""
+                                      }`}
+                                      title="Click to manage item customizations"
+                                    >
+                                      {/* Drag Handle */}
+                                      <td className="px-4 py-3 text-center">
+                                        <span
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="cursor-grab active:cursor-grabbing text-[#5e5e5e] text-[18px] opacity-0 group-hover:opacity-50 transition-opacity"
+                                        >
+                                          <DragHandleIcon className="w-4 h-4 mx-auto" />
+                                        </span>
+                                      </td>
 
-                                    {/* Item Details */}
-                                    <td className="px-4 py-3">
-                                      <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-lg bg-[#f1edec] border border-[#e7e5e4] overflow-hidden shrink-0 flex items-center justify-center font-bold text-[#141010] text-sm">
-                                          {item.imageUrl ? (
-                                            <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
-                                          ) : (
-                                            <span>{initialLetter}</span>
-                                          )}
-                                        </div>
-                                        <div>
-                                          <p className="font-semibold text-[16px] text-[#141010] flex items-center gap-2">
-                                            <span className={(item.published ?? true) ? "" : "text-[#928c8a]"}>{item.name}</span>
-                                            {(item.published ?? true) && !item.isAvailable && (
-                                              <span className="inline-block px-1.5 py-0.5 bg-[#e6e1e1] text-[#5e5e5e] text-[10px] uppercase font-bold tracking-wider rounded">
-                                                Sold Out
-                                              </span>
+                                      {/* Item Details */}
+                                      <td className="px-4 py-3">
+                                        <div className="flex items-center gap-4">
+                                          <div className="w-12 h-12 rounded-lg bg-[#f1edec] border border-[#e7e5e4] overflow-hidden shrink-0 flex items-center justify-center font-bold text-[#141010] text-sm">
+                                            {item.imageUrl ? (
+                                              <img
+                                                src={item.imageUrl}
+                                                alt={item.name}
+                                                className="w-full h-full object-cover"
+                                              />
+                                            ) : (
+                                              <span>{initialLetter}</span>
                                             )}
-                                          </p>
-                                          {item.description ? (
-                                            <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-xl">
-                                              {stripHtml(item.description)}
+                                          </div>
+                                          <div>
+                                            <p className="font-semibold text-[16px] text-[#141010] flex items-center gap-2">
+                                              <span
+                                                className={
+                                                  (item.published ?? true)
+                                                    ? ""
+                                                    : "text-[#928c8a]"
+                                                }
+                                              >
+                                                {item.name}
+                                              </span>
+                                              {(item.published ?? true) &&
+                                                !item.isAvailable && (
+                                                  <span className="inline-block px-1.5 py-0.5 bg-[#e6e1e1] text-[#5e5e5e] text-[10px] uppercase font-bold tracking-wider rounded">
+                                                    Sold Out
+                                                  </span>
+                                                )}
                                             </p>
-                                          ) : (
-                                            <p className="text-[#928c8a] text-[12px] italic mt-0.5">No description</p>
-                                          )}
+                                            {item.description ? (
+                                              <p className="text-[#5e5e5e] text-[13px] line-clamp-1 mt-0.5 max-w-xl">
+                                                {stripHtml(item.description)}
+                                              </p>
+                                            ) : (
+                                              <p className="text-[#928c8a] text-[12px] italic mt-0.5">
+                                                No description
+                                              </p>
+                                            )}
+                                          </div>
                                         </div>
-                                      </div>
-                                    </td>
+                                      </td>
 
-                                    {/* Base Price */}
-                                    <td className="px-4 py-3 text-right font-medium text-[#141010] whitespace-nowrap">
-                                      {currencySymbol}{(item.price / 100).toFixed(2)}
-                                    </td>
+                                      {/* Base Price */}
+                                      <td className="px-4 py-3 text-right font-medium text-[#141010] whitespace-nowrap">
+                                        {currencySymbol}
+                                        {(item.price / 100).toFixed(2)}
+                                      </td>
 
-                                    {/* Status Toggle */}
-                                    <td className="px-4 py-3 text-center">
-                                      <div
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleToggleItemPublished(item._id, item.published ?? true, item.name);
-                                        }}
-                                        className={`w-8 h-4 rounded-full relative cursor-pointer inline-block transition-colors ${
-                                          (item.published ?? true) ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
-                                        }`}
-                                        title={(item.published ?? true) ? "Published (Click to Unpublish)" : "Unpublished (Click to Publish)"}
-                                      >
+                                      {/* Status Toggle */}
+                                      <td className="px-4 py-3 text-center">
                                         <div
-                                          className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
-                                            (item.published ?? true) ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleToggleItemPublished(
+                                              item._id,
+                                              item.published ?? true,
+                                              item.name,
+                                            );
+                                          }}
+                                          className={`w-8 h-4 rounded-full relative cursor-pointer inline-block transition-colors ${
+                                            (item.published ?? true)
+                                              ? "bg-[#0c0a09]"
+                                              : "bg-[#e6e1e1] border border-[#e7e5e4]"
                                           }`}
-                                        />
-                                      </div>
-                                    </td>
+                                          title={
+                                            (item.published ?? true)
+                                              ? "Published (Click to Unpublish)"
+                                              : "Unpublished (Click to Publish)"
+                                          }
+                                        >
+                                          <div
+                                            className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
+                                              (item.published ?? true)
+                                                ? "right-[2px]"
+                                                : "left-[2px] bg-[#5e5e5e]"
+                                            }`}
+                                          />
+                                        </div>
+                                      </td>
 
-                                    {/* Edit Icon on Hover */}
-                                    <td className="px-4 py-3 text-right">
-                                      <button
-                                        type="button"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOpenEditItem(item);
-                                        }}
-                                        className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] transition-colors inline-flex opacity-0 group-hover:opacity-100 cursor-pointer"
-                                        title="Edit Item Details"
-                                      >
-                                        <EditPencilIcon className="w-4 h-4 text-[#141010]" />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                );
-                              })
+                                      {/* Edit Icon on Hover */}
+                                      <td className="px-4 py-3 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleOpenEditItem(item);
+                                          }}
+                                          className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] transition-colors inline-flex opacity-0 group-hover:opacity-100 cursor-pointer"
+                                          title="Edit Item Details"
+                                        >
+                                          <EditPencilIcon className="w-4 h-4 text-[#141010]" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                },
+                              )
                             ) : (
                               <tr>
-                                <td colSpan={5} className="py-16 text-center text-[#5e5e5e] text-sm">
-                                  No items in this category yet. Click <strong>+ Add Item</strong> to create one.
+                                <td
+                                  colSpan={5}
+                                  className="py-16 text-center text-[#5e5e5e] text-sm"
+                                >
+                                  No items in this category yet. Click{" "}
+                                  <strong>+ Add Item</strong> to create one.
                                 </td>
                               </tr>
                             )}
@@ -4788,7 +5953,9 @@ export default function MenuPage() {
             <div className="h-full w-96 max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
               <div>
                 <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
-                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Create New Menu</h2>
+                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+                    Create New Menu
+                  </h2>
                   <button
                     type="button"
                     onClick={() => setIsCreateMenuOpen(false)}
@@ -4798,14 +5965,20 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                <form id="create-menu-form" onSubmit={handleCreateMenuSubmit} className="p-6 space-y-4">
+                <form
+                  id="create-menu-form"
+                  onSubmit={handleCreateMenuSubmit}
+                  className="p-6 space-y-4"
+                >
                   {createMenuError && (
                     <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
                       {createMenuError}
                     </div>
                   )}
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Menu Name *</label>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                      Menu Name *
+                    </label>
                     <input
                       type="text"
                       required
@@ -4816,7 +5989,9 @@ export default function MenuPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Description</label>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                      Description
+                    </label>
                     <textarea
                       rows={3}
                       value={menuDescription}
@@ -4858,7 +6033,9 @@ export default function MenuPage() {
             <div className="h-full w-96 max-w-full bg-[#fdf8f7] shadow-2xl border-l border-[#e7e5e4] transform transition-transform duration-300 flex flex-col justify-between">
               <div>
                 <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7]">
-                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Edit Menu</h2>
+                  <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+                    Edit Menu
+                  </h2>
                   <button
                     type="button"
                     onClick={() => setIsEditMenuOpen(false)}
@@ -4868,9 +6045,15 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                <form id="edit-menu-form" onSubmit={handleEditMenuSubmit} className="p-6 space-y-4">
+                <form
+                  id="edit-menu-form"
+                  onSubmit={handleEditMenuSubmit}
+                  className="p-6 space-y-4"
+                >
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Menu Name *</label>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                      Menu Name *
+                    </label>
                     <input
                       type="text"
                       required
@@ -4880,7 +6063,9 @@ export default function MenuPage() {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Description</label>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                      Description
+                    </label>
                     <textarea
                       rows={3}
                       value={editMenuDescription}
@@ -4897,11 +6082,19 @@ export default function MenuPage() {
                           if (!activeMenu?._id) return;
                           try {
                             const name = activeMenu.name;
-                            await setDefaultMenuMutation({ id: activeMenu._id });
+                            await setDefaultMenuMutation({
+                              id: activeMenu._id,
+                            });
                             setIsEditMenuOpen(false);
-                            showToast(`Menu "${name}" set as default menu`, "success");
+                            showToast(
+                              `Menu "${name}" set as default menu`,
+                              "success",
+                            );
                           } catch (err: any) {
-                            showToast(err.message || "Failed to set default menu", "error");
+                            showToast(
+                              err.message || "Failed to set default menu",
+                              "error",
+                            );
                           }
                         }}
                         className="w-full py-2 px-3 text-xs font-medium text-[#141010] bg-[#f1edec] hover:bg-[#e7e5e4] rounded-lg transition cursor-pointer"
@@ -4971,9 +6164,15 @@ export default function MenuPage() {
                   </button>
                 </div>
 
-                <form id="category-form" onSubmit={handleSaveCategorySubmit} className="p-6 space-y-4">
+                <form
+                  id="category-form"
+                  onSubmit={handleSaveCategorySubmit}
+                  className="p-6 space-y-4"
+                >
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">Category Name *</label>
+                    <label className="text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]">
+                      Category Name *
+                    </label>
                     <input
                       type="text"
                       required
@@ -4988,7 +6187,9 @@ export default function MenuPage() {
                     <div className="pt-4 border-t border-[#e7e5e4]">
                       <button
                         type="button"
-                        onClick={() => handleOpenDeleteCategory(editingCategory)}
+                        onClick={() =>
+                          handleOpenDeleteCategory(editingCategory)
+                        }
                         className="w-full py-2 px-3 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
                       >
                         Delete Category
@@ -5016,7 +6217,11 @@ export default function MenuPage() {
                   style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
                   className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingCategory ? "Saving..." : editingCategory ? "Save Changes" : "Create Category"}
+                  {isSavingCategory
+                    ? "Saving..."
+                    : editingCategory
+                      ? "Save Changes"
+                      : "Create Category"}
                 </button>
               </div>
             </div>
@@ -5032,9 +6237,12 @@ export default function MenuPage() {
               <div className="flex-1 flex flex-col overflow-hidden">
                 <div className="p-6 border-b border-[#e7e5e4] flex justify-between items-center bg-[#fdf8f7] shrink-0">
                   <div>
-                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">Add Existing Item</h2>
+                    <h2 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
+                      Add Existing Item
+                    </h2>
                     <p className="text-xs text-[#5e5e5e] mt-0.5">
-                      Attach an existing item from your catalog to <strong>{activeCategory?.name}</strong>.
+                      Attach an existing item from your catalog to{" "}
+                      <strong>{activeCategory?.name}</strong>.
                     </p>
                   </div>
                   <button
@@ -5065,9 +6273,11 @@ export default function MenuPage() {
 
                   {!existingItemSearchQuery.trim() ? (
                     <div className="py-12 text-center text-xs text-[#5e5e5e]">
-                      Type in the search box above to find items in your catalog.
+                      Type in the search box above to find items in your
+                      catalog.
                     </div>
-                  ) : filteredExistingItems && filteredExistingItems.length > 0 ? (
+                  ) : filteredExistingItems &&
+                    filteredExistingItems.length > 0 ? (
                     filteredExistingItems.map((item) => {
                       const isSelected = selectedExistingItem?._id === item._id;
                       return (
@@ -5081,20 +6291,26 @@ export default function MenuPage() {
                           }`}
                         >
                           <div>
-                            <p className="font-semibold text-sm text-[#141010]">{item.name}</p>
+                            <p className="font-semibold text-sm text-[#141010]">
+                              {item.name}
+                            </p>
                             <p className="text-xs text-[#5e5e5e] mt-0.5">
-                              {item.categoryName ? `In category: ${item.categoryName}` : "Catalog item"}
+                              {item.categoryName
+                                ? `In category: ${item.categoryName}`
+                                : "Catalog item"}
                             </p>
                           </div>
                           <span className="font-medium text-sm text-[#141010]">
-                            {currencySymbol}{(item.price / 100).toFixed(2)}
+                            {currencySymbol}
+                            {(item.price / 100).toFixed(2)}
                           </span>
                         </div>
                       );
                     })
                   ) : (
                     <div className="py-12 text-center text-xs text-[#5e5e5e]">
-                      No existing items found matching "{existingItemSearchQuery}".
+                      No existing items found matching "
+                      {existingItemSearchQuery}".
                     </div>
                   )}
                 </div>
@@ -5128,7 +6344,6 @@ export default function MenuPage() {
         {isAddExistingCustomizationOpen && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
             <div className="relative w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl border-l border-[#e7e5e4] flex flex-col z-10 justify-between">
-              
               <div>
                 <div className="p-6 border-b border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7]">
                   <div>
@@ -5136,7 +6351,8 @@ export default function MenuPage() {
                       Add Existing Customization
                     </h3>
                     <p className="text-xs text-[#5e5e5e] mt-0.5">
-                      Attach an existing customization from your catalog to <strong>{activeItem?.name}</strong>.
+                      Attach an existing customization from your catalog to{" "}
+                      <strong>{activeItem?.name}</strong>.
                     </p>
                   </div>
                   <button
@@ -5152,7 +6368,9 @@ export default function MenuPage() {
                   <input
                     type="text"
                     value={existingCustomizationSearchQuery}
-                    onChange={(e) => setExistingCustomizationSearchQuery(e.target.value)}
+                    onChange={(e) =>
+                      setExistingCustomizationSearchQuery(e.target.value)
+                    }
                     placeholder="Search customization by name, type, or item..."
                     className="w-full rounded-lg border border-[#e7e5e4] bg-[#f7f3f2] px-3.5 py-2 text-sm text-[#141010] focus:bg-white focus:border-[#141010] outline-none"
                   />
@@ -5167,11 +6385,14 @@ export default function MenuPage() {
 
                   {!existingCustomizationSearchQuery.trim() ? (
                     <div className="py-12 text-center text-xs text-[#5e5e5e]">
-                      Type in the search box above to find customizations from your catalog.
+                      Type in the search box above to find customizations from
+                      your catalog.
                     </div>
-                  ) : filteredExistingCustomizations && filteredExistingCustomizations.length > 0 ? (
+                  ) : filteredExistingCustomizations &&
+                    filteredExistingCustomizations.length > 0 ? (
                     filteredExistingCustomizations.map((cust: any) => {
-                      const isSelected = selectedExistingCustomization?._id === cust._id;
+                      const isSelected =
+                        selectedExistingCustomization?._id === cust._id;
                       return (
                         <div
                           key={cust._id}
@@ -5183,20 +6404,27 @@ export default function MenuPage() {
                           }`}
                         >
                           <div>
-                            <p className="font-semibold text-sm text-[#141010]">{cust.name}</p>
+                            <p className="font-semibold text-sm text-[#141010]">
+                              {cust.name}
+                            </p>
                             <p className="text-xs text-[#5e5e5e] mt-0.5">
-                              {cust.itemName ? `${cust.itemName} (${cust.choiceCount} choices)` : `${cust.choiceCount} choices`}
+                              {cust.itemName
+                                ? `${cust.itemName} (${cust.choiceCount} choices)`
+                                : `${cust.choiceCount} choices`}
                             </p>
                           </div>
                           <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-[#f1edec] text-[#5e5e5e] border border-[#e7e5e4]">
-                            {cust.customizationType === "AddOns" ? "Add-Ons" : "Preparations"}
+                            {cust.customizationType === "AddOns"
+                              ? "Add-Ons"
+                              : "Preparations"}
                           </span>
                         </div>
                       );
                     })
                   ) : (
                     <div className="py-12 text-center text-xs text-[#5e5e5e]">
-                      No existing customizations found matching "{existingCustomizationSearchQuery}".
+                      No existing customizations found matching "
+                      {existingCustomizationSearchQuery}".
                     </div>
                   )}
                 </div>
@@ -5213,7 +6441,9 @@ export default function MenuPage() {
                 <button
                   type="button"
                   onClick={handleAddExistingCustomizationSubmit}
-                  disabled={!selectedExistingCustomization || isCopyingCustomization}
+                  disabled={
+                    !selectedExistingCustomization || isCopyingCustomization
+                  }
                   style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
                   className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[15px] hover:bg-[#252626] transition-colors shadow-sm cursor-pointer disabled:opacity-50"
                 >
@@ -5230,15 +6460,17 @@ export default function MenuPage() {
         {(isAddCustomizationOpen || isEditCustomizationOpen) && (
           <div className="fixed inset-0 bg-[#0c0a09]/20 backdrop-blur-sm z-50 transition-opacity flex justify-end font-sans">
             <div className="relative w-full max-w-md bg-[#fdf8f7] h-full shadow-2xl border-l border-[#e7e5e4] flex flex-col z-10 justify-between overflow-hidden">
-              
               {/* Drawer Header */}
               <div className="p-6 border-b border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7] shrink-0">
                 <div>
                   <h3 className="font-garamond text-[24px] text-[#141010] font-normal leading-tight">
-                    {isEditCustomizationOpen ? "Edit Customization" : "Add Customization"}
+                    {isEditCustomizationOpen
+                      ? "Edit Customization"
+                      : "Add Customization"}
                   </h3>
                   <p className="text-xs text-[#5e5e5e] mt-0.5">
-                    Configure customization group for <strong>{activeItem?.name}</strong>
+                    Configure customization group for{" "}
+                    <strong>{activeItem?.name}</strong>
                   </p>
                 </div>
                 <button
@@ -5255,7 +6487,11 @@ export default function MenuPage() {
               </div>
 
               {/* Drawer Content Form (Scrollable) */}
-              <form id="customization-form" onSubmit={handleSaveCustomizationSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+              <form
+                id="customization-form"
+                onSubmit={handleSaveCustomizationSubmit}
+                className="flex-1 overflow-y-auto p-6 space-y-6"
+              >
                 {/* Customization Type Tabs */}
                 <div>
                   <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e] mb-2">
@@ -5330,18 +6566,28 @@ export default function MenuPage() {
                   {/* Required Selection Toggle */}
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs font-medium text-[#141010] block">Required Selection</span>
-                      <span className="text-[11px] text-[#5e5e5e]">Customer must select at least 1 option</span>
+                      <span className="text-xs font-medium text-[#141010] block">
+                        Required Selection
+                      </span>
+                      <span className="text-[11px] text-[#5e5e5e]">
+                        Customer must select at least 1 option
+                      </span>
                     </div>
                     <div
-                      onClick={() => setCustomizationRequired(!customizationRequired)}
+                      onClick={() =>
+                        setCustomizationRequired(!customizationRequired)
+                      }
                       className={`w-8 h-4 rounded-full relative cursor-pointer transition-colors ${
-                        customizationRequired ? "bg-[#0c0a09]" : "bg-[#e6e1e1] border border-[#e7e5e4]"
+                        customizationRequired
+                          ? "bg-[#0c0a09]"
+                          : "bg-[#e6e1e1] border border-[#e7e5e4]"
                       }`}
                     >
                       <div
                         className={`absolute top-[2px] w-3 h-3 bg-white rounded-full transition-transform ${
-                          customizationRequired ? "right-[2px]" : "left-[2px] bg-[#5e5e5e]"
+                          customizationRequired
+                            ? "right-[2px]"
+                            : "left-[2px] bg-[#5e5e5e]"
                         }`}
                       />
                     </div>
@@ -5350,21 +6596,35 @@ export default function MenuPage() {
                   {/* Maximum Selections */}
                   <div className="flex items-center justify-between pt-3 border-t border-[#e7e5e4]">
                     <div>
-                      <span className="text-xs font-medium text-[#141010] block">Maximum selections allowed</span>
-                      <span className="text-[11px] text-[#5e5e5e]">Limit how many customization items can be chosen</span>
+                      <span className="text-xs font-medium text-[#141010] block">
+                        Maximum selections allowed
+                      </span>
+                      <span className="text-[11px] text-[#5e5e5e]">
+                        Limit how many customization items can be chosen
+                      </span>
                     </div>
                     <div className="flex items-center border border-[#e7e5e4] rounded-lg bg-white overflow-hidden">
                       <button
                         type="button"
-                        onClick={() => setCustomizationMaxSelected(Math.max(1, customizationMaxSelected - 1))}
+                        onClick={() =>
+                          setCustomizationMaxSelected(
+                            Math.max(1, customizationMaxSelected - 1),
+                          )
+                        }
                         className="px-2.5 py-1 text-[#5e5e5e] hover:bg-[#f1edec] border-r border-[#e7e5e4] cursor-pointer"
                       >
                         -
                       </button>
-                      <span className="px-3 text-xs font-bold text-[#141010]">{customizationMaxSelected}</span>
+                      <span className="px-3 text-xs font-bold text-[#141010]">
+                        {customizationMaxSelected}
+                      </span>
                       <button
                         type="button"
-                        onClick={() => setCustomizationMaxSelected(customizationMaxSelected + 1)}
+                        onClick={() =>
+                          setCustomizationMaxSelected(
+                            customizationMaxSelected + 1,
+                          )
+                        }
                         className="px-2.5 py-1 text-[#5e5e5e] hover:bg-[#f1edec] border-l border-[#e7e5e4] cursor-pointer"
                       >
                         +
@@ -5394,7 +6654,11 @@ export default function MenuPage() {
                   style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
                   className="h-10 px-6 rounded-full bg-[#0c0a09] text-white font-medium text-[14px] hover:bg-[#252626] transition shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingCustomization ? "Saving..." : isEditCustomizationOpen ? "Save changes" : "Create customization"}
+                  {isSavingCustomization
+                    ? "Saving..."
+                    : isEditCustomizationOpen
+                      ? "Save changes"
+                      : "Create customization"}
                 </button>
               </div>
             </div>
@@ -5438,8 +6702,18 @@ export default function MenuPage() {
                   className="p-1.5 text-neutral-400 hover:text-neutral-700 rounded-md hover:bg-neutral-100 transition-colors cursor-pointer"
                   title="Close drawer"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      d="M6 18L18 6M6 6l12 12"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                    />
                   </svg>
                 </button>
               </div>
@@ -5452,8 +6726,12 @@ export default function MenuPage() {
               >
                 {/* Field: Customization Item Name */}
                 <div className="space-y-1.5" data-purpose="field-choice-name">
-                  <label className="block text-xs font-semibold text-neutral-700" htmlFor="choice-name">
-                    Customization item name <span className="text-red-500">*</span>
+                  <label
+                    className="block text-xs font-semibold text-neutral-700"
+                    htmlFor="choice-name"
+                  >
+                    Customization item name{" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="choice-name"
@@ -5468,12 +6746,18 @@ export default function MenuPage() {
 
                 {/* Field: Additional Price */}
                 <div className="space-y-1.5" data-purpose="field-price">
-                  <label className="block text-xs font-semibold text-neutral-700" htmlFor="choice-price">
-                    Additional price ({currencySymbol}) <span className="text-red-500">*</span>
+                  <label
+                    className="block text-xs font-semibold text-neutral-700"
+                    htmlFor="choice-price"
+                  >
+                    Additional price ({currencySymbol}){" "}
+                    <span className="text-red-500">*</span>
                   </label>
                   <div className="relative rounded-md shadow-xs">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <span className="text-neutral-500 text-xs font-medium">{currencySymbol}</span>
+                      <span className="text-neutral-500 text-xs font-medium">
+                        {currencySymbol}
+                      </span>
                     </div>
                     <input
                       id="choice-price"
@@ -5487,15 +6771,21 @@ export default function MenuPage() {
                     />
                   </div>
                   <p className="text-[11px] text-neutral-500 leading-tight">
-                    Additional amount added to the item's base price. (Add 0 for free item)
+                    Additional amount added to the item's base price. (Add 0 for
+                    free item)
                   </p>
                 </div>
 
                 {/* Advanced Details Collapsible (Accordion) */}
-                <div className="border-t border-neutral-200 pt-3" data-purpose="advanced-details-accordion">
+                <div
+                  className="border-t border-neutral-200 pt-3"
+                  data-purpose="advanced-details-accordion"
+                >
                   <button
                     type="button"
-                    onClick={() => setIsChoiceAdvancedOpen(!isChoiceAdvancedOpen)}
+                    onClick={() =>
+                      setIsChoiceAdvancedOpen(!isChoiceAdvancedOpen)
+                    }
                     className="w-full flex items-center justify-between py-1 text-xs font-semibold text-neutral-900 select-none cursor-pointer"
                   >
                     <span className="flex items-center">
@@ -5507,7 +6797,12 @@ export default function MenuPage() {
                         stroke="currentColor"
                         viewBox="0 0 24 24"
                       >
-                        <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                        <path
+                          d="M9 5l7 7-7 7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
                       </svg>
                       Advanced details
                     </span>
@@ -5521,7 +6816,10 @@ export default function MenuPage() {
                     <div className="mt-4 space-y-4 pl-4 border-l-2 border-neutral-100">
                       {/* Description */}
                       <div className="space-y-1">
-                        <label className="block text-[11px] font-medium text-neutral-700" htmlFor="adv-desc">
+                        <label
+                          className="block text-[11px] font-medium text-neutral-700"
+                          htmlFor="adv-desc"
+                        >
                           Description (Optional)
                         </label>
                         <textarea
@@ -5547,27 +6845,37 @@ export default function MenuPage() {
                             />
                           </div>
                           <div className="ml-2.5 text-xs">
-                            <label className="font-medium text-neutral-700 cursor-pointer" htmlFor="is-taxable">
+                            <label
+                              className="font-medium text-neutral-700 cursor-pointer"
+                              htmlFor="is-taxable"
+                            >
                               Tax applicable
                             </label>
-                            <p className="text-[11px] text-neutral-400">Include in regular item tax calculations</p>
+                            <p className="text-[11px] text-neutral-400">
+                              Include in regular item tax calculations
+                            </p>
                           </div>
                         </div>
 
                         {choiceIsGst && (
                           <div className="space-y-3 pl-6 pt-1">
                             <div className="space-y-1">
-                              <label className="block text-[11px] font-medium text-neutral-600">Tax Group / Rate</label>
+                              <label className="block text-[11px] font-medium text-neutral-600">
+                                Tax Group / Rate
+                              </label>
                               <div className="relative">
                                 <select
                                   value={choiceSelectedTaxGroupId}
-                                  onChange={(e) => setChoiceSelectedTaxGroupId(e.target.value)}
+                                  onChange={(e) =>
+                                    setChoiceSelectedTaxGroupId(e.target.value)
+                                  }
                                   className="w-full bg-white border border-neutral-300 rounded-md px-3 py-1.5 appearance-none focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-900 text-xs font-medium shadow-xs"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
                                     taxGroups.map((tg) => (
                                       <option key={tg._id} value={tg._id}>
-                                        {tg.name} {tg.isDefault ? "⭐ (Default)" : ""}
+                                        {tg.name}{" "}
+                                        {tg.isDefault ? "⭐ (Default)" : ""}
                                       </option>
                                     ))
                                   ) : (
@@ -5579,7 +6887,9 @@ export default function MenuPage() {
                             </div>
 
                             <div className="space-y-1">
-                              <label className="block text-[11px] font-medium text-neutral-600">Tax Calculation Mode</label>
+                              <label className="block text-[11px] font-medium text-neutral-600">
+                                Tax Calculation Mode
+                              </label>
                               <div className="grid grid-cols-2 gap-2">
                                 <button
                                   type="button"
@@ -5609,26 +6919,43 @@ export default function MenuPage() {
                             {choiceTaxBreakdown && (
                               <div className="p-2.5 rounded-md bg-neutral-50 border border-neutral-200 space-y-1 text-[11px]">
                                 <div className="flex items-center justify-between font-semibold text-neutral-900 border-b border-neutral-200 pb-1">
-                                  <span>Tax Breakdown ({choiceTaxBreakdown.totalRate}%):</span>
+                                  <span>
+                                    Tax Breakdown (
+                                    {choiceTaxBreakdown.totalRate}%):
+                                  </span>
                                   <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
-                                    {choiceTaxBreakdown.mode === "inclusive" ? "Inclusive" : "Exclusive"}
+                                    {choiceTaxBreakdown.mode === "inclusive"
+                                      ? "Inclusive"
+                                      : "Exclusive"}
                                   </span>
                                 </div>
                                 <div className="flex justify-between text-neutral-500">
                                   <span>Base:</span>
                                   <span className="font-medium text-neutral-900">
-                                    {currencySymbol}{choiceTaxBreakdown.basePrice}
+                                    {currencySymbol}
+                                    {choiceTaxBreakdown.basePrice}
                                   </span>
                                 </div>
                                 {choiceTaxBreakdown.components.map((c, idx) => (
-                                  <div key={idx} className="flex justify-between text-neutral-500">
-                                    <span>• {c.name} ({c.rate}%):</span>
-                                    <span className="font-medium text-neutral-900">+{currencySymbol}{c.amount}</span>
+                                  <div
+                                    key={idx}
+                                    className="flex justify-between text-neutral-500"
+                                  >
+                                    <span>
+                                      • {c.name} ({c.rate}%):
+                                    </span>
+                                    <span className="font-medium text-neutral-900">
+                                      +{currencySymbol}
+                                      {c.amount}
+                                    </span>
                                   </div>
                                 ))}
                                 <div className="flex justify-between text-neutral-900 font-bold pt-1 border-t border-neutral-200">
                                   <span>Total Customer Pays:</span>
-                                  <span>{currencySymbol}{choiceTaxBreakdown.finalPrice}</span>
+                                  <span>
+                                    {currencySymbol}
+                                    {choiceTaxBreakdown.finalPrice}
+                                  </span>
                                 </div>
                               </div>
                             )}
@@ -5639,20 +6966,28 @@ export default function MenuPage() {
                       {/* Show Quantity */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-neutral-700">Show quantity</span>
+                          <span className="text-xs font-medium text-neutral-700">
+                            Show quantity
+                          </span>
                           <button
                             type="button"
                             role="switch"
                             aria-checked={choiceShowQuantity}
-                            onClick={() => setChoiceShowQuantity(!choiceShowQuantity)}
+                            onClick={() =>
+                              setChoiceShowQuantity(!choiceShowQuantity)
+                            }
                             className={`${
-                              choiceShowQuantity ? "bg-neutral-900" : "bg-neutral-200"
+                              choiceShowQuantity
+                                ? "bg-neutral-900"
+                                : "bg-neutral-200"
                             } relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none`}
                           >
                             <span
                               aria-hidden="true"
                               className={`${
-                                choiceShowQuantity ? "translate-x-3" : "translate-x-0"
+                                choiceShowQuantity
+                                  ? "translate-x-3"
+                                  : "translate-x-0"
                               } pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
                             />
                           </button>
@@ -5663,13 +6998,17 @@ export default function MenuPage() {
                               type="number"
                               step="0.01"
                               value={choiceQuantity}
-                              onChange={(e) => setChoiceQuantity(e.target.value)}
+                              onChange={(e) =>
+                                setChoiceQuantity(e.target.value)
+                              }
                               placeholder="Quantity (e.g. 50)"
                               className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
                             />
                             <select
                               value={choiceQuantityUnit}
-                              onChange={(e) => setChoiceQuantityUnit(e.target.value)}
+                              onChange={(e) =>
+                                setChoiceQuantityUnit(e.target.value)
+                              }
                               className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
                             >
                               <option value="g">gm (Grams)</option>
@@ -5685,20 +7024,28 @@ export default function MenuPage() {
                       {/* Show Calories */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-neutral-700">Show calorie value</span>
+                          <span className="text-xs font-medium text-neutral-700">
+                            Show calorie value
+                          </span>
                           <button
                             type="button"
                             role="switch"
                             aria-checked={choiceShowCalorie}
-                            onClick={() => setChoiceShowCalorie(!choiceShowCalorie)}
+                            onClick={() =>
+                              setChoiceShowCalorie(!choiceShowCalorie)
+                            }
                             className={`${
-                              choiceShowCalorie ? "bg-neutral-900" : "bg-neutral-200"
+                              choiceShowCalorie
+                                ? "bg-neutral-900"
+                                : "bg-neutral-200"
                             } relative inline-flex h-4 w-7 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none`}
                           >
                             <span
                               aria-hidden="true"
                               className={`${
-                                choiceShowCalorie ? "translate-x-3" : "translate-x-0"
+                                choiceShowCalorie
+                                  ? "translate-x-3"
+                                  : "translate-x-0"
                               } pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out`}
                             />
                           </button>
@@ -5714,7 +7061,9 @@ export default function MenuPage() {
                             />
                             <select
                               value={choiceCalorieMetric}
-                              onChange={(e) => setChoiceCalorieMetric(e.target.value)}
+                              onChange={(e) =>
+                                setChoiceCalorieMetric(e.target.value)
+                              }
                               className="block w-full rounded-md border border-neutral-300 text-xs py-1.5 px-3 text-neutral-900 focus:border-neutral-900 focus:ring-neutral-900 shadow-xs outline-none"
                             >
                               <option value="kcal">kcal</option>
@@ -5726,13 +7075,17 @@ export default function MenuPage() {
 
                       {/* Dietary Type */}
                       <div className="space-y-1.5">
-                        <span className="block text-[11px] font-medium text-neutral-700">Dietary classification</span>
+                        <span className="block text-[11px] font-medium text-neutral-700">
+                          Dietary classification
+                        </span>
                         <div className="flex flex-wrap gap-1.5">
                           {availableItemTypes.map((type) => {
                             const isSelected =
                               choiceDietaryType === type.id ||
-                              choiceDietaryType.toLowerCase() === type.name.toLowerCase() ||
-                              (choiceDietaryType === "veg" && type.name.toLowerCase() === "vegetarian");
+                              choiceDietaryType.toLowerCase() ===
+                                type.name.toLowerCase() ||
+                              (choiceDietaryType === "veg" &&
+                                type.name.toLowerCase() === "vegetarian");
                             return (
                               <button
                                 key={type.id}
@@ -5778,7 +7131,11 @@ export default function MenuPage() {
                   disabled={isSavingChoice}
                   className="px-4 py-2 border border-transparent text-xs font-semibold rounded-md shadow-xs text-white bg-neutral-900 hover:bg-neutral-800 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {isSavingChoice ? "Saving..." : isEditChoiceOpen ? "Save customization item" : "Save customization item"}
+                  {isSavingChoice
+                    ? "Saving..."
+                    : isEditChoiceOpen
+                      ? "Save customization item"
+                      : "Save customization item"}
                 </button>
               </div>
             </aside>
@@ -5804,7 +7161,9 @@ export default function MenuPage() {
               <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <h3 className="text-lg font-bold text-gray-900 tracking-tight">
-                    {unavailabilityTargetType === "choice" ? "Change unavailability" : "Change unavailability"}
+                    {unavailabilityTargetType === "choice"
+                      ? "Change unavailability"
+                      : "Change unavailability"}
                   </h3>
                   <div className="relative group inline-flex items-center">
                     <button
@@ -5817,7 +7176,9 @@ export default function MenuPage() {
                     <div className="absolute left-0 top-full mt-2 hidden group-hover:flex flex-col w-64 p-3 bg-neutral-900 text-white rounded-lg shadow-xl z-50 pointer-events-none transition-all">
                       <div className="absolute -top-1 left-2 w-2 h-2 bg-neutral-900 rotate-45" />
                       <span className="font-bold text-xs text-white">
-                        {unavailabilityTargetType === "choice" ? "Customization Item Unavailability" : "Item Unavailability"}
+                        {unavailabilityTargetType === "choice"
+                          ? "Customization Item Unavailability"
+                          : "Item Unavailability"}
                       </span>
                       <span className="text-[11px] text-gray-300 leading-relaxed mt-1">
                         {unavailabilityTargetType === "choice"
@@ -5896,7 +7257,9 @@ export default function MenuPage() {
                         <button
                           key={dur.id}
                           type="button"
-                          onClick={() => setUnavailabilityDuration(dur.id as any)}
+                          onClick={() =>
+                            setUnavailabilityDuration(dur.id as any)
+                          }
                           className={`py-2.5 px-2 text-center transition cursor-pointer ${
                             unavailabilityDuration === dur.id
                               ? "bg-gray-100 text-gray-900 font-bold shadow-xs"
@@ -5917,7 +7280,9 @@ export default function MenuPage() {
                           type="number"
                           min="1"
                           value={customDurationHours}
-                          onChange={(e) => setCustomDurationHours(e.target.value)}
+                          onChange={(e) =>
+                            setCustomDurationHours(e.target.value)
+                          }
                           placeholder="e.g. 72"
                           className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-xs text-gray-900 focus:border-black outline-none"
                         />
@@ -5977,7 +7342,9 @@ export default function MenuPage() {
               {/* Header */}
               <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
                 <h3 className="text-lg font-bold text-gray-900 tracking-tight">
-                  {duplicateTargetType === "choice" ? "Duplicate Customization Item" : "Duplicate Item"}
+                  {duplicateTargetType === "choice"
+                    ? "Duplicate Customization Item"
+                    : "Duplicate Item"}
                 </h3>
                 <button
                   type="button"
@@ -5999,7 +7366,9 @@ export default function MenuPage() {
                 <div className="border border-gray-200 rounded-lg px-4 py-3.5 flex items-center justify-between bg-white shadow-xs">
                   <div>
                     <span className="text-xs text-gray-500 block">
-                      {duplicateTargetType === "choice" ? "Source Customization Item" : "Source Item"}
+                      {duplicateTargetType === "choice"
+                        ? "Source Customization Item"
+                        : "Source Item"}
                     </span>
                     <span className="text-sm font-bold text-gray-900 truncate">
                       {targetDuplicateItem.name}
@@ -6017,14 +7386,20 @@ export default function MenuPage() {
                 {/* New Item Name */}
                 <div className="space-y-1.5">
                   <label className="block text-xs font-semibold text-gray-700">
-                    {duplicateTargetType === "choice" ? "New customization item name" : "New item name"}
+                    {duplicateTargetType === "choice"
+                      ? "New customization item name"
+                      : "New item name"}
                   </label>
                   <input
                     type="text"
                     value={duplicateItemNewName}
                     onChange={(e) => setDuplicateItemNewName(e.target.value)}
                     className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:border-black outline-none font-medium"
-                    placeholder={duplicateTargetType === "choice" ? "e.g. Spice(1)" : "e.g. Vadapav(1)"}
+                    placeholder={
+                      duplicateTargetType === "choice"
+                        ? "e.g. Spice(1)"
+                        : "e.g. Vadapav(1)"
+                    }
                   />
                   <p className="text-[11px] text-gray-500">
                     {duplicateTargetType === "choice"
@@ -6078,9 +7453,16 @@ export default function MenuPage() {
                 <AlertTriangleIcon className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-gray-900">Delete item?</h4>
+                <h4 className="text-base font-bold text-gray-900">
+                  Delete item?
+                </h4>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteItem.name}</strong>? This action will remove this item and its customization settings. This action cannot be undone.
+                  Are you sure you want to delete{" "}
+                  <strong className="text-gray-900">
+                    {targetDeleteItem.name}
+                  </strong>
+                  ? This action will remove this item and its customization
+                  settings. This action cannot be undone.
                 </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -6126,9 +7508,16 @@ export default function MenuPage() {
                 <AlertTriangleIcon className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-gray-900">Delete category?</h4>
+                <h4 className="text-base font-bold text-gray-900">
+                  Delete category?
+                </h4>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteCategory.name}</strong>? This action will remove this category and unassign its items from this category. This action cannot be undone.
+                  Are you sure you want to delete{" "}
+                  <strong className="text-gray-900">
+                    {targetDeleteCategory.name}
+                  </strong>
+                  ? This action will remove this category and unassign its items
+                  from this category. This action cannot be undone.
                 </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -6174,9 +7563,16 @@ export default function MenuPage() {
                 <AlertTriangleIcon className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-gray-900">Delete menu?</h4>
+                <h4 className="text-base font-bold text-gray-900">
+                  Delete menu?
+                </h4>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteMenu.name}</strong>? This action will remove this menu and its categories. This action cannot be undone.
+                  Are you sure you want to delete{" "}
+                  <strong className="text-gray-900">
+                    {targetDeleteMenu.name}
+                  </strong>
+                  ? This action will remove this menu and its categories. This
+                  action cannot be undone.
                 </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -6222,9 +7618,16 @@ export default function MenuPage() {
                 <AlertTriangleIcon className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-gray-900">Delete customization?</h4>
+                <h4 className="text-base font-bold text-gray-900">
+                  Delete customization?
+                </h4>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteCustomization.name}</strong>? This action will remove this customization group and all its modifier options.
+                  Are you sure you want to delete{" "}
+                  <strong className="text-gray-900">
+                    {targetDeleteCustomization.name}
+                  </strong>
+                  ? This action will remove this customization group and all its
+                  modifier options.
                 </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -6270,9 +7673,15 @@ export default function MenuPage() {
                 <AlertTriangleIcon className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="text-base font-bold text-gray-900">Delete customization item?</h4>
+                <h4 className="text-base font-bold text-gray-900">
+                  Delete customization item?
+                </h4>
                 <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
-                  Are you sure you want to delete <strong className="text-gray-900">{targetDeleteChoice.name}</strong>? This action will remove this modifier item.
+                  Are you sure you want to delete{" "}
+                  <strong className="text-gray-900">
+                    {targetDeleteChoice.name}
+                  </strong>
+                  ? This action will remove this modifier item.
                 </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -6299,6 +7708,8 @@ export default function MenuPage() {
           </div>
         )}
 
+        {/* Toast Notification Component */}
+        <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
     </PosShell>
   );
