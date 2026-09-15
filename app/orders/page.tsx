@@ -457,29 +457,65 @@ export default function OrdersPage() {
   const printers = useQuery(api.organizationPrinters.list, {});
   const isPrinterConnected = Boolean(printers && printers.length > 0);
 
+  // Persisted Filters Helper (Session Storage)
+  const initialFilters = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = sessionStorage.getItem("pos_orders_filters_v1");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  }, []);
+
   // Filter States
-  const [activeStage, setActiveStage] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [priceFrom, setPriceFrom] = useState("");
-  const [priceTo, setPriceTo] = useState("");
+  const [activeStage, setActiveStage] = useState<string>(
+    () => initialFilters?.activeStage || "All",
+  );
+  const [searchQuery, setSearchQuery] = useState(
+    () => initialFilters?.searchQuery || "",
+  );
+  const [priceFrom, setPriceFrom] = useState(
+    () => initialFilters?.priceFrom || "",
+  );
+  const [priceTo, setPriceTo] = useState(() => initialFilters?.priceTo || "");
 
   // Applied Date Filter
-  const [appliedPreset, setAppliedPreset] = useState<string>("Today");
-  const [appliedStartDate, setAppliedStartDate] = useState<Date>(
-    () => getPresetDateRange("Today").start,
+  const [appliedPreset, setAppliedPreset] = useState<string>(
+    () => initialFilters?.appliedPreset || "Today",
   );
-  const [appliedEndDate, setAppliedEndDate] = useState<Date>(
-    () => getPresetDateRange("Today").end,
-  );
+  const [appliedStartDate, setAppliedStartDate] = useState<Date>(() => {
+    if (initialFilters?.appliedStartDate) {
+      const d = new Date(initialFilters.appliedStartDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").start;
+  });
+  const [appliedEndDate, setAppliedEndDate] = useState<Date>(() => {
+    if (initialFilters?.appliedEndDate) {
+      const d = new Date(initialFilters.appliedEndDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").end;
+  });
 
   // Draft Date Filter (while popover is open)
-  const [draftPreset, setDraftPreset] = useState<string>("Today");
-  const [draftStartDate, setDraftStartDate] = useState<Date>(
-    () => getPresetDateRange("Today").start,
+  const [draftPreset, setDraftPreset] = useState<string>(
+    () => initialFilters?.appliedPreset || "Today",
   );
-  const [draftEndDate, setDraftEndDate] = useState<Date>(
-    () => getPresetDateRange("Today").end,
-  );
+  const [draftStartDate, setDraftStartDate] = useState<Date>(() => {
+    if (initialFilters?.appliedStartDate) {
+      const d = new Date(initialFilters.appliedStartDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").start;
+  });
+  const [draftEndDate, setDraftEndDate] = useState<Date>(() => {
+    if (initialFilters?.appliedEndDate) {
+      const d = new Date(initialFilters.appliedEndDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").end;
+  });
   const [viewMonth, setViewMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -515,10 +551,14 @@ export default function OrdersPage() {
   }, [appliedStartDate, appliedEndDate]);
 
   const [sortField, setSortField] = useState<"createdAt" | "totalAmount">(
-    "createdAt",
+    () => initialFilters?.sortField || "createdAt",
   );
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(
+    () => initialFilters?.sortOrder || "desc",
+  );
+  const [currentPage, setCurrentPage] = useState(
+    () => initialFilters?.currentPage || 1,
+  );
   const pageSize = 10;
 
   // Selected Order Detail View & Unified Drawer States
@@ -545,8 +585,13 @@ export default function OrdersPage() {
     null,
   );
 
-  // Reset pagination to page 1 on filter changes
+  // Reset pagination to page 1 on subsequent user-initiated filter changes
+  const isInitialMount = useRef(true);
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     setCurrentPage(1);
   }, [
     appliedStartDate,
@@ -555,6 +600,39 @@ export default function OrdersPage() {
     searchQuery,
     priceFrom,
     priceTo,
+  ]);
+
+  // Persist filter state to sessionStorage
+  useEffect(() => {
+    try {
+      const stateToSave = {
+        activeStage,
+        searchQuery,
+        priceFrom,
+        priceTo,
+        appliedPreset,
+        appliedStartDate: appliedStartDate.toISOString(),
+        appliedEndDate: appliedEndDate.toISOString(),
+        sortField,
+        sortOrder,
+        currentPage,
+      };
+      sessionStorage.setItem(
+        "pos_orders_filters_v1",
+        JSON.stringify(stateToSave),
+      );
+    } catch (e) {}
+  }, [
+    activeStage,
+    searchQuery,
+    priceFrom,
+    priceTo,
+    appliedPreset,
+    appliedStartDate,
+    appliedEndDate,
+    sortField,
+    sortOrder,
+    currentPage,
   ]);
 
   // Backend Queries & Mutations
@@ -2960,7 +3038,9 @@ export default function OrdersPage() {
               <button
                 type="button"
                 disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() =>
+                  setCurrentPage((p: number) => Math.max(1, p - 1))
+                }
                 className="px-3 py-1.5 text-xs font-medium text-[#5e5e5e] bg-white border border-[#e7e5e4] rounded-md hover:bg-[#fdf8f7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Previous
@@ -2992,7 +3072,7 @@ export default function OrdersPage() {
                 type="button"
                 disabled={currentPage >= totalPages}
                 onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  setCurrentPage((p: number) => Math.min(totalPages, p + 1))
                 }
                 className="px-3 py-1.5 text-xs font-medium text-[#0c0a09] bg-white border border-[#e7e5e4] rounded-md hover:bg-[#fdf8f7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >

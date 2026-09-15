@@ -508,12 +508,19 @@ export default function OrderDetailsDynamicPage() {
                 aria-label="Breadcrumb"
                 className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
               >
-                <Link
-                  href="/orders"
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.history.length > 1) {
+                      router.back();
+                    } else {
+                      router.push("/orders");
+                    }
+                  }}
                   className="hover:text-[#141010] transition-colors cursor-pointer"
                 >
                   Orders
-                </Link>
+                </button>
                 <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
                 <span className="text-[#141010] font-semibold">
                   {order.orderNumber}
@@ -530,13 +537,20 @@ export default function OrderDetailsDynamicPage() {
 
             {/* Quick Action Buttons in Top Header */}
             <div className="flex items-center gap-3">
-              <Link
-                href="/orders"
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined" && window.history.length > 1) {
+                    router.back();
+                  } else {
+                    router.push("/orders");
+                  }
+                }}
                 className="h-10 px-5 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-sm bg-white cursor-pointer inline-flex items-center gap-2 shadow-2xs"
               >
                 <ArrowLeftIcon className="w-4 h-4 text-[#5e5e5e]" />
                 <span>Back to Orders</span>
-              </Link>
+              </button>
               <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                 <span>{order.orderStatusName || "Live Order Status"}</span>
