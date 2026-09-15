@@ -1232,16 +1232,16 @@ export const update = mutation({
     inclusiveGst: v.optional(v.boolean()),
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
-    gstDocumentStorageId: v.optional(v.id("_storage")),
-    gstDocumentAssetId: v.optional(v.id("organization_assets")),
+    gstDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    gstDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
     isFssai: v.optional(v.boolean()),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
-    fssaiDocumentStorageId: v.optional(v.id("_storage")),
-    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
+    fssaiDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    fssaiDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
@@ -1259,8 +1259,8 @@ export const update = mutation({
     secondaryColor: v.optional(v.string()),
     theme: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
-    logoStorageId: v.optional(v.id("_storage")),
-    logoAssetId: v.optional(v.id("organization_assets")),
+    logoStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    logoAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
 
     // Module & Feature Flags
     isDineIn: v.optional(v.boolean()),
@@ -1432,24 +1432,37 @@ export const update = mutation({
 
     validateOrganizationState(finalState);
 
-    const needsReplace =
+    const isLogoRemoved =
       updates.logoUrl === "" ||
+      updates.logoAssetId === ("" as any) ||
+      updates.logoStorageId === ("" as any);
+
+    const isFssaiRemoved =
       updates.fssaiDocumentUrl === "" ||
-      updates.gstDocumentUrl === "";
+      updates.fssaiDocumentAssetId === ("" as any) ||
+      updates.fssaiDocumentStorageId === ("" as any);
+
+    const isGstRemoved =
+      updates.gstDocumentUrl === "" ||
+      updates.gstDocumentAssetId === ("" as any) ||
+      updates.gstDocumentStorageId === ("" as any);
+
+    const needsReplace = isLogoRemoved || isFssaiRemoved || isGstRemoved;
 
     if (needsReplace) {
       const docToReplace = { ...existing, ...finalState, updatedAt: Date.now() };
-      if (updates.logoUrl === "") {
+
+      if (isLogoRemoved) {
         delete (docToReplace as any).logoUrl;
         delete (docToReplace as any).logoStorageId;
         delete (docToReplace as any).logoAssetId;
       }
-      if (updates.fssaiDocumentUrl === "") {
+      if (isFssaiRemoved) {
         delete (docToReplace as any).fssaiDocumentUrl;
         delete (docToReplace as any).fssaiDocumentStorageId;
         delete (docToReplace as any).fssaiDocumentAssetId;
       }
-      if (updates.gstDocumentUrl === "") {
+      if (isGstRemoved) {
         delete (docToReplace as any).gstDocumentUrl;
         delete (docToReplace as any).gstDocumentStorageId;
         delete (docToReplace as any).gstDocumentAssetId;
@@ -1467,7 +1480,7 @@ export const update = mutation({
         scheduledPickupOnlinePayment,
         scheduledDeliveryOnlinePayment,
         updatedAt: Date.now(),
-      });
+      } as any);
     }
   },
 });

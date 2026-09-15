@@ -51,6 +51,25 @@ export const DEFAULT_PERMISSIONS: Record<
   bot: { create: true, read: true, update: true, delete: true },
 };
 
+export const ROLE_MODULE_MAPPING: Record<string, string[]> = {
+  admin: [
+    "customer_data",
+    "dashboard",
+    "orders",
+    "menu",
+    "kds",
+    "queue",
+    "inventory",
+    "report",
+    "survey",
+  ],
+  cashier: ["orders", "customer_data", "dashboard", "report"],
+  captain: ["orders", "queue", "dashboard", "menu"],
+  waiter: ["orders", "queue"],
+  chef: ["kds", "inventory"],
+  worker: ["orders", "kds"],
+};
+
 // ----------------------------------------------------
 // HELPER FUNCTIONS
 // ----------------------------------------------------
@@ -295,6 +314,17 @@ export async function requireMember(
 // ----------------------------------------------------
 // QUERIES
 // ----------------------------------------------------
+
+/**
+ * Fetches backend role-to-module mapping.
+ * Backend role configuration is the source of truth for role -> module access.
+ */
+export const getRoleModuleMapping = query({
+  args: {},
+  handler: async () => {
+    return ROLE_MODULE_MAPPING;
+  },
+});
 
 /**
  * Fetches the active organization membership for the currently authenticated caller
