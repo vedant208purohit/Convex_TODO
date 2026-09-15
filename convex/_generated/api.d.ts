@@ -41,6 +41,7 @@ import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
 import type * as taxation from "../taxation.js";
+import type * as userAddresses from "../userAddresses.js";
 
 import type {
   ApiFromModules,
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
   taxation: typeof taxation;
+  userAddresses: typeof userAddresses;
 }>;
 
 /**
