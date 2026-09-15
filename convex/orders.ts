@@ -22,6 +22,7 @@ export const createOrder = mutation({
     membersOnTable: v.optional(v.number()),
 
     // Customer Information
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -235,6 +236,7 @@ export const createOrder = mutation({
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
+      customerId: args.customerId,
       customerName: args.customerName,
       customerPhone: args.customerPhone,
       customerEmail: args.customerEmail,

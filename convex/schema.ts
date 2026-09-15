@@ -205,6 +205,34 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
 
+  // Customer Domain Table (Migrated from legacy Rails users where user_type includes 'customer')
+  customers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Identity & Contact Details
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    email: v.optional(v.string()),
+
+    // Payment Gateway Identifier (e.g. Razorpay Customer ID from legacy user.razorpay_customer_id)
+    razorpayCustomerId: v.optional(v.string()),
+
+    // Optional Avatar Asset / Storage reference
+    avatarStorageId: v.optional(v.id("_storage")),
+    avatarAssetId: v.optional(v.id("organization_assets")),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_email", ["email"])
+    .index("by_legacy_id", ["legacyId"]),
+
   // Master Global Features Catalog (Super Admin & Base Features)
   features: defineTable({
     name: v.string(),
@@ -733,7 +761,8 @@ export default defineSchema({
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
 
-    // Customer Information (from Frontend POS / Online)
+    // Customer Relationship & Information (from Frontend POS / Online)
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -769,7 +798,8 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_org_status", ["organizationId", "orderStatusId"])
     .index("by_org_table", ["organizationId", "tableId"])
-    .index("by_created_at", ["organizationId", "createdAt"]),
+    .index("by_created_at", ["organizationId", "createdAt"])
+    .index("by_customer", ["customerId"]),
 
   orderItems: defineTable({
     organizationId: v.id("organizations"),
