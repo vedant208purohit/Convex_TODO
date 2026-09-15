@@ -61,9 +61,18 @@ function parseTimeToMs(timeStr: string): number {
   if (!isNaN(parsed)) {
     return parsed;
   }
-  const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
-  if (match) {
-    return parseInt(match[1], 10) * 60 + parseInt(match[2], 10);
+  const match12 = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2], 10);
+    const isPM = match12[3].toUpperCase() === "PM";
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  const match24 = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
   }
   throw new Error("invalid time format detected");
 }
