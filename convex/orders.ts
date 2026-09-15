@@ -416,39 +416,26 @@ export const getOrderDetails = query({
       .withIndex("by_order", (q) => q.eq("orderId", order._id))
       .collect();
 
-    const hasCredit = payments.some((p) => p.paymentType === "Credit");
-    const allPayments = [...payments];
-    if (!hasCredit) {
-      allPayments.unshift({
-        _id: `initial_credit_${order._id}` as any,
-        _creationTime: order.createdAt,
-        organizationId: order.organizationId,
-        orderId: order._id,
-        paymentModeName: order.paymentMode || "Cash",
-        paymentType: "Credit",
-        amount: order.totalAmount,
-        payAmount: order.totalAmount,
-        refundAmount: 0,
-        createdAt: order.createdAt,
-      });
-    }
-
     let totalCredit = 0;
     let totalDebit = 0;
-    for (const p of allPayments) {
+    for (const p of payments) {
       if (p.paymentType === "Debit") {
-        totalDebit += p.amount;
+        totalDebit += p.refundAmount || p.amount || 0;
       } else {
-        totalCredit += p.amount;
+        totalCredit += p.payAmount || p.amount || 0;
       }
     }
     const netPaid = totalCredit - totalDebit;
+    const remainingDue = Math.max(0, order.totalAmount - netPaid);
+    const refundableAmount = Math.max(0, totalCredit - totalDebit);
 
     return {
       ...order,
       totalCredit,
       totalDebit,
       netPaid,
+      remainingDue,
+      refundableAmount,
       display_sub_total: (order.subTotal / 100).toFixed(2),
       display_tax_total: (order.taxTotal / 100).toFixed(2),
       display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
@@ -456,13 +443,15 @@ export const getOrderDetails = query({
       display_credit_amount: (totalCredit / 100).toFixed(2),
       display_debit_amount: (totalDebit / 100).toFixed(2),
       display_net_paid: (netPaid / 100).toFixed(2),
+      display_remaining_due: (remainingDue / 100).toFixed(2),
+      display_refundable_amount: (refundableAmount / 100).toFixed(2),
       items: items.map((i) => ({
         ...i,
         display_item_price: (i.itemPrice / 100).toFixed(2),
         display_total_price: (i.totalPrice / 100).toFixed(2),
       })),
       activities: activities.sort((a, b) => a.position - b.position),
-      payments: allPayments,
+      payments,
       table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
     };
   },

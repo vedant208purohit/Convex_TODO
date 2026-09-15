@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
@@ -290,7 +290,86 @@ export default function OrderDetailsDynamicPage() {
 
   // Query Real Store Printers from DB
   const printers = useQuery(api.organizationPrinters.list, {});
-  const isPrinterConnected = Boolean(printers && printers.length > 0);
+  const [printerStatus, setPrinterStatus] = useState<
+    "checking" | "connected" | "disconnected"
+  >("checking");
+
+  useEffect(() => {
+    let isMounted = true;
+    if (printers === undefined) return;
+    if (!printers || printers.length === 0) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const cashierPrinter =
+      printers.find((p) => p.printerUseFor === "Cashier") || printers[0];
+    if (!cashierPrinter || !cashierPrinter.printerUrl) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const checkStatus = async () => {
+      if (cashierPrinter.printerType === "Usb") {
+        if (typeof navigator !== "undefined" && "usb" in navigator) {
+          try {
+            const devices = await (navigator as any).usb.getDevices();
+            if (isMounted) {
+              setPrinterStatus(devices.length > 0 ? "connected" : "disconnected");
+            }
+            return;
+          } catch {
+            if (isMounted) setPrinterStatus("disconnected");
+            return;
+          }
+        }
+        if (isMounted) setPrinterStatus("disconnected");
+        return;
+      }
+
+      if (cashierPrinter.printerType === "Bluetooth") {
+        if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
+          try {
+            const devices = await (navigator as any).bluetooth.getDevices?.();
+            if (devices && devices.length > 0) {
+              if (isMounted) setPrinterStatus("connected");
+              return;
+            }
+          } catch {}
+        }
+        if (isMounted) setPrinterStatus("disconnected");
+        return;
+      }
+
+      // LAN Printer TCP ping
+      try {
+        const res = await fetch("/api/printers/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            printerUrl: cashierPrinter.printerUrl,
+            printerPort: cashierPrinter.printerPort || "9100",
+            printerType: cashierPrinter.printerType,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (isMounted) {
+          setPrinterStatus(data.online ? "connected" : "disconnected");
+        }
+      } catch {
+        if (isMounted) {
+          setPrinterStatus("disconnected");
+        }
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [printers]);
 
   // Query Order Details
   const order = useQuery(
@@ -332,7 +411,38 @@ export default function OrderDetailsDynamicPage() {
   const handleSettlePayment = async () => {
     if (!orderId || !order) return;
     try {
-      const amountPaise = order.totalAmount;
+      const remainingDue =
+        order.remainingDue !== undefined
+          ? order.remainingDue / 100
+          : Math.max(
+              0,
+              parseFloat(order.display_total_amount || "0") -
+                (order.netPaid ? order.netPaid / 100 : 0),
+            );
+
+      const givenVal = parseFloat(
+        tenderCashGiven ||
+          (remainingDue > 0
+            ? remainingDue.toString()
+            : order.display_total_amount || "0"),
+      );
+      if (isNaN(givenVal) || givenVal <= 0) {
+        showToast("Please enter a valid payment amount");
+        return;
+      }
+
+      // For Cash: if customer gives 50 for a 19.43 bill, record the 19.43 payable and return 30.57 change
+      // For partial payments: record givenVal
+      const settleAmountPaise =
+        paymentTenderMode === "Cash" && remainingDue > 0 && givenVal >= remainingDue
+          ? Math.round(remainingDue * 100)
+          : Math.round(givenVal * 100);
+
+      const changeAmount =
+        paymentTenderMode === "Cash" && givenVal > remainingDue && remainingDue > 0
+          ? givenVal - remainingDue
+          : 0;
+
       const selectedMode = paymentModesList?.find(
         (m) => m.name.toLowerCase() === paymentTenderMode.toLowerCase(),
       );
@@ -341,14 +451,21 @@ export default function OrderDetailsDynamicPage() {
         paymentModeId: selectedMode?._id,
         paymentModeName: selectedMode?.name || paymentTenderMode,
         paymentType: "Credit",
-        amount: amountPaise,
+        amount: settleAmountPaise,
         transactionReference: `POS-PAY-${Date.now().toString().slice(-6)}`,
       });
       setDrawerTab(null);
       setTenderCashGiven("");
-      showToast(
-        `Payment of ₹${order.display_total_amount} via ${paymentTenderMode} recorded successfully.`,
-      );
+
+      if (changeAmount > 0) {
+        showToast(
+          `Payment of ₹${(settleAmountPaise / 100).toFixed(2)} recorded via ${paymentTenderMode}. Return change: ₹${changeAmount.toFixed(2)}.`,
+        );
+      } else {
+        showToast(
+          `Payment of ₹${(settleAmountPaise / 100).toFixed(2)} via ${paymentTenderMode} recorded successfully.`,
+        );
+      }
     } catch (err: any) {
       showToast(err.message || "Failed to record payment");
     }
@@ -508,12 +625,19 @@ export default function OrderDetailsDynamicPage() {
                 aria-label="Breadcrumb"
                 className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
               >
-                <Link
-                  href="/orders"
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.history.length > 1) {
+                      router.back();
+                    } else {
+                      router.push("/orders");
+                    }
+                  }}
                   className="hover:text-[#141010] transition-colors cursor-pointer"
                 >
                   Orders
-                </Link>
+                </button>
                 <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
                 <span className="text-[#141010] font-semibold">
                   {order.orderNumber}
@@ -530,13 +654,20 @@ export default function OrderDetailsDynamicPage() {
 
             {/* Quick Action Buttons in Top Header */}
             <div className="flex items-center gap-3">
-              <Link
-                href="/orders"
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof window !== "undefined" && window.history.length > 1) {
+                    router.back();
+                  } else {
+                    router.push("/orders");
+                  }
+                }}
                 className="h-10 px-5 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-sm bg-white cursor-pointer inline-flex items-center gap-2 shadow-2xs"
               >
                 <ArrowLeftIcon className="w-4 h-4 text-[#5e5e5e]" />
                 <span>Back to Orders</span>
-              </Link>
+              </button>
               <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                 <span>{order.orderStatusName || "Live Order Status"}</span>
@@ -1004,12 +1135,6 @@ export default function OrderDetailsDynamicPage() {
                           : "0.00"}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                      <span>Delivery / Service Charge</span>
-                      <span className="font-semibold text-[#0c0a09]">
-                        ₹0.00
-                      </span>
-                    </div>
                     {parseFloat(order.display_discount_amount || "0") > 0 && (
                       <div className="flex justify-between items-center text-emerald-700 text-xs">
                         <span className="font-medium">Discount</span>
@@ -1034,58 +1159,45 @@ export default function OrderDetailsDynamicPage() {
                   </div>
                 </section>
 
-                {/* Card 2: Issue Refund Card */}
-                <section
-                  className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
-                  data-purpose="refund-widget"
-                >
-                  <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
-                    Issue Refund
-                  </h3>
-
-                  {/* Debit Amount Display Box matching screenshot */}
-                  <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
-                    <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
-                      Debit Amount
-                    </div>
-                    <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
-                      -₹
-                      {order.display_debit_amount &&
-                      parseFloat(order.display_debit_amount) > 0
-                        ? parseFloat(order.display_debit_amount) % 1 === 0
-                          ? parseInt(order.display_debit_amount)
-                          : order.display_debit_amount
-                        : "0"}
-                    </div>
-                  </div>
-
-                  {/* Button triggering payment refund drawer */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const remainingRefundable = Math.max(
-                        0,
-                        parseFloat(
-                          order.display_net_paid ||
-                            order.display_total_amount ||
-                            "0",
-                        ),
-                      );
-                      setRefundAmountInput(
-                        remainingRefundable > 0
-                          ? remainingRefundable.toString()
-                          : order.display_total_amount,
-                      );
-                      setDrawerTab("refund");
-                    }}
-                    style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
-                    className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                {/* Card 2: Issue Refund Card (Visible only when eligible refund amount > 0, matching defx-pos-frontend) */}
+                {((order.totalCredit ?? 0) > (order.totalDebit ?? 0)) && (
+                  <section
+                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                    data-purpose="refund-widget"
                   >
-                    <span className="!text-white text-white font-semibold text-sm">
+                    <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
                       Issue Refund
-                    </span>
-                  </button>
-                </section>
+                    </h3>
+
+                    {/* Debit Amount Display Box matching defx-pos-frontend */}
+                    <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
+                      <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
+                        Debit Amount
+                      </div>
+                      <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
+                        ₹{order.display_refundable_amount || (Math.max(0, ((order.totalCredit || 0) - (order.totalDebit || 0)) / 100).toFixed(2))}
+                      </div>
+                    </div>
+
+                    {/* Button triggering payment refund drawer */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const remainingRefundable =
+                          order.display_refundable_amount ||
+                          (Math.max(0, ((order.totalCredit || 0) - (order.totalDebit || 0)) / 100).toFixed(2));
+                        setRefundAmountInput(remainingRefundable);
+                        setDrawerTab("refund");
+                      }}
+                      style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
+                      className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                    >
+                      <span className="!text-white text-white font-semibold text-sm">
+                        Issue Refund
+                      </span>
+                    </button>
+                  </section>
+                )}
 
                 {/* Card 3: Order Actions */}
                 <section
@@ -1183,13 +1295,18 @@ export default function OrderDetailsDynamicPage() {
                   {/* Printer Status Widget */}
                   <div className="pt-3 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#7a716b]">
                     <span className="flex items-center gap-1.5 font-medium">
-                      <PrintIcon className={`w-3.5 h-3.5 ${isPrinterConnected ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
+                      <PrintIcon className={`w-3.5 h-3.5 ${printerStatus === "connected" ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
                       <span>Thermal Printer</span>
                     </span>
-                    {isPrinterConnected ? (
+                    {printerStatus === "connected" ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
                         Connected ●
+                      </span>
+                    ) : printerStatus === "checking" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        Checking...
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] px-2 py-0.5 rounded-full border border-[#e7e5e4]">
@@ -1353,14 +1470,16 @@ export default function OrderDetailsDynamicPage() {
                     <div className="flex items-center justify-between border border-[#e7e5e4] rounded-xl p-4 bg-[#faf8f5]">
                       <div>
                         <span className="block text-xs font-semibold uppercase tracking-wider text-[#7a716b]">
-                          Total payable amount
+                          {parseFloat(order.display_remaining_due || order.display_total_amount || "0") > 0
+                            ? "Remaining payable amount"
+                            : "Total order amount"}
                         </span>
                         <span className="text-[11px] text-[#7a716b] font-sans">
                           Includes all applicable taxes
                         </span>
                       </div>
                       <span className="font-sans text-2xl font-bold text-[#141010] tracking-tight">
-                        ₹{order.display_total_amount}
+                        ₹{order.display_remaining_due || order.display_total_amount}
                       </span>
                     </div>
 
@@ -1404,7 +1523,11 @@ export default function OrderDetailsDynamicPage() {
                             type="number"
                             step="any"
                             value={
-                              tenderCashGiven || order.display_total_amount
+                              tenderCashGiven !== ""
+                                ? tenderCashGiven
+                                : (order.display_remaining_due && parseFloat(order.display_remaining_due) > 0
+                                    ? order.display_remaining_due
+                                    : order.display_total_amount)
                             }
                             onChange={(e) => setTenderCashGiven(e.target.value)}
                           />
@@ -1423,14 +1546,16 @@ export default function OrderDetailsDynamicPage() {
                         </div>
                         <div className="grid grid-cols-4 gap-2">
                           {(() => {
-                            const totalNum = parseFloat(
-                              order.display_total_amount || "0",
+                            const baseNum = parseFloat(
+                              order.display_remaining_due && parseFloat(order.display_remaining_due) > 0
+                                ? order.display_remaining_due
+                                : order.display_total_amount || "0",
                             );
-                            const rounded1 = Math.ceil(totalNum);
-                            const rounded2 = Math.ceil(totalNum / 10) * 10;
-                            const rounded3 = Math.ceil(totalNum / 50) * 50;
+                            const rounded1 = Math.ceil(baseNum);
+                            const rounded2 = Math.ceil(baseNum / 10) * 10;
+                            const rounded3 = Math.ceil(baseNum / 50) * 50;
                             const rounded4 =
-                              Math.ceil(totalNum / 100) * 100 || 1000;
+                              Math.ceil(baseNum / 100) * 100 || 1000;
                             const shortcuts = Array.from(
                               new Set([rounded1, rounded2, rounded3, rounded4]),
                             );
@@ -1457,13 +1582,17 @@ export default function OrderDetailsDynamicPage() {
 
                       {/* Return Amount Banner */}
                       {(() => {
+                        const remainingDue = parseFloat(
+                          order.display_remaining_due && parseFloat(order.display_remaining_due) > 0
+                            ? order.display_remaining_due
+                            : order.display_total_amount || "0",
+                        );
                         const givenNum = parseFloat(
-                          tenderCashGiven || order.display_total_amount || "0",
+                          tenderCashGiven !== ""
+                            ? tenderCashGiven
+                            : remainingDue.toString(),
                         );
-                        const totalNum = parseFloat(
-                          order.display_total_amount || "0",
-                        );
-                        const change = Math.max(0, givenNum - totalNum);
+                        const change = paymentTenderMode === "Cash" ? Math.max(0, givenNum - remainingDue) : 0;
                         return (
                           <div className="flex items-center justify-between p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg">
                             <span className="text-xs font-semibold text-emerald-900 uppercase tracking-wider">
@@ -1691,15 +1820,36 @@ export default function OrderDetailsDynamicPage() {
 
               {/* Drawer Sticky Footer with Primary Action */}
               <div className="p-6 border-t border-[#e7e5e4] bg-[#fdf8f7] space-y-3">
-                {drawerTab === "pay" && (
-                  <button
-                    type="button"
-                    onClick={handleSettlePayment}
-                    className="w-full py-3.5 bg-[#0c0a09] hover:bg-neutral-800 text-white font-sans font-bold text-sm rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
-                  >
-                    <span>Record Payment (₹{order.display_total_amount})</span>
-                  </button>
-                )}
+                {drawerTab === "pay" && (() => {
+                  const remainingDue = parseFloat(
+                    order.display_remaining_due && parseFloat(order.display_remaining_due) > 0
+                      ? order.display_remaining_due
+                      : order.display_total_amount || "0",
+                  );
+                  const givenNum = parseFloat(
+                    tenderCashGiven !== ""
+                      ? tenderCashGiven
+                      : remainingDue.toString(),
+                  );
+                  const settleAmt =
+                    paymentTenderMode === "Cash" && remainingDue > 0 && givenNum >= remainingDue
+                      ? remainingDue
+                      : (isNaN(givenNum) ? 0 : givenNum);
+                  const change = paymentTenderMode === "Cash" ? Math.max(0, givenNum - remainingDue) : 0;
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleSettlePayment}
+                      className="w-full py-3.5 bg-[#0c0a09] hover:bg-neutral-800 text-white font-sans font-bold text-sm rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                    >
+                      <span>
+                        Record Payment (₹{settleAmt.toFixed(2)})
+                        {change > 0 ? ` • Change ₹${change.toFixed(2)}` : ""}
+                      </span>
+                    </button>
+                  );
+                })()}
 
                 {drawerTab === "timeline" && (
                   <button

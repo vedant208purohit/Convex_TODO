@@ -455,31 +455,146 @@ export default function OrdersPage() {
 
   // Query Real Store Printers from DB
   const printers = useQuery(api.organizationPrinters.list, {});
-  const isPrinterConnected = Boolean(printers && printers.length > 0);
+  const [printerStatus, setPrinterStatus] = useState<
+    "checking" | "connected" | "disconnected"
+  >("checking");
+
+  useEffect(() => {
+    let isMounted = true;
+    if (printers === undefined) return;
+    if (!printers || printers.length === 0) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const cashierPrinter =
+      printers.find((p) => p.printerUseFor === "Cashier") || printers[0];
+    if (!cashierPrinter || !cashierPrinter.printerUrl) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const checkStatus = async () => {
+      if (cashierPrinter.printerType === "Usb") {
+        if (typeof navigator !== "undefined" && "usb" in navigator) {
+          try {
+            const devices = await (navigator as any).usb.getDevices();
+            if (isMounted) {
+              setPrinterStatus(devices.length > 0 ? "connected" : "disconnected");
+            }
+            return;
+          } catch {
+            if (isMounted) setPrinterStatus("disconnected");
+            return;
+          }
+        }
+        if (isMounted) setPrinterStatus("disconnected");
+        return;
+      }
+
+      if (cashierPrinter.printerType === "Bluetooth") {
+        if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
+          try {
+            const devices = await (navigator as any).bluetooth.getDevices?.();
+            if (devices && devices.length > 0) {
+              if (isMounted) setPrinterStatus("connected");
+              return;
+            }
+          } catch {}
+        }
+        if (isMounted) setPrinterStatus("disconnected");
+        return;
+      }
+
+      // LAN Printer TCP ping
+      try {
+        const res = await fetch("/api/printers/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            printerUrl: cashierPrinter.printerUrl,
+            printerPort: cashierPrinter.printerPort || "9100",
+            printerType: cashierPrinter.printerType,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (isMounted) {
+          setPrinterStatus(data.online ? "connected" : "disconnected");
+        }
+      } catch {
+        if (isMounted) {
+          setPrinterStatus("disconnected");
+        }
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [printers]);
+
+  // Persisted Filters Helper (Session Storage)
+  const initialFilters = useMemo(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = sessionStorage.getItem("pos_orders_filters_v1");
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  }, []);
 
   // Filter States
-  const [activeStage, setActiveStage] = useState<string>("All");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [priceFrom, setPriceFrom] = useState("");
-  const [priceTo, setPriceTo] = useState("");
+  const [activeStage, setActiveStage] = useState<string>(
+    () => initialFilters?.activeStage || "All",
+  );
+  const [searchQuery, setSearchQuery] = useState(
+    () => initialFilters?.searchQuery || "",
+  );
+  const [priceFrom, setPriceFrom] = useState(
+    () => initialFilters?.priceFrom || "",
+  );
+  const [priceTo, setPriceTo] = useState(() => initialFilters?.priceTo || "");
 
   // Applied Date Filter
-  const [appliedPreset, setAppliedPreset] = useState<string>("Today");
-  const [appliedStartDate, setAppliedStartDate] = useState<Date>(
-    () => getPresetDateRange("Today").start,
+  const [appliedPreset, setAppliedPreset] = useState<string>(
+    () => initialFilters?.appliedPreset || "Today",
   );
-  const [appliedEndDate, setAppliedEndDate] = useState<Date>(
-    () => getPresetDateRange("Today").end,
-  );
+  const [appliedStartDate, setAppliedStartDate] = useState<Date>(() => {
+    if (initialFilters?.appliedStartDate) {
+      const d = new Date(initialFilters.appliedStartDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").start;
+  });
+  const [appliedEndDate, setAppliedEndDate] = useState<Date>(() => {
+    if (initialFilters?.appliedEndDate) {
+      const d = new Date(initialFilters.appliedEndDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").end;
+  });
 
   // Draft Date Filter (while popover is open)
-  const [draftPreset, setDraftPreset] = useState<string>("Today");
-  const [draftStartDate, setDraftStartDate] = useState<Date>(
-    () => getPresetDateRange("Today").start,
+  const [draftPreset, setDraftPreset] = useState<string>(
+    () => initialFilters?.appliedPreset || "Today",
   );
-  const [draftEndDate, setDraftEndDate] = useState<Date>(
-    () => getPresetDateRange("Today").end,
-  );
+  const [draftStartDate, setDraftStartDate] = useState<Date>(() => {
+    if (initialFilters?.appliedStartDate) {
+      const d = new Date(initialFilters.appliedStartDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").start;
+  });
+  const [draftEndDate, setDraftEndDate] = useState<Date>(() => {
+    if (initialFilters?.appliedEndDate) {
+      const d = new Date(initialFilters.appliedEndDate);
+      if (!isNaN(d.getTime())) return d;
+    }
+    return getPresetDateRange("Today").end;
+  });
   const [viewMonth, setViewMonth] = useState<Date>(() => {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
@@ -515,10 +630,14 @@ export default function OrdersPage() {
   }, [appliedStartDate, appliedEndDate]);
 
   const [sortField, setSortField] = useState<"createdAt" | "totalAmount">(
-    "createdAt",
+    () => initialFilters?.sortField || "createdAt",
   );
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [currentPage, setCurrentPage] = useState(1);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">(
+    () => initialFilters?.sortOrder || "desc",
+  );
+  const [currentPage, setCurrentPage] = useState(
+    () => initialFilters?.currentPage || 1,
+  );
   const pageSize = 10;
 
   // Selected Order Detail View & Unified Drawer States
@@ -545,8 +664,13 @@ export default function OrdersPage() {
     null,
   );
 
-  // Reset pagination to page 1 on filter changes
+  // Reset pagination to page 1 on subsequent user-initiated filter changes
+  const isInitialMount = useRef(true);
   useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
     setCurrentPage(1);
   }, [
     appliedStartDate,
@@ -555,6 +679,39 @@ export default function OrdersPage() {
     searchQuery,
     priceFrom,
     priceTo,
+  ]);
+
+  // Persist filter state to sessionStorage
+  useEffect(() => {
+    try {
+      const stateToSave = {
+        activeStage,
+        searchQuery,
+        priceFrom,
+        priceTo,
+        appliedPreset,
+        appliedStartDate: appliedStartDate.toISOString(),
+        appliedEndDate: appliedEndDate.toISOString(),
+        sortField,
+        sortOrder,
+        currentPage,
+      };
+      sessionStorage.setItem(
+        "pos_orders_filters_v1",
+        JSON.stringify(stateToSave),
+      );
+    } catch (e) {}
+  }, [
+    activeStage,
+    searchQuery,
+    priceFrom,
+    priceTo,
+    appliedPreset,
+    appliedStartDate,
+    appliedEndDate,
+    sortField,
+    sortOrder,
+    currentPage,
   ]);
 
   // Backend Queries & Mutations
@@ -1595,12 +1752,6 @@ export default function OrdersPage() {
                             : "0.00"}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                        <span>Delivery / Service Charge</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          ₹0.00
-                        </span>
-                      </div>
                       {parseFloat(order?.display_discount_amount || "0") >
                         0 && (
                         <div className="flex justify-between items-center text-emerald-700 text-xs">
@@ -1626,58 +1777,45 @@ export default function OrdersPage() {
                     </div>
                   </section>
 
-                  {/* Card 2: Issue Refund Card */}
-                  <section
-                    className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
-                    data-purpose="refund-widget"
-                  >
-                    <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
-                      Issue Refund
-                    </h3>
-
-                    {/* Debit Amount Display Box matching screenshot */}
-                    <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
-                      <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
-                        Debit Amount
-                      </div>
-                      <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
-                        -₹
-                        {order?.display_debit_amount &&
-                        parseFloat(order.display_debit_amount) > 0
-                          ? parseFloat(order.display_debit_amount) % 1 === 0
-                            ? parseInt(order.display_debit_amount)
-                            : order.display_debit_amount
-                          : "0"}
-                      </div>
-                    </div>
-
-                    {/* Button triggering payment refund drawer */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const remainingRefundable = Math.max(
-                          0,
-                          parseFloat(
-                            order?.display_net_paid ||
-                              order?.display_total_amount ||
-                              "0",
-                          ),
-                        );
-                        setRefundAmountInput(
-                          remainingRefundable > 0
-                            ? remainingRefundable.toString()
-                            : order?.display_total_amount || "",
-                        );
-                        setDrawerTab("refund");
-                      }}
-                      style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
-                      className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                  {/* Card 2: Issue Refund Card (Visible only when eligible refund amount > 0, matching defx-pos-frontend) */}
+                  {((order?.totalCredit ?? 0) > (order?.totalDebit ?? 0)) && (
+                    <section
+                      className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
+                      data-purpose="refund-widget"
                     >
-                      <span className="!text-white text-white font-semibold text-sm">
+                      <h3 className="text-[20px] font-semibold text-[#0c0a09] mb-4">
                         Issue Refund
-                      </span>
-                    </button>
-                  </section>
+                      </h3>
+
+                      {/* Debit Amount Display Box matching defx-pos-frontend */}
+                      <div className="flex border border-[#141010] rounded-lg overflow-hidden bg-white mb-4 shadow-2xs">
+                        <div className="flex-1 py-3 px-4 text-sm font-semibold text-[#141010] flex items-center">
+                          Debit Amount
+                        </div>
+                        <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
+                          ₹{order?.display_refundable_amount || (Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100).toFixed(2))}
+                        </div>
+                      </div>
+
+                      {/* Button triggering payment refund drawer */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const remainingRefundable =
+                            order?.display_refundable_amount ||
+                            (Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100).toFixed(2));
+                          setRefundAmountInput(remainingRefundable);
+                          setDrawerTab("refund");
+                        }}
+                        style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
+                        className="w-full py-3 px-4 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white rounded-lg text-sm font-semibold tracking-wide transition-all shadow-xs flex items-center justify-center gap-2 cursor-pointer hover:opacity-95"
+                      >
+                        <span className="!text-white text-white font-semibold text-sm">
+                          Issue Refund
+                        </span>
+                      </button>
+                    </section>
+                  )}
 
                   {/* Card 3: Order Actions */}
                   <section
@@ -1775,13 +1913,18 @@ export default function OrdersPage() {
                     {/* Printer Status Widget */}
                     <div className="pt-3 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#7a716b]">
                       <span className="flex items-center gap-1.5 font-medium">
-                        <PrintIcon className={`w-3.5 h-3.5 ${isPrinterConnected ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
+                        <PrintIcon className={`w-3.5 h-3.5 ${printerStatus === "connected" ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
                         <span>Thermal Printer</span>
                       </span>
-                      {isPrinterConnected ? (
+                      {printerStatus === "connected" ? (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
                           Connected ●
+                        </span>
+                      ) : printerStatus === "checking" ? (
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Checking...
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] px-2 py-0.5 rounded-full border border-[#e7e5e4]">
@@ -2960,7 +3103,9 @@ export default function OrdersPage() {
               <button
                 type="button"
                 disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                onClick={() =>
+                  setCurrentPage((p: number) => Math.max(1, p - 1))
+                }
                 className="px-3 py-1.5 text-xs font-medium text-[#5e5e5e] bg-white border border-[#e7e5e4] rounded-md hover:bg-[#fdf8f7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
                 Previous
@@ -2992,7 +3137,7 @@ export default function OrdersPage() {
                 type="button"
                 disabled={currentPage >= totalPages}
                 onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  setCurrentPage((p: number) => Math.min(totalPages, p + 1))
                 }
                 className="px-3 py-1.5 text-xs font-medium text-[#0c0a09] bg-white border border-[#e7e5e4] rounded-md hover:bg-[#fdf8f7] disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
               >
