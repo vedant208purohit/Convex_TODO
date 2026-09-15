@@ -65,6 +65,7 @@ export const ALLOWED_ASSET_TYPES = [
   "invoice_pdf",
   "bill_pdf",
   "carousel_image",
+  "about_us_image",
   "qr_code",
   "document",
   "general",
