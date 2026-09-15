@@ -9,6 +9,7 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as features from "../features.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
 import type * as menuImport from "../menuImport.js";
@@ -33,6 +34,7 @@ import type * as organizationTables from "../organizationTables.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
+import type * as paymentModes from "../paymentModes.js";
 import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
@@ -46,6 +48,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  features: typeof features;
   inventory: typeof inventory;
   menu: typeof menu;
   menuImport: typeof menuImport;
@@ -70,6 +73,7 @@ declare const fullApi: ApiFromModules<{
   organizationUsers: typeof organizationUsers;
   organizationWaiters: typeof organizationWaiters;
   organizations: typeof organizations;
+  paymentModes: typeof paymentModes;
   postpaidOrderRequests: typeof postpaidOrderRequests;
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;

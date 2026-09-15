@@ -17,7 +17,7 @@ export async function requireAdminOrCashier(
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  const callerMember = await getCallerMembership(ctx, identity.subject, org._id, identity.email);
 
   if (
     !callerMember ||

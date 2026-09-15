@@ -205,10 +205,27 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
 
-  // Organization Feature Flags
+  // Master Global Features Catalog (Super Admin & Base Features)
+  features: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    displayDescription: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_name", ["name"]),
+
+  // Organization Feature Flags (Per-store runtime active toggles)
   organizationFeatures: defineTable({
     organizationId: v.optional(v.id("organizations")),
+    featureId: v.optional(v.id("features")),
     featureKey: v.string(),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    displayDescription: v.optional(v.string()),
     active: v.boolean(),
     createdAt: v.optional(v.number()),
     updatedAt: v.number(),
@@ -794,7 +811,10 @@ export default defineSchema({
     orderId: v.id("orders"),
     paymentModeId: v.optional(v.id("paymentModes")),
     paymentModeName: v.string(),
+    paymentType: v.optional(v.union(v.literal("Credit"), v.literal("Debit"))),
     amount: v.number(),
+    payAmount: v.optional(v.number()),
+    refundAmount: v.optional(v.number()),
     transactionReference: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_order", ["orderId"]),

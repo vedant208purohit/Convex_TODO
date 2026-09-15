@@ -1221,13 +1221,21 @@ export const repairStoreOwnerAdmin = mutation({
 
     const now = Date.now();
 
-    // 1. Safe Backfill: Set ownerClerkId if unassigned
-    if (!org.ownerClerkId) {
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeAdmins = allMembers.filter(
+      (m) => m.deletedAt === undefined && m.userType.some((r) => r === "admin")
+    );
+
+    // 1. Safe Backfill: Set ownerClerkId if unassigned or unclaimed
+    if (!org.ownerClerkId || activeAdmins.length === 0) {
       await ctx.db.patch(org._id, {
         ownerClerkId: identity.subject,
         updatedAt: now,
       });
-    } else if (org.ownerClerkId !== identity.subject) {
+    } else if (org.ownerClerkId !== identity.subject && activeAdmins.length > 0) {
       return { success: false, reason: "Forbidden. Organization owner is assigned to another user." };
     }
 

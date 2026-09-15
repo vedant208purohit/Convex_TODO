@@ -6,6 +6,7 @@ import {
   resolveStoreOrganization,
   getCallerMembership,
   requireMember,
+  requireAdmin,
 } from "./organizationUsers";
 
 // ----------------------------------------------------
@@ -13,25 +14,50 @@ import {
 // ----------------------------------------------------
 
 /**
- * Requires caller to be an active Store Admin or Cashier in the target organization
+ * Requires caller to be an active Store Admin, Cashier, or Store Owner in the target organization
  */
 export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
-  explicitOrgId?: Id<"organizations">
+  explicitOrgId?: Id<"organizations">,
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  const callerMember = await getCallerMembership(
+    ctx,
+    identity.subject,
+    org._id,
+    identity.email,
+  );
 
-  if (
-    !callerMember ||
-    (!callerMember.userType.includes("admin") &&
-      !callerMember.userType.includes("cashier"))
-  ) {
+  if (callerMember) {
+    const types = callerMember.userType.map((t) => t.toLowerCase());
+    if (
+      types.includes("admin") ||
+      types.includes("store_admin") ||
+      types.includes("org_admin") ||
+      types.includes("super_admin") ||
+      types.includes("cashier")
+    ) {
+      return { identity, org, callerMember };
+    }
     throw new Error("Forbidden. Admin or Cashier access required.");
   }
 
-  return { identity, org, callerMember };
+  // Fallback: If caller has NO membership record yet, check if store owner or auto-bootstrap initial admin
+  const allMembers = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const activeAdmins = allMembers.filter(
+    (m) => m.deletedAt === undefined && m.userType.some((r) => ["admin", "store_admin"].includes(r.toLowerCase()))
+  );
+
+  if (!org.ownerClerkId || org.ownerClerkId === identity.subject || activeAdmins.length === 0) {
+    const adminRes = await requireAdmin(ctx, explicitOrgId);
+    return { identity, org, callerMember: adminRes.callerMember };
+  }
+
+  throw new Error("Forbidden. Admin or Cashier access required.");
 }
 
 // ----------------------------------------------------
@@ -44,7 +70,7 @@ export async function requireAdminOrCashier(
 async function validateUniquePrinterUseFor(
   ctx: QueryCtx | MutationCtx,
   printerUseFor: "Cashier" | "Station" | "WorkStation",
-  excludeId?: Id<"organizationPrinters">
+  excludeId?: Id<"organizationPrinters">,
 ): Promise<void> {
   const existing = await ctx.db
     .query("organizationPrinters")
@@ -63,11 +89,13 @@ async function validateUniquePrinterUseFor(
 function validateStationRequirement(
   printerType: "Lan" | "Bluetooth" | "Usb",
   printerUseFor: "Cashier" | "Station" | "WorkStation",
-  stationId?: string
+  stationId?: string,
 ): void {
   if (printerType === "Lan" && printerUseFor === "Station") {
     if (!stationId || !stationId.trim()) {
-      throw new Error("Station reference is required for LAN station printers.");
+      throw new Error(
+        "Station reference is required for LAN station printers.",
+      );
     }
   }
 }
@@ -82,9 +110,18 @@ function validateStationRequirement(
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMember(ctx);
     const printers = await ctx.db.query("organizationPrinters").collect();
     return printers.filter((printer) => printer.deletedAt === undefined);
+  },
+});
+
+/**
+ * Lists all stations for the store
+ */
+export const listStations = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db.query("stations").collect();
   },
 });
 
@@ -94,7 +131,6 @@ export const list = query({
 export const get = query({
   args: { id: v.id("organizationPrinters") },
   handler: async (ctx, args) => {
-    await requireMember(ctx);
     const printer = await ctx.db.get(args.id);
     if (!printer || printer.deletedAt !== undefined) {
       return null;
@@ -117,12 +153,12 @@ export const create = mutation({
     printerType: v.union(
       v.literal("Lan"),
       v.literal("Bluetooth"),
-      v.literal("Usb")
+      v.literal("Usb"),
     ),
     printerUseFor: v.union(
       v.literal("Cashier"),
       v.literal("Station"),
-      v.literal("WorkStation")
+      v.literal("WorkStation"),
     ),
     stationId: v.optional(v.string()),
     legacyId: v.optional(v.string()),
@@ -142,7 +178,11 @@ export const create = mutation({
     const trimmedStationId = args.stationId ? args.stationId.trim() : undefined;
 
     // 2. Validate conditional station requirement (Lan + Station requires stationId)
-    validateStationRequirement(args.printerType, args.printerUseFor, trimmedStationId);
+    validateStationRequirement(
+      args.printerType,
+      args.printerUseFor,
+      trimmedStationId,
+    );
 
     // 3. Validate active uniqueness of printerUseFor
     await validateUniquePrinterUseFor(ctx, args.printerUseFor);
@@ -174,10 +214,14 @@ export const update = mutation({
     printerUrl: v.optional(v.string()),
     printerPort: v.optional(v.string()),
     printerType: v.optional(
-      v.union(v.literal("Lan"), v.literal("Bluetooth"), v.literal("Usb"))
+      v.union(v.literal("Lan"), v.literal("Bluetooth"), v.literal("Usb")),
     ),
     printerUseFor: v.optional(
-      v.union(v.literal("Cashier"), v.literal("Station"), v.literal("WorkStation"))
+      v.union(
+        v.literal("Cashier"),
+        v.literal("Station"),
+        v.literal("WorkStation"),
+      ),
     ),
     stationId: v.optional(v.string()),
   },
@@ -197,8 +241,10 @@ export const update = mutation({
       trimmedUrl = args.printerUrl.trim();
     }
 
-    const trimmedPort = args.printerPort !== undefined ? args.printerPort.trim() : undefined;
-    const trimmedStationId = args.stationId !== undefined ? args.stationId.trim() : undefined;
+    const trimmedPort =
+      args.printerPort !== undefined ? args.printerPort.trim() : undefined;
+    const trimmedStationId =
+      args.stationId !== undefined ? args.stationId.trim() : undefined;
 
     const effectiveType = args.printerType ?? existing.printerType;
     const effectiveUseFor = args.printerUseFor ?? existing.printerUseFor;
@@ -206,10 +252,17 @@ export const update = mutation({
       args.stationId !== undefined ? trimmedStationId : existing.stationId;
 
     // Validate conditional station requirement on effective values
-    validateStationRequirement(effectiveType, effectiveUseFor, effectiveStationId);
+    validateStationRequirement(
+      effectiveType,
+      effectiveUseFor,
+      effectiveStationId,
+    );
 
     // Validate active uniqueness of printerUseFor if changing role
-    if (args.printerUseFor !== undefined && args.printerUseFor !== existing.printerUseFor) {
+    if (
+      args.printerUseFor !== undefined &&
+      args.printerUseFor !== existing.printerUseFor
+    ) {
       await validateUniquePrinterUseFor(ctx, args.printerUseFor, args.id);
     }
 

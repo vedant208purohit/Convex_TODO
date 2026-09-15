@@ -4,7 +4,6 @@ import { ReactNode, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
-import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrderProcessesView } from "../components/order-processes/OrderProcessesView";
 import { OrganizationEmployees } from "../components/OrganizationEmployees";
 import { OrganizationFeatures } from "../components/OrganizationFeatures";
@@ -35,16 +34,6 @@ function OrganizationIcon({ className = "w-4 h-4" }: { className?: string }) {
       <path d="M9 12v.01" />
       <path d="M9 15v.01" />
       <path d="M9 18v.01" />
-    </svg>
-  );
-}
-
-function PrinterIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 6 2 18 2 18 9" />
-      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-      <rect x="6" y="14" width="12" height="8" rx="1" />
     </svg>
   );
 }
@@ -127,7 +116,6 @@ function LiveScreensIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 type SettingsTab =
   | "organization"
-  | "printers"
   | "features"
   | "staff"
   | "waiters"
@@ -145,7 +133,6 @@ interface SettingsNavOption {
 
 const SETTINGS_TABS: SettingsNavOption[] = [
   { id: "organization", label: "Organization", icon: <OrganizationIcon className="w-4 h-4" /> },
-  { id: "printers", label: "Printers", icon: <PrinterIcon className="w-4 h-4" /> },
   { id: "features", label: "Features", icon: <FeaturesIcon className="w-4 h-4" /> },
   { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
   { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
@@ -229,7 +216,6 @@ function SettingsContent() {
           {/* Right Panel: Settings Content Area */}
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
-            {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {activeTab === "waiters" && <OrganizationWaiters />}
@@ -237,7 +223,6 @@ function SettingsContent() {
             {activeTab === "payment" && <OrganizationPaymentModes />}
             {activeTab === "tables" && <OrganizationTablesSettings />}
             {activeTab !== "organization" &&
-              activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
