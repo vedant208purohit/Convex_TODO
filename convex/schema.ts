@@ -1018,4 +1018,36 @@ postpaidOrderRequests: defineTable({
     .index("by_storage_key", ["storageKey"])
     .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Provider Payment Transfers Domain Table (Marketplace Payout / Split Ledger)
+  providerPaymentTransfers: defineTable({
+    legacyId: v.optional(v.string()),
+    orderPaymentId: v.id("orderPayments"),
+    organizationId: v.optional(v.id("organizations")),
+
+    transferId: v.optional(v.string()),
+    transferAmount: v.number(), // Minor currency units (paise / cents integer)
+    transferStatus: v.union(
+      v.literal("created"),
+      v.literal("processed"),
+      v.literal("failed"),
+      v.literal("reversed"),
+      v.literal("pending")
+    ),
+    settlementStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("settled")
+      )
+    ),
+
+    errorMessage: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order_payment", ["orderPaymentId"])
+    .index("by_transfer_id", ["transferId"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
