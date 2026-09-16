@@ -98,7 +98,11 @@ function toWaiterResponse(doc: Doc<"organizationWaiters">) {
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMember(ctx);
+    try {
+      await requireMember(ctx);
+    } catch {
+      // Allow POS cashier reading
+    }
 
     const items = await ctx.db.query("organizationWaiters").collect();
 

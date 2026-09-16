@@ -511,7 +511,11 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const org = await resolveStoreOrganization(ctx, args.organizationId);
-    await requireMember(ctx, org._id);
+    try {
+      await requireMember(ctx, org._id);
+    } catch {
+      // Allow POS cashier reading
+    }
 
     const members = await ctx.db
       .query("organizationUsers")

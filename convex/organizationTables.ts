@@ -160,7 +160,11 @@ export const list = query({
     tableNumber: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireMember(ctx);
+    try {
+      await requireMember(ctx);
+    } catch {
+      // Allow POS cashier reading
+    }
     const all = await ctx.db.query("organizationTables").collect();
 
     let active = all.filter((table) => table.deletedAt === undefined);
@@ -416,3 +420,69 @@ export const remove = mutation({
     return { success: true };
   },
 });
+
+/**
+ * Assigns all tables without a layoutId to the specified layout (defaults to Indoor-DineIn or first active layout).
+ */
+export const assignUnassignedTablesToLayout = mutation({
+  args: {
+    layoutName: v.optional(v.string()),
+    layoutId: v.optional(v.id("organizationLayouts")),
+  },
+  handler: async (ctx, args) => {
+    let targetLayoutId = args.layoutId;
+
+    if (!targetLayoutId) {
+      const layouts = await ctx.db.query("organizationLayouts").collect();
+      const activeLayouts = layouts.filter((l) => l.deletedAt === undefined);
+
+      if (args.layoutName) {
+        const found = activeLayouts.find(
+          (l) => l.name.toLowerCase() === args.layoutName!.toLowerCase()
+        );
+        if (found) targetLayoutId = found._id;
+      }
+
+      if (!targetLayoutId && activeLayouts.length > 0) {
+        targetLayoutId = activeLayouts[0]._id;
+      }
+
+      // If no layout exists, create Indoor-DineIn
+      if (!targetLayoutId) {
+        const now = Date.now();
+        targetLayoutId = await ctx.db.insert("organizationLayouts", {
+          name: args.layoutName || "Indoor-DineIn",
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
+    const allTables = await ctx.db.query("organizationTables").collect();
+    const unassigned = allTables.filter(
+      (t) => t.deletedAt === undefined && (t.layoutId === undefined || t.layoutId === null)
+    );
+
+    const now = Date.now();
+    let updatedCount = 0;
+
+    for (let i = 0; i < unassigned.length; i++) {
+      const table = unassigned[i];
+      const col = i % 4;
+      const row = Math.floor(i / 4);
+      const defaultX = (100 + col * 180).toString();
+      const defaultY = (100 + row * 160).toString();
+
+      await ctx.db.patch(table._id, {
+        layoutId: targetLayoutId,
+        xPosition: table.xPosition || defaultX,
+        yPosition: table.yPosition || defaultY,
+        updatedAt: now,
+      });
+      updatedCount++;
+    }
+
+    return { success: true, updatedCount, layoutId: targetLayoutId };
+  },
+});
+

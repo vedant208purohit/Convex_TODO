@@ -290,6 +290,47 @@ export const createOrder = mutation({
       createdAt: now,
     });
 
+    // 8.6 Auto-sync customer to organizationUsers (matching defx-pos v1 set_order_user)
+    if (args.customerPhone || args.customerName) {
+      const cleanPhone = args.customerPhone?.replace(/\D/g, "");
+      const existingUsers = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+        .collect();
+
+      const existingCust = existingUsers.find((u) => {
+        if (!cleanPhone || !u.phone) return false;
+        const uDigits = u.phone.replace(/\D/g, "");
+        return uDigits.endsWith(cleanPhone) || cleanPhone.endsWith(uDigits);
+      });
+
+      if (existingCust) {
+        // Update customer profile details
+        await ctx.db.patch(existingCust._id, {
+          firstName: existingCust.firstName || args.customerName?.split(" ")[0],
+          lastName: existingCust.lastName || args.customerName?.split(" ").slice(1).join(" ") || undefined,
+          email: args.customerEmail || existingCust.email,
+          updatedAt: now,
+        });
+      } else if (cleanPhone && cleanPhone.length >= 4) {
+        // Insert new customer record
+        const nameParts = (args.customerName || "Customer").trim().split(" ");
+        const firstName = nameParts[0] || "Customer";
+        const lastName = nameParts.slice(1).join(" ") || undefined;
+        await ctx.db.insert("organizationUsers", {
+          organizationId: args.organizationId,
+          userId: "cust_" + now + "_" + Math.random().toString(36).slice(2, 7),
+          firstName,
+          lastName,
+          phone: args.customerPhone,
+          email: args.customerEmail,
+          userType: ["customer"],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
     // 9. Dine-In Table Locking & Postpaid Request Linking
     if (reqTableId) {
       const table = await ctx.db.get(reqTableId);
@@ -1138,15 +1179,33 @@ export const seedSampleOrders = mutation({
       }
     }
 
-    // 2. Ensure Sample Dine-In Tables exist
+    // 2. Ensure Sample Dine-In Tables exist & are linked to a Layout
     let tables = await ctx.db.query("organizationTables").collect();
 
     if (tables.length === 0) {
+      let defaultLayout = (await ctx.db.query("organizationLayouts").collect()).find(
+        (l) => l.deletedAt === undefined
+      );
+      if (!defaultLayout) {
+        const layoutId = await ctx.db.insert("organizationLayouts", {
+          name: "Indoor-DineIn",
+          createdAt: now,
+          updatedAt: now,
+        });
+        defaultLayout = await ctx.db.get(layoutId) || undefined;
+      }
+
       const tableNumbers = ["01", "02", "04", "06", "10"];
-      for (const tNum of tableNumbers) {
+      for (let i = 0; i < tableNumbers.length; i++) {
+        const tNum = tableNumbers[i];
+        const col = i % 4;
+        const row = Math.floor(i / 4);
         const tId = await ctx.db.insert("organizationTables", {
           tableNumber: tNum,
           seatingCapacity: 4,
+          layoutId: defaultLayout?._id,
+          xPosition: (100 + col * 180).toString(),
+          yPosition: (100 + row * 160).toString(),
           createdAt: now,
           updatedAt: now,
         });
