@@ -514,35 +514,61 @@ export default defineSchema({
     .index("by_table_number", ["tableNumber"])
     .index("by_legacy_id", ["legacyId"]),
 
-  // Postpaid Order Requests Domain Table
-  postpaidOrderRequests: defineTable({
-    tableId: v.id("organizationTables"),
-    userId: v.string(),
-    orderId: v.optional(v.id("orders")),
+  // Digital Storefront Images Domain Table (Migrated from legacy ssr_images)
+digitalStoreImages: defineTable({
+  legacyId: v.optional(v.string()),
 
-    status: v.union(
-      v.literal("requested"),
-      v.literal("approved"),
-      v.literal("declined"),
-      v.literal("completed")
-    ),
+  // Cloudflare R2 Asset Reference
+  assetId: v.id("organization_assets"),
 
-    statusActionById: v.optional(v.string()),
+  // Verified Image Type Classification
+  imageType: v.union(
+    v.literal("carousel_image"),
+    v.literal("about_us_image")
+  ),
 
-    otpHash: v.optional(v.string()),
-    otpExpiresAt: v.optional(v.number()),
-    otpVerifiedAt: v.optional(v.number()),
-    otpAttempts: v.optional(v.number()),
+  // Sequence display position (1-indexed, scoped per imageType)
+  position: v.number(),
 
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    deletedAt: v.optional(v.number()),
-  })
-    .index("by_table", ["tableId"])
-    .index("by_table_and_status", ["tableId", "status"])
-    .index("by_user", ["userId"])
-    .index("by_order", ["orderId"])
-    .index("by_status", ["status"]),
+  // Standard Timestamps & Soft Deletion
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_type_and_position", ["imageType", "position"])
+  .index("by_image_type", ["imageType"])
+  .index("by_asset", ["assetId"])
+  .index("by_legacy_id", ["legacyId"]),
+
+// Postpaid Order Requests Domain Table
+postpaidOrderRequests: defineTable({
+  tableId: v.id("organizationTables"),
+  userId: v.string(),
+  orderId: v.optional(v.id("orders")),
+
+  status: v.union(
+    v.literal("requested"),
+    v.literal("approved"),
+    v.literal("declined"),
+    v.literal("completed")
+  ),
+
+  statusActionById: v.optional(v.string()),
+
+  otpHash: v.optional(v.string()),
+  otpExpiresAt: v.optional(v.number()),
+  otpVerifiedAt: v.optional(v.number()),
+  otpAttempts: v.optional(v.number()),
+
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_table", ["tableId"])
+  .index("by_table_and_status", ["tableId", "status"])
+  .index("by_user", ["userId"])
+  .index("by_order", ["orderId"])
+  .index("by_status", ["status"]),
 
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({

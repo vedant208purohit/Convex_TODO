@@ -639,7 +639,7 @@ export const getOrganizationMenu = query({
         .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
 
-      const activeDefault = defaultMenus.find((m) => m.isActive);
+      const activeDefault = defaultMenus.find((m) => m.isActive) || defaultMenus[0];
       if (activeDefault) {
         targetMenuId = activeDefault._id;
       } else {
@@ -648,32 +648,34 @@ export const getOrganizationMenu = query({
           .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
           .filter((q) => q.eq(q.field("deletedAt"), undefined))
           .collect();
-        const firstActive = orgMenus.find((m) => m.isActive);
+        const firstActive = orgMenus.find((m) => m.isActive) || orgMenus[0];
         if (firstActive) {
           targetMenuId = firstActive._id;
         }
       }
     }
 
-    if (!targetMenuId) {
-      return [];
+    // 2. Query Categories for the resolved menu or organization
+    let categories: Array<any> = [];
+    if (targetMenuId) {
+      categories = await ctx.db
+        .query("categories")
+        .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
     }
 
-    const targetMenu = await ctx.db.get(targetMenuId);
-    if (!targetMenu || targetMenu.deletedAt !== undefined) {
-      return [];
+    if (categories.length === 0) {
+      categories = await ctx.db
+        .query("categories")
+        .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
     }
-
-    // 2. Query Categories for the resolved menu
-    const categories = await ctx.db
-      .query("categories")
-      .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
-      .collect();
 
     const activeCategories = categories
-      .filter((c) => c.published)
-      .sort((a, b) => a.position - b.position);
+      .filter((c) => c.published !== false)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
     const resultMenu: Array<any> = [];
     const searchQuery = args.search?.trim().toLowerCase();
@@ -694,7 +696,7 @@ export const getOrganizationMenu = query({
 
       for (const ci of activeCatItems) {
         const item = await ctx.db.get(ci.itemId);
-        if (!item || item.deletedAt !== undefined || !item.published) continue;
+        if (!item || item.deletedAt !== undefined || item.published === false || item.isAvailable === false) continue;
 
         // Apply attribute filters
         if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
@@ -939,6 +941,80 @@ export const getOrganizationMenu = query({
             position: category.position,
             published: category.published,
             items: serializedItems,
+          },
+        });
+      }
+    }
+
+    // Fallback: If no category-linked items were found, query all items for the organization directly
+    if (resultMenu.length === 0) {
+      const allOrgItems = await ctx.db
+        .query("items")
+        .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      const directSerializedItems: Array<any> = [];
+
+      for (const item of allOrgItems) {
+        if (item.published === false || item.isAvailable === false) continue;
+        if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
+        if (args.isSpicy !== undefined && item.isSpicy !== args.isSpicy) continue;
+        if (searchQuery) {
+          const matchName = item.name.toLowerCase().includes(searchQuery);
+          const matchDesc = item.description?.toLowerCase().includes(searchQuery) ?? false;
+          if (!matchName && !matchDesc) continue;
+        }
+
+        const imageUrl = await resolveAssetOrStorageUrl(ctx, {
+          assetId: item.imageAssetId,
+          storageId: item.imageStorageId,
+          organizationId: args.organizationId,
+        });
+
+        directSerializedItems.push({
+          category_item_id: item._id,
+          item: {
+            id: item._id,
+            name: item.name,
+            price: item.price,
+            display_price: (item.price / 100).toFixed(2),
+            description: item.description,
+            published: item.published ?? true,
+            is_available: item.isAvailable ?? true,
+            is_gst: item.isGst ?? false,
+            is_veg: item.isVeg ?? true,
+            is_spicy: item.isSpicy ?? false,
+            show_quantity: item.showQuantity ?? false,
+            quantity: item.quantity,
+            quantity_unit: item.quantityUnit,
+            sku_number: item.skuNumber,
+            mark_as_bestseller: item.markAsBestseller ?? false,
+            favourite_item: item.favouriteItem ?? false,
+            items_item_types: [],
+            tax_info: {
+              is_gst: item.isGst ?? false,
+              tax_mode: "exclusive",
+              total_tax_rate: 0,
+              tax_amount: "0.00",
+              base_price: (item.price / 100).toFixed(2),
+              final_price: (item.price / 100).toFixed(2),
+              components: [],
+            },
+          },
+          customizations: [],
+          item_image_url: imageUrl,
+        });
+      }
+
+      if (directSerializedItems.length > 0) {
+        resultMenu.push({
+          category: {
+            id: "all-items",
+            name: "All Items",
+            position: 0,
+            published: true,
+            items: directSerializedItems,
           },
         });
       }

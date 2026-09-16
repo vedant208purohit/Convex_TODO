@@ -140,16 +140,44 @@ export default function CashierPosPage() {
       categoryName: string;
       categoryId: string;
       item: any;
+      itemImageUrl?: string;
+      customizations?: any[];
     }> = [];
 
-    for (const cat of menuCategories) {
-      if (cat.items && Array.isArray(cat.items)) {
-        for (const it of cat.items) {
-          itemsList.push({
-            categoryName: cat.name,
-            categoryId: cat.id || cat._id,
-            item: it,
-          });
+    for (const catEntry of menuCategories) {
+      const catObj = catEntry?.category || catEntry;
+      const categoryName = catObj?.name || "General";
+      const categoryId = catObj?.id || catObj?._id || "";
+      const rawItems = catObj?.items || [];
+
+      if (Array.isArray(rawItems)) {
+        for (const rawIt of rawItems) {
+          const actualItem = rawIt?.item || rawIt;
+          const itemImageUrl =
+            rawIt?.item_image_url?.original ||
+            (typeof rawIt?.item_image_url === "string" ? rawIt.item_image_url : undefined) ||
+            actualItem?.imageUrl;
+          const customizations = rawIt?.customizations || actualItem?.customizations || [];
+
+          // Exclude unpublished and unavailable items matching defx-pos behavior
+          if (
+            actualItem.published === false ||
+            actualItem.is_published === false ||
+            actualItem.isAvailable === false ||
+            actualItem.is_available === false
+          ) {
+            continue;
+          }
+
+          if (actualItem && (actualItem.name || actualItem._id || actualItem.id)) {
+            itemsList.push({
+              categoryName,
+              categoryId,
+              item: actualItem,
+              itemImageUrl,
+              customizations,
+            });
+          }
         }
       }
     }
@@ -159,10 +187,11 @@ export default function CashierPosPage() {
   // Categories List
   const categoryNames = useMemo(() => {
     const list = ["All Items"];
-    if (menuCategories) {
-      for (const cat of menuCategories) {
-        if (cat.name && !list.includes(cat.name)) {
-          list.push(cat.name);
+    if (menuCategories && Array.isArray(menuCategories)) {
+      for (const catEntry of menuCategories) {
+        const catObj = catEntry?.category || catEntry;
+        if (catObj?.name && !list.includes(catObj.name)) {
+          list.push(catObj.name);
         }
       }
     }
@@ -179,11 +208,13 @@ export default function CashierPosPage() {
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
+      const itemName = entry.item.name?.toLowerCase() || "";
+      const skuNumber = entry.item.skuNumber?.toLowerCase() || "";
+      const catName = entry.categoryName?.toLowerCase() || "";
       return (
-        entry.item.name.toLowerCase().includes(q) ||
-        (entry.item.skuNumber &&
-          entry.item.skuNumber.toLowerCase().includes(q)) ||
-        entry.categoryName.toLowerCase().includes(q)
+        itemName.includes(q) ||
+        skuNumber.includes(q) ||
+        catName.includes(q)
       );
     });
   }, [allCatalogItems, selectedCategory, searchQuery]);
@@ -193,12 +224,11 @@ export default function CashierPosPage() {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
     return allCatalogItems
-      .filter(
-        (entry) =>
-          entry.item.name.toLowerCase().includes(q) ||
-          (entry.item.skuNumber &&
-            entry.item.skuNumber.toLowerCase().includes(q)),
-      )
+      .filter((entry) => {
+        const itemName = entry.item.name?.toLowerCase() || "";
+        const skuNumber = entry.item.skuNumber?.toLowerCase() || "";
+        return itemName.includes(q) || skuNumber.includes(q);
+      })
       .slice(0, 6);
   }, [allCatalogItems, searchQuery]);
 
@@ -983,141 +1013,130 @@ export default function CashierPosPage() {
             className="flex-1 flex flex-col bg-white rounded-2xl border border-[#e7e5e4] shadow-xs overflow-hidden relative"
             data-purpose="catalog-search-area"
           >
-            {/* Top Search and Item Insertion Bar */}
-            <div className="p-3.5 border-b border-[#e7e5e4] bg-white flex items-center gap-3 relative z-20">
-              {/* Search Input with Clear Button */}
-              <div className="relative flex-1">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8a7e75]">
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                </div>
-                <input
-                  ref={searchInputRef}
-                  className="w-full pl-9 pr-8 py-2 text-xs border border-[#141010] rounded-xl focus:ring-1 focus:ring-[#141010] focus:border-[#141010] font-medium text-[#141010] bg-white shadow-2xs focus:outline-none"
-                  placeholder="Search items by name or code (Shortcut: F1)"
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setIsAutocompleteOpen(Boolean(e.target.value.trim()));
-                    setHighlightedIndex(0);
-                  }}
-                  onFocus={() => {
-                    if (searchQuery.trim()) setIsAutocompleteOpen(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (isAutocompleteOpen && autocompleteMatches.length > 0) {
-                      if (e.key === "ArrowDown") {
-                        e.preventDefault();
-                        setHighlightedIndex((prev) =>
-                          prev < autocompleteMatches.length - 1 ? prev + 1 : 0,
-                        );
-                      } else if (e.key === "ArrowUp") {
-                        e.preventDefault();
-                        setHighlightedIndex((prev) =>
-                          prev > 0 ? prev - 1 : autocompleteMatches.length - 1,
-                        );
+            {/* Top Search Area */}
+            <div className="p-3.5 border-b border-[#e7e5e4] bg-white flex flex-col gap-2 relative z-20">
+              <span className="text-xs font-bold text-[#141010]">Search menu</span>
+              <div className="flex items-center gap-3">
+                {/* Search Input with Clear Button and Dropdown Icon */}
+                <div className="relative flex-1">
+                  <input
+                    ref={searchInputRef}
+                    className="w-full pl-3 pr-8 py-2 text-xs border border-[#141010] rounded-lg focus:ring-1 focus:ring-[#141010] focus:border-[#141010] font-medium text-[#141010] placeholder-[#a8a29e] bg-white shadow-2xs focus:outline-none"
+                    placeholder="Search via item name/number (Shortcut: F1)"
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsAutocompleteOpen(Boolean(e.target.value.trim()));
+                      setHighlightedIndex(0);
+                    }}
+                    onFocus={() => {
+                      if (searchQuery.trim()) setIsAutocompleteOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (isAutocompleteOpen && autocompleteMatches.length > 0) {
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setHighlightedIndex((prev) =>
+                            prev < autocompleteMatches.length - 1 ? prev + 1 : 0,
+                          );
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setHighlightedIndex((prev) =>
+                            prev > 0 ? prev - 1 : autocompleteMatches.length - 1,
+                          );
+                        } else if (e.key === "Enter") {
+                          e.preventDefault();
+                          const selectedMatch =
+                            autocompleteMatches[highlightedIndex];
+                          if (selectedMatch) {
+                            handleAddItemToCart(selectedMatch.item, inputQty);
+                            setIsAutocompleteOpen(false);
+                            setSearchQuery("");
+                          }
+                        }
                       } else if (e.key === "Enter") {
-                        e.preventDefault();
-                        const selectedMatch =
-                          autocompleteMatches[highlightedIndex];
-                        if (selectedMatch) {
-                          handleAddItemToCart(selectedMatch.item, inputQty);
-                          setIsAutocompleteOpen(false);
+                        if (filteredCatalogItems.length > 0) {
+                          handleAddItemToCart(
+                            filteredCatalogItems[0].item,
+                            inputQty,
+                          );
                           setSearchQuery("");
                         }
                       }
-                    } else if (e.key === "Enter") {
-                      if (filteredCatalogItems.length > 0) {
-                        handleAddItemToCart(
-                          filteredCatalogItems[0].item,
-                          inputQty,
-                        );
+                    }}
+                  />
+                  {/* Dropdown / Clear Icon */}
+                  {searchQuery ? (
+                    <button
+                      type="button"
+                      onClick={() => {
                         setSearchQuery("");
-                      }
+                        setIsAutocompleteOpen(false);
+                      }}
+                      className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[#8a7e75] hover:text-[#141010] cursor-pointer"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M6 18L18 6M6 6l12 12"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
+                      </svg>
+                    </button>
+                  ) : (
+                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-[#8a7e75]">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quantity Control */}
+                <div className="flex items-center border border-[#141010] rounded-lg bg-white px-2.5 py-1.5 space-x-1">
+                  <span className="text-xs text-[#141010] font-medium">Qty:</span>
+                  <input
+                    className="w-8 text-center text-xs font-bold text-[#141010] border-0 bg-transparent p-0 focus:ring-0 focus:outline-none"
+                    min="1"
+                    type="number"
+                    value={inputQty}
+                    onChange={(e) =>
+                      setInputQty(Math.max(1, parseInt(e.target.value) || 1))
                     }
-                  }}
-                />
-                {/* Clear 'x' button */}
-                {searchQuery && (
-                  <button
-                    type="button"
-                    onClick={() => {
+                  />
+                </div>
+
+                {/* Add Item Enter Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (autocompleteMatches.length > 0) {
+                      handleAddItemToCart(
+                        autocompleteMatches[highlightedIndex || 0].item,
+                        inputQty,
+                      );
                       setSearchQuery("");
                       setIsAutocompleteOpen(false);
-                    }}
-                    className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-[#8a7e75] hover:text-[#141010] cursor-pointer"
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        d="M6 18L18 6M6 6l12 12"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                      />
-                    </svg>
-                  </button>
-                )}
+                    } else if (filteredCatalogItems.length > 0) {
+                      handleAddItemToCart(
+                        filteredCatalogItems[0].item,
+                        inputQty,
+                      );
+                      setSearchQuery("");
+                    }
+                  }}
+                  className="px-5 py-2 bg-[#78716c] hover:bg-[#141010] active:scale-98 text-white text-xs font-medium rounded-lg shadow-2xs transition-colors flex items-center space-x-1.5 shrink-0 cursor-pointer"
+                >
+                  <span>Add item</span>
+                </button>
               </div>
-
-              {/* Quantity Control */}
-              <div className="flex items-center border border-[#e7e5e4] rounded-xl bg-[#fdf8f7] px-2 py-1 space-x-1.5">
-                <span className="text-[11px] text-[#8a7e75] font-medium">
-                  Qty:
-                </span>
-                <input
-                  className="w-10 text-center text-xs font-bold text-[#141010] border-0 bg-transparent p-0 focus:ring-0 focus:outline-none"
-                  min="1"
-                  type="number"
-                  value={inputQty}
-                  onChange={(e) =>
-                    setInputQty(Math.max(1, parseInt(e.target.value) || 1))
-                  }
-                />
-              </div>
-
-              {/* Add Item Enter Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (autocompleteMatches.length > 0) {
-                    handleAddItemToCart(
-                      autocompleteMatches[highlightedIndex || 0].item,
-                      inputQty,
-                    );
-                    setSearchQuery("");
-                    setIsAutocompleteOpen(false);
-                  } else if (filteredCatalogItems.length > 0) {
-                    handleAddItemToCart(
-                      filteredCatalogItems[0].item,
-                      inputQty,
-                    );
-                    setSearchQuery("");
-                  }
-                }}
-                className="px-5 py-2 bg-[#0c0a09] hover:bg-stone-900 text-white text-xs font-medium rounded-xl shadow-xs transition-colors flex items-center space-x-1.5 shrink-0 cursor-pointer"
-              >
-                <span>Add Item</span>
-                <span className="text-[10px] text-stone-400 bg-white/10 px-1 py-0.5 rounded font-mono">
-                  ↵
-                </span>
-              </button>
 
               {/* BEGIN: Autocomplete Dropdown */}
               {isAutocompleteOpen && autocompleteMatches.length > 0 && (
@@ -1165,7 +1184,7 @@ export default function CashierPosPage() {
                                   entry.item.isVeg
                                     ? "bg-emerald-600"
                                     : "bg-red-600"
-                                }`}
+                                  }`}
                               />
                             </span>
                             <span
@@ -1198,8 +1217,8 @@ export default function CashierPosPage() {
               {/* END: Autocomplete Dropdown */}
             </div>
 
-            {/* Category Filter Tabs Bar (Horizontal Scrollable) */}
-            <div className="px-3 py-2 border-b border-[#e7e5e4] bg-[#fdf8f7]/30 flex items-center space-x-1.5 overflow-x-auto hide-scrollbar z-10">
+            {/* Category Filter Tabs Bar (Wrapped matching defx-pos) */}
+            <div className="p-3 border-b border-[#e7e5e4] bg-white flex flex-wrap gap-2 z-10">
               {categoryNames.map((catName) => {
                 const isSelected = selectedCategory === catName;
                 return (
@@ -1207,10 +1226,10 @@ export default function CashierPosPage() {
                     key={catName}
                     type="button"
                     onClick={() => setSelectedCategory(catName)}
-                    className={`px-3.5 py-1 rounded-full text-xs transition-colors whitespace-nowrap cursor-pointer ${
+                    className={`px-3.5 py-1.5 rounded-lg text-xs transition-colors whitespace-nowrap cursor-pointer ${
                       isSelected
-                        ? "bg-[#0c0a09] text-white shadow-xs font-medium"
-                        : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                        ? "bg-[#141010] text-white border border-[#141010] font-semibold shadow-2xs"
+                        : "bg-white text-[#141010] border border-[#141010] hover:bg-neutral-50 font-normal"
                     }`}
                   >
                     {catName}
@@ -1221,13 +1240,13 @@ export default function CashierPosPage() {
 
             {/* Menu Items Catalog Table View */}
             <div
-              className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4]/70 px-4 py-2"
+              className="flex-1 overflow-y-auto divide-y divide-[#e7e5e4] px-4 py-1"
               data-purpose="catalog-item-list"
             >
               {/* Table Column Headers */}
-              <div className="flex items-center justify-between pb-2 pt-1 text-[10px] uppercase tracking-wider font-semibold text-[#8a7e75]">
-                <div className="w-24">Quantity</div>
-                <div className="flex-1 px-4">Menu Item Details</div>
+              <div className="flex items-center justify-between py-2 text-xs font-semibold text-[#8a7e75]">
+                <div className="w-28">Quantity</div>
+                <div className="flex-1 px-4">Item</div>
                 <div className="w-20 text-right">Price</div>
               </div>
 
@@ -1242,26 +1261,19 @@ export default function CashierPosPage() {
                     (ci) => ci.itemId === it._id || ci.itemId === it.id,
                   );
                   const currentCartQty = inCartItem?.quantity || 0;
-                  const priceFormatted = (it.price / 100).toFixed(2);
+                  const priceFormatted =
+                    it.price % 100 === 0
+                      ? (it.price / 100).toString()
+                      : (it.price / 100).toFixed(2);
 
                   return (
                     <div
                       key={it._id || it.id}
-                      className={`flex items-center justify-between py-2.5 transition-colors ${
-                        currentCartQty > 0
-                          ? "bg-[#fdf8f7]/60"
-                          : "hover:bg-[#fdf8f7]/40"
-                      }`}
+                      className="flex items-center justify-between py-3 hover:bg-[#fafaf9] transition-colors"
                     >
                       {/* Quantity Stepper */}
-                      <div className="w-24 flex items-center">
-                        <div
-                          className={`inline-flex items-center border rounded-md bg-white ${
-                            currentCartQty > 0
-                              ? "border-[#0c0a09]"
-                              : "border-[#e7e5e4]"
-                          }`}
-                        >
+                      <div className="w-28 flex items-center">
+                        <div className="inline-flex items-center border border-[#141010] rounded-md bg-white">
                           <button
                             type="button"
                             onClick={() =>
@@ -1270,31 +1282,17 @@ export default function CashierPosPage() {
                                 currentCartQty - 1,
                               )
                             }
-                            className={`w-5 h-5 flex items-center justify-center text-xs cursor-pointer ${
-                              currentCartQty > 0
-                                ? "text-[#141010] hover:bg-[#f5f5f5]"
-                                : "text-[#8a7e75] hover:text-[#141010]"
-                            }`}
+                            className="w-6 h-6 flex items-center justify-center text-sm font-medium text-[#141010] hover:bg-neutral-100 rounded-l border-r border-[#141010]/30 cursor-pointer"
                           >
                             -
                           </button>
-                          <span
-                            className={`w-6 text-center text-xs ${
-                              currentCartQty > 0
-                                ? "font-bold text-[#141010]"
-                                : "font-medium text-[#8a7e75]"
-                            }`}
-                          >
+                          <span className="w-7 text-center text-xs font-bold text-[#141010]">
                             {currentCartQty}
                           </span>
                           <button
                             type="button"
                             onClick={() => handleAddItemToCart(it, 1)}
-                            className={`w-5 h-5 flex items-center justify-center text-xs cursor-pointer ${
-                              currentCartQty > 0
-                                ? "text-[#141010] hover:bg-[#f5f5f5]"
-                                : "text-[#8a7e75] hover:text-[#141010]"
-                            }`}
+                            className="w-6 h-6 flex items-center justify-center text-sm font-medium text-[#141010] hover:bg-neutral-100 rounded-r border-l border-[#141010]/30 cursor-pointer"
                           >
                             +
                           </button>
@@ -1303,27 +1301,25 @@ export default function CashierPosPage() {
 
                       {/* Menu Item Details */}
                       <div
-                        className="flex-1 px-4 flex items-center space-x-2 cursor-pointer"
+                        className="flex-1 px-4 flex items-center space-x-2.5 cursor-pointer"
                         onClick={() => handleAddItemToCart(it, 1)}
                       >
                         <span
                           className={`w-3.5 h-3.5 rounded-xs border p-[1.5px] flex items-center justify-center shrink-0 ${
-                            it.isVeg ? "border-emerald-600" : "border-red-600"
+                            it.isVeg !== false
+                              ? "border-emerald-600"
+                              : "border-red-600"
                           }`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              it.isVeg ? "bg-emerald-600" : "bg-red-600"
+                              it.isVeg !== false
+                                ? "bg-emerald-600"
+                                : "bg-red-600"
                             }`}
                           />
                         </span>
-                        <span
-                          className={`text-xs ${
-                            currentCartQty > 0
-                              ? "font-semibold text-[#141010]"
-                              : "font-normal text-[#141010]"
-                          }`}
-                        >
+                        <span className="text-xs font-medium text-[#141010]">
                           {it.name}
                         </span>
                         {it.quantityUnit && (
@@ -1339,7 +1335,7 @@ export default function CashierPosPage() {
                       </div>
 
                       {/* Price */}
-                      <div className="w-20 text-right text-xs font-mono font-medium text-[#141010]">
+                      <div className="w-20 text-right text-xs font-semibold text-[#141010]">
                         ₹{priceFormatted}
                       </div>
                     </div>

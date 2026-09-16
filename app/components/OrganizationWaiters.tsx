@@ -242,14 +242,14 @@ export function OrganizationWaiters() {
           lastName: trimmedLast || undefined,
           waiterCode: trimmedCode || undefined,
         });
-        showToast(`Waiter profile updated successfully.`);
+        showToast(`Waiter updated successfully.`);
       } else {
         await createWaiter({
           firstName: trimmedFirst || undefined,
           lastName: trimmedLast || undefined,
           waiterCode: trimmedCode || undefined,
         });
-        showToast(`New floor server added successfully.`);
+        showToast(`New waiter added successfully.`);
       }
       handleCloseDrawer();
     } catch (err: any) {
@@ -257,7 +257,7 @@ export function OrganizationWaiters() {
       if (rawMsg.includes("is already taken")) {
         setFormError(`Hey! ${trimmedCode || "This code"} is already taken.`);
       } else {
-        setFormError(rawMsg || "Failed to save floor server profile.");
+        setFormError(rawMsg || "Failed to save waiter.");
       }
     } finally {
       setIsSubmitting(false);
@@ -278,7 +278,7 @@ export function OrganizationWaiters() {
       );
       setDeletingWaiter(null);
     } catch (err: any) {
-      showToast(err?.message || "Failed to delete floor server.", "error");
+      showToast(err?.message || "Failed to delete waiter.", "error");
     } finally {
       setIsDeleting(false);
     }
@@ -289,7 +289,7 @@ export function OrganizationWaiters() {
       <div className="py-16 text-center">
         <div className="w-8 h-8 mx-auto border-2 border-[#141010] border-t-transparent rounded-full animate-spin mb-3" />
         <p className="text-sm font-medium text-[#5e5e5e]">
-          Loading Floor Staff Roster...
+          Loading Waiters...
         </p>
       </div>
     );
@@ -319,11 +319,10 @@ export function OrganizationWaiters() {
               className="text-[30px] leading-tight font-normal text-[#141010]"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
-              Waiters &amp; Floor Servers
+              Waiters
             </h1>
             <p className="text-[14px] text-[#5e5e5e] mt-1 font-normal">
-              Manage floor staff, server badge codes, and table assignment
-              profiles.
+              Add and manage staff who take orders and serve customers at tables.
             </p>
           </div>
 
@@ -351,7 +350,7 @@ export function OrganizationWaiters() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name or waiter code..."
+              placeholder="Search by waiter name..."
               className="w-full pl-10 pr-4 py-2 bg-white border border-[#e7e5e4] rounded-lg text-[13px] text-[#141010] placeholder-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition shadow-xs"
             />
           </div>
@@ -359,7 +358,7 @@ export function OrganizationWaiters() {
           {/* Meta Count Badge */}
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <span className="text-[12px] text-[#5e5e5e]">
-              Total Active Waiters:
+              Active Waiters:
             </span>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-white text-[#141010] border border-[#e7e5e4] shadow-xs">
               {filteredWaiters.length} active
@@ -375,11 +374,11 @@ export function OrganizationWaiters() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f7f3f2] border-b border-[#e7e5e4] text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
-                <th className="py-3.5 px-6 w-36">BADGE / CODE</th>
-                <th className="py-3.5 px-6">WAITER NAME</th>
-                <th className="py-3.5 px-6 w-44">CREATED DATE</th>
+                <th className="py-3.5 px-6 w-36">WAITER CODE</th>
+                <th className="py-3.5 px-6">NAME</th>
+                <th className="py-3.5 px-6 w-44">ADDED ON</th>
                 <th className="py-3.5 px-6 w-32">STATUS</th>
-                <th className="py-3.5 px-6 w-28 text-right">ACTIONS</th>
+                <th className="py-3.5 px-6 w-28 text-right">ACTION</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#e7e5e4] text-[14px] text-[#1c1b1b]">
@@ -387,11 +386,31 @@ export function OrganizationWaiters() {
                 <tr>
                   <td
                     colSpan={5}
-                    className="py-12 text-center text-[#8a7e75] text-xs"
+                    className="py-12 text-center"
                   >
-                    {searchQuery
-                      ? `No floor servers found matching "${searchQuery}"`
-                      : "No floor servers registered yet."}
+                    {searchQuery ? (
+                      <span className="text-[#8a7e75] text-xs">
+                        No waiters found matching "{searchQuery}"
+                      </span>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-4">
+                        <p className="text-base font-semibold text-[#141010]">
+                          No waiters added yet
+                        </p>
+                        <p className="text-xs text-[#5e5e5e] mt-1 mb-4">
+                          Add your restaurant staff here so they can be assigned to tables and orders.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={handleOpenCreate}
+                          style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-full text-xs font-medium text-white bg-[#0c0a09] hover:bg-[#292524] transition shadow-xs cursor-pointer"
+                        >
+                          <PlusIcon className="w-3.5 h-3.5 text-white" />
+                          <span>+ Add Waiter</span>
+                        </button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ) : (
@@ -399,14 +418,14 @@ export function OrganizationWaiters() {
                   const fullName =
                     [waiter.firstName, waiter.lastName]
                       .filter(Boolean)
-                      .join(" ") || "Unnamed Server";
+                      .join(" ") || "Unnamed Waiter";
 
                   return (
                     <tr
                       key={waiter._id}
                       className="hover:bg-[#fdf8f7] transition-colors"
                     >
-                      {/* Badge / Code */}
+                      {/* Waiter Code */}
                       <td className="py-4 px-6 font-mono text-[13px]">
                         {waiter.waiterCode ? (
                           <span className="inline-block px-2.5 py-0.5 rounded bg-[#f1edec] text-[#141010] font-medium border border-[#e7e5e4]">
@@ -417,32 +436,51 @@ export function OrganizationWaiters() {
                         )}
                       </td>
 
-                      {/* Waiter Name */}
+                      {/* Name */}
                       <td className="py-4 px-6 font-medium text-[#141010]">
                         {fullName}
                       </td>
 
-                      {/* Created Date */}
+                      {/* Added On */}
                       <td className="py-4 px-6 text-[#5e5e5e] text-[13px]">
                         {formatDate(waiter.createdAt)}
                       </td>
 
                       {/* Status */}
                       <td className="py-4 px-6">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-[#10b981] border border-emerald-200/60">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
-                          Active
+                        <span
+                          title={
+                            (waiter as any).isActive === false
+                              ? "Inactive — Waiter is currently not available for assignments."
+                              : "Active — Waiter can be assigned to tables/orders."
+                          }
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                            (waiter as any).isActive === false
+                              ? "bg-stone-100 text-[#5e5e5e] border border-stone-200"
+                              : "bg-emerald-50 text-[#10b981] border border-emerald-200/60"
+                          }`}
+                        >
+                          <span
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              (waiter as any).isActive === false
+                                ? "bg-[#8a7e75]"
+                                : "bg-[#10b981]"
+                            }`}
+                          />
+                          {(waiter as any).isActive === false
+                            ? "Inactive"
+                            : "Active"}
                         </span>
                       </td>
 
-                      {/* Actions */}
+                      {/* Action */}
                       <td className="py-4 px-6 text-right">
                         <div className="inline-flex items-center gap-1.5 justify-end">
                           <button
                             type="button"
                             onClick={() => handleOpenEdit(waiter)}
                             className="p-1.5 text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-md transition cursor-pointer"
-                            title="Edit Server"
+                            title="Edit Waiter"
                           >
                             <EditIcon className="w-4 h-4" />
                           </button>
@@ -450,8 +488,8 @@ export function OrganizationWaiters() {
                             type="button"
                             onClick={() => setDeletingWaiter(waiter)}
                             className="p-1.5 text-[#5e5e5e] hover:text-[#ef4444] hover:bg-red-50 rounded-md transition cursor-pointer"
-                            title="Delete Server"
-                            aria-label="Delete Server"
+                            title="Delete Waiter"
+                            aria-label="Delete Waiter"
                           >
                             <TrashIcon className="w-4 h-4" />
                           </button>
@@ -464,16 +502,14 @@ export function OrganizationWaiters() {
             </tbody>
           </table>
 
-          {/* Table Footer / Attribution Notice */}
+          {/* Table Footer */}
           <div className="py-3 px-6 bg-[#fdf8f7] border-t border-[#e7e5e4] flex items-center justify-between text-[12px] text-[#8a7e75]">
             <div>
-              Sorted by created date (newest first) • Displaying{" "}
-              {filteredWaiters.length} of {waiters?.length ?? 0} active floor
-              servers
+              Sorted by added date (newest first) • Displaying{" "}
+              {filteredWaiters.length} of {waiters?.length ?? 0} active waiters
             </div>
             <div>
-              Floor server assignments affect Captain orders &amp; thermal
-              receipts
+              Waiter assignments apply to table orders and receipts
             </div>
           </div>
         </div>
@@ -504,12 +540,12 @@ export function OrganizationWaiters() {
                 className="text-[24px] font-normal text-[#141010] leading-snug"
                 style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
               >
-                {editingWaiter ? "Edit Floor Server" : "Add New Floor Server"}
+                {editingWaiter ? "Edit Waiter" : "Add Waiter"}
               </h2>
               <p className="text-[12px] text-[#5e5e5e] mt-0.5">
                 {editingWaiter
-                  ? "Modify waiter identification details and active badge allocation."
-                  : "Register a waiter profile for dining table assignment and KOT orders."}
+                  ? "Update waiter details and code."
+                  : "Add a waiter so they can be assigned to tables and orders."}
               </p>
             </div>
             <button
@@ -529,58 +565,51 @@ export function OrganizationWaiters() {
           >
             {/* Field 1: First Name (Required) */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
-                  FIRST NAME <span className="text-[#ef4444]">*</span>
-                </label>
-                <span className="text-[11px] text-[#8a7e75]">
-                  Required • max 50 chars
-                </span>
-              </div>
+              <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
+                FIRST NAME <span className="text-[#ef4444]">*</span>
+              </label>
               <input
                 type="text"
                 maxLength={50}
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
-                placeholder="Enter first name"
+                placeholder="e.g. Rahul"
                 className="w-full px-3.5 py-2.5 bg-white border border-[#e7e5e4] rounded-lg text-[14px] text-[#141010] placeholder-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition"
               />
+              <p className="text-[12px] text-[#8a7e75]">
+                Enter the waiter's first name.
+              </p>
             </div>
 
             {/* Field 2: Last Name (Optional) */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
-                  LAST NAME
-                </label>
-                <span className="text-[11px] text-[#8a7e75]">Optional</span>
-              </div>
+              <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
+                LAST NAME
+              </label>
               <input
                 type="text"
                 maxLength={50}
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
-                placeholder="Enter last name"
+                placeholder="e.g. Patel"
                 className="w-full px-3.5 py-2.5 bg-white border border-[#e7e5e4] rounded-lg text-[14px] text-[#141010] placeholder-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition"
               />
+              <p className="text-[12px] text-[#8a7e75]">
+                Optional.
+              </p>
             </div>
 
-            {/* Field 3: Waiter Code / Badge ID (Optional) */}
+            {/* Field 3: Waiter Code (Optional) */}
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
-                  WAITER CODE / BADGE ID
-                </label>
-                <span className="text-[11px] text-[#8a7e75]">
-                  Optional • max 20 chars
-                </span>
-              </div>
+              <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
+                WAITER CODE
+              </label>
               <input
                 type="text"
                 maxLength={20}
                 value={waiterCode}
                 onChange={(e) => setWaiterCode(e.target.value)}
-                placeholder="e.g. W-04 or #14"
+                placeholder="e.g. W-04"
                 className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-[14px] font-mono text-[#141010] placeholder-[#928c8a] focus:outline-none transition ${
                   formError
                     ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500"
@@ -588,12 +617,11 @@ export function OrganizationWaiters() {
                 }`}
               />
               <p className="text-[12px] text-[#8a7e75] leading-relaxed pt-1">
-                Unique short code printed on kitchen order tickets (KOT) &amp;
-                receipts. Leave blank if not using badge codes.
+                A short code used to identify the waiter on orders and receipts. Leave this blank if you don't use waiter codes.
               </p>
             </div>
 
-            {/* Form Error Banner (Duplicate Code Handling) */}
+            {/* Form Error Banner */}
             {formError && (
               <div className="p-3.5 bg-red-50/80 border border-red-200 rounded-lg text-xs text-red-700 space-y-1">
                 <div className="flex items-center gap-1.5 font-semibold text-red-800">
@@ -601,26 +629,19 @@ export function OrganizationWaiters() {
                   <span>{formError}</span>
                 </div>
                 <p className="text-[11px] text-red-600 pl-5 leading-normal">
-                  Each active floor waiter requires an exclusive badge code for
-                  thermal printing &amp; register assignment.
+                  Each active waiter requires a unique waiter code.
                 </p>
               </div>
             )}
 
-            {/* Attribution Note Box */}
+            {/* Information Box */}
             <div className="p-3.5 rounded-lg bg-[#f7f3f2] border border-[#eadfd6] text-[12px] text-[#5e5e5e] space-y-1">
               <div className="font-medium text-[#141010] flex items-center gap-1.5">
                 <InfoIcon className="w-3.5 h-3.5 text-[#8a7e75]" />
-                <span>
-                  {editingWaiter
-                    ? "Record Attribution"
-                    : "Floor Staff Attribution Note"}
-                </span>
+                <span>About Waiter Codes</span>
               </div>
               <p className="leading-relaxed">
-                {editingWaiter
-                  ? `Created on ${formatDate(editingWaiter.createdAt)}. Updating this profile updates live terminal rosters immediately while keeping prior order audit records intact.`
-                  : "This profile is strictly used for order taker tagging, table coverage, and cashier receipts. Sensitive data (passwords, PINs, phone numbers) are never stored here."}
+                This code helps identify which waiter handled the order or table. You don't need to add a code if your restaurant doesn't use waiter codes.
               </p>
             </div>
           </form>
@@ -650,7 +671,7 @@ export function OrganizationWaiters() {
                 </>
               ) : (
                 <span className="text-white" style={{ color: "#ffffff" }}>
-                  {editingWaiter ? "Update Waiter" : "Save Waiter"}
+                  {editingWaiter ? "Save Changes" : "Add Waiter"}
                 </span>
               )}
             </button>
@@ -682,10 +703,10 @@ export function OrganizationWaiters() {
                     className="text-[24px] font-normal text-[#141010] leading-snug"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    Delete Floor Server?
+                    Delete Waiter?
                   </h3>
                   <p className="text-[12px] text-[#8a7e75] font-medium">
-                    Permanently remove operational waiter profile
+                    Remove waiter from your staff list
                   </p>
                 </div>
               </div>
@@ -715,33 +736,32 @@ export function OrganizationWaiters() {
                 ? This action cannot be undone.
               </p>
 
-              {/* Authoritative Backend Rules List */}
+              {/* Rules List */}
               <div className="p-4 rounded-xl bg-[#f7f3f2] border border-[#eadfd6] space-y-2.5 text-[13px] text-[#4e4543]">
                 <div className="flex items-start gap-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
                   <span>
-                    This server profile will be permanently removed from your
-                    active staff roster.
+                    This waiter will be permanently removed from your active staff list.
                   </span>
                 </div>
                 <div className="flex items-start gap-2.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
                   <span>
-                    The server will no longer appear in POS terminal station
-                    logins or order assignment dropdowns.
+                    They will no longer appear in order assignment dropdowns.
                   </span>
                 </div>
-                <div className="flex items-start gap-2.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
-                  <span>
-                    Code{" "}
-                    <strong className="font-mono text-[#141010]">
-                      "{deletingWaiter.waiterCode || "—"}"
-                    </strong>{" "}
-                    will be immediately released and available for reassignment
-                    to new staff.
-                  </span>
-                </div>
+                {deletingWaiter.waiterCode && (
+                  <div className="flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#8a7e75] mt-1.5 shrink-0" />
+                    <span>
+                      Code{" "}
+                      <strong className="font-mono text-[#141010]">
+                        "{deletingWaiter.waiterCode}"
+                      </strong>{" "}
+                      will be released and can be assigned to new staff.
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -762,7 +782,7 @@ export function OrganizationWaiters() {
                 className="px-5 py-2 rounded-full text-[13px] font-medium text-white bg-[#ef4444] hover:bg-[#dc2626] active:scale-[0.98] transition shadow-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <TrashIcon className="w-3.5 h-3.5" />
-                <span>{isDeleting ? "Deleting..." : "Delete Server"}</span>
+                <span>{isDeleting ? "Deleting..." : "Delete Waiter"}</span>
               </button>
             </div>
           </div>
@@ -771,3 +791,4 @@ export function OrganizationWaiters() {
     </div>
   );
 }
+

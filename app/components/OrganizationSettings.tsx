@@ -99,6 +99,67 @@ const PHONE_CODE_OPTIONS = [
   { code: "+61", country: "Australia" },
 ];
 
+function parseTimeToDayMinutes(timeStr: string): number {
+  if (!timeStr || typeof timeStr !== "string") return 0;
+  const clean = timeStr.trim();
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2], 10);
+    const isPM = match12[3].toUpperCase() === "PM";
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+  const match24 = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+  }
+  const parsed = Date.parse(clean);
+  if (!isNaN(parsed)) {
+    const d = new Date(parsed);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+  return 0;
+}
+
+function checkScheduleOverlapFrontend(schedule: any): string | null {
+  if (!schedule || typeof schedule !== "object") return null;
+
+  for (const day of Object.keys(schedule)) {
+    const dayData = schedule[day];
+    if (!dayData || !dayData.is_open || !Array.isArray(dayData.hours) || dayData.hours.length <= 1) {
+      continue;
+    }
+
+    const parsedSlots: Array<{ start: number; end: number; slotIdx: number }> = [];
+
+    for (let idx = 0; idx < dayData.hours.length; idx++) {
+      const h = dayData.hours[idx];
+      if (!h || !h.start_time || !h.end_time) continue;
+
+      const s = parseTimeToDayMinutes(h.start_time);
+      const e = parseTimeToDayMinutes(h.end_time);
+
+      if (e <= s) {
+        return `${day}: Slot ${idx + 1} end time (${h.end_time}) must be after start time (${h.start_time}).`;
+      }
+
+      parsedSlots.push({ start: s, end: e, slotIdx: idx });
+    }
+
+    parsedSlots.sort((a, b) => a.start - b.start);
+
+    for (let i = 0; i < parsedSlots.length - 1; i++) {
+      if (parsedSlots[i + 1].start < parsedSlots[i].end) {
+        return `${day}: Slot ${parsedSlots[i + 1].slotIdx + 1} overlaps with Slot ${parsedSlots[i].slotIdx + 1}. Please adjust slot times to prevent clashing operational intervals.`;
+      }
+    }
+  }
+
+  return null;
+}
+
 function defaultSchedule(): WeeklySchedule {
   const schedule: WeeklySchedule = {};
   DAYS.forEach((day) => {
@@ -909,6 +970,12 @@ export function OrganizationSettings() {
       return;
     }
 
+    const scheduleConflict = checkScheduleOverlapFrontend(formData.schedule);
+    if (scheduleConflict) {
+      setErrorMessage(`Schedule Conflict: ${scheduleConflict}`);
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -941,32 +1008,32 @@ export function OrganizationSettings() {
       };
 
       if (formData.isGst) {
-        if (formData.gstDocumentAssetId) {
-          updatePayload.gstDocumentAssetId = formData.gstDocumentAssetId;
-        } else if (formData.gstDocumentStorageId) {
-          updatePayload.gstDocumentStorageId = formData.gstDocumentStorageId;
-        } else {
+        if (formData.gstDocumentAssetId && formData.gstDocumentAssetId.trim()) {
+          updatePayload.gstDocumentAssetId = formData.gstDocumentAssetId.trim();
+        } else if (formData.gstDocumentStorageId && formData.gstDocumentStorageId.trim()) {
+          updatePayload.gstDocumentStorageId = formData.gstDocumentStorageId.trim();
+        } else if ((org as any)?.gstDocumentAssetId || (org as any)?.gstDocumentStorageId || (org as any)?.gstDocumentUrl) {
           updatePayload.gstDocumentUrl = "";
           updatePayload.gstDocumentAssetId = "";
           updatePayload.gstDocumentStorageId = "";
         }
-      } else {
+      } else if ((org as any)?.gstDocumentAssetId || (org as any)?.gstDocumentStorageId || (org as any)?.gstDocumentUrl) {
         updatePayload.gstDocumentUrl = "";
         updatePayload.gstDocumentAssetId = "";
         updatePayload.gstDocumentStorageId = "";
       }
 
       if (formData.isFssai) {
-        if (formData.fssaiDocumentAssetId) {
-          updatePayload.fssaiDocumentAssetId = formData.fssaiDocumentAssetId;
-        } else if (formData.fssaiDocumentStorageId) {
-          updatePayload.fssaiDocumentStorageId = formData.fssaiDocumentStorageId;
-        } else {
+        if (formData.fssaiDocumentAssetId && formData.fssaiDocumentAssetId.trim()) {
+          updatePayload.fssaiDocumentAssetId = formData.fssaiDocumentAssetId.trim();
+        } else if (formData.fssaiDocumentStorageId && formData.fssaiDocumentStorageId.trim()) {
+          updatePayload.fssaiDocumentStorageId = formData.fssaiDocumentStorageId.trim();
+        } else if ((org as any)?.fssaiDocumentAssetId || (org as any)?.fssaiDocumentStorageId || (org as any)?.fssaiDocumentUrl) {
           updatePayload.fssaiDocumentUrl = "";
           updatePayload.fssaiDocumentAssetId = "";
           updatePayload.fssaiDocumentStorageId = "";
         }
-      } else {
+      } else if ((org as any)?.fssaiDocumentAssetId || (org as any)?.fssaiDocumentStorageId || (org as any)?.fssaiDocumentUrl) {
         updatePayload.fssaiDocumentUrl = "";
         updatePayload.fssaiDocumentAssetId = "";
         updatePayload.fssaiDocumentStorageId = "";

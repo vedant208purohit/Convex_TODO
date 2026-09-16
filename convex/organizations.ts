@@ -455,8 +455,40 @@ function normalizeAllDayHours(operationTiming: any): any {
   return updatedTiming;
 }
 
+// Helper: Robust Time Parser (Minutes of Day: 0 to 1439)
+function parseTimeToDayMinutes(timeStr: string): number {
+  if (!timeStr || typeof timeStr !== "string") return 0;
+  const clean = timeStr.trim();
+
+  // 1. Try 12-hour AM/PM format (e.g., "11:00 AM", "4:30 PM")
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2], 10);
+    const isPM = match12[3].toUpperCase() === "PM";
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // 2. Try 24-hour format (e.g., "11:00", "16:30")
+  const match24 = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+  }
+
+  // 3. Try Date ISO / GMT string parsing
+  const parsed = Date.parse(clean);
+  if (!isNaN(parsed)) {
+    const d = new Date(parsed);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  return 0;
+}
+
 // Helper: Operating Hours Overlap Validation
-function validateOperatingHoursOverlap(operationTiming: any): void {
+export function validateOperatingHoursOverlap(operationTiming: any): void {
   if (!operationTiming || typeof operationTiming !== "object") return;
 
   for (const dayKey of Object.keys(operationTiming)) {
@@ -471,26 +503,8 @@ function validateOperatingHoursOverlap(operationTiming: any): void {
     for (const hourObj of hours) {
       if (!hourObj.start_time || !hourObj.end_time) continue;
 
-      let startMs: number;
-      let endMs: number;
-
-      if (
-        hourObj.start_time.includes("T") ||
-        hourObj.start_time.includes("GMT") ||
-        hourObj.start_time.includes(" ")
-      ) {
-        startMs = new Date(hourObj.start_time).getTime();
-        endMs = new Date(hourObj.end_time).getTime();
-      } else {
-        const [sh, sm] = hourObj.start_time.split(":").map(Number);
-        const [eh, em] = hourObj.end_time.split(":").map(Number);
-        startMs = sh * 60 + sm;
-        endMs = eh * 60 + em;
-      }
-
-      if (isNaN(startMs) || isNaN(endMs)) {
-        throw new Error("invalid time format detected");
-      }
+      const startMs = parseTimeToDayMinutes(hourObj.start_time);
+      const endMs = parseTimeToDayMinutes(hourObj.end_time);
 
       parsedSlots.push({ start: startMs, end: endMs });
     }
@@ -795,16 +809,16 @@ export const create = mutation({
     inclusiveGst: v.optional(v.boolean()),
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
-    gstDocumentStorageId: v.optional(v.id("_storage")),
-    gstDocumentAssetId: v.optional(v.id("organization_assets")),
+    gstDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    gstDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
     gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
     isFssai: v.optional(v.boolean()),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
-    fssaiDocumentStorageId: v.optional(v.id("_storage")),
-    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
+    fssaiDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    fssaiDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
     fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
@@ -1026,16 +1040,16 @@ export const create = mutation({
       inclusiveGst,
       separateGst,
       gstNumber: args.gstNumber,
-      gstDocumentStorageId: args.gstDocumentStorageId,
-      gstDocumentAssetId: args.gstDocumentAssetId,
+      gstDocumentStorageId: args.gstDocumentStorageId ? (args.gstDocumentStorageId as any) : undefined,
+      gstDocumentAssetId: args.gstDocumentAssetId ? (ctx.db.normalizeId("organization_assets", args.gstDocumentAssetId) ?? (args.gstDocumentAssetId as any)) : undefined,
       gstDocumentUrl: args.gstDocumentUrl,
 
       // FSSAI Compliance
       isFssai,
       fssaiRegistrationNumber: args.fssaiRegistrationNumber,
       expiryDate: args.expiryDate,
-      fssaiDocumentStorageId: args.fssaiDocumentStorageId,
-      fssaiDocumentAssetId: args.fssaiDocumentAssetId,
+      fssaiDocumentStorageId: args.fssaiDocumentStorageId ? (args.fssaiDocumentStorageId as any) : undefined,
+      fssaiDocumentAssetId: args.fssaiDocumentAssetId ? (ctx.db.normalizeId("organization_assets", args.fssaiDocumentAssetId) ?? (args.fssaiDocumentAssetId as any)) : undefined,
       fssaiDocumentUrl: args.fssaiDocumentUrl,
 
       // Currency & Regional Timezone
