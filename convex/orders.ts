@@ -1,5 +1,6 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+import { Id } from "./_generated/dataModel";
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -429,8 +430,35 @@ export const getOrderDetails = query({
     const remainingDue = Math.max(0, order.totalAmount - netPaid);
     const refundableAmount = Math.max(0, totalCredit - totalDebit);
 
+    // Look up active survey attempt if any exists
+    let surveyQrUrl: string | null = null;
+    const activeSurvey = await ctx.db
+      .query("surveys")
+      .withIndex("by_active", (q) => q.eq("active", true))
+      .first();
+
+    if (activeSurvey) {
+      const attempt = await ctx.db
+        .query("surveyAttempts")
+        .withIndex("by_order_survey", (q) =>
+          q.eq("orderId", order._id).eq("surveyId", activeSurvey._id)
+        )
+        .first();
+
+      if (attempt) {
+        const baseUrl =
+          process.env.FRONTEND_URL ||
+          process.env.PUBLIC_URL ||
+          "";
+        surveyQrUrl = baseUrl
+          ? `${baseUrl.replace(/\/$/, "")}/attempts/${attempt._id}`
+          : `/attempts/${attempt._id}`;
+      }
+    }
+
     return {
       ...order,
+      surveyQrUrl,
       totalCredit,
       totalDebit,
       netPaid,
@@ -456,6 +484,31 @@ export const getOrderDetails = query({
     };
   },
 });
+
+/**
+ * Cascading cleanup helper: deletes all survey attempts and answers associated with an order.
+ */
+export async function deleteOrderSurveys(
+  ctx: MutationCtx,
+  orderId: Id<"orders">
+) {
+  const attempts = await ctx.db
+    .query("surveyAttempts")
+    .withIndex("by_order_id", (q) => q.eq("orderId", orderId))
+    .collect();
+
+  for (const attempt of attempts) {
+    const answers = await ctx.db
+      .query("surveyAnswers")
+      .withIndex("by_attempt_id", (q) => q.eq("attemptId", attempt._id))
+      .collect();
+
+    for (const a of answers) {
+      await ctx.db.delete(a._id);
+    }
+    await ctx.db.delete(attempt._id);
+  }
+}
 
 // ==========================================
 // 3. ORDER STATUS ADVANCEMENT & KDS MUTATIONS
@@ -1180,6 +1233,7 @@ export const seedSampleOrders = mutation({
         .collect();
       for (const oa of activitiesOfOrder) await ctx.db.delete(oa._id);
 
+      await deleteOrderSurveys(ctx, eo._id);
       await ctx.db.delete(eo._id);
     }
 

@@ -1018,4 +1018,85 @@ postpaidOrderRequests: defineTable({
     .index("by_storage_key", ["storageKey"])
     .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // ==========================================
+  // CUSTOMER FEEDBACK & RAPIDFIRE SURVEY DOMAIN
+  // ==========================================
+
+  surveys: defineTable({
+    legacyId: v.optional(v.string()),
+    name: v.string(),
+    introduction: v.optional(v.string()),
+    afterSurveyContent: v.optional(v.string()),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["active"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  surveyQuestions: defineTable({
+    legacyId: v.optional(v.string()),
+    surveyId: v.id("surveys"),
+    type: v.union(
+      v.literal("numeric"),
+      v.literal("checkbox"),
+      v.literal("radio"),
+      v.literal("select"),
+      v.literal("short"),
+      v.literal("long"),
+      v.literal("date")
+    ),
+    questionText: v.string(),
+    defaultText: v.optional(v.string()),
+    placeholder: v.optional(v.string()),
+    position: v.number(),
+    answerOptions: v.optional(v.array(v.string())),
+    validationRules: v.optional(
+      v.object({
+        presence: v.optional(v.boolean()),
+        minimumLength: v.optional(v.number()),
+        maximumLength: v.optional(v.number()),
+        greaterThanOrEqualTo: v.optional(v.number()),
+        lessThanOrEqualTo: v.optional(v.number()),
+      })
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_survey_id", ["surveyId"])
+    .index("by_survey_position", ["surveyId", "position"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  surveyAttempts: defineTable({
+    legacyId: v.optional(v.string()),
+    surveyId: v.id("surveys"),
+    orderId: v.optional(v.id("orders")),
+    customerId: v.optional(v.string()),
+    published: v.boolean(),
+    submittedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_survey_id", ["surveyId"])
+    .index("by_survey_published", ["surveyId", "published"])
+    .index("by_order_id", ["orderId"])
+    .index("by_order_survey", ["orderId", "surveyId"])
+    .index("by_customer_id", ["customerId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  surveyAnswers: defineTable({
+    legacyId: v.optional(v.string()),
+    attemptId: v.id("surveyAttempts"),
+    questionId: v.id("surveyQuestions"),
+    answerText: v.optional(v.string()),
+    selectedOptions: v.optional(v.array(v.string())),
+    numericValue: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_attempt_id", ["attemptId"])
+    .index("by_attempt_question", ["attemptId", "questionId"])
+    .index("by_question_id", ["questionId"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });
