@@ -396,8 +396,8 @@ function SettingsContent() {
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${
                       isSelected
-                       ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
-                       : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
+                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
+                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
                     }`}
                   >
                     <span className="w-5 flex items-center justify-center text-[#5e5e5e]">
