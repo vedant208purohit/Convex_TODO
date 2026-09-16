@@ -251,6 +251,7 @@ import { requireAuth, requireMember, requireAdmin } from "./organizationUsers";
 import { initializeDefaultsHelper } from "./organizationFeatures";
 import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
 import { resolveAssetOrStorageUrl } from "./assetResolver";
+import { seedDefaultProcessNotifications } from "./processNotifications";
 
 
 
@@ -1894,7 +1895,10 @@ export const initializeStore = mutation({
       }
     }
 
-    // 10. Default Organization Queue Configurations Seeding (Idempotent)
+    // 10. Default Process Notifications Seeding (Idempotent)
+    await seedDefaultProcessNotifications(ctx);
+
+    // 11. Default Organization Queue Configurations Seeding (Idempotent)
     if (org.isQueue) {
       const allConfigs = await ctx.db.query("organizationQueueConfigurations").collect();
       const activeConfig = allConfigs.find((c) => c.deletedAt === undefined);

@@ -37,6 +37,7 @@ import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
 import type * as paymentModes from "../paymentModes.js";
 import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
+import type * as processNotifications from "../processNotifications.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
 import type * as taxation from "../taxation.js";
@@ -77,6 +78,7 @@ declare const fullApi: ApiFromModules<{
   organizations: typeof organizations;
   paymentModes: typeof paymentModes;
   postpaidOrderRequests: typeof postpaidOrderRequests;
+  processNotifications: typeof processNotifications;
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
   taxation: typeof taxation;
