@@ -11,7 +11,15 @@ import { Id, Doc } from "../../convex/_generated/dataModel";
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -20,7 +28,15 @@ function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function EditIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
     </svg>
   );
@@ -28,7 +44,15 @@ function EditIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="3 6 5 6 21 6" />
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
       <line x1="10" y1="11" x2="10" y2="17" />
@@ -39,7 +63,15 @@ function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="11" cy="11" r="8" />
       <line x1="21" y1="21" x2="16.65" y2="16.65" />
     </svg>
@@ -48,16 +80,36 @@ function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
   );
 }
 
-function ShieldAdminIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+function ShieldAdminIcon({
+  className = "w-3.5 h-3.5",
+}: {
+  className?: string;
+}) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
     </svg>
   );
@@ -65,7 +117,15 @@ function ShieldAdminIcon({ className = "w-3.5 h-3.5" }: { className?: string }) 
 
 function PosIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="2" y="5" width="20" height="14" rx="2" />
       <line x1="2" y1="10" x2="22" y2="10" />
     </svg>
@@ -74,7 +134,15 @@ function PosIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function TableIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M3 7h18M3 7v10M21 7v10M7 17v4M17 17v4" />
     </svg>
   );
@@ -82,7 +150,15 @@ function TableIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function RoomServiceIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2 18h20M4 18a8 8 0 0 1 16 0M12 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z" />
     </svg>
   );
@@ -90,15 +166,35 @@ function RoomServiceIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ChefHatIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M6 13.8V4a2 2 0 0 1 4 0v9.8M14 13.8V4a2 2 0 0 1 4 0v9.8M10 13.8V4M6 18h12v3H6z" />
     </svg>
   );
 }
 
-function ComputerWorkstationIcon({ className = "w-4 h-4" }: { className?: string }) {
+function ComputerWorkstationIcon({
+  className = "w-4 h-4",
+}: {
+  className?: string;
+}) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="2" y="3" width="20" height="14" rx="2" />
       <line x1="8" y1="21" x2="16" y2="21" />
       <line x1="12" y1="17" x2="12" y2="21" />
@@ -108,7 +204,15 @@ function ComputerWorkstationIcon({ className = "w-4 h-4" }: { className?: string
 
 function PersonSearchIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="10" cy="8" r="4" />
       <path d="M2 20a8 8 0 0 1 14 0" />
       <circle cx="17" cy="17" r="3" />
@@ -119,7 +223,15 @@ function PersonSearchIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function DashboardIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="3" width="7" height="9" rx="1" />
       <rect x="14" y="3" width="7" height="5" rx="1" />
       <rect x="14" y="12" width="7" height="9" rx="1" />
@@ -130,7 +242,15 @@ function DashboardIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ReceiptLongIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 2v20l3-2 3 2 3-2 3 2 3-2 3 2V2l-3 2-3-2-3 2-3-2-3 2z" />
       <line x1="8" y1="7" x2="16" y2="7" />
       <line x1="8" y1="11" x2="16" y2="11" />
@@ -141,7 +261,15 @@ function ReceiptLongIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function MenuBookIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
       <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
     </svg>
@@ -150,7 +278,15 @@ function MenuBookIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function SoupKitchenIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9z" />
       <path d="M7 8V4M12 8V4M17 8V4" />
     </svg>
@@ -159,7 +295,15 @@ function SoupKitchenIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function GroupsIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -170,7 +314,15 @@ function GroupsIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function InventoryIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
       <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
       <line x1="12" y1="22.08" x2="12" y2="12" />
@@ -180,7 +332,15 @@ function InventoryIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function BarChartIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="12" y1="20" x2="12" y2="10" />
       <line x1="18" y1="20" x2="18" y2="4" />
       <line x1="6" y1="20" x2="6" y2="16" />
@@ -190,7 +350,15 @@ function BarChartIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function RateReviewIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       <line x1="9" y1="10" x2="15" y2="10" />
     </svg>
@@ -199,7 +367,15 @@ function RateReviewIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -209,7 +385,15 @@ function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function EnvelopeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
       <polyline points="22,6 12,13 2,6" />
     </svg>
@@ -218,7 +402,15 @@ function EnvelopeIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PhoneIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
     </svg>
   );
@@ -226,7 +418,15 @@ function PhoneIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function CheckIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
@@ -234,7 +434,15 @@ function CheckIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function LockIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
       <path d="M7 11V7a5 5 0 0 1 10 0v4" />
     </svg>
@@ -303,24 +511,53 @@ const STAFF_ROLE_CARDS = [
 ];
 
 const MODULE_ACCESS_CARDS = [
-  { key: "customer_data", label: "Customer Data", desc: "Profiles & CRM", icon: PersonSearchIcon },
-  { key: "dashboard", label: "Dashboard", desc: "Store overview", icon: DashboardIcon },
-  { key: "orders", label: "Orders", desc: "Live orders & logs", icon: ReceiptLongIcon },
+  {
+    key: "customer_data",
+    label: "Customer Data",
+    desc: "Profiles & CRM",
+    icon: PersonSearchIcon,
+  },
+  {
+    key: "dashboard",
+    label: "Dashboard",
+    desc: "Store overview",
+    icon: DashboardIcon,
+  },
+  {
+    key: "orders",
+    label: "Orders",
+    desc: "Live orders & logs",
+    icon: ReceiptLongIcon,
+  },
   { key: "menu", label: "Menu", desc: "Items & pricing", icon: MenuBookIcon },
   { key: "kds", label: "KDS", desc: "Kitchen display", icon: SoupKitchenIcon },
   { key: "queue", label: "Queue", desc: "Waitlist & diners", icon: GroupsIcon },
-  { key: "inventory", label: "Inventory", desc: "Stock & recipes", icon: InventoryIcon },
+  {
+    key: "inventory",
+    label: "Inventory",
+    desc: "Stock & recipes",
+    icon: InventoryIcon,
+  },
   { key: "report", label: "Report", desc: "Sales & tax", icon: BarChartIcon },
-  { key: "survey", label: "Survey", desc: "Guest feedback", icon: RateReviewIcon },
+  {
+    key: "survey",
+    label: "Survey",
+    desc: "Guest feedback",
+    icon: RateReviewIcon,
+  },
 ];
 
 export function OrganizationEmployees() {
   // Query Convex Database for Employees / Staff List & Backend Role Module Mapping
   const employees = useQuery(api.organizationUsers.list, {});
-  const currentMembership = useQuery(api.organizationUsers.getCurrentMembership, {});
-  const getRoleModuleMappingFn = (api.organizationUsers as any).getRoleModuleMapping;
+  const currentMembership = useQuery(
+    api.organizationUsers.getCurrentMembership,
+    {},
+  );
+  const getRoleModuleMappingFn = (api.organizationUsers as any)
+    .getRoleModuleMapping;
   const backendRoleModules = useQuery(
-    getRoleModuleMappingFn ? getRoleModuleMappingFn : "skip"
+    getRoleModuleMappingFn ? getRoleModuleMappingFn : "skip",
   );
 
   const roleModuleMapping = useMemo<Record<string, string[]>>(() => {
@@ -362,7 +599,9 @@ export function OrganizationEmployees() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [drawerMode, setDrawerMode] = useState<"add" | "edit">("add");
-  const [editingId, setEditingId] = useState<Id<"organizationUsers"> | null>(null);
+  const [editingId, setEditingId] = useState<Id<"organizationUsers"> | null>(
+    null,
+  );
 
   // Form Fields State
   const [formFirstName, setFormFirstName] = useState("");
@@ -370,24 +609,31 @@ export function OrganizationEmployees() {
   const [formUserIdentifier, setFormUserIdentifier] = useState("");
   const [formRoles, setFormRoles] = useState<string[]>([]);
   const [customPermissions, setCustomPermissions] = useState<
-    Record<string, { create: boolean; read: boolean; update: boolean; delete: boolean }>
+    Record<
+      string,
+      { create: boolean; read: boolean; update: boolean; delete: boolean }
+    >
   >({});
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // View Details Modal / Drawer State
-  const [viewingTarget, setViewingTarget] = useState<Doc<"organizationUsers"> | null>(null);
+  const [viewingTarget, setViewingTarget] =
+    useState<Doc<"organizationUsers"> | null>(null);
   const [isViewGranularOpen, setIsViewGranularOpen] = useState(false);
 
   // Live Query single employee document when viewing
   const fetchedViewingDetail = useQuery(
     api.organizationUsers.get,
-    viewingTarget ? { id: viewingTarget._id } : "skip"
+    viewingTarget ? { id: viewingTarget._id } : "skip",
   );
   const activeViewingDoc = fetchedViewingDetail || viewingTarget;
 
   // Delete Confirmation Modal State
-  const [deleteTarget, setDeleteTarget] = useState<{ id: Id<"organizationUsers">; userId: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: Id<"organizationUsers">;
+    userId: string;
+  } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Pagination State
@@ -417,13 +663,17 @@ export function OrganizationEmployees() {
     }
 
     // 3. Email Resolution
-    let email = emp.email || (raw.includes("@") ? raw : `${raw.toLowerCase()}@example.com`);
+    let email =
+      emp.email ||
+      (raw.includes("@") ? raw : `${raw.toLowerCase()}@example.com`);
 
     // 4. Initials
     const nameWords = name.trim().split(" ");
     let initials = "MS";
     if (nameWords.length >= 2) {
-      initials = (nameWords[0].charAt(0) + nameWords[1].charAt(0)).toUpperCase();
+      initials = (
+        nameWords[0].charAt(0) + nameWords[1].charAt(0)
+      ).toUpperCase();
     } else if (nameWords.length === 1 && nameWords[0].length > 0) {
       initials = nameWords[0].slice(0, 2).toUpperCase();
     }
@@ -437,16 +687,25 @@ export function OrganizationEmployees() {
       return { title: "Full Access", desc: "All modules unrestricted" };
     }
     if (userTypes.length > 2) {
-      return { title: `Customized (${userTypes.length} items)`, desc: "Multiple roles and modules assigned" };
+      return {
+        title: `Customized (${userTypes.length} items)`,
+        desc: "Multiple roles and modules assigned",
+      };
     }
     if (userTypes.length === 1) {
       const roleObj = STAFF_ROLE_CARDS.find((r) => r.key === userTypes[0]);
       if (roleObj) return { title: roleObj.permTitle, desc: roleObj.permDesc };
     }
     if (userTypes.includes("cashier")) {
-      return { title: "Standard Cashier + Orders", desc: "Payment terminal & billing" };
+      return {
+        title: "Standard Cashier + Orders",
+        desc: "Payment terminal & billing",
+      };
     }
-    return { title: "Standard Staff Access", desc: "Assigned store permissions" };
+    return {
+      title: "Standard Staff Access",
+      desc: "Assigned store permissions",
+    };
   };
 
   // Filtered Employees List
@@ -491,7 +750,9 @@ export function OrganizationEmployees() {
   // Toggle individual module access manually
   const handleToggleModule = (modKey: string) => {
     setFormRoles((prev) =>
-      prev.includes(modKey) ? prev.filter((m) => m !== modKey) : [...prev, modKey]
+      prev.includes(modKey)
+        ? prev.filter((m) => m !== modKey)
+        : [...prev, modKey],
     );
   };
 
@@ -503,7 +764,12 @@ export function OrganizationEmployees() {
     setFormLastName("");
     setFormUserIdentifier("");
     const defaultRole = "cashier";
-    const defaultModules = roleModuleMapping[defaultRole] || ["orders", "customer_data", "dashboard", "report"];
+    const defaultModules = roleModuleMapping[defaultRole] || [
+      "orders",
+      "customer_data",
+      "dashboard",
+      "report",
+    ];
     setFormRoles([defaultRole, ...defaultModules]);
     setCustomPermissions({});
     setIsAdvancedOpen(false);
@@ -549,10 +815,15 @@ export function OrganizationEmployees() {
 
   const handleTogglePermission = (
     key: string,
-    action: "create" | "read" | "update" | "delete"
+    action: "create" | "read" | "update" | "delete",
   ) => {
     setCustomPermissions((prev) => {
-      const currentObj = prev[key] || { create: true, read: true, update: true, delete: true };
+      const currentObj = prev[key] || {
+        create: true,
+        read: true,
+        update: true,
+        delete: true,
+      };
       return {
         ...prev,
         [key]: {
@@ -587,7 +858,9 @@ export function OrganizationEmployees() {
     try {
       const effectiveUserId = formUserIdentifier.trim();
       const permissionPayload =
-        Object.keys(customPermissions).length > 0 ? customPermissions : undefined;
+        Object.keys(customPermissions).length > 0
+          ? customPermissions
+          : undefined;
 
       if (drawerMode === "add") {
         await createEmployeeMutation({
@@ -598,7 +871,9 @@ export function OrganizationEmployees() {
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
-        setSuccessMessage(`Employee "${formFirstName} ${formLastName}" created successfully!`);
+        setSuccessMessage(
+          `Employee "${formFirstName} ${formLastName}" created successfully!`,
+        );
       } else if (editingId) {
         await updateEmployeeMutation({
           id: editingId,
@@ -643,15 +918,21 @@ export function OrganizationEmployees() {
       <div className="flex h-64 w-full items-center justify-center">
         <div className="flex flex-col items-center gap-3 text-[#78716c]">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#141010] border-t-transparent"></div>
-          <span className="text-xs font-medium">Loading employees from Convex...</span>
+          <span className="text-xs font-medium">
+            Loading employees from Convex...
+          </span>
         </div>
       </div>
     );
   }
 
   // Selected Roles & Modules for Section 4 Summary
-  const selectedRoles = formRoles.filter((r) => STAFF_ROLE_CARDS.some((c) => c.key === r));
-  const selectedModules = formRoles.filter((m) => MODULE_ACCESS_CARDS.some((c) => c.key === m));
+  const selectedRoles = formRoles.filter((r) =>
+    STAFF_ROLE_CARDS.some((c) => c.key === r),
+  );
+  const selectedModules = formRoles.filter((m) =>
+    MODULE_ACCESS_CARDS.some((c) => c.key === m),
+  );
 
   return (
     <div className="flex flex-col flex-1 min-h-0 h-full space-y-4">
@@ -662,7 +943,11 @@ export function OrganizationEmployees() {
             <span>✓</span>
             <span className="font-medium">{successMessage}</span>
           </div>
-          <button type="button" onClick={() => setSuccessMessage(null)} className="text-emerald-600 hover:text-emerald-900 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => setSuccessMessage(null)}
+            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
+          >
             ✕
           </button>
         </div>
@@ -674,7 +959,11 @@ export function OrganizationEmployees() {
             <span>⚠️</span>
             <span className="font-medium">{errorMessage}</span>
           </div>
-          <button type="button" onClick={() => setErrorMessage(null)} className="text-red-600 hover:text-red-900 cursor-pointer">
+          <button
+            type="button"
+            onClick={() => setErrorMessage(null)}
+            className="text-red-600 hover:text-red-900 cursor-pointer"
+          >
             ✕
           </button>
         </div>
@@ -688,7 +977,8 @@ export function OrganizationEmployees() {
             Employees
           </h2>
           <p className="text-xs text-[#78716c] mt-1">
-            Manage store staff, assign branch roles, and configure system permissions.
+            Manage store staff, assign branch roles, and configure system
+            permissions.
           </p>
         </div>
 
@@ -736,7 +1026,10 @@ export function OrganizationEmployees() {
                   </option>
                 ))}
               </select>
-              <svg className="w-3.5 h-3.5 text-[#78716c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+              <svg
+                className="w-3.5 h-3.5 text-[#78716c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 fill-none stroke-current stroke-2"
+                viewBox="0 0 24 24"
+              >
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </div>
@@ -755,7 +1048,10 @@ export function OrganizationEmployees() {
                 <option value="active">Active Status</option>
                 <option value="inactive">Inactive</option>
               </select>
-              <svg className="w-3.5 h-3.5 text-[#78716c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 fill-none stroke-current stroke-2" viewBox="0 0 24 24">
+              <svg
+                className="w-3.5 h-3.5 text-[#78716c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 fill-none stroke-current stroke-2"
+                viewBox="0 0 24 24"
+              >
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </div>
@@ -768,7 +1064,9 @@ export function OrganizationEmployees() {
             className="flex items-center justify-center gap-1.5 bg-[#141010] text-white hover:bg-[#282320] active:scale-95 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer shrink-0 border border-[#282320]"
           >
             <PlusIcon className="w-4 h-4 text-white" />
-            <span className="text-white font-semibold text-xs">Add employee</span>
+            <span className="text-white font-semibold text-xs">
+              Add employee
+            </span>
           </button>
         </div>
       </div>
@@ -807,7 +1105,8 @@ export function OrganizationEmployees() {
             <tbody className="divide-y divide-[#f3efe]">
               {filteredEmployees.length > 0 ? (
                 filteredEmployees.map((emp) => {
-                  const isCurrentCaller = currentMembership?.userId === emp.userId;
+                  const isCurrentCaller =
+                    currentMembership?.userId === emp.userId;
                   const meta = getEmployeeDisplayMeta(emp);
 
                   const formattedJoined = emp.createdAt
@@ -819,7 +1118,10 @@ export function OrganizationEmployees() {
                     : "12 Aug 2024";
 
                   return (
-                    <tr key={emp._id} className="transition-colors hover:bg-[#fdfbfb]">
+                    <tr
+                      key={emp._id}
+                      className="transition-colors hover:bg-[#fdfbfb]"
+                    >
                       {/* EMPLOYEE COLUMN */}
                       <td className="py-3.5 px-3.5 min-w-0">
                         <div className="flex items-center gap-2.5 min-w-0">
@@ -837,7 +1139,10 @@ export function OrganizationEmployees() {
                                 </span>
                               )}
                             </div>
-                            <div className="text-[11px] text-[#78716c] mt-0.5 truncate" title={emp.userId}>
+                            <div
+                              className="text-[11px] text-[#78716c] mt-0.5 truncate"
+                              title={emp.userId}
+                            >
                               {emp.userId}
                             </div>
                           </div>
@@ -848,9 +1153,14 @@ export function OrganizationEmployees() {
                       <td className="py-3.5 px-3.5">
                         <div className="flex flex-wrap items-center gap-1">
                           {emp.userType.map((type) => {
-                            const matchRole = STAFF_ROLE_CARDS.find((r) => r.key === type);
-                            const matchMod = MODULE_ACCESS_CARDS.find((m) => m.key === type);
-                            const label = matchRole?.label || matchMod?.label || type;
+                            const matchRole = STAFF_ROLE_CARDS.find(
+                              (r) => r.key === type,
+                            );
+                            const matchMod = MODULE_ACCESS_CARDS.find(
+                              (m) => m.key === type,
+                            );
+                            const label =
+                              matchRole?.label || matchMod?.label || type;
                             const isAdmin = type === "admin";
 
                             return (
@@ -862,7 +1172,9 @@ export function OrganizationEmployees() {
                                     : "bg-[#f5f5f4] border border-[#e7e5e4] text-[#44403c]"
                                 }`}
                               >
-                                {isAdmin && <ShieldAdminIcon className="w-3 h-3 text-white" />}
+                                {isAdmin && (
+                                  <ShieldAdminIcon className="w-3 h-3 text-white" />
+                                )}
                                 {label}
                               </span>
                             );
@@ -907,9 +1219,18 @@ export function OrganizationEmployees() {
                           <button
                             type="button"
                             disabled={isCurrentCaller}
-                            onClick={() => setDeleteTarget({ id: emp._id, userId: emp.userId })}
+                            onClick={() =>
+                              setDeleteTarget({
+                                id: emp._id,
+                                userId: emp.userId,
+                              })
+                            }
                             className="p-1.5 text-[#78716c] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                            title={isCurrentCaller ? "You cannot remove yourself" : "Remove Employee"}
+                            title={
+                              isCurrentCaller
+                                ? "You cannot remove yourself"
+                                : "Remove Employee"
+                            }
                           >
                             <TrashIcon className="w-4 h-4" />
                           </button>
@@ -929,7 +1250,8 @@ export function OrganizationEmployees() {
                           : "No staff members found."}
                       </p>
                       <p className="text-[11px] text-[#78716c]">
-                        Click "+ Add employee" to onboard your team to this organization.
+                        Click "+ Add employee" to onboard your team to this
+                        organization.
                       </p>
                     </div>
                   </td>
@@ -942,7 +1264,8 @@ export function OrganizationEmployees() {
         {/* FOOTER BAR (Clean Showing Count without Previous/Next buttons) */}
         <div className="flex items-center px-6 py-3.5 border-t border-[#e7e5e4] bg-[#faf8f7]">
           <div className="text-xs text-[#78716c] font-medium">
-            Showing {filteredEmployees.length} {filteredEmployees.length === 1 ? "employee" : "employees"}
+            Showing {filteredEmployees.length}{" "}
+            {filteredEmployees.length === 1 ? "employee" : "employees"}
           </div>
         </div>
       </div>
@@ -976,8 +1299,18 @@ export function OrganizationEmployees() {
                 onClick={() => setViewingTarget(null)}
                 className="w-8 h-8 -mr-1 -mt-1 inline-flex items-center justify-center rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition focus:outline-none cursor-pointer"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M6 18L18 6M6 6l12 12"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
                 </svg>
               </button>
             </div>
@@ -1010,12 +1343,16 @@ export function OrganizationEmployees() {
                           <div className="mt-1.5 space-y-1 text-xs text-neutral-600">
                             <div className="flex items-center gap-2 truncate">
                               <EnvelopeIcon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                              <span className="font-mono text-neutral-700">{meta.email}</span>
+                              <span className="font-mono text-neutral-700">
+                                {meta.email}
+                              </span>
                             </div>
                             {meta.phone && (
                               <div className="flex items-center gap-2">
                                 <PhoneIcon className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
-                                <span className="font-mono text-neutral-700">{meta.phone}</span>
+                                <span className="font-mono text-neutral-700">
+                                  {meta.phone}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1027,7 +1364,9 @@ export function OrganizationEmployees() {
                         <div className="p-3 bg-amber-50/80 border border-amber-200/90 rounded-lg flex items-start gap-2 text-xs text-amber-900">
                           <LockIcon className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                           <div className="leading-snug">
-                            <strong>Sole Administrator</strong> — This employee is the primary administrator. Assign Admin role to another employee before deactivating.
+                            <strong>Sole Administrator</strong> — This employee
+                            is the primary administrator. Assign Admin role to
+                            another employee before deactivating.
                           </div>
                         </div>
                       )}
@@ -1051,12 +1390,20 @@ export function OrganizationEmployees() {
 
                 <div className="space-y-2">
                   {activeViewingDoc.userType.map((roleKey) => {
-                    const rObj = STAFF_ROLE_CARDS.find((c) => c.key === roleKey);
-                    const mObj = MODULE_ACCESS_CARDS.find((c) => c.key === roleKey);
+                    const rObj = STAFF_ROLE_CARDS.find(
+                      (c) => c.key === roleKey,
+                    );
+                    const mObj = MODULE_ACCESS_CARDS.find(
+                      (c) => c.key === roleKey,
+                    );
                     const label = rObj?.label || mObj?.label || roleKey;
-                    const desc = rObj?.desc || mObj?.desc || "Assigned store operational module access.";
+                    const desc =
+                      rObj?.desc ||
+                      mObj?.desc ||
+                      "Assigned store operational module access.";
                     const badge = rObj?.badge || "ACTIVE MODULE";
-                    const RoleIconComp = rObj?.icon || mObj?.icon || ShieldAdminIcon;
+                    const RoleIconComp =
+                      rObj?.icon || mObj?.icon || ShieldAdminIcon;
 
                     return (
                       <div
@@ -1065,14 +1412,18 @@ export function OrganizationEmployees() {
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-bold text-neutral-900">{label}</span>
+                            <span className="text-xs font-bold text-neutral-900">
+                              {label}
+                            </span>
                             <span className="px-2 py-0.5 rounded bg-black text-white text-[10px] font-bold uppercase tracking-wide">
                               {badge}
                             </span>
                           </div>
                           <RoleIconComp className="w-4 h-4 text-neutral-500" />
                         </div>
-                        <p className="text-xs text-neutral-500 leading-relaxed">{desc}</p>
+                        <p className="text-xs text-neutral-500 leading-relaxed">
+                          {desc}
+                        </p>
                       </div>
                     );
                   })}
@@ -1103,7 +1454,9 @@ export function OrganizationEmployees() {
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Cashier, billing, settlements, and payment gateways</span>
+                    <span>
+                      Cashier, billing, settlements, and payment gateways
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1111,7 +1464,9 @@ export function OrganizationEmployees() {
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>Operational, sales, orders, and customer reports</span>
+                    <span>
+                      Operational, sales, orders, and customer reports
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckIcon className="w-4 h-4 text-emerald-600 shrink-0" />
@@ -1130,7 +1485,9 @@ export function OrganizationEmployees() {
                   </h3>
                   <span className="text-xs font-medium text-emerald-700 flex items-center gap-1">
                     <CheckIcon className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>{activeViewingDoc.userType.length * 2} Modules enabled</span>
+                    <span>
+                      {activeViewingDoc.userType.length * 2} Modules enabled
+                    </span>
                   </span>
                 </div>
 
@@ -1148,7 +1505,9 @@ export function OrganizationEmployees() {
                     onClick={() => setIsViewGranularOpen((prev) => !prev)}
                     className="text-xs font-semibold text-neutral-900 underline hover:text-black cursor-pointer"
                   >
-                    {isViewGranularOpen ? "Hide granular matrix" : "View granular permissions (CRUD)"}
+                    {isViewGranularOpen
+                      ? "Hide granular matrix"
+                      : "View granular permissions (CRUD)"}
                   </button>
                 </div>
 
@@ -1166,10 +1525,16 @@ export function OrganizationEmployees() {
 
                     <div className="space-y-1.5 font-normal">
                       {activeViewingDoc.userType.map((itemKey) => {
-                        const rObj = STAFF_ROLE_CARDS.find((c) => c.key === itemKey);
-                        const mObj = MODULE_ACCESS_CARDS.find((c) => c.key === itemKey);
+                        const rObj = STAFF_ROLE_CARDS.find(
+                          (c) => c.key === itemKey,
+                        );
+                        const mObj = MODULE_ACCESS_CARDS.find(
+                          (c) => c.key === itemKey,
+                        );
                         const label = rObj?.label || mObj?.label || itemKey;
-                        const perms = activeViewingDoc.userPermission?.[itemKey] || {
+                        const perms = activeViewingDoc.userPermission?.[
+                          itemKey
+                        ] || {
                           create: true,
                           read: true,
                           update: true,
@@ -1177,14 +1542,23 @@ export function OrganizationEmployees() {
                         };
 
                         return (
-                          <div key={itemKey} className="flex items-center justify-between py-1 border-b border-neutral-200/50 last:border-b-0">
-                            <span className="text-neutral-800 font-medium text-xs">{label}</span>
+                          <div
+                            key={itemKey}
+                            className="flex items-center justify-between py-1 border-b border-neutral-200/50 last:border-b-0"
+                          >
+                            <span className="text-neutral-800 font-medium text-xs">
+                              {label}
+                            </span>
                             <div className="flex gap-4 pr-1">
-                              {(["create", "read", "update", "delete"] as const).map((act) => (
+                              {(
+                                ["create", "read", "update", "delete"] as const
+                              ).map((act) => (
                                 <span
                                   key={act}
                                   className={`w-8 text-center font-bold text-xs ${
-                                    perms[act] ? "text-emerald-600" : "text-neutral-300"
+                                    perms[act]
+                                      ? "text-emerald-600"
+                                      : "text-neutral-300"
                                   }`}
                                 >
                                   {perms[act] ? "✓" : "—"}
@@ -1204,11 +1578,16 @@ export function OrganizationEmployees() {
             <div className="border-t border-neutral-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
               <button
                 type="button"
-                disabled={Boolean(currentMembership?._id === activeViewingDoc._id)}
+                disabled={Boolean(
+                  currentMembership?._id === activeViewingDoc._id,
+                )}
                 onClick={() => {
                   const docToDel = activeViewingDoc;
                   setViewingTarget(null);
-                  setDeleteTarget({ id: docToDel._id, userId: docToDel.userId });
+                  setDeleteTarget({
+                    id: docToDel._id,
+                    userId: docToDel.userId,
+                  });
                 }}
                 className="px-3.5 py-2 text-xs font-medium text-rose-400 hover:text-rose-500 bg-white hover:bg-rose-50/60 rounded-xl border border-rose-200 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-2xs"
               >
@@ -1233,10 +1612,15 @@ export function OrganizationEmployees() {
                   }}
                   className="px-4.5 py-2 text-xs font-bold text-white bg-black hover:bg-neutral-800 active:scale-95 rounded-xl transition-all shadow-sm focus:outline-none cursor-pointer flex items-center gap-2 border border-black"
                 >
-                  <svg className="w-3.5 h-3.5 text-amber-400 fill-current shrink-0" viewBox="0 0 24 24">
+                  <svg
+                    className="w-3.5 h-3.5 text-amber-400 fill-current shrink-0"
+                    viewBox="0 0 24 24"
+                  >
                     <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
                   </svg>
-                  <span className="text-white font-bold text-xs tracking-wide">Edit employee</span>
+                  <span className="text-white font-bold text-xs tracking-wide">
+                    Edit employee
+                  </span>
                 </button>
               </div>
             </div>
@@ -1289,8 +1673,18 @@ export function OrganizationEmployees() {
                 onClick={handleCloseDrawer}
                 className="w-8 h-8 -mr-1 -mt-1 inline-flex items-center justify-center rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-100 transition focus:outline-none cursor-pointer"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M6 18L18 6M6 6l12 12"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
                 </svg>
               </button>
             </div>
@@ -1304,7 +1698,10 @@ export function OrganizationEmployees() {
                     EMPLOYEE DETAILS
                   </h3>
                   {drawerMode === "edit" && formUserIdentifier && (
-                    <span className="text-[11px] text-neutral-400 font-mono truncate max-w-[200px]" title={formUserIdentifier}>
+                    <span
+                      className="text-[11px] text-neutral-400 font-mono truncate max-w-[200px]"
+                      title={formUserIdentifier}
+                    >
                       ID: {formUserIdentifier}
                     </span>
                   )}
@@ -1312,7 +1709,10 @@ export function OrganizationEmployees() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-neutral-700" htmlFor="first-name">
+                    <label
+                      className="block text-xs font-semibold text-neutral-700"
+                      htmlFor="first-name"
+                    >
                       First name <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1325,7 +1725,10 @@ export function OrganizationEmployees() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-neutral-700" htmlFor="last-name">
+                    <label
+                      className="block text-xs font-semibold text-neutral-700"
+                      htmlFor="last-name"
+                    >
                       Last name <span className="text-rose-500">*</span>
                     </label>
                     <input
@@ -1341,8 +1744,12 @@ export function OrganizationEmployees() {
 
                 {/* User identifier / Email */}
                 <div className="space-y-1.5">
-                  <label className="block text-xs font-semibold text-neutral-700" htmlFor="user-identifier">
-                    User identifier / Email <span className="text-rose-500">*</span>
+                  <label
+                    className="block text-xs font-semibold text-neutral-700"
+                    htmlFor="user-identifier"
+                  >
+                    User identifier / Email{" "}
+                    <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
@@ -1370,7 +1777,8 @@ export function OrganizationEmployees() {
                     STAFF ROLES
                   </h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Select a staff role to automatically assign backend-defined module access.
+                    Select a staff role to automatically assign backend-defined
+                    module access.
                   </p>
                 </div>
 
@@ -1392,8 +1800,12 @@ export function OrganizationEmployees() {
                         <div>
                           <div className="flex items-start justify-between">
                             <div className="flex items-center gap-1.5">
-                              <IconComp className={`w-4 h-4 ${isChecked ? "text-neutral-900" : "text-neutral-700"}`} />
-                              <span className={`text-xs font-bold ${isChecked ? "text-neutral-900" : "text-neutral-800"}`}>
+                              <IconComp
+                                className={`w-4 h-4 ${isChecked ? "text-neutral-900" : "text-neutral-700"}`}
+                              />
+                              <span
+                                className={`text-xs font-bold ${isChecked ? "text-neutral-900" : "text-neutral-800"}`}
+                              >
                                 {card.label}
                               </span>
                             </div>
@@ -1410,7 +1822,9 @@ export function OrganizationEmployees() {
                           </p>
                         </div>
                         <div className="mt-2.5 text-[10px] uppercase tracking-tight">
-                          <span className={`px-2 py-0.5 rounded font-semibold ${isChecked ? "bg-neutral-200/80 text-neutral-800" : "text-neutral-400"}`}>
+                          <span
+                            className={`px-2 py-0.5 rounded font-semibold ${isChecked ? "bg-neutral-200/80 text-neutral-800" : "text-neutral-400"}`}
+                          >
                             {card.badge}
                           </span>
                         </div>
@@ -1429,7 +1843,8 @@ export function OrganizationEmployees() {
                     MODULE ACCESS
                   </h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Module access automatically populated based on backend role configuration.
+                    Module access automatically populated based on backend role
+                    configuration.
                   </p>
                 </div>
 
@@ -1453,7 +1868,9 @@ export function OrganizationEmployees() {
                           onChange={() => {}}
                           className="h-4 w-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer"
                         />
-                        <span className={`text-xs font-medium truncate ${isChecked ? "text-neutral-900 font-bold" : "text-neutral-700"}`}>
+                        <span
+                          className={`text-xs font-medium truncate ${isChecked ? "text-neutral-900 font-bold" : "text-neutral-700"}`}
+                        >
                           {mod.label}
                         </span>
                       </label>
@@ -1474,16 +1891,24 @@ export function OrganizationEmployees() {
                     {selectedRoles.map((rk) => {
                       const rObj = STAFF_ROLE_CARDS.find((c) => c.key === rk);
                       return (
-                        <span key={rk} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-black text-white text-xs font-medium shadow-sm">
+                        <span
+                          key={rk}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-black text-white text-xs font-medium shadow-sm"
+                        >
                           <span>{rObj?.label || rk}</span>
                         </span>
                       );
                     })}
 
                     {selectedModules.map((mk) => {
-                      const mObj = MODULE_ACCESS_CARDS.find((c) => c.key === mk);
+                      const mObj = MODULE_ACCESS_CARDS.find(
+                        (c) => c.key === mk,
+                      );
                       return (
-                        <span key={mk} className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 text-white text-xs font-medium shadow-sm">
+                        <span
+                          key={mk}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 text-white text-xs font-medium shadow-sm"
+                        >
                           <span>{mObj?.label || mk}</span>
                           <button
                             type="button"
@@ -1506,11 +1931,23 @@ export function OrganizationEmployees() {
                     <div className="leading-relaxed">
                       Assigned as{" "}
                       <strong>
-                        {selectedRoles.map((r) => STAFF_ROLE_CARDS.find((c) => c.key === r)?.label || r).join(", ") || "Staff"}
+                        {selectedRoles
+                          .map(
+                            (r) =>
+                              STAFF_ROLE_CARDS.find((c) => c.key === r)
+                                ?.label || r,
+                          )
+                          .join(", ") || "Staff"}
                       </strong>{" "}
                       with active{" "}
                       <strong>
-                        {selectedModules.map((m) => MODULE_ACCESS_CARDS.find((c) => c.key === m)?.label || m).join(", ") || "standard"}
+                        {selectedModules
+                          .map(
+                            (m) =>
+                              MODULE_ACCESS_CARDS.find((c) => c.key === m)
+                                ?.label || m,
+                          )
+                          .join(", ") || "standard"}
                       </strong>{" "}
                       management access.
                     </div>
@@ -1528,7 +1965,8 @@ export function OrganizationEmployees() {
                       ADVANCED PERMISSIONS
                     </h4>
                     <p className="text-[11px] text-neutral-500 mt-0.5">
-                      Customize specific permissions when standard role access is not enough.
+                      Customize specific permissions when standard role access
+                      is not enough.
                     </p>
                   </div>
                   <button
@@ -1536,8 +1974,12 @@ export function OrganizationEmployees() {
                     onClick={() => setIsAdvancedOpen((prev) => !prev)}
                     className="px-2.5 py-1.5 text-xs font-medium text-neutral-700 bg-neutral-100 hover:bg-neutral-200 rounded border border-neutral-200 flex items-center gap-1.5 transition focus:outline-none shrink-0 ml-3 cursor-pointer"
                   >
-                    <span>{isAdvancedOpen ? "Hide matrix" : "Customize permissions"}</span>
-                    <span className="text-[10px] text-neutral-500">{isAdvancedOpen ? "▲" : "▾"}</span>
+                    <span>
+                      {isAdvancedOpen ? "Hide matrix" : "Customize permissions"}
+                    </span>
+                    <span className="text-[10px] text-neutral-500">
+                      {isAdvancedOpen ? "▲" : "▾"}
+                    </span>
                   </button>
                 </div>
 
@@ -1555,8 +1997,12 @@ export function OrganizationEmployees() {
 
                     <div className="space-y-1.5 font-normal">
                       {formRoles.map((itemKey) => {
-                        const rObj = STAFF_ROLE_CARDS.find((c) => c.key === itemKey);
-                        const mObj = MODULE_ACCESS_CARDS.find((c) => c.key === itemKey);
+                        const rObj = STAFF_ROLE_CARDS.find(
+                          (c) => c.key === itemKey,
+                        );
+                        const mObj = MODULE_ACCESS_CARDS.find(
+                          (c) => c.key === itemKey,
+                        );
                         const label = rObj?.label || mObj?.label || itemKey;
                         const perms = customPermissions[itemKey] || {
                           create: true,
@@ -1566,14 +2012,23 @@ export function OrganizationEmployees() {
                         };
 
                         return (
-                          <div key={itemKey} className="flex items-center justify-between py-1.5 border-b border-neutral-200/50 last:border-b-0">
-                            <span className="text-neutral-800 font-medium text-xs">{label}</span>
+                          <div
+                            key={itemKey}
+                            className="flex items-center justify-between py-1.5 border-b border-neutral-200/50 last:border-b-0"
+                          >
+                            <span className="text-neutral-800 font-medium text-xs">
+                              {label}
+                            </span>
                             <div className="flex gap-4 pr-1">
-                              {(["create", "read", "update", "delete"] as const).map((act) => (
+                              {(
+                                ["create", "read", "update", "delete"] as const
+                              ).map((act) => (
                                 <button
                                   key={act}
                                   type="button"
-                                  onClick={() => handleTogglePermission(itemKey, act)}
+                                  onClick={() =>
+                                    handleTogglePermission(itemKey, act)
+                                  }
                                   className={`w-8 text-center font-bold text-xs cursor-pointer select-none rounded py-0.5 transition ${
                                     perms[act]
                                       ? "text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
@@ -1602,15 +2057,21 @@ export function OrganizationEmployees() {
                         Danger Zone
                       </div>
                       <p className="text-[11px] text-neutral-600">
-                        Deactivating this employee immediately revokes their access to this store.
+                        Deactivating this employee immediately revokes their
+                        access to this store.
                       </p>
                     </div>
                     <button
                       type="button"
-                      disabled={Boolean(editingId && currentMembership?._id === editingId)}
+                      disabled={Boolean(
+                        editingId && currentMembership?._id === editingId,
+                      )}
                       onClick={() => {
                         if (editingId) {
-                          setDeleteTarget({ id: editingId, userId: formUserIdentifier });
+                          setDeleteTarget({
+                            id: editingId,
+                            userId: formUserIdentifier,
+                          });
                           handleCloseDrawer();
                         }
                       }}
@@ -1649,7 +2110,11 @@ export function OrganizationEmployees() {
                       <span>Saving...</span>
                     </>
                   ) : (
-                    <span>{drawerMode === "add" ? "Create employee" : "Save changes"}</span>
+                    <span>
+                      {drawerMode === "add"
+                        ? "Create employee"
+                        : "Save changes"}
+                    </span>
                   )}
                 </button>
               </div>
@@ -1678,7 +2143,8 @@ export function OrganizationEmployees() {
 
             <p className="text-xs text-[#78716c]">
               Are you sure you want to remove staff member{" "}
-              <strong className="text-[#1c1917]">{deleteTarget.userId}</strong>? They will lose access to the store portal.
+              <strong className="text-[#1c1917]">{deleteTarget.userId}</strong>?
+              They will lose access to the store portal.
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">

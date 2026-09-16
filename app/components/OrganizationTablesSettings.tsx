@@ -43,6 +43,15 @@ function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
 function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
@@ -116,6 +125,10 @@ export function OrganizationTablesSettings() {
 
   // Inspector Popover State for Selected Canvas Table
   const [canvasSelectedTableId, setCanvasSelectedTableId] = useState<Id<"organizationTables"> | null>(null);
+  // Active Left-Clicked Action Toolbar Table State
+  const [activeActionTableId, setActiveActionTableId] = useState<Id<"organizationTables"> | null>(null);
+  // Hovered Table State for Instant Hover Toolbar
+  const [hoveredTableId, setHoveredTableId] = useState<Id<"organizationTables"> | null>(null);
 
   // Form Inputs
   const [layoutNameInput, setLayoutNameInput] = useState("");
@@ -384,6 +397,8 @@ export function OrganizationTablesSettings() {
     e: React.MouseEvent,
     table: Doc<"organizationTables">
   ) => {
+    // Only proceed on Left Mouse Click (button === 0), ignore Right Click
+    if (e.button !== 0) return;
     e.stopPropagation();
 
     const canvasEl = canvasRef.current;
@@ -400,6 +415,11 @@ export function OrganizationTablesSettings() {
     setPendingDragTable(table);
     setDragStartPos({ x: e.clientX, y: e.clientY });
     isHasDraggedRef.current = false;
+
+    // Open 3 action buttons instantly on Left Mouse Down (if preview is not open)
+    if (canvasSelectedTableId !== table._id) {
+      setActiveActionTableId(table._id);
+    }
 
     setDragOffset({
       x: mouseX - currentX,
@@ -466,11 +486,13 @@ export function OrganizationTablesSettings() {
           console.error("Failed to save table position:", err);
         }
       }
-    } else {
-      // Pure click -> toggle Edit / Delete inspector popover!
-      setCanvasSelectedTableId((prev) => (prev === tableId ? null : tableId));
     }
-  }, [pendingDragTable, tempPositions, updateTable]);
+
+    // Always keep 3 action buttons active for table on mouse up (if preview is not open)
+    if (canvasSelectedTableId !== tableId) {
+      setActiveActionTableId(tableId);
+    }
+  }, [pendingDragTable, tempPositions, updateTable, canvasSelectedTableId]);
 
   // Selected table in 2D canvas inspector
   const canvasSelectedTable = tablesInSelectedLayout.find(
@@ -814,69 +836,7 @@ export function OrganizationTablesSettings() {
                 {/* Canvas Mini Header */}
                 <header className="px-5 py-2.5 border-b border-[#e7e5e4] bg-white flex items-center justify-between z-10 select-none">
                   <div className="flex items-center gap-3">
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setIsGridSnapDropdownOpen(!isGridSnapDropdownOpen)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs text-[#5e5e5e] hover:text-[#0c0a09] hover:bg-stone-100 transition-colors font-medium border border-stone-200 cursor-pointer shadow-xs"
-                        title="Click to change grid snap size"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span>Grid snap:</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          {gridSnapSize === 1 ? "Off" : `${gridSnapSize}px`}
-                        </span>
-                        {zoomLevel !== 100 && gridSnapSize > 1 && (
-                          <span className="text-[10px] text-[#8a8580] font-mono">
-                            ({Math.round(gridSnapSize * (zoomLevel / 100))}px scaled)
-                          </span>
-                        )}
-                        <ChevronDownIcon className={`w-3.5 h-3.5 text-[#5e5e5e] transition-transform ${isGridSnapDropdownOpen ? "rotate-180" : ""}`} />
-                      </button>
-
-                      {/* Grid Snap Dropdown Menu */}
-                      {isGridSnapDropdownOpen && (
-                        <div
-                          className="absolute left-0 mt-1.5 w-48 bg-white rounded-xl shadow-xl border border-stone-200 p-1.5 z-50 animate-in fade-in duration-100"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="px-2.5 py-1 border-b border-stone-100 mb-1">
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                              GRID SNAP SIZE
-                            </span>
-                          </div>
-                          {[
-                            { label: "12px (Fine)", value: 12 },
-                            { label: "16px (Compact)", value: 16 },
-                            { label: "24px (Standard)", value: 24 },
-                            { label: "32px (Coarse)", value: 32 },
-                            { label: "48px (Large)", value: 48 },
-                            { label: "Off (Free Movement)", value: 1 },
-                          ].map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => {
-                                setGridSnapSize(option.value);
-                                setIsGridSnapDropdownOpen(false);
-                              }}
-                              className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-colors cursor-pointer ${
-                                gridSnapSize === option.value
-                                  ? "bg-[#f5efeb] text-[#0c0a09] font-bold"
-                                  : "text-stone-700 hover:bg-stone-50"
-                              }`}
-                            >
-                              <span>{option.label}</span>
-                              {gridSnapSize === option.value && (
-                                <svg className="w-3.5 h-3.5 text-[#0c0a09]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
-                                </svg>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                    {/* Clean canvas header without Grid Snap dropdown */}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-[#5e5e5e]">
                     <div className="flex items-center gap-1 border border-[#e7e5e4] rounded-lg px-2 py-0.5 bg-stone-50 font-mono text-[11px]">
@@ -915,7 +875,11 @@ export function OrganizationTablesSettings() {
                   ref={canvasRef}
                   onMouseMove={handleCanvasMouseMove}
                   onMouseUp={handleCanvasMouseUp}
-                  onClick={() => setCanvasSelectedTableId(null)}
+                  onClick={() => {
+                    setCanvasSelectedTableId(null);
+                    setActiveActionTableId(null);
+                  }}
+                  onContextMenu={(e) => e.preventDefault()}
                   className="flex-1 relative p-8 cursor-crosshair overflow-auto select-none min-h-[500px] max-h-[650px]"
                   style={{
                     backgroundColor: "#ffffff",
@@ -1022,10 +986,20 @@ export function OrganizationTablesSettings() {
                         return (
                           <div
                             key={table._id}
+                            onMouseEnter={() => setHoveredTableId(table._id)}
+                            onMouseLeave={() => setHoveredTableId(null)}
                             onMouseDown={(e) => handleTableMouseDown(e, table)}
+                            onMouseUp={(e) => e.stopPropagation()}
+                            onClick={(e) => e.stopPropagation()}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
                             onDoubleClick={(e) => {
                               e.stopPropagation();
-                              handleOpenEditTable(table);
+                              if (canvasSelectedTableId !== table._id) {
+                                setActiveActionTableId((prev) => (prev === table._id ? null : table._id));
+                              }
                             }}
                             className={`absolute group select-none transition-all duration-75 ${
                               isDragging
@@ -1040,13 +1014,74 @@ export function OrganizationTablesSettings() {
                               touchAction: "none",
                             }}
                             data-purpose="visual-table-item"
-                            title="Click to inspect/edit/delete • Drag to reposition • Double-click to edit"
+                            title="Hover or click to show Edit, Preview, Delete buttons • Drag to reposition table"
                           >
                             {/* Moving Visual Indicator Badge */}
                             {isDragging && (
                               <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#0c0a09] text-white text-[10px] font-mono px-2.5 py-0.5 rounded-full shadow-xl whitespace-nowrap z-50 flex items-center gap-1.5 animate-pulse border border-stone-700">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                                 <span>Moving: X:{posX}px Y:{posY}px</span>
+                              </div>
+                            )}
+
+                            {/* UI Friendly 3 Mini Action Buttons: Edit, Preview, Delete */}
+                            {/* Shown on hover or left-click when preview is NOT active */}
+                            {!isDragging && !isSelected && (hoveredTableId === table._id || activeActionTableId === table._id) && (
+                              <div
+                                className="absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white/95 backdrop-blur-md border border-stone-200/90 p-1 rounded-lg shadow-md z-30 transition-all opacity-90 group-hover:opacity-100 whitespace-nowrap"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => e.stopPropagation()}
+                                onContextMenu={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                }}
+                              >
+                                {/* Edit Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditTable(table);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-800 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Edit Table"
+                                >
+                                  <PencilIcon className="w-3 h-3 text-stone-700" />
+                                  <span>Edit</span>
+                                </button>
+
+                                {/* Preview Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setCanvasSelectedTableId(isSelected ? null : table._id);
+                                    setActiveActionTableId(null);
+                                  }}
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
+                                    isSelected
+                                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                                      : "bg-stone-100 hover:bg-stone-200 text-stone-800"
+                                  }`}
+                                  title="Preview Table Details"
+                                >
+                                  <EyeIcon className={`w-3 h-3 ${isSelected ? "text-white" : "text-stone-700"}`} />
+                                  <span>Preview</span>
+                                </button>
+
+                                {/* Delete Button */}
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTableClick(table);
+                                  }}
+                                  className="px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Delete Table"
+                                >
+                                  <TrashIcon className="w-3 h-3 text-red-600" />
+                                  <span>Delete</span>
+                                </button>
                               </div>
                             )}
 
@@ -1118,7 +1153,10 @@ export function OrganizationTablesSettings() {
                                       Ready
                                     </span>
                                     <button
-                                      onClick={() => setCanvasSelectedTableId(null)}
+                                      onClick={() => {
+                                        setCanvasSelectedTableId(null);
+                                        setActiveActionTableId(table._id);
+                                      }}
                                       className="p-1 text-[#5e5e5e] hover:text-[#0c0a09] rounded-md transition cursor-pointer"
                                       title="Close"
                                       type="button"
