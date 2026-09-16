@@ -19,7 +19,7 @@ const MAIN_STAGE_TEMPLATES: MainStageTemplate[] = [
   {
     key: "accepted",
     name: "Accepted",
-    subtitle: "Initial acceptance",
+    subtitle: "Order received",
     defaultColor: "#141010",
     matches: (p) => {
       const n = p.name.trim().toLowerCase();
@@ -29,7 +29,7 @@ const MAIN_STAGE_TEMPLATES: MainStageTemplate[] = [
   {
     key: "in_progress",
     name: "In progress",
-    subtitle: "Kitchen prep",
+    subtitle: "Kitchen is preparing the order",
     defaultColor: "#f59e0b",
     matches: (p) => {
       const n = p.name.trim().toLowerCase();
@@ -44,7 +44,7 @@ const MAIN_STAGE_TEMPLATES: MainStageTemplate[] = [
   {
     key: "ready_to_deliver",
     name: "Ready to deliver",
-    subtitle: "Ready for handoff",
+    subtitle: "Order is ready to serve",
     defaultColor: "#f97316",
     matches: (p) => {
       const n = p.name.trim().toLowerCase();
@@ -57,7 +57,7 @@ const MAIN_STAGE_TEMPLATES: MainStageTemplate[] = [
   {
     key: "delivered",
     name: "Delivered",
-    subtitle: "Order completed",
+    subtitle: "Order has been completed",
     defaultColor: "#22c55e",
     matches: (p) => {
       const n = p.name.trim().toLowerCase();
@@ -94,12 +94,17 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
       <div className="absolute -right-12 -bottom-12 w-48 h-48 rounded-full bg-[#ece7e6]/50 pointer-events-none blur-2xl" />
 
       {/* Card Header */}
-      <div className="flex items-center justify-between mb-5 relative z-10">
-        <span className="text-[12px] font-semibold text-[#4e4543] tracking-[0.96px] uppercase font-sans">
-          ORDER FLOW — LIVE VISUAL CHAIN
-        </span>
-        <span className="text-[12px] font-semibold text-[#141010] tracking-[0.96px] uppercase font-sans">
-          {activeStages.length} {activeStages.length === 1 ? "ACTIVE STAGE" : "ACTIVE STAGES"}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-5 relative z-10">
+        <div>
+          <h2 className="text-[11px] font-semibold text-[#5e5e5e] tracking-[0.96px] uppercase font-sans">
+            Order Flow
+          </h2>
+          <p className="text-sm text-[#5e5e5e] font-normal font-sans mt-0.5">
+            This shows the order steps in the same order they appear to your staff.
+          </p>
+        </div>
+        <span className="text-[11px] font-semibold text-[#141010] tracking-wider uppercase font-sans self-start sm:self-auto bg-white/80 px-2.5 py-1 rounded-full border border-[#e7e5e4]">
+          {activeStages.length} {activeStages.length === 1 ? "ACTIVE STEP" : "ACTIVE STEPS"}
         </span>
       </div>
 
@@ -116,10 +121,10 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
                     style={{ backgroundColor: stage.color }}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-[#141010] text-[15px] leading-tight truncate">
+                    <div className="font-medium text-[#141010] text-sm leading-tight truncate font-sans">
                       {stage.name}
                     </div>
-                    <div className="text-[11px] font-semibold text-[#4e4543] tracking-[0.5px] uppercase mt-0.5 truncate font-sans">
+                    <div className="text-[11px] font-semibold text-[#5e5e5e] tracking-[0.5px] uppercase mt-0.5 truncate font-sans">
                       {stage.subtitle}
                     </div>
                   </div>
@@ -128,7 +133,7 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
                 {/* Arrow Connector between items */}
                 {index < activeStages.length - 1 && (
                   <svg
-                    className="text-[#7f7572] w-5 h-5 shrink-0 opacity-80"
+                    className="text-[#7f7572] w-4 h-4 shrink-0 opacity-80"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -145,8 +150,8 @@ export function WorkflowPreview({ processes }: WorkflowPreviewProps) {
           </div>
         </div>
       ) : (
-        <div className="bg-[#ffffff] p-6 rounded-xl text-center border border-[#e7e5e4] text-[#4e4543] text-sm relative z-10">
-          No active stages in workflow.
+        <div className="bg-[#ffffff] p-6 rounded-xl text-center border border-[#e7e5e4] text-[#5e5e5e] text-xs font-sans relative z-10">
+          No active steps in workflow.
         </div>
       )}
     </div>

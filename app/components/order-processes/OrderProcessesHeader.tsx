@@ -11,86 +11,38 @@ export function OrderProcessesHeader({
   processCount,
   onAddProcess,
 }: OrderProcessesHeaderProps) {
-  const [showTooltip, setShowTooltip] = useState(false);
-
   return (
-    <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-5">
+    <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-[#e7e5e4]">
       <div>
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-3 mb-2">
-          <span className="text-[12px] font-semibold text-[#4e4543] tracking-[0.96px] uppercase font-sans">
-            PREST POS / SETTINGS
-          </span>
-          <span className="w-1 h-1 rounded-full bg-[#7f7572]" />
-          <span className="text-[12px] font-semibold text-[#141010] tracking-[0.96px] uppercase font-sans">
-            ORDER PROCESSES
-          </span>
-        </div>
-
-        {/* Title + Count Pill + Info Icon */}
-        <div className="flex items-center gap-4 flex-wrap">
-          <h1 className="font-serif text-[48px] text-[#141010] font-light leading-[1.08] tracking-[-0.96px]">
-            Order Processes
+        <nav aria-label="Breadcrumb" className="flex items-center space-x-2 text-[11px] uppercase tracking-widest text-[#5e5e5e] font-medium font-sans mb-1.5">
+          <span>SETTINGS</span>
+          <span className="text-[#b8b3b0]">/</span>
+          <span className="text-[#0c0a09] font-semibold">ORDER STATUS</span>
+        </nav>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="font-garamond text-[30px] md:text-[32px] font-normal tracking-tight text-[#141010] leading-tight">
+            Order Status
           </h1>
-
-          {/* Process Count Badge */}
-          <div className="bg-[#f0efed] px-3.5 py-1 rounded-full flex items-center gap-2 border border-[#e7e5e4]">
+          <div className="bg-[#f0efed] px-3 py-1 rounded-full flex items-center gap-2 border border-[#e7e5e4]">
             <span className="w-2 h-2 rounded-full bg-[#141010]" />
-            <span className="text-[12px] font-semibold text-[#141010] tracking-[0.96px] uppercase font-sans">
-              {processCount} {processCount === 1 ? "process" : "processes"}
+            <span className="text-[11px] font-semibold text-[#141010] tracking-wider uppercase font-sans">
+              {processCount} {processCount === 1 ? "status" : "statuses"}
             </span>
           </div>
-
-          {/* Info Tooltip */}
-          <div
-            className="relative inline-flex items-center justify-center cursor-pointer"
-            onMouseEnter={() => setShowTooltip(true)}
-            onMouseLeave={() => setShowTooltip(false)}
-            onFocus={() => setShowTooltip(true)}
-            onBlur={() => setShowTooltip(false)}
-            tabIndex={0}
-            role="button"
-            aria-label="Order processes info"
-          >
-            <svg
-              className="w-5 h-5 text-[#4e4543] hover:text-[#141010] transition-colors"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 16v-4" />
-              <path d="M12 8h.01" />
-            </svg>
-
-            {showTooltip && (
-              <div
-                role="tooltip"
-                className="absolute top-full left-1/2 -translate-x-1/2 mt-2.5 w-72 p-3.5 bg-[#ffffff] text-[#4e4543] text-[13px] leading-relaxed rounded-xl shadow-lg border border-[#e7e5e4] z-50 text-left font-normal font-sans pointer-events-none"
-              >
-                {/* Arrow pointing up towards the info icon */}
-                <div className="absolute -top-[5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-[#ffffff] border-t border-l border-[#e7e5e4] rotate-45" />
-                <span className="relative z-10 block">
-                  Order processes define the workflow stages used to track orders
-                  from acceptance to completion.
-                </span>
-              </div>
-            )}
-          </div>
         </div>
+        <p className="font-sans text-sm text-[#5e5e5e] mt-1 leading-normal">
+          Set the steps an order follows from receiving the order to completing it.
+        </p>
       </div>
 
-      {/* Add Order Process Button */}
+      {/* Add Order Status Button */}
       <button
         type="button"
         onClick={onAddProcess}
-        className="!bg-[#141010] hover:!bg-[#292524] !text-[#ffffff] h-10 px-6 rounded-full text-[15px] font-medium flex items-center gap-2 transition-all shadow-sm cursor-pointer shrink-0 active:scale-[0.98]"
+        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#0c0a09] text-white text-xs md:text-sm font-semibold hover:bg-neutral-800 active:scale-[0.98] transition-all shadow-sm cursor-pointer border border-[#0c0a09] shrink-0"
       >
         <svg
-          className="w-[18px] h-[18px] text-[#ffffff] stroke-[#ffffff]"
+          className="w-4 h-4 text-white stroke-white"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -98,10 +50,10 @@ export function OrderProcessesHeader({
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M12 5v14" />
-          <path d="M5 12h14" />
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        <span className="text-[#ffffff] font-medium font-sans">Add order process</span>
+        <span className="text-white font-semibold font-sans">Add Order Status</span>
       </button>
     </div>
   );
