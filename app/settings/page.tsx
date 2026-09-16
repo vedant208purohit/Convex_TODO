@@ -18,7 +18,15 @@ import { OrganizationQueueSettings } from "../components/OrganizationQueueSettin
 
 function QueueIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
@@ -26,7 +34,15 @@ function QueueIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PaymentIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="20" height="14" x="2" y="5" rx="2" />
       <line x1="2" x2="22" y1="10" y2="10" />
     </svg>
@@ -35,7 +51,15 @@ function PaymentIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function OrganizationIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M3 21h18" />
       <path d="M5 21V7l8-4v18" />
       <path d="M19 21V11l-6-4" />
@@ -49,7 +73,15 @@ function OrganizationIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function FeaturesIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
       <line x1="4" x2="4" y1="22" y2="15" />
     </svg>
@@ -58,7 +90,15 @@ function FeaturesIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function StaffIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -69,7 +109,15 @@ function StaffIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function WaiterIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
       <circle cx="12" cy="7" r="4" />
     </svg>
@@ -78,7 +126,15 @@ function WaiterIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function OrderProcessesIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
     </svg>
   );
@@ -86,7 +142,15 @@ function OrderProcessesIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function TablesIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="18" height="18" x="3" y="3" rx="2" />
       <path d="M3 9h18" />
       <path d="M9 21V9" />
@@ -96,7 +160,15 @@ function TablesIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="5" height="5" x="3" y="3" rx="1" />
       <rect width="5" height="5" x="16" y="3" rx="1" />
       <rect width="5" height="5" x="3" y="16" rx="1" />
@@ -115,7 +187,15 @@ function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function LiveScreensIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="20" height="14" x="2" y="3" rx="2" />
       <line x1="8" x2="16" y1="21" y2="21" />
       <line x1="12" x2="12" y1="17" y2="21" />
@@ -142,17 +222,49 @@ interface SettingsNavOption {
 }
 
 const SETTINGS_TABS: SettingsNavOption[] = [
-  { id: "organization", label: "Organization", icon: <OrganizationIcon className="w-4 h-4" /> },
-  { id: "queue", label: "Queue & Waitlist", icon: <QueueIcon className="w-4 h-4" /> },
-  { id: "printers", label: "Printers", icon: <PrinterIcon className="w-4 h-4" /> },
-  { id: "features", label: "Features", icon: <FeaturesIcon className="w-4 h-4" /> },
+  {
+    id: "organization",
+    label: "Organization",
+    icon: <OrganizationIcon className="w-4 h-4" />,
+  },
+  {
+    id: "queue",
+    label: "Queue & Waitlist",
+    icon: <QueueIcon className="w-4 h-4" />,
+  },
+  // { id: "printers", label: "Printers", icon: <PrinterIcon className="w-4 h-4" /> },
+  {
+    id: "features",
+    label: "Features",
+    icon: <FeaturesIcon className="w-4 h-4" />,
+  },
   { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
   { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
-  { id: "orderProcesses", label: "Order Processes", icon: <OrderProcessesIcon className="w-4 h-4" /> },
-  { id: "payment", label: "Payment", icon: <PaymentIcon className="w-4 h-4" /> },
-  { id: "tables", label: "Tables & Layouts", icon: <TablesIcon className="w-4 h-4" /> },
-  { id: "qrCodes", label: "QR Codes", icon: <QrCodesIcon className="w-4 h-4" /> },
-  { id: "liveScreens", label: "Live Screens", icon: <LiveScreensIcon className="w-4 h-4" /> },
+  {
+    id: "orderProcesses",
+    label: "Order Processes",
+    icon: <OrderProcessesIcon className="w-4 h-4" />,
+  },
+  {
+    id: "payment",
+    label: "Payment",
+    icon: <PaymentIcon className="w-4 h-4" />,
+  },
+  {
+    id: "tables",
+    label: "Tables & Layouts",
+    icon: <TablesIcon className="w-4 h-4" />,
+  },
+  {
+    id: "qrCodes",
+    label: "QR Codes",
+    icon: <QrCodesIcon className="w-4 h-4" />,
+  },
+  {
+    id: "liveScreens",
+    label: "Live Screens",
+    icon: <LiveScreensIcon className="w-4 h-4" />,
+  },
 ];
 
 function SettingsContent() {
@@ -162,7 +274,8 @@ function SettingsContent() {
   // Read active tab from URL param, default to "organization"
   const rawTab = searchParams.get("tab") as SettingsTab | null;
   const validTabIds = SETTINGS_TABS.map((t) => t.id);
-  const activeTab: SettingsTab = rawTab && validTabIds.includes(rawTab) ? rawTab : "organization";
+  const activeTab: SettingsTab =
+    rawTab && validTabIds.includes(rawTab) ? rawTab : "organization";
 
   // Update URL when tab changes (replaces history so back button works naturally)
   const setActiveTab = useCallback(
@@ -171,7 +284,7 @@ function SettingsContent() {
       params.set("tab", tab);
       router.replace(`/settings?${params.toString()}`);
     },
-    [router, searchParams]
+    [router, searchParams],
   );
 
   return (
@@ -245,18 +358,22 @@ function SettingsContent() {
               activeTab !== "waiters" &&
               activeTab !== "payment" &&
               activeTab !== "tables" && (
-              <div className="py-12 text-center">
-                <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
-                  {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}
+                <div className="py-12 text-center">
+                  <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
+                    {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}
+                  </div>
+                  <h3 className="font-garamond text-2xl text-[#141010]">
+                    {SETTINGS_TABS.find((t) => t.id === activeTab)?.label}
+                  </h3>
+                  <p className="text-sm text-[#5e5e5e] mt-1">
+                    Manage configuration and preferences for{" "}
+                    {SETTINGS_TABS.find(
+                      (t) => t.id === activeTab,
+                    )?.label.toLowerCase()}
+                    .
+                  </p>
                 </div>
-                <h3 className="font-garamond text-2xl text-[#141010]">
-                  {SETTINGS_TABS.find((t) => t.id === activeTab)?.label}
-                </h3>
-                <p className="text-sm text-[#5e5e5e] mt-1">
-                  Manage configuration and preferences for {SETTINGS_TABS.find((t) => t.id === activeTab)?.label.toLowerCase()}.
-                </p>
-              </div>
-            )}
+              )}
           </div>
         </div>
       </div>

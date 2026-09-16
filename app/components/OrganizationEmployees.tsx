@@ -458,7 +458,7 @@ const STAFF_ROLE_CARDS = [
     key: "admin",
     label: "Admin",
     badge: "ALL MODULES • UNRESTRICTED",
-    desc: "Full store administrator. Complete control over store settings, staff, billing, menus, and reports.",
+    desc: "Full access to restaurant settings and management.",
     icon: ShieldAdminIcon,
     permTitle: "Full Access",
     permDesc: "All modules unrestricted",
@@ -467,7 +467,7 @@ const STAFF_ROLE_CARDS = [
     key: "cashier",
     label: "Cashier",
     badge: "CASHIER • ORDERS",
-    desc: "Front-of-house register operator. Manages active orders, bills, settlements, and payments.",
+    desc: "Handles billing, payments and orders.",
     icon: PosIcon,
     permTitle: "Standard Cashier + Orders",
     permDesc: "Payment terminal & billing",
@@ -476,7 +476,7 @@ const STAFF_ROLE_CARDS = [
     key: "captain",
     label: "Captain",
     badge: "TABLES • WAITERS",
-    desc: "Floor lead. Manages tables, seating, waiter assignments, and order supervision.",
+    desc: "Manages tables and takes customer orders.",
     icon: TableIcon,
     permTitle: "Floor Management",
     permDesc: "Tables, Captain app & Queue",
@@ -485,7 +485,7 @@ const STAFF_ROLE_CARDS = [
     key: "waiter",
     label: "Waiter",
     badge: "TABLE ORDERS",
-    desc: "Floor service staff. Takes table orders and handles guest table service.",
+    desc: "Takes table orders and serves customers.",
     icon: RoomServiceIcon,
     permTitle: "Floor Operations",
     permDesc: "Order placement & tables",
@@ -494,7 +494,7 @@ const STAFF_ROLE_CARDS = [
     key: "chef",
     label: "Chef",
     badge: "KITCHEN • KDS",
-    desc: "Kitchen staff. Works with KDS and manages food preparation stages.",
+    desc: "Manages kitchen orders and food preparation.",
     icon: ChefHatIcon,
     permTitle: "Kitchen Operations",
     permDesc: "Order processing & KDS view",
@@ -503,7 +503,7 @@ const STAFF_ROLE_CARDS = [
     key: "worker",
     label: "Worker",
     badge: "WORKSTATION",
-    desc: "General operational staff. Works with assigned workstation views.",
+    desc: "Handles assigned restaurant operations.",
     icon: ComputerWorkstationIcon,
     permTitle: "General Access",
     permDesc: "Basic store functions",
@@ -1702,7 +1702,7 @@ export function OrganizationEmployees() {
                       className="text-[11px] text-neutral-400 font-mono truncate max-w-[200px]"
                       title={formUserIdentifier}
                     >
-                      ID: {formUserIdentifier}
+                      {formUserIdentifier}
                     </span>
                   )}
                 </div>
@@ -1713,7 +1713,7 @@ export function OrganizationEmployees() {
                       className="block text-xs font-semibold text-neutral-700"
                       htmlFor="first-name"
                     >
-                      First name <span className="text-rose-500">*</span>
+                      First Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       id="first-name"
@@ -1729,7 +1729,7 @@ export function OrganizationEmployees() {
                       className="block text-xs font-semibold text-neutral-700"
                       htmlFor="last-name"
                     >
-                      Last name <span className="text-rose-500">*</span>
+                      Last Name <span className="text-rose-500">*</span>
                     </label>
                     <input
                       id="last-name"
@@ -1742,14 +1742,13 @@ export function OrganizationEmployees() {
                   </div>
                 </div>
 
-                {/* User identifier / Email */}
+                {/* Email Address */}
                 <div className="space-y-1.5">
                   <label
                     className="block text-xs font-semibold text-neutral-700"
                     htmlFor="user-identifier"
                   >
-                    User identifier / Email{" "}
-                    <span className="text-rose-500">*</span>
+                    Email Address <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
@@ -1761,24 +1760,26 @@ export function OrganizationEmployees() {
                       disabled={drawerMode === "edit"}
                       value={formUserIdentifier}
                       onChange={(e) => setFormUserIdentifier(e.target.value)}
-                      placeholder="e.g. clerk_user_id or name@restaurant.com"
+                      placeholder="e.g. john@gmail.com"
                       className="w-full text-sm rounded-md border border-neutral-300 bg-white pl-9 pr-3 py-2 text-neutral-800 focus:border-black focus:ring-1 focus:ring-black transition disabled:bg-neutral-50 disabled:text-neutral-500"
                     />
                   </div>
+                  <p className="text-[12px] text-neutral-500">
+                    Enter the employee's email address.
+                  </p>
                 </div>
               </div>
 
               <hr className="border-neutral-200" />
 
-              {/* SECTION 2: STAFF ROLES (6 Explanatory Cards) */}
+              {/* SECTION 2: STAFF ROLES */}
               <div className="space-y-3">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
                     STAFF ROLES
                   </h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Select a staff role to automatically assign backend-defined
-                    module access.
+                    Select what this employee does in the restaurant.
                   </p>
                 </div>
 
@@ -1836,15 +1837,14 @@ export function OrganizationEmployees() {
 
               <hr className="border-neutral-200" />
 
-              {/* SECTION 3: MODULE ACCESS (9 Specific Cards) */}
+              {/* SECTION 3: MODULE ACCESS */}
               <div className="space-y-3">
                 <div>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-                    MODULE ACCESS
+                    What can this employee access?
                   </h3>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    Module access automatically populated based on backend role
-                    configuration.
+                    Select the areas this employee needs to use.
                   </p>
                 </div>
 
@@ -1986,7 +1986,7 @@ export function OrganizationEmployees() {
                 {isAdvancedOpen && (
                   <div className="border border-neutral-200 rounded-lg p-3 bg-neutral-50/40 text-[11px] text-neutral-500">
                     <div className="flex items-center justify-between font-semibold text-neutral-600 mb-2 uppercase text-[10px]">
-                      <span>Module Override Matrix</span>
+                      <span>Detailed Access Permissions</span>
                       <div className="flex gap-4 pr-1">
                         <span className="w-8 text-center">Create</span>
                         <span className="w-8 text-center">View</span>
@@ -2088,7 +2088,7 @@ export function OrganizationEmployees() {
             {/* Sticky Drawer Footer */}
             <div className="border-t border-neutral-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
               <div className="text-xs text-neutral-400">
-                Changes apply across all store terminals.
+                These changes apply to all POS terminals.
               </div>
               <div className="flex items-center gap-2.5">
                 <button
