@@ -1164,7 +1164,7 @@ export default function OrdersPage() {
     try {
       const amountPaise = selectedOrderDetails.totalAmount;
       const selectedMode = paymentModesList?.find(
-        (m) => m.name.toLowerCase() === paymentTenderMode.toLowerCase(),
+        (m: any) => m.name.toLowerCase() === paymentTenderMode.toLowerCase(),
       );
       await addPaymentMutation({
         orderId: selectedOrderId,
@@ -1196,7 +1196,7 @@ export default function OrdersPage() {
     }
     try {
       const selectedMode = paymentModesList?.find(
-        (m) => m.name.toLowerCase() === refundPaymentMode.toLowerCase(),
+        (m: any) => m.name.toLowerCase() === refundPaymentMode.toLowerCase(),
       );
       await addPaymentMutation({
         orderId: selectedOrderId,
