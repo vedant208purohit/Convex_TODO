@@ -342,7 +342,7 @@ function SettingsContent() {
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
-            {activeTab === "printers" && <OrganizationPrinters />}
+            {/* {activeTab === "printers" && <OrganizationPrinters />} */}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {activeTab === "waiters" && <OrganizationWaiters />}
@@ -351,7 +351,7 @@ function SettingsContent() {
             {activeTab === "tables" && <OrganizationTablesSettings />}
             {activeTab !== "organization" &&
               activeTab !== "queue" &&
-              activeTab !== "printers" &&
+              // activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
