@@ -9,6 +9,7 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as customers from "../customers.js";
 import type * as deliveryProvider from "../deliveryProvider.js";
 import type * as http from "../http.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
@@ -43,6 +44,7 @@ import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
 import type * as taxation from "../taxation.js";
+import type * as userAddresses from "../userAddresses.js";
 
 import type {
   ApiFromModules,
@@ -52,6 +54,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  customers: typeof customers;
   deliveryProvider: typeof deliveryProvider;
   http: typeof http;
   digitalStoreImages: typeof digitalStoreImages;
@@ -86,6 +89,7 @@ declare const fullApi: ApiFromModules<{
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
   taxation: typeof taxation;
+  userAddresses: typeof userAddresses;
 }>;
 
 /**

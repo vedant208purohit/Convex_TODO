@@ -22,6 +22,7 @@ export const createOrder = mutation({
     membersOnTable: v.optional(v.number()),
 
     // Customer Information
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -30,7 +31,8 @@ export const createOrder = mutation({
     discountAmount: v.optional(v.number()),
     deliveryCharge: v.optional(v.number()),
 
-    // Delivery Address
+    // Delivery Address Details
+    userAddressId: v.optional(v.id("userAddresses")),
     deliveryAddress: v.optional(
       v.object({
         addressLine1: v.string(),
@@ -235,6 +237,7 @@ export const createOrder = mutation({
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
+      customerId: args.customerId,
       customerName: args.customerName,
       customerPhone: args.customerPhone,
       customerEmail: args.customerEmail,
@@ -242,6 +245,7 @@ export const createOrder = mutation({
       taxTotal,
       discountAmount: args.discountAmount,
       deliveryCharge: args.deliveryCharge,
+      userAddressId: args.userAddressId,
       deliveryAddress: args.deliveryAddress,
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",

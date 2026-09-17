@@ -205,6 +205,70 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
 
+  // Customer Domain Table (Migrated from legacy Rails users where user_type includes 'customer')
+  customers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Identity & Contact Details
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    email: v.optional(v.string()),
+
+    // Payment Gateway Identifier (e.g. Razorpay Customer ID from legacy user.razorpay_customer_id)
+    razorpayCustomerId: v.optional(v.string()),
+
+    // Optional Avatar Asset / Storage reference
+    avatarStorageId: v.optional(v.id("_storage")),
+    avatarAssetId: v.optional(v.id("organization_assets")),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_email", ["email"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Customer Addresses Domain Table (Migrated from legacy Rails user_addresses)
+  userAddresses: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Customer Relationship
+    customerId: v.id("customers"),
+
+    // Address Details
+    addressLine1: v.string(),
+    addressLine2: v.optional(v.string()),
+    landmark: v.optional(v.string()),
+    city: v.string(),
+    zipCode: v.string(),
+    otherLocationDetail: v.optional(v.string()),
+    addressType: v.string(), // "Home", "Work", "Other", etc.
+
+    // Geocoordinates (Decimal in Rails)
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+
+    // Formatted & Delivery Notes
+    completeAddress: v.optional(v.string()),
+    deliveryInstructions: v.optional(v.string()),
+
+    // Default Address Flag
+    isDefault: v.optional(v.boolean()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_legacy_id", ["legacyId"]),
+
   // Master Global Features Catalog (Super Admin & Base Features)
   features: defineTable({
     name: v.string(),
@@ -826,7 +890,8 @@ postpaidOrderRequests: defineTable({
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
 
-    // Customer Information (from Frontend POS / Online)
+    // Customer Relationship & Information (from Frontend POS / Online)
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -839,6 +904,7 @@ postpaidOrderRequests: defineTable({
     totalAmount: v.number(),
 
     // Delivery Address Details
+    userAddressId: v.optional(v.id("userAddresses")),
     deliveryAddress: v.optional(
       v.object({
         addressLine1: v.string(),
@@ -862,7 +928,9 @@ postpaidOrderRequests: defineTable({
     .index("by_org", ["organizationId"])
     .index("by_org_status", ["organizationId", "orderStatusId"])
     .index("by_org_table", ["organizationId", "tableId"])
-    .index("by_created_at", ["organizationId", "createdAt"]),
+    .index("by_created_at", ["organizationId", "createdAt"])
+    .index("by_customer", ["customerId"])
+    .index("by_user_address", ["userAddressId"]),
 
   orderItems: defineTable({
     organizationId: v.id("organizations"),
