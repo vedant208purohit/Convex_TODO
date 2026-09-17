@@ -306,11 +306,17 @@ export function OrganizationDigitalStore() {
         throw new Error("Failed to upload carousel image. Please try again.");
       }
 
-      await createCarouselScreen({
-        storageId,
-        assetId,
+      const carouselPayload: {
+        storageId?: Id<"_storage">;
+        assetId?: Id<"organization_assets">;
+        fileName: string;
+      } = {
         fileName: file.name,
-      });
+      };
+      if (storageId) carouselPayload.storageId = storageId;
+      if (assetId) carouselPayload.assetId = assetId;
+
+      await createCarouselScreen(carouselPayload);
 
       showToast("Carousel image added successfully");
     } catch (err: any) {
@@ -390,11 +396,17 @@ export function OrganizationDigitalStore() {
         throw new Error("Failed to upload gallery photo. Please try again.");
       }
 
-      await createGalleryImage({
-        storageId,
-        assetId,
+      const galleryPayload: {
+        storageId?: Id<"_storage">;
+        assetId?: Id<"organization_assets">;
+        imageType: "about_us_image";
+      } = {
         imageType: "about_us_image",
-      });
+      };
+      if (storageId) galleryPayload.storageId = storageId;
+      if (assetId) galleryPayload.assetId = assetId;
+
+      await createGalleryImage(galleryPayload);
 
       showToast("Gallery photo added successfully");
     } catch (err: any) {
