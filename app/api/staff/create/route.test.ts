@@ -258,4 +258,47 @@ describe("Store-Side Staff Creation API (/api/staff/create)", () => {
     const data = await res.json();
     expect(data.code).toBe("BRIDGE_UNREACHABLE");
   });
+
+  // 8. Graceful Fallback if getStoreAdminContext is not yet synced in Convex deployment
+  test("8. Gracefully falls back to getCurrentMembership when getStoreAdminContext is not deployed", async () => {
+    mockQuery.mockImplementation(async (queryRef: any) => {
+      // First call (getStoreAdminContext) throws missing function error
+      if (mockQuery.mock.calls.length === 1) {
+        throw new Error("Could not find public function for 'organizationUsers:getStoreAdminContext'");
+      }
+      // Second call (getCurrentMembership)
+      if (mockQuery.mock.calls.length === 2) {
+        return {
+          _id: "user_membership_1",
+          organizationId: "org_store_doc_1",
+          userId: "user_default_clerk_admin_1",
+          userType: ["admin"],
+        };
+      }
+      // Third call (organizations.list)
+      return [
+        {
+          _id: "org_store_doc_1",
+          slug: "curry-bistro",
+          name: "Curry Bistro",
+        },
+      ];
+    });
+
+    const req = new Request("http://localhost:3000/api/staff/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        firstName: "Fallback",
+        lastName: "Admin",
+        email: "fallback@currybistro.com",
+        role: "cashier",
+      }),
+    });
+
+    const res = await storeStaffCreateHandler(req);
+    expect(res.status).toBe(201);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+  });
 });
