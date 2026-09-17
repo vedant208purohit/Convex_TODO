@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import {
@@ -21,8 +21,19 @@ export function OrderProcessesView() {
   const updateProcess = useMutation(api.organizationOrderProcesses.update);
   const reorderProcess = useMutation(api.organizationOrderProcesses.reorder);
 
-  // Pure Convex-driven data
-  const processes = convexProcesses ?? [];
+  // Pure Convex-driven data with guaranteed stable ordering
+  const processes = useMemo(() => {
+    if (!convexProcesses) return [];
+    return [...convexProcesses].sort((a, b) => {
+      const aSeq = a.isSequence ?? true;
+      const bSeq = b.isSequence ?? true;
+      if (aSeq !== bSeq) {
+        return aSeq ? -1 : 1;
+      }
+      return a.position - b.position;
+    });
+  }, [convexProcesses]);
+
   const isLoading = convexProcesses === undefined;
 
   // Drawer State
@@ -75,12 +86,12 @@ export function OrderProcessesView() {
         await updateProcess({
           id: formData.id,
           name: formData.name,
-          description: formData.description,
+          description: formData.description !== undefined ? formData.description : undefined,
           processColor: formData.processColor,
           published: formData.published,
-          isSequence: formData.isSequence ?? true,
+          ...(formData.isSequence !== undefined ? { isSequence: formData.isSequence } : {}),
         });
-        showFeedback("success", `Process "${formData.name}" updated successfully.`);
+        showFeedback("success", `Status "${formData.name}" updated successfully.`);
       } else {
         await createProcess({
           name: formData.name,
@@ -89,7 +100,7 @@ export function OrderProcessesView() {
           published: formData.published,
           isSequence: formData.isSequence ?? true,
         });
-        showFeedback("success", `Process "${formData.name}" created successfully.`);
+        showFeedback("success", `Status "${formData.name}" created successfully.`);
       }
       handleCloseDrawer();
     } catch (err: unknown) {
@@ -118,7 +129,7 @@ export function OrderProcessesView() {
       });
       showFeedback(
         "success",
-        `"${process.name}" is now ${nextPublished ? "published" : "unpublished"}.`
+        `"${process.name}" is now ${nextPublished ? "active" : "inactive"}.`
       );
     } catch (err: unknown) {
       const msg =
@@ -142,12 +153,12 @@ export function OrderProcessesView() {
         id,
         position: newPosition,
       });
-      showFeedback("success", "Workflow order updated.");
+      showFeedback("success", "Order flow updated.");
     } catch (err: unknown) {
       const msg =
         err instanceof Error
           ? err.message.replace("Uncaught Error: ", "")
-          : "Failed to reorder process.";
+          : "Failed to reorder status.";
       showFeedback("error", msg);
     }
   };
@@ -177,7 +188,7 @@ export function OrderProcessesView() {
       )}
 
       {/* 1. Fixed / Sticky Page Header */}
-      <div className="shrink-0 space-y-4 bg-[#fdf8f7] pb-3 border-b border-[#e7e5e4]">
+      <div className="shrink-0 bg-[#fdf8f7]">
         <OrderProcessesHeader
           processCount={processes.length}
           onAddProcess={handleOpenCreate}
@@ -193,7 +204,7 @@ export function OrderProcessesView() {
         {isLoading ? (
           <div className="bg-[#ffffff] rounded-2xl shadow-sm border border-[#e7e5e4] p-12 text-center text-[#4e4543] animate-pulse">
             <div className="inline-block w-6 h-6 border-2 border-[#141010] border-t-transparent rounded-full animate-spin mb-3" />
-            <p className="text-sm font-medium">Loading order processes...</p>
+            <p className="text-sm font-medium">Loading order statuses...</p>
           </div>
         ) : (
           <OrderProcessesTable

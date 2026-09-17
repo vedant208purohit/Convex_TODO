@@ -5,7 +5,7 @@ import { OrderProcessesView } from "../../components/order-processes/OrderProces
 
 export default function OrderProcessesPage() {
   return (
-    <PosShell title="Settings" subtitle="Order Processes">
+    <PosShell title="Settings" subtitle="Order Status">
       <OrderProcessesView />
     </PosShell>
   );
