@@ -370,11 +370,10 @@ function SettingsContent() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
-                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${isSelected
+                      ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
+                      : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
+                      }`}
                   >
                     <span className="w-5 flex items-center justify-center text-[#5e5e5e]">
                       {tab.icon}
@@ -390,7 +389,7 @@ function SettingsContent() {
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
-            {activeTab === "printers" && <OrganizationPrinters />}
+            {/* {activeTab === "printers" && <OrganizationPrinters />} */}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {activeTab === "waiters" && <OrganizationWaiters />}
@@ -401,7 +400,7 @@ function SettingsContent() {
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
               activeTab !== "queue" &&
-              activeTab !== "printers" &&
+              // activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&

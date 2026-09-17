@@ -1153,4 +1153,40 @@ postpaidOrderRequests: defineTable({
     .index("by_storage_key", ["storageKey"])
     .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Process Notifications Domain Table
+  processNotifications: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationOrderProcessId: v.id("organizationOrderProcesses"),
+
+    notificationType: v.union(
+      v.literal("At"),
+      v.literal("Before"),
+      v.literal("After")
+    ),
+
+    notificationVia: v.union(
+      v.literal("sms"),
+      v.literal("whatsapp"),
+      v.literal("push"),
+      v.literal("email")
+    ),
+
+    notificationText: v.string(),
+
+    customerType: v.optional(
+      v.union(
+        v.literal("all"),
+        v.literal("dine_in"),
+        v.literal("takeaway"),
+        v.literal("delivery")
+      )
+    ),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_process", ["organizationOrderProcessId"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

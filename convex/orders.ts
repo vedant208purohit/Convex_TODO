@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveNotificationsForOrderStatus } from "./processNotifications";
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -502,7 +503,21 @@ export const updateOrderStatus = mutation({
       updatedAt: now,
     });
 
-    return { success: true, statusName: process.name };
+    // 4. Resolve process notifications if order status actually transitioned and not suppressed
+    let notifications: any[] = [];
+    try {
+      if (!order.isModify) {
+        notifications = await resolveNotificationsForOrderStatus(
+          ctx,
+          { ...order, orderStatusId: process._id, orderStatusName: process.name },
+          process._id
+        );
+      }
+    } catch (err) {
+      console.error("Failed to resolve process notifications:", err);
+    }
+
+    return { success: true, statusName: process.name, notifications };
   },
 });
 
