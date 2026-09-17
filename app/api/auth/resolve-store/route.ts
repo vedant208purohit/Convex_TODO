@@ -59,22 +59,6 @@ export async function resolveStoreForAuthenticatedUser() {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.success) {
-      if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_CONVEX_URL) {
-        return NextResponse.json(
-          {
-            success: true,
-            organization: {
-              id: "default_org",
-              slug: "store",
-              name: "Default Store",
-            },
-            deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-            user: { role: "admin", status: "active" },
-          },
-          { status: 200 }
-        );
-      }
-
       return NextResponse.json(
         {
           success: false,
@@ -96,22 +80,6 @@ export async function resolveStoreForAuthenticatedUser() {
     );
   } catch (error: any) {
     console.error("Failed to connect to Master bridge:", error);
-    if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-      return NextResponse.json(
-        {
-          success: true,
-          organization: {
-            id: "default_org",
-            slug: "store",
-            name: "Default Store",
-          },
-          deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-          user: { role: "admin", status: "active" },
-        },
-        { status: 200 }
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,

@@ -35,8 +35,8 @@ import type * as organizationTables from "../organizationTables.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
+import type * as paymentModes from "../paymentModes.js";
 import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
-import type * as providerPaymentTransfers from "../providerPaymentTransfers.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
 import type * as surveyAttempts from "../surveyAttempts.js";
@@ -80,7 +80,6 @@ declare const fullApi: ApiFromModules<{
   organizations: typeof organizations;
   paymentModes: typeof paymentModes;
   postpaidOrderRequests: typeof postpaidOrderRequests;
-  providerPaymentTransfers: typeof providerPaymentTransfers;
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
   surveyAttempts: typeof surveyAttempts;
