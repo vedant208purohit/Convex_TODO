@@ -174,11 +174,16 @@ export default defineSchema({
   }).index("by_org", ["organizationId"]),
 
   paymentModes: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     name: v.string(),
     active: v.boolean(),
     createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_active", ["organizationId", "active"])
+    .index("by_legacy_id", ["legacyId"]),
 
   inventoryCategories: defineTable({
     organizationId: v.id("organizations"),
