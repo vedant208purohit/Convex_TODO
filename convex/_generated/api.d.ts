@@ -40,6 +40,7 @@ import type * as organizationTables from "../organizationTables.js";
 import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
+import type * as paymentModes from "../paymentModes.js";
 import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
 import type * as processNotifications from "../processNotifications.js";
 import type * as providerPaymentTransfers from "../providerPaymentTransfers.js";
