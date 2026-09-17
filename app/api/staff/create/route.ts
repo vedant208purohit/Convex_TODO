@@ -226,15 +226,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Safe debug log for verifying authenticated caller authorization
-    console.log("[STAFF CREATE DEBUG]", {
-      authenticatedClerkSubject: userId,
-      resolvedOrganization: adminContext.slug,
-      callerUserId: adminContext.callerUserId,
-      callerRoles: adminContext.callerRoles,
-      authorizationResult: "ALLOWED",
-    });
-
     // ----------------------------------------------------
     // 4. Check Bridge Secret & Sign Server-to-Server Request
     // ----------------------------------------------------
