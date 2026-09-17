@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
 import crypto from "crypto";
@@ -146,6 +146,14 @@ export async function POST(req: Request) {
       storeConvexClient.setAuth(token);
     }
 
+    let userEmail: string | undefined;
+    try {
+      const clerkUser = await currentUser();
+      userEmail = clerkUser?.emailAddresses?.[0]?.emailAddress;
+    } catch {
+      userEmail = undefined;
+    }
+
     const ADMIN_ROLES = ["admin", "store_admin", "org_admin", "super_admin", "owner"];
 
     let adminContext: {
@@ -159,87 +167,52 @@ export async function POST(req: Request) {
     try {
       adminContext = await storeConvexClient.query(
         api.organizationUsers.getStoreAdminContext,
-        {}
+        {
+          userId,
+          email: userEmail,
+        }
       );
     } catch (authErr: any) {
       const errMessage = authErr?.message || "";
-      const isFunctionMissing =
-        errMessage.includes("Could not find public function") ||
-        errMessage.includes("organizationUsers:getStoreAdminContext");
+      const isForbidden =
+        errMessage.includes("Forbidden") ||
+        errMessage.includes("Admin access required") ||
+        errMessage.includes("Active store membership required");
+      const isUnauthenticated =
+        errMessage.includes("Unauthenticated") ||
+        errMessage.includes("valid authentication token");
 
-      if (isFunctionMissing) {
-        // Fallback for live environments where getStoreAdminContext is pending Convex cloud sync
-        try {
-          const membership = await storeConvexClient.query(
-            api.organizationUsers.getCurrentMembership,
-            {}
-          );
-
-          if (!membership) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: "Forbidden: You do not have an active store membership.",
-                code: "FORBIDDEN",
-              },
-              { status: 403 }
-            );
-          }
-
-          const roles: string[] = Array.isArray(membership.userType)
-            ? membership.userType
-            : typeof membership.userType === "string"
-              ? [membership.userType]
-              : [];
-
-          const hasAdminRole = roles.some((r) => ADMIN_ROLES.includes(r.toLowerCase()));
-          if (!hasAdminRole) {
-            return NextResponse.json(
-              {
-                success: false,
-                error: "Forbidden: You do not have permission to manage employees for this store.",
-                code: "FORBIDDEN",
-              },
-              { status: 403 }
-            );
-          }
-
-          const orgs = await storeConvexClient.query(api.organizations.list, {});
-          const matchedOrg =
-            (orgs || []).find((o: any) => o._id === membership.organizationId) ||
-            (orgs || [])[0];
-
-          if (matchedOrg && matchedOrg.slug) {
-            adminContext = {
-              organizationId: matchedOrg._id,
-              slug: matchedOrg.slug,
-              name: matchedOrg.name,
-              callerUserId: membership.userId || userId,
-              callerRoles: roles,
-            };
-          }
-        } catch (fallbackErr: any) {
-          console.error("Fallback store resolution failed:", fallbackErr);
-        }
-      }
-
-      if (!adminContext) {
-        const isForbidden =
-          errMessage.includes("Forbidden") ||
-          errMessage.includes("Admin access required") ||
-          errMessage.includes("Active store membership required");
-
+      if (isForbidden) {
         return NextResponse.json(
           {
             success: false,
-            error: isForbidden
-              ? "Forbidden: You do not have permission to manage employees for this store."
-              : authErr?.message || "Store authorization failed.",
-            code: isForbidden ? "FORBIDDEN" : "STORE_AUTH_FAILED",
+            error: "Forbidden: You do not have permission to manage employees for this store.",
+            code: "FORBIDDEN",
           },
-          { status: isForbidden ? 403 : 400 }
+          { status: 403 }
         );
       }
+
+      if (isUnauthenticated) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Unauthorized: Store authentication required.",
+            code: "UNAUTHORIZED",
+          },
+          { status: 401 }
+        );
+      }
+
+      console.error("[Store Auth Error]", authErr);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Store backend service error during authorization check.",
+          code: "STORE_AUTH_FAILED",
+        },
+        { status: 500 }
+      );
     }
 
     if (!adminContext || !adminContext.slug) {
@@ -252,6 +225,15 @@ export async function POST(req: Request) {
         { status: 404 }
       );
     }
+
+    // Safe debug log for verifying authenticated caller authorization
+    console.log("[STAFF CREATE DEBUG]", {
+      authenticatedClerkSubject: userId,
+      resolvedOrganization: adminContext.slug,
+      callerUserId: adminContext.callerUserId,
+      callerRoles: adminContext.callerRoles,
+      authorizationResult: "ALLOWED",
+    });
 
     // ----------------------------------------------------
     // 4. Check Bridge Secret & Sign Server-to-Server Request

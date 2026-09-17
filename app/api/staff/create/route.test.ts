@@ -3,8 +3,10 @@ import { POST as storeStaffCreateHandler } from "./route";
 
 // Mock @clerk/nextjs/server
 const mockAuth = vi.fn();
+const mockCurrentUser = vi.fn();
 vi.mock("@clerk/nextjs/server", () => ({
   auth: () => mockAuth(),
+  currentUser: () => mockCurrentUser(),
 }));
 
 // Mock ConvexHttpClient
@@ -259,46 +261,24 @@ describe("Store-Side Staff Creation API (/api/staff/create)", () => {
     expect(data.code).toBe("BRIDGE_UNREACHABLE");
   });
 
-  // 8. Graceful Fallback if getStoreAdminContext is not yet synced in Convex deployment
-  test("8. Gracefully falls back to getCurrentMembership when getStoreAdminContext is not deployed", async () => {
-    mockQuery.mockImplementation(async (queryRef: any) => {
-      // First call (getStoreAdminContext) throws missing function error
-      if (mockQuery.mock.calls.length === 1) {
-        throw new Error("Could not find public function for 'organizationUsers:getStoreAdminContext'");
-      }
-      // Second call (getCurrentMembership)
-      if (mockQuery.mock.calls.length === 2) {
-        return {
-          _id: "user_membership_1",
-          organizationId: "org_store_doc_1",
-          userId: "user_default_clerk_admin_1",
-          userType: ["admin"],
-        };
-      }
-      // Third call (organizations.list)
-      return [
-        {
-          _id: "org_store_doc_1",
-          slug: "curry-bistro",
-          name: "Curry Bistro",
-        },
-      ];
-    });
+  // 8. Distinguishes Infrastructure / Backend Errors (500) from Authorization (403)
+  test("8. Returns 500 when Store Convex encounters infrastructure or missing function errors", async () => {
+    mockQuery.mockRejectedValue(new Error("Convex backend connection failed"));
 
     const req = new Request("http://localhost:3000/api/staff/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        firstName: "Fallback",
+        firstName: "Test",
         lastName: "Admin",
-        email: "fallback@currybistro.com",
+        email: "test@currybistro.com",
         role: "cashier",
       }),
     });
 
     const res = await storeStaffCreateHandler(req);
-    expect(res.status).toBe(201);
+    expect(res.status).toBe(500);
     const data = await res.json();
-    expect(data.success).toBe(true);
+    expect(data.code).toBe("STORE_AUTH_FAILED");
   });
 });
