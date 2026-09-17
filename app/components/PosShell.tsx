@@ -108,11 +108,6 @@ const navItems: NavItem[] = [
     icon: <DashboardIcon className="w-4 h-4" />,
   },
   {
-    href: "/cashier",
-    label: "Cashier",
-    icon: <CashierIcon className="w-4 h-4" />,
-  },
-  {
     href: "/menu",
     label: "Menu",
     icon: <MenuIcon className="w-4 h-4" />,
@@ -121,6 +116,11 @@ const navItems: NavItem[] = [
     href: "/orders",
     label: "Orders",
     icon: <OrdersIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/cashier",
+    label: "Cashier",
+    icon: <CashierIcon className="w-4 h-4" />,
   },
   {
     href: "/inventory",

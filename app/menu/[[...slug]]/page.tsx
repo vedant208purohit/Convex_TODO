@@ -2066,8 +2066,9 @@ export default function MenuPage() {
     setItemQuantity("");
     setItemQuantityUnit("g");
     setItemIsGst(true);
-    setItemSelectedTaxGroupId(taxGroups?.[0]?._id || "");
-    setItemTaxMode(taxGroups?.[0]?.taxMode || "inclusive");
+    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
+    setItemSelectedTaxGroupId(defaultTg?._id || "");
+    setItemTaxMode(defaultTg?.taxMode || "inclusive");
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
     setItemSelectedCategoryId(activeCategory?._id || "");
@@ -2116,8 +2117,9 @@ export default function MenuPage() {
     setItemQuantity(item.quantity ? String(item.quantity) : "");
     setItemQuantityUnit(item.quantityUnit || "g");
     setItemIsGst(item.isGst ?? true);
-    setItemSelectedTaxGroupId(item.taxGroupId || taxGroups?.[0]?._id || "");
-    setItemTaxMode(item.taxMode || taxGroups?.[0]?.taxMode || "inclusive");
+    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
+    setItemSelectedTaxGroupId(item.taxGroupId || defaultTg?._id || "");
+    setItemTaxMode(item.taxMode || defaultTg?.taxMode || "inclusive");
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
     setItemSelectedCategoryId(activeCategory?._id || "");
@@ -2253,6 +2255,8 @@ export default function MenuPage() {
           ? [matchedTypeObj.id as Id<"itemTypes">]
           : undefined;
 
+      const effectiveTaxGroupId = (itemSelectedTaxGroupId || resolvedTaxGroup?._id || undefined) as Id<"taxGroups"> | undefined;
+
       if (editingItem) {
         await updateItemMutation({
           id: editingItem._id,
@@ -2270,7 +2274,7 @@ export default function MenuPage() {
               : undefined,
           quantityUnit: itemShowQuantity ? itemQuantityUnit : undefined,
           isGst: itemIsGst,
-          taxGroupId: (itemSelectedTaxGroupId as any) || undefined,
+          taxGroupId: effectiveTaxGroupId,
           taxMode: itemTaxMode,
           markAsBestseller: itemMarkAsBestseller,
           isAvailable: itemIsAvailable,
@@ -2304,7 +2308,7 @@ export default function MenuPage() {
           showItemType: itemShowItemType,
           isAvailable: itemIsAvailable,
           isGst: itemIsGst,
-          taxGroupId: (itemSelectedTaxGroupId as any) || undefined,
+          taxGroupId: effectiveTaxGroupId,
           taxMode: itemTaxMode,
           showQuantity: itemShowQuantity,
           quantity:
@@ -3556,10 +3560,14 @@ export default function MenuPage() {
                               </label>
                               <div className="relative">
                                 <select
-                                  value={itemSelectedTaxGroupId}
-                                  onChange={(e) =>
-                                    setItemSelectedTaxGroupId(e.target.value)
-                                  }
+                                  value={itemSelectedTaxGroupId || resolvedTaxGroup?._id || ""}
+                                  onChange={(e) => {
+                                    setItemSelectedTaxGroupId(e.target.value);
+                                    const matched = taxGroups?.find((g) => g._id === e.target.value);
+                                    if (matched?.taxMode) {
+                                      setItemTaxMode(matched.taxMode);
+                                    }
+                                  }}
                                   className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 appearance-none focus:outline-none focus:border-[#141010] text-[#0c0a09] text-xs font-medium"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
@@ -3701,7 +3709,7 @@ export default function MenuPage() {
                               onChange={(e) =>
                                 setItemShowAllergens(e.target.checked)
                               }
-                              className="w-4 h-4 rounded text-[#0c0a09] focus:ring-[#0c0a09] border-[#d1c4c1] cursor-pointer"
+                              className="w-4 h-4 rounded text-[#0c0a09] focus:ring-[#0c0a09] border-[#d1c4c1] cursor-pointer accent-[#0c0a09]"
                             />
                             <span className="text-xs text-[#0c0a09] font-medium">
                               Show allergen contents
@@ -6841,7 +6849,7 @@ export default function MenuPage() {
                               type="checkbox"
                               checked={choiceIsGst}
                               onChange={(e) => setChoiceIsGst(e.target.checked)}
-                              className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer"
+                              className="h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900 cursor-pointer accent-[#0c0a09]"
                             />
                           </div>
                           <div className="ml-2.5 text-xs">

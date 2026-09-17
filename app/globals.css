@@ -45,14 +45,21 @@
 ::-webkit-scrollbar-thumb { background: #e7e5e4; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #c8c6c6; }
 
+input[type="checkbox"],
+input[type="radio"],
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  accent-color: #0c0a09 !important;
+  color: #0c0a09 !important;
+  cursor: pointer;
+}
+
 button,
 [role="button"],
 select,
 summary,
 a,
 label[for],
-input[type="checkbox"],
-input[type="radio"],
 input[type="button"],
 input[type="submit"],
 input[type="reset"] {

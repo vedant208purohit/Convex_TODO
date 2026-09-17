@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -14,11 +14,16 @@ import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
 // ==========================================
 
 interface CartItem {
+  cartItemId?: string;
   itemId: Id<"items">;
   name: string;
   price: number; // in minor units (paise)
   quantity: number;
-  isVeg: boolean;
+  isVeg?: boolean;
+  showItemType?: boolean;
+  dietaryIcon?: string;
+  dietaryName?: string;
+  items_item_types?: Array<{ id: string; name: string; icon?: string }>;
   unit?: string;
   description?: string;
   isGst?: boolean;
@@ -29,7 +34,99 @@ interface CartItem {
     optionId: Id<"customizationItems">;
     name?: string;
     price?: number;
+    isGst?: boolean;
+    is_gst?: boolean;
+    taxGroupId?: Id<"taxGroups">;
+    tax_group_id?: Id<"taxGroups">;
+    taxMode?: "inclusive" | "exclusive";
+    tax_mode?: "inclusive" | "exclusive";
+    tax_info?: any;
   }>;
+}
+
+// ==========================================
+// DYNAMIC DIETARY MARK RENDERER
+// ==========================================
+
+function renderDietaryMark(_it: any) {
+  // Veg / Non-Veg labels/marks disabled for items
+  return null;
+}
+
+const COUNTRY_DIAL_OPTIONS = [
+  { code: "+91", label: "IN +91", country: "India", iso: "IN" },
+  { code: "+1", label: "US +1", country: "United States", iso: "US" },
+  { code: "+971", label: "AE +971", country: "United Arab Emirates", iso: "AE" },
+  { code: "+44", label: "UK +44", country: "United Kingdom", iso: "GB" },
+  { code: "+33", label: "FR +33", country: "France", iso: "FR" },
+  { code: "+61", label: "AU +61", country: "Australia", iso: "AU" },
+  { code: "+65", label: "SG +65", country: "Singapore", iso: "SG" },
+  { code: "+49", label: "DE +49", country: "Germany", iso: "DE" },
+  { code: "+81", label: "JP +81", country: "Japan", iso: "JP" },
+  { code: "+966", label: "SA +966", country: "Saudi Arabia", iso: "SA" },
+  { code: "+974", label: "QA +974", country: "Qatar", iso: "QA" },
+];
+
+function formatPhoneNumberWithCountryCode(rawPhone: string, defaultCode: string = "+91"): string {
+  if (!rawPhone || !rawPhone.trim()) return "";
+  const trimmed = rawPhone.trim();
+
+  // If already starts with '+', ensure clean spacing between dial code and number
+  if (trimmed.startsWith("+")) {
+    const digitsOnly = trimmed.replace(/\D/g, "");
+    for (const opt of COUNTRY_DIAL_OPTIONS) {
+      const codeDigits = opt.code.replace(/\D/g, "");
+      if (digitsOnly.startsWith(codeDigits)) {
+        const local = digitsOnly.slice(codeDigits.length);
+        return `${opt.code} ${local}`;
+      }
+    }
+    return trimmed;
+  }
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (!digits) return trimmed;
+
+  const currentCode = defaultCode.startsWith("+") ? defaultCode : `+${defaultCode}`;
+
+  if (currentCode === "+91") {
+    // Standard Indian mobile number is 10 digits (can start with 6, 7, 8, 9, or 91...)
+    if (digits.length === 12 && digits.startsWith("91")) {
+      return `+91 ${digits.slice(2)}`;
+    }
+    return `+91 ${digits}`;
+  } else if (currentCode === "+1") {
+    if (digits.length === 11 && digits.startsWith("1")) {
+      return `+1 ${digits.slice(1)}`;
+    }
+    return `+1 ${digits}`;
+  } else if (currentCode === "+971") {
+    if (digits.length === 12 && digits.startsWith("971")) {
+      return `+971 ${digits.slice(3)}`;
+    }
+    return `+971 ${digits}`;
+  } else if (currentCode === "+44") {
+    if (digits.length === 12 && digits.startsWith("44")) {
+      return `+44 ${digits.slice(2)}`;
+    }
+    return `+44 ${digits}`;
+  } else if (currentCode === "+33") {
+    if (digits.length === 11 && digits.startsWith("33")) {
+      return `+33 ${digits.slice(2)}`;
+    }
+    return `+33 ${digits}`;
+  } else if (currentCode === "+61") {
+    if (digits.length === 11 && digits.startsWith("61")) {
+      return `+61 ${digits.slice(2)}`;
+    }
+    return `+61 ${digits}`;
+  }
+
+  const dialDigits = currentCode.replace(/\D/g, "");
+  if (digits.startsWith(dialDigits) && digits.length > dialDigits.length + 8) {
+    return `${currentCode} ${digits.slice(dialDigits.length)}`;
+  }
+  return `${currentCode} ${digits}`;
 }
 
 interface CartTab {
@@ -46,6 +143,7 @@ interface CartTab {
   customerFirstName?: string;
   customerLastName?: string;
   customerName: string;
+  customerCountryCode?: string;
   customerPhone: string;
   customerEmail?: string;
   pickupLocation?: string;
@@ -69,11 +167,12 @@ interface CartTab {
 }
 
 // ==========================================
-// MAIN CASHIER PAGE COMPONENT
+// MAIN CASHIER POS CONTENT COMPONENT
 // ==========================================
 
-export default function CashierPosPage() {
+function CashierPosContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   // 1. Resolve Organization
   const orgs = useQuery(api.organizations.list, {});
@@ -81,6 +180,22 @@ export default function CashierPosPage() {
     if (!orgs || orgs.length === 0) return null;
     return orgs[0];
   }, [orgs]);
+
+  // Dynamic Country Dial Code resolved from Store Organization Country
+  const defaultOrgCountryCode = useMemo(() => {
+    const c = (activeOrg?.country || "").toLowerCase().trim();
+    if (c === "india" || c === "in" || c === "+91") return "+91";
+    if (c === "united arab emirates" || c === "uae" || c === "ae" || c === "+971") return "+971";
+    if (c === "united states" || c === "usa" || c === "us" || c === "canada" || c === "ca" || c === "+1") return "+1";
+    if (c === "united kingdom" || c === "uk" || c === "gb" || c === "+44") return "+44";
+    if (c === "france" || c === "fr" || c === "+33") return "+33";
+    if (c === "australia" || c === "au" || c === "+61") return "+61";
+    if (c === "germany" || c === "de" || c === "+49") return "+49";
+    if (c === "singapore" || c === "sg" || c === "+65") return "+65";
+    if (c === "saudi arabia" || c === "ksa" || c === "sa" || c === "+966") return "+966";
+    if (c === "qatar" || c === "qa" || c === "+974") return "+974";
+    return "+91";
+  }, [activeOrg?.country]);
 
   // 2. Query Menu Data & Categories
   const menuCategories = useQuery(
@@ -122,13 +237,23 @@ export default function CashierPosPage() {
   const createOrderMutation = useMutation(api.orders.createOrder);
 
   // ==========================================
-  // STATE MANAGEMENT
+  // STATE MANAGEMENT WITH URL & LOCALSTORAGE PERSISTENCE
   // ==========================================
 
-  // Step Indicator: 1: Build Order | 2: Order Details | 3: Payment
-  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+  const [isHydrated, setIsHydrated] = useState(false);
 
-  // Multi-cart Tabs (by default no table selected, clean patron fields)
+  // Step Indicator: 1: Build Order | 2: Order Details | 3: Payment
+  const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const s = sp.get("step");
+      if (s === "2") return 2;
+      if (s === "3") return 3;
+    }
+    return 1;
+  });
+
+  // Multi-cart Tabs
   const [cartTabs, setCartTabs] = useState<CartTab[]>([
     {
       id: "cart-1",
@@ -145,8 +270,18 @@ export default function CashierPosPage() {
       specialNotes: "",
     },
   ]);
-  const [activeCartId, setActiveCartId] = useState<string>("cart-1");
+
+  const [activeCartId, setActiveCartId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      const sp = new URLSearchParams(window.location.search);
+      const c = sp.get("cart");
+      if (c) return c;
+    }
+    return "cart-1";
+  });
+
   const [isCartSwitcherOpen, setIsCartSwitcherOpen] = useState(false);
+  const [isScheduleStatsOpen, setIsScheduleStatsOpen] = useState(false);
 
   // Search & Insertion State
   const [searchQuery, setSearchQuery] = useState("");
@@ -155,9 +290,29 @@ export default function CashierPosPage() {
   const [isAutocompleteOpen, setIsAutocompleteOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(0);
 
+  // Item Customizations Selection Modal State (Defx-POS matching)
+  const [customizingCatalogEntry, setCustomizingCatalogEntry] = useState<{
+    item: any;
+    customizations: any[];
+  } | null>(null);
+  const [customizationQty, setCustomizationQty] = useState<number>(1);
+  const [selectedCustomizationOptions, setSelectedCustomizationOptions] = useState<
+    Record<string, Array<{ id?: string; _id?: string; name: string; price: number; isGst?: boolean; items_item_types?: any[]; [key: string]: any }>>
+  >({});
+
   // Payment Step State
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>("Cash");
   const [tenderCashGiven, setTenderCashGiven] = useState<string>("");
+  const [tenderCardGiven, setTenderCardGiven] = useState<string>("");
+  const [tenderUpiGiven, setTenderUpiGiven] = useState<string>("");
+  const [cardAuthRef, setCardAuthRef] = useState<string>("");
+  const [upiAuthRef, setUpiAuthRef] = useState<string>("");
+  const [customTenderGiven, setCustomTenderGiven] = useState<string>("");
+  const [customTenderRef, setCustomTenderRef] = useState<string>("");
+  const [splitPart1Amount, setSplitPart1Amount] = useState<string>("");
+  const [splitPart1Mode, setSplitPart1Mode] = useState<string>("Cash");
+  const [splitPart2Amount, setSplitPart2Amount] = useState<string>("");
+  const [splitPart2Mode, setSplitPart2Mode] = useState<string>("UPI QR");
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [completedOrderData, setCompletedOrderData] = useState<any>(null);
   const [notificationToast, setNotificationToast] = useState<string | null>(null);
@@ -177,10 +332,77 @@ export default function CashierPosPage() {
     }, 4000);
   };
 
+  // Always purge legacy localStorage persistence on mount so cashier starts fresh
+  useEffect(() => {
+    try {
+      localStorage.removeItem("pos_cashier_cart_tabs");
+      localStorage.removeItem("pos_cashier_active_cart_id");
+
+      const sp = new URLSearchParams(window.location.search);
+      const urlStep = sp.get("step");
+      const urlCart = sp.get("cart");
+
+      if (urlStep === "2") setCurrentStep(2);
+      else if (urlStep === "3") setCurrentStep(3);
+      else setCurrentStep(1);
+
+      if (urlCart) {
+        setActiveCartId(urlCart);
+      }
+    } catch (e) {
+      console.error("Error initializing cashier state", e);
+    } finally {
+      setIsHydrated(true);
+    }
+  }, []);
+
+  // Synchronize Step & URL query parameter seamlessly
+  const goToStep = useCallback((step: 1 | 2 | 3, targetCartId?: string) => {
+    setCurrentStep(step);
+    const cId = targetCartId || activeCartId;
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (step === 1) {
+        url.searchParams.delete("step");
+        url.searchParams.delete("cart");
+      } else {
+        url.searchParams.set("step", step.toString());
+        url.searchParams.set("cart", cId);
+      }
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, [activeCartId]);
+
+  const switchActiveCart = useCallback((newCartId: string) => {
+    setActiveCartId(newCartId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (currentStep > 1) {
+        url.searchParams.set("cart", newCartId);
+        url.searchParams.set("step", currentStep.toString());
+      }
+      window.history.replaceState(null, "", url.toString());
+    }
+  }, [currentStep]);
+
   // Active Cart Reference
   const activeCart = useMemo(() => {
     return cartTabs.find((c) => c.id === activeCartId) || cartTabs[0];
   }, [cartTabs, activeCartId]);
+
+  // Customer History & Stats for Cashier Details (Only queried when full 10-digit phone is entered)
+  const hasCustomerPhone = Boolean(
+    activeCart?.customerPhone && activeCart.customerPhone.trim().replace(/\D/g, "").length >= 10
+  );
+  const customerStats = useQuery(
+    api.orders.getCustomerStats,
+    activeOrg && hasCustomerPhone
+      ? {
+          organizationId: activeOrg._id,
+          phone: activeCart?.customerPhone?.trim() || undefined,
+        }
+      : "skip",
+  );
 
   // Extract Flat Menu Items for Search & Catalog
   const allCatalogItems = useMemo(() => {
@@ -328,64 +550,179 @@ export default function CashierPosPage() {
       const lineTotalPaise = item.price * item.quantity;
       subtotalPaise += lineTotalPaise;
 
-      // Item tax exemption check
-      const isGst = item.isGst ?? true;
-      if (!isGst) continue; // 100% Tax Exempt item
+      // Look up current catalog item to ensure latest taxMode & taxGroupId are used
+      const catalogEntry = allCatalogItems.find(
+        (ci) => ci.item?._id === item.itemId || ci.item?.id === item.itemId
+      );
+      const liveItem = catalogEntry?.item;
 
-      // Resolve tax group for item
-      let targetGroup = null;
-      if (item.taxGroupId && taxGroups) {
-        targetGroup = taxGroups.find((g) => g._id === item.taxGroupId) || null;
-      }
-      if (!targetGroup) {
-        targetGroup = defaultTaxGroup;
-      }
+      // 1. Base item tax calculation
+      const addonsUnitPrice = (item.customizations || []).reduce((sum, c) => sum + (c.price || 0), 0);
+      const baseItemUnitPrice = Math.max(
+        0,
+        liveItem?.price !== undefined ? liveItem.price : item.price - addonsUnitPrice
+      );
+      const baseLineTotalPaise = baseItemUnitPrice * item.quantity;
 
-      if (!targetGroup || !targetGroup.componentIds || targetGroup.componentIds.length === 0) {
-        continue;
-      }
+      const itemTaxGroupId = liveItem?.taxGroupId || liveItem?.tax_group_id || item.taxGroupId;
+      const itemTaxMode = liveItem?.taxMode || liveItem?.tax_mode || item.taxMode;
+      const isGst = liveItem?.isGst ?? liveItem?.is_gst ?? item.isGst ?? false;
 
-      const mode = item.taxMode || targetGroup.taxMode || "inclusive";
-      const groupComps: Array<any> = [];
-      let groupTotalRate = 0;
+      if (isGst && baseLineTotalPaise > 0) {
+        let groupComps: Array<{ name: string; rate: number; code?: string }> = [];
+        let groupTotalRate = 0;
+        let mode: "inclusive" | "exclusive" = "inclusive";
 
-      for (const cid of targetGroup.componentIds) {
-        const comp = compMap.get(cid);
-        if (comp) {
-          groupComps.push(comp);
-          groupTotalRate += comp.rate;
+        if (liveItem?.tax_info?.components && liveItem.tax_info.components.length > 0) {
+          groupComps = liveItem.tax_info.components.map((c: any) => ({
+            name: c.name,
+            rate: c.rate,
+            code: c.code || c.name,
+          }));
+          groupTotalRate = liveItem.tax_info.total_tax_rate || groupComps.reduce((acc: number, c: any) => acc + c.rate, 0);
+          mode = (liveItem.taxMode || liveItem.tax_mode || liveItem.tax_info.tax_mode || "inclusive") as "inclusive" | "exclusive";
+        } else {
+          let targetGroup = null;
+          if (itemTaxGroupId && taxGroups) {
+            targetGroup = taxGroups.find((g) => g._id === itemTaxGroupId) || null;
+          }
+          if (!targetGroup) {
+            targetGroup = defaultTaxGroup;
+          }
+
+          if (targetGroup && targetGroup.componentIds && targetGroup.componentIds.length > 0) {
+            mode = (itemTaxMode || targetGroup.taxMode || "inclusive") as "inclusive" | "exclusive";
+            for (const cid of targetGroup.componentIds) {
+              const comp = compMap.get(cid);
+              if (comp) {
+                groupComps.push({ name: comp.name, rate: comp.rate, code: comp.code });
+                groupTotalRate += comp.rate;
+              }
+            }
+          }
+        }
+
+        if (groupTotalRate > 0 && groupComps.length > 0) {
+          let lineTaxPaise = 0;
+          if (mode === "inclusive") {
+            lineTaxPaise = Math.round(baseLineTotalPaise * (groupTotalRate / (100 + groupTotalRate)));
+            taxInclusivePaise += lineTaxPaise;
+          } else {
+            lineTaxPaise = Math.round(baseLineTotalPaise * (groupTotalRate / 100));
+            taxExclusivePaise += lineTaxPaise;
+
+            for (const comp of groupComps) {
+              const compShare = groupTotalRate > 0 ? comp.rate / groupTotalRate : 0;
+              const compTaxPaise = Math.round(lineTaxPaise * compShare);
+              const key = `${comp.name}_${comp.rate}`;
+              const existing = compAccumulator.get(key);
+              if (existing) {
+                existing.taxAmountPaise += compTaxPaise;
+              } else {
+                compAccumulator.set(key, {
+                  name: comp.name,
+                  rate: comp.rate,
+                  code: comp.code,
+                  taxAmountPaise: compTaxPaise,
+                  isInclusive: false,
+                });
+              }
+            }
+          }
         }
       }
 
-      if (groupTotalRate <= 0) continue;
+      // 2. Customizations tax calculation
+      if (item.customizations && item.customizations.length > 0) {
+        for (const cust of item.customizations) {
+          const custUnitPrice = cust.price || 0;
+          const custLineTotalPaise = custUnitPrice * item.quantity;
+          if (custLineTotalPaise <= 0) continue;
 
-      let lineTaxPaise = 0;
-      if (mode === "inclusive") {
-        // Tax is included inside lineTotalPaise: Tax = Price * (Rate / (100 + Rate))
-        lineTaxPaise = Math.round(lineTotalPaise * (groupTotalRate / (100 + groupTotalRate)));
-        taxInclusivePaise += lineTaxPaise;
-      } else {
-        // Tax is exclusive: Tax = Price * (Rate / 100)
-        lineTaxPaise = Math.round(lineTotalPaise * (groupTotalRate / 100));
-        taxExclusivePaise += lineTaxPaise;
-      }
+          // Resolve customization details from live catalogEntry or cust object
+          let custIsGst = cust.isGst ?? cust.is_gst;
+          let custTaxGroupId = cust.taxGroupId ?? cust.tax_group_id;
+          let custTaxMode = cust.taxMode ?? cust.tax_mode;
+          let custTaxInfo: any = cust.tax_info;
 
-      // Distribute tax to components proportionally
-      for (const comp of groupComps) {
-        const compShare = groupTotalRate > 0 ? comp.rate / groupTotalRate : 0;
-        const compTaxPaise = Math.round(lineTaxPaise * compShare);
-        const key = `${comp.name}_${comp.rate}_${mode}`;
-        const existing = compAccumulator.get(key);
-        if (existing) {
-          existing.taxAmountPaise += compTaxPaise;
-        } else {
-          compAccumulator.set(key, {
-            name: comp.name,
-            rate: comp.rate,
-            code: comp.code,
-            taxAmountPaise: compTaxPaise,
-            isInclusive: mode === "inclusive",
-          });
+          if (catalogEntry?.customizations) {
+            for (const cg of catalogEntry.customizations) {
+              const foundCi = (cg.customization_items || []).find(
+                (ci: any) => (ci.id || ci._id) === (cust.optionId || (cust as any).id || (cust as any)._id)
+              );
+              if (foundCi) {
+                if (custIsGst === undefined) custIsGst = foundCi.is_gst ?? foundCi.isGst;
+                if (!custTaxGroupId) custTaxGroupId = foundCi.tax_group_id ?? foundCi.taxGroupId;
+                if (!custTaxMode) custTaxMode = foundCi.tax_mode ?? foundCi.taxMode;
+                if (!custTaxInfo) custTaxInfo = foundCi.tax_info;
+                break;
+              }
+            }
+          }
+
+          if (!custIsGst) continue; // Customization item is tax exempt
+
+          let custComps: Array<{ name: string; rate: number; code?: string }> = [];
+          let custTotalRate = 0;
+          let mode: "inclusive" | "exclusive" = "inclusive";
+
+          if (custTaxInfo?.components && custTaxInfo.components.length > 0) {
+            custComps = custTaxInfo.components.map((c: any) => ({
+              name: c.name,
+              rate: c.rate,
+              code: c.code || c.name,
+            }));
+            custTotalRate = custTaxInfo.total_tax_rate || custComps.reduce((acc: number, c: any) => acc + c.rate, 0);
+            mode = (custTaxMode || custTaxInfo.tax_mode || "inclusive") as "inclusive" | "exclusive";
+          } else {
+            let targetGroup = null;
+            if (custTaxGroupId && taxGroups) {
+              targetGroup = taxGroups.find((g) => g._id === custTaxGroupId) || null;
+            }
+            if (!targetGroup) {
+              targetGroup = defaultTaxGroup;
+            }
+
+            if (targetGroup && targetGroup.componentIds && targetGroup.componentIds.length > 0) {
+              mode = (custTaxMode || targetGroup.taxMode || "inclusive") as "inclusive" | "exclusive";
+              for (const cid of targetGroup.componentIds) {
+                const comp = compMap.get(cid);
+                if (comp) {
+                  custComps.push({ name: comp.name, rate: comp.rate, code: comp.code });
+                  custTotalRate += comp.rate;
+                }
+              }
+            }
+          }
+
+          if (custTotalRate > 0 && custComps.length > 0) {
+            let lineTaxPaise = 0;
+            if (mode === "inclusive") {
+              lineTaxPaise = Math.round(custLineTotalPaise * (custTotalRate / (100 + custTotalRate)));
+              taxInclusivePaise += lineTaxPaise;
+            } else {
+              lineTaxPaise = Math.round(custLineTotalPaise * (custTotalRate / 100));
+              taxExclusivePaise += lineTaxPaise;
+
+              for (const comp of custComps) {
+                const compShare = custTotalRate > 0 ? comp.rate / custTotalRate : 0;
+                const compTaxPaise = Math.round(lineTaxPaise * compShare);
+                const key = `${comp.name}_${comp.rate}`;
+                const existing = compAccumulator.get(key);
+                if (existing) {
+                  existing.taxAmountPaise += compTaxPaise;
+                } else {
+                  compAccumulator.set(key, {
+                    name: comp.name,
+                    rate: comp.rate,
+                    code: comp.code,
+                    taxAmountPaise: compTaxPaise,
+                    isInclusive: false,
+                  });
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -407,13 +744,167 @@ export default function CashierPosPage() {
       isTaxExempt: subtotalPaise > 0 && totalTaxPaise === 0,
       currencySymbol: storeTaxSettings?.currencySymbol || "₹",
     };
-  }, [activeCart, storeTaxSettings, taxGroups, taxComponents]);
+  }, [activeCart, storeTaxSettings, taxGroups, taxComponents, allCatalogItems]);
 
   // Backward-compatible calculation variables
   const cartSubtotalPaise = taxCalculation.subtotalPaise;
   const taxGstPaise = taxCalculation.totalTaxPaise;
   const deliveryFeePaise = taxCalculation.deliveryFeePaise;
   const totalPayablePaise = taxCalculation.totalPayablePaise;
+
+  // Dynamic Payment Channels derived from active organization payment modes
+  const activePaymentChannels = useMemo(() => {
+    if (paymentModesList && paymentModesList.length > 0) {
+      const channels = paymentModesList.map((m: any) => {
+        const name = m.name;
+        const lower = name.toLowerCase();
+        let icon = (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          </svg>
+        );
+
+        if (lower.includes("credit") || (lower.includes("card") && !lower.includes("debit"))) {
+          icon = (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          );
+        } else if (lower.includes("debit")) {
+          icon = (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          );
+        } else if (lower.includes("upi") || lower.includes("qr") || lower.includes("gpay") || lower.includes("phonepe") || lower.includes("paytm")) {
+          icon = (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          );
+        } else if (lower.includes("split")) {
+          icon = (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          );
+        } else {
+          icon = (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          );
+        }
+
+        return {
+          id: m._id || m.id,
+          name: m.name,
+          icon,
+        };
+      });
+
+      if (!channels.some((m: any) => m.name.toLowerCase().includes("split"))) {
+        channels.push({
+          id: "split-payment",
+          name: "Split Payment",
+          icon: (
+            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            </svg>
+          ),
+        });
+      }
+
+      return channels;
+    }
+
+    return [
+      {
+        id: "pm_cash",
+        name: "Cash",
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          </svg>
+        ),
+      },
+      {
+        id: "pm_credit",
+        name: "Credit Card",
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          </svg>
+        ),
+      },
+      {
+        id: "pm_debit",
+        name: "Debit Card",
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          </svg>
+        ),
+      },
+      {
+        id: "pm_upi",
+        name: "UPI QR",
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          </svg>
+        ),
+      },
+      {
+        id: "pm_split",
+        name: "Split Payment",
+        icon: (
+          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          </svg>
+        ),
+      },
+    ];
+  }, [paymentModesList]);
+
+  // Ensure selectedPaymentMode is valid for current store's active payment modes
+  useEffect(() => {
+    if (activePaymentChannels.length > 0) {
+      const exists = activePaymentChannels.some((m: any) => m.name === selectedPaymentMode);
+      if (!exists) {
+        setSelectedPaymentMode(activePaymentChannels[0].name);
+      }
+    }
+  }, [activePaymentChannels, selectedPaymentMode]);
+
+  // Auto-fill exact cash/card/upi/split tendered when entering Step 3 Payment screen or when cart total updates
+  useEffect(() => {
+    if (currentStep === 3) {
+      const required = (totalPayablePaise / 100).toFixed(2);
+      const half1 = (Math.floor(totalPayablePaise / 2) / 100).toFixed(2);
+      const half2 = ((totalPayablePaise - Math.floor(totalPayablePaise / 2)) / 100).toFixed(2);
+      const lower = selectedPaymentMode.toLowerCase();
+
+      if (lower.includes("cash")) {
+        setTenderCashGiven((prev) => {
+          const parsed = parseFloat(prev || "0");
+          if (!prev.trim() || isNaN(parsed) || Math.round(parsed * 100) < totalPayablePaise) {
+            return required;
+          }
+          return prev;
+        });
+      } else if (lower.includes("card")) {
+        setTenderCardGiven((prev) => (!prev.trim() || prev === "0" ? required : prev));
+      } else if (lower.includes("upi") || lower.includes("qr")) {
+        setTenderUpiGiven((prev) => (!prev.trim() || prev === "0" ? required : prev));
+      } else if (lower.includes("split")) {
+        setSplitPart1Amount((prev) => (!prev.trim() || prev === "0" ? half1 : prev));
+        setSplitPart2Amount((prev) => (!prev.trim() || prev === "0" ? half2 : prev));
+      } else {
+        setCustomTenderGiven((prev) => (!prev.trim() || prev === "0" ? required : prev));
+      }
+    }
+  }, [currentStep, selectedPaymentMode, totalPayablePaise]);
 
   const totalCartItemCount = useMemo(() => {
     if (!activeCart) return 0;
@@ -450,7 +941,7 @@ export default function CashierPosPage() {
   // CART ACTIONS
   // ==========================================
 
-  // Add Item to Current Cart
+  // Add Item to Current Cart (Standard Direct)
   const handleAddItemToCart = useCallback(
     (item: any, quantityToAdd: number = 1) => {
       if (!item || quantityToAdd <= 0) return;
@@ -458,19 +949,27 @@ export default function CashierPosPage() {
         prevTabs.map((cart) => {
           if (cart.id !== activeCartId) return cart;
           const existingIndex = cart.items.findIndex(
-            (ci) => ci.itemId === item._id || ci.itemId === item.id,
+            (ci) => (ci.itemId === item._id || ci.itemId === item.id) && (!ci.customizations || ci.customizations.length === 0),
           );
           if (existingIndex > -1) {
             const updatedItems = [...cart.items];
             updatedItems[existingIndex].quantity += quantityToAdd;
             return { ...cart, items: updatedItems };
           } else {
+            const types = item.items_item_types || item.itemTypes || item.itemsItemTypes || [];
+            const primaryType = Array.isArray(types) && types.length > 0 ? types[0] : null;
+
             const newItem: CartItem = {
+              cartItemId: `${item._id || item.id}_standard_${Date.now()}`,
               itemId: item._id || item.id,
               name: item.name,
               price: item.price,
               quantity: quantityToAdd,
-              isVeg: item.isVeg ?? true,
+              isVeg: item.isVeg ?? item.is_veg,
+              showItemType: item.showItemType ?? item.show_item_type,
+              dietaryIcon: primaryType?.icon,
+              dietaryName: primaryType?.name,
+              items_item_types: types,
               unit: item.quantityUnit || (item.servingSize ? `${item.servingSize}` : "1 pc"),
               description: item.description,
               isGst: item.isGst ?? item.is_gst ?? true,
@@ -486,8 +985,188 @@ export default function CashierPosPage() {
     [activeCartId, activeCart],
   );
 
+  // Catalog Item Click - Opens Customization Modal if published customizations exist
+  const handleCatalogItemClick = useCallback(
+    (entry: { item: any; customizations?: any[] }, quantityToAdd: number = 1) => {
+      if (!entry?.item) return;
+      const rawCusts = entry.customizations || entry.item?.customizations || [];
+      const activeCusts = Array.isArray(rawCusts)
+        ? rawCusts.filter(
+            (c: any) =>
+              c.published !== false &&
+              Array.isArray(c.customization_items) &&
+              c.customization_items.length > 0,
+          )
+        : [];
+
+      if (activeCusts.length > 0) {
+        setCustomizingCatalogEntry({ item: entry.item, customizations: activeCusts });
+        setCustomizationQty(quantityToAdd);
+        const initialMap: Record<string, any[]> = {};
+        for (const group of activeCusts) {
+          const availableItems = (group.customization_items || []).filter(
+            (ci: any) => ci.is_available !== false,
+          );
+          if (group.required && availableItems.length > 0) {
+            initialMap[group.id || group._id] = [availableItems[0]];
+          } else {
+            initialMap[group.id || group._id] = [];
+          }
+        }
+        setSelectedCustomizationOptions(initialMap);
+      } else {
+        handleAddItemToCart(entry.item, quantityToAdd);
+      }
+    },
+    [handleAddItemToCart],
+  );
+
+  // Toggle Customization Option inside Modal
+  const handleToggleCustomizationOption = (group: any, option: any) => {
+    const gid = group.id || group._id;
+    const maxSelected = group.max_selected ?? (group.required ? 1 : 99);
+    const currentSelections = selectedCustomizationOptions[gid] || [];
+    const isAlreadySelected = currentSelections.some(
+      (o) => (o.id || o._id) === (option.id || option._id),
+    );
+
+    if (maxSelected === 1) {
+      // Radio single-choice behavior
+      if (isAlreadySelected) {
+        if (!group.required) {
+          // If group is optional / not required, allow toggling off (unselecting)
+          setSelectedCustomizationOptions((prev) => ({
+            ...prev,
+            [gid]: [],
+          }));
+        }
+      } else {
+        setSelectedCustomizationOptions((prev) => ({
+          ...prev,
+          [gid]: [option],
+        }));
+      }
+    } else {
+      // Multi-choice behavior up to max_selected
+      if (isAlreadySelected) {
+        setSelectedCustomizationOptions((prev) => ({
+          ...prev,
+          [gid]: prev[gid]?.filter((o) => (o.id || o._id) !== (option.id || option._id)) || [],
+        }));
+      } else {
+        if (currentSelections.length >= maxSelected) {
+          showToast(`You can select at most ${maxSelected} option${maxSelected > 1 ? "s" : ""}`);
+          return;
+        }
+        setSelectedCustomizationOptions((prev) => ({
+          ...prev,
+          [gid]: [...(prev[gid] || []), option],
+        }));
+      }
+    }
+  };
+
+  // Confirm Customization Modal and Add Customized Item to Cart
+  const handleConfirmCustomizationModal = useCallback(() => {
+    if (!customizingCatalogEntry) return;
+
+    const item = customizingCatalogEntry.item;
+    const activeCusts = customizingCatalogEntry.customizations;
+
+    // Validation: ensure required groups have a selection
+    for (const group of activeCusts) {
+      const gid = group.id || group._id;
+      const selectedInGroup = selectedCustomizationOptions[gid] || [];
+      if (group.required && selectedInGroup.length === 0) {
+        showToast(`Please make a selection for "${group.name}"`);
+        return;
+      }
+    }
+
+    const flatCustomizations: Array<{
+      customizationId: Id<"customizations">;
+      optionId: Id<"customizationItems">;
+      name: string;
+      price: number;
+      isGst?: boolean;
+      taxGroupId?: Id<"taxGroups">;
+      taxMode?: "inclusive" | "exclusive";
+      tax_info?: any;
+    }> = [];
+
+    let totalAddonPaise = 0;
+    for (const [groupId, options] of Object.entries(selectedCustomizationOptions)) {
+      for (const opt of options) {
+        flatCustomizations.push({
+          customizationId: groupId as Id<"customizations">,
+          optionId: (opt.id || opt._id) as Id<"customizationItems">,
+          name: opt.name,
+          price: opt.price || 0,
+          isGst: opt.isGst ?? opt.is_gst,
+          taxGroupId: opt.taxGroupId ?? opt.tax_group_id,
+          taxMode: opt.taxMode ?? opt.tax_mode,
+          tax_info: opt.tax_info,
+        });
+        totalAddonPaise += opt.price || 0;
+      }
+    }
+
+    const finalUnitPrice = item.price + totalAddonPaise;
+    const types = item.items_item_types || item.itemTypes || item.itemsItemTypes || [];
+    const primaryType = Array.isArray(types) && types.length > 0 ? types[0] : null;
+
+    const custKey = flatCustomizations
+      .map((c) => `${c.customizationId}_${c.optionId}`)
+      .sort()
+      .join("|");
+
+    const newItem: CartItem = {
+      cartItemId: `${item._id || item.id}_${custKey}_${Date.now()}`,
+      itemId: item._id || item.id,
+      name: item.name,
+      price: finalUnitPrice,
+      quantity: customizationQty,
+      isVeg: item.isVeg ?? item.is_veg,
+      showItemType: item.showItemType ?? item.show_item_type,
+      dietaryIcon: primaryType?.icon,
+      dietaryName: primaryType?.name,
+      items_item_types: types,
+      unit: item.quantityUnit || (item.servingSize ? `${item.servingSize}` : "1 pc"),
+      description: item.description,
+      isGst: item.isGst ?? item.is_gst ?? true,
+      taxGroupId: item.taxGroupId || item.tax_group_id,
+      taxMode: item.taxMode || item.tax_mode,
+      customizations: flatCustomizations,
+    };
+
+    setCartTabs((prevTabs) =>
+      prevTabs.map((cart) => {
+        if (cart.id !== activeCartId) return cart;
+        const existingIndex = cart.items.findIndex(
+          (ci) =>
+            (ci.itemId === item._id || ci.itemId === item.id) &&
+            (ci.customizations || [])
+              .map((c) => `${c.customizationId}_${c.optionId}`)
+              .sort()
+              .join("|") === custKey,
+        );
+
+        if (existingIndex > -1) {
+          const updatedItems = [...cart.items];
+          updatedItems[existingIndex].quantity += customizationQty;
+          return { ...cart, items: updatedItems };
+        } else {
+          return { ...cart, items: [...cart.items, newItem] };
+        }
+      }),
+    );
+
+    showToast(`Added ${customizationQty}x ${item.name} to ${activeCart.label}`);
+    setCustomizingCatalogEntry(null);
+  }, [customizingCatalogEntry, selectedCustomizationOptions, customizationQty, activeCartId, activeCart]);
+
   // Modify Quantity
-  const handleUpdateItemQuantity = (itemId: string, newQty: number) => {
+  const handleUpdateItemQuantity = (cartItemKey: string, newQty: number) => {
     setCartTabs((prevTabs) =>
       prevTabs.map((cart) => {
         if (cart.id !== activeCartId) return cart;
@@ -495,14 +1174,14 @@ export default function CashierPosPage() {
           return {
             ...cart,
             items: cart.items.filter(
-              (ci) => ci.itemId !== (itemId as unknown as Id<"items">),
+              (ci) => ci.cartItemId !== cartItemKey && (ci.itemId as unknown as string) !== cartItemKey,
             ),
           };
         }
         return {
           ...cart,
           items: cart.items.map((ci) =>
-            ci.itemId === (itemId as unknown as Id<"items">)
+            ci.cartItemId === cartItemKey || (ci.itemId as unknown as string) === cartItemKey
               ? { ...ci, quantity: newQty }
               : ci,
           ),
@@ -512,36 +1191,74 @@ export default function CashierPosPage() {
   };
 
   // Remove Item
-  const handleRemoveItem = (itemId: string) => {
+  const handleRemoveItem = (cartItemKey: string) => {
     setCartTabs((prevTabs) =>
       prevTabs.map((cart) => {
         if (cart.id !== activeCartId) return cart;
         return {
           ...cart,
           items: cart.items.filter(
-            (ci) => ci.itemId !== (itemId as unknown as Id<"items">),
+            (ci) => ci.cartItemId !== cartItemKey && (ci.itemId as unknown as string) !== cartItemKey,
           ),
         };
       }),
     );
   };
 
-  // Clear Entire Active Cart
-  const handleClearCart = () => {
+  // Clear Entire Active Cart & Reset All Associated Order Details
+  const handleClearCart = useCallback(() => {
     setCartTabs((prevTabs) =>
       prevTabs.map((cart) => {
         if (cart.id !== activeCartId) return cart;
-        return { ...cart, items: [] };
+        return {
+          id: cart.id,
+          label: cart.label,
+          items: [],
+          orderType: "DineIn",
+          isTableRequired: false,
+          guestCount: 2,
+          customerFirstName: "",
+          customerLastName: "",
+          customerName: "",
+          customerCountryCode: defaultOrgCountryCode,
+          customerPhone: "",
+          customerEmail: "",
+          specialNotes: "",
+          tableId: undefined,
+          tableName: undefined,
+          waiterId: undefined,
+          waiterName: undefined,
+          deliveryAddress: undefined,
+          deliveryInstructions: undefined,
+          scheduledDate: undefined,
+          scheduledTime: undefined,
+        };
       }),
     );
-    showToast("Cart cleared");
-  };
+    setTenderCashGiven("");
+    setTenderCardGiven("");
+    setTenderUpiGiven("");
+    setCardAuthRef("");
+    setUpiAuthRef("");
+    setCustomTenderGiven("");
+    setCustomTenderRef("");
+    setSplitPart1Amount("");
+    setSplitPart2Amount("");
+    setSearchQuery("");
+  }, [activeCartId, defaultOrgCountryCode]);
+
+  // Complete Reset of Active Cart & Modal for a Brand New Order
+  const handleResetToNewOrder = useCallback(() => {
+    handleClearCart();
+    setCompletedOrderData(null);
+    goToStep(1);
+  }, [handleClearCart, goToStep]);
 
   // Matched customer profile for active cart
   const matchedCustomer = useMemo(() => {
     if (!customersList || !activeCart?.customerPhone) return null;
     const cleanPhone = activeCart.customerPhone.replace(/\D/g, "");
-    if (cleanPhone.length < 4) return null;
+    if (cleanPhone.length < 10) return null;
     return (
       customersList.find((u) => {
         const uPhone = (u.phone || "").replace(/\D/g, "");
@@ -550,11 +1267,23 @@ export default function CashierPosPage() {
     );
   }, [customersList, activeCart?.customerPhone]);
 
-  // Handle phone input change with auto-lookup
+  // Handle phone input change with auto-lookup & dynamic country code detection
   const handleCustomerPhoneChange = (phoneVal: string) => {
-    const cleanDigits = phoneVal.replace(/\D/g, "");
+    let updatedCode: string | undefined = undefined;
+    let localDigits = phoneVal;
+
+    // Check if user pasted number with country code like +91 98250...
+    for (const opt of COUNTRY_DIAL_OPTIONS) {
+      if (phoneVal.startsWith(opt.code)) {
+        updatedCode = opt.code;
+        localDigits = phoneVal.slice(opt.code.length).trim();
+        break;
+      }
+    }
+
+    const cleanDigits = localDigits.replace(/\D/g, "");
     const match =
-      cleanDigits.length >= 4 && customersList
+      cleanDigits.length >= 10 && customersList
         ? customersList.find((u) => {
             const uPhone = (u.phone || "").replace(/\D/g, "");
             return uPhone && (uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone));
@@ -564,19 +1293,36 @@ export default function CashierPosPage() {
     setCartTabs((prev) =>
       prev.map((c) => {
         if (c.id !== activeCartId) return c;
+        const currentCode = updatedCode || c.customerCountryCode || defaultOrgCountryCode;
         if (match) {
           const first = match.firstName || c.customerFirstName || "";
           const last = match.lastName || c.customerLastName || "";
+          let matchCode = currentCode;
+          let matchPhone = localDigits;
+          if (match.phone) {
+            for (const opt of COUNTRY_DIAL_OPTIONS) {
+              if (match.phone.startsWith(opt.code)) {
+                matchCode = opt.code;
+                matchPhone = match.phone.slice(opt.code.length).trim();
+                break;
+              }
+            }
+          }
           return {
             ...c,
-            customerPhone: phoneVal,
+            customerCountryCode: matchCode,
+            customerPhone: localDigits || matchPhone,
             customerFirstName: first,
             customerLastName: last,
             customerName: `${first} ${last}`.trim(),
             customerEmail: match.email || c.customerEmail || "",
           };
         }
-        return { ...c, customerPhone: phoneVal };
+        return {
+          ...c,
+          customerCountryCode: currentCode,
+          customerPhone: localDigits,
+        };
       }),
     );
   };
@@ -595,6 +1341,7 @@ export default function CashierPosPage() {
       customerFirstName: "",
       customerLastName: "",
       customerName: "",
+      customerCountryCode: defaultOrgCountryCode,
       customerPhone: "",
       customerEmail: "",
       specialNotes: "",
@@ -708,53 +1455,126 @@ export default function CashierPosPage() {
       return;
     }
 
+    const lowerMode = selectedPaymentMode.toLowerCase();
+    if (lowerMode.includes("cash")) {
+      const cashStr = tenderCashGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const given = parseFloat(cashStr);
+      const required = totalPayablePaise / 100;
+      if (isNaN(given) || given <= 0) {
+        showToast("Please enter a valid cash tendered amount.");
+        return;
+      }
+      if (Math.round(given * 100) < totalPayablePaise) {
+        showToast(
+          `Insufficient cash tendered (${taxCalculation.currencySymbol}${given.toFixed(2)}). Total payable is ${taxCalculation.currencySymbol}${required.toFixed(2)}.`
+        );
+        return;
+      }
+    } else if (lowerMode.includes("card")) {
+      const cardStr = tenderCardGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const given = parseFloat(cardStr);
+      if (isNaN(given) || given <= 0) {
+        showToast("Please enter a valid card charge amount.");
+        return;
+      }
+    } else if (lowerMode.includes("upi") || lowerMode.includes("qr")) {
+      const upiStr = tenderUpiGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const given = parseFloat(upiStr);
+      if (isNaN(given) || given <= 0) {
+        showToast("Please enter a valid UPI amount.");
+        return;
+      }
+    } else if (lowerMode.includes("split")) {
+      const p1 = parseFloat(splitPart1Amount.trim() || "0");
+      const p2 = parseFloat(splitPart2Amount.trim() || "0");
+      if (isNaN(p1) || p1 <= 0 || isNaN(p2) || p2 <= 0) {
+        showToast("Both split payment amounts must be greater than zero.");
+        return;
+      }
+      const totalSplitPaise = Math.round((p1 + p2) * 100);
+      if (totalSplitPaise !== totalPayablePaise) {
+        showToast(
+          `Split amounts total (${taxCalculation.currencySymbol}${(totalSplitPaise / 100).toFixed(2)}) must equal payable total (${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}).`
+        );
+        return;
+      }
+    } else {
+      const customStr = customTenderGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const given = parseFloat(customStr);
+      if (isNaN(given) || given <= 0) {
+        showToast(`Please enter a valid amount for ${selectedPaymentMode}.`);
+        return;
+      }
+    }
+
     try {
       setIsProcessingOrder(true);
 
       const itemsPayload = activeCart.items.map((ci) => ({
         itemId: ci.itemId,
         quantity: ci.quantity,
+        customizations:
+          ci.customizations && ci.customizations.length > 0
+            ? ci.customizations.map((c) => ({
+                customizationId: c.customizationId,
+                optionId: c.optionId,
+              }))
+            : undefined,
       }));
 
       const tableObj = tables?.find((t) => t._id === activeCart.tableId);
 
+      const firstName = activeCart.customerFirstName?.trim() || "Guest";
+      const lastName = activeCart.customerLastName?.trim() || "Customer";
       const resolvedCustomerName =
-        activeCart.customerName ||
-        (activeCart.customerFirstName
-          ? `${activeCart.customerFirstName} ${activeCart.customerLastName || ""}`.trim()
-          : "Walk-in Customer");
+        activeCart.customerName?.trim() ||
+        (activeCart.customerFirstName?.trim()
+          ? `${activeCart.customerFirstName.trim()} ${activeCart.customerLastName?.trim() || ""}`.trim()
+          : `${firstName} ${lastName}`);
 
       let resolvedNotes = activeCart.specialNotes || "";
-      if (activeCart.orderType === "TakeAway") {
-        const prefs: string[] = [];
-        if (activeCart.pickupLocation) prefs.push(`Pickup: ${activeCart.pickupLocation}`);
-        if (activeCart.includeCarryBag !== false) prefs.push("Carry bag included");
-        if (activeCart.includeCutlery !== false) prefs.push("Cutlery included");
-        if (activeCart.contactlessHandoff) prefs.push("Contactless handoff");
-        if (prefs.length > 0) {
-          resolvedNotes = resolvedNotes ? `[${prefs.join(" • ")}] ${resolvedNotes}` : `[${prefs.join(" • ")}]`;
-        }
-      } else if (activeCart.orderType === "Delivery") {
+      if (activeCart.orderType === "Delivery") {
         if (activeCart.deliveryInstructions) {
           resolvedNotes = resolvedNotes
             ? `[Delivery Note: ${activeCart.deliveryInstructions}] ${resolvedNotes}`
             : `[Delivery Note: ${activeCart.deliveryInstructions}]`;
         }
       } else if (activeCart.orderType === "Scheduled") {
-        const sDate = activeCart.scheduledDate || "Tomorrow — Sep 17, 2026";
-        const sTime = activeCart.scheduledTime || "01:30 PM - 02:00 PM (Lunch Slot)";
-        const sType = activeCart.scheduledSubtype === "ScheduledDelivery" ? "Delivery" : "Pickup";
+        const sDate = activeCart.scheduledDate || "Today";
+        const sTime = activeCart.scheduledTime || "Standard Slot";
         resolvedNotes = resolvedNotes
-          ? `[Scheduled ${sType}: ${sDate} @ ${sTime}] ${resolvedNotes}`
-          : `[Scheduled ${sType}: ${sDate} @ ${sTime}]`;
+          ? `[Scheduled Pickup: ${sDate} @ ${sTime}] ${resolvedNotes}`
+          : `[Scheduled Pickup: ${sDate} @ ${sTime}]`;
+      }
+
+      if (
+        customTenderRef.trim() &&
+        !lowerMode.includes("cash") &&
+        !lowerMode.includes("card") &&
+        !lowerMode.includes("upi") &&
+        !lowerMode.includes("qr") &&
+        !lowerMode.includes("split")
+      ) {
+        resolvedNotes = resolvedNotes
+          ? `[${selectedPaymentMode} Ref: ${customTenderRef.trim()}] ${resolvedNotes}`
+          : `[${selectedPaymentMode} Ref: ${customTenderRef.trim()}]`;
       }
 
       const resolvedOrderType =
         activeCart.orderType === "Scheduled"
-          ? activeCart.scheduledSubtype === "ScheduledDelivery"
-            ? "ScheduledDelivery"
-            : "ScheduledPickup"
+          ? "ScheduledPickup"
           : activeCart.orderType;
+
+      // Build full international phone number with dynamic country dial code
+      // Auto-generate unique non-repeating 10-digit series starting with 90 if customer phone is not provided
+      const currentDial = activeCart.customerCountryCode || defaultOrgCountryCode || "+91";
+      let rawPhone = activeCart.customerPhone?.trim();
+      if (!rawPhone) {
+        const timeSlice = (Date.now() % 1000000).toString().padStart(6, "0");
+        const randomSeed = Math.floor(10 + Math.random() * 90).toString();
+        rawPhone = `90${timeSlice}${randomSeed}`;
+      }
+      const resolvedCustomerPhone = formatPhoneNumberWithCountryCode(rawPhone, currentDial);
 
       const res = await createOrderMutation({
         organizationId: activeOrg._id,
@@ -766,18 +1586,14 @@ export default function CashierPosPage() {
         waiterUserId: activeCart.waiterId,
         membersOnTable: activeCart.guestCount,
         customerName: resolvedCustomerName,
-        customerPhone: activeCart.customerPhone || undefined,
+        customerPhone: resolvedCustomerPhone,
         customerEmail: activeCart.customerEmail || undefined,
         deliveryCharge:
-          activeCart.orderType === "Delivery" ||
-          (activeCart.orderType === "Scheduled" &&
-            activeCart.scheduledSubtype === "ScheduledDelivery")
+          activeCart.orderType === "Delivery"
             ? 5800
             : undefined,
         deliveryAddress:
-          activeCart.orderType === "Delivery" ||
-          (activeCart.orderType === "Scheduled" &&
-            activeCart.scheduledSubtype === "ScheduledDelivery")
+          activeCart.orderType === "Delivery"
             ? activeCart.deliveryAddress || {
                 addressLine1: "34, Example Street, Near Sunshine Heights, Bandra West",
                 landmark: "Opposite Lotus Park",
@@ -787,21 +1603,80 @@ export default function CashierPosPage() {
               }
             : undefined,
         specialNotes: resolvedNotes || undefined,
+        orderSource: "Prest-Cashier",
         paymentMode: selectedPaymentMode,
         items: itemsPayload,
       });
 
+      const itemsSnapshot = activeCart.items.map((ci) => {
+        const itemRate = ci.price;
+        const itemQty = ci.quantity || 1;
+        const lineTotal = itemRate * itemQty;
+        return {
+          itemId: ci.itemId,
+          itemName: ci.name,
+          name: ci.name,
+          itemPrice: itemRate,
+          price: itemRate,
+          display_item_price: (itemRate / 100).toFixed(2),
+          quantity: itemQty,
+          totalPrice: lineTotal,
+          display_total_price: (lineTotal / 100).toFixed(2),
+          customizations: ci.customizations?.map((c) => ({
+            optionName: c.name,
+            name: c.name,
+          })),
+        };
+      });
+
       setCompletedOrderData({
         ...res,
-        items: activeCart.items,
-        totalAmount: (totalPayablePaise / 100).toFixed(2),
+        _id: res.orderId,
+        orderId: res.orderId,
+        orderNumber: res.orderNumber,
+        tokenNumber: res.tokenNumber,
+        orderType: resolvedOrderType,
+        orderSource: "Prest-Cashier",
+        customerName: resolvedCustomerName,
+        customerPhone: resolvedCustomerPhone,
+        customerEmail: activeCart.customerEmail || undefined,
         paymentMode: selectedPaymentMode,
+        paymentStatus: "Paid",
         tableName: tableObj?.tableNumber,
+        table: tableObj ? { number: tableObj.tableNumber } : undefined,
+        subTotal: cartSubtotalPaise,
+        taxTotal: taxGstPaise,
+        deliveryCharge: deliveryFeePaise,
+        totalAmount: totalPayablePaise,
+        display_sub_total: (cartSubtotalPaise / 100).toFixed(2),
+        display_tax_total: (taxGstPaise / 100).toFixed(2),
+        display_discount_amount: "0.00",
+        display_total_amount: (totalPayablePaise / 100).toFixed(2),
+        taxInfoSnapshot: {
+          tax_mode: taxCalculation.taxExclusivePaise > 0 ? "exclusive" : "inclusive",
+          tax_amount: (taxGstPaise / 100).toFixed(2),
+          components: taxCalculation.componentBreakdown.map((c) => ({
+            name: c.name,
+            rate: c.rate,
+            amount: (c.taxAmountPaise / 100).toFixed(2),
+          })),
+        },
+        items: itemsSnapshot,
+        createdAt: Date.now(),
       });
 
       // Clear the current cart
       handleClearCart();
-      setCurrentStep(1);
+      setTenderCashGiven("");
+      setTenderCardGiven("");
+      setTenderUpiGiven("");
+      setCardAuthRef("");
+      setUpiAuthRef("");
+      setCustomTenderGiven("");
+      setCustomTenderRef("");
+      setSplitPart1Amount("");
+      setSplitPart2Amount("");
+      goToStep(1);
       showToast(`Order ${res.orderNumber} created successfully!`);
     } catch (err: any) {
       showToast(err.message || "Failed to create order");
@@ -814,27 +1689,43 @@ export default function CashierPosPage() {
     tables,
     createOrderMutation,
     selectedPaymentMode,
+    tenderCashGiven,
+    tenderCardGiven,
+    tenderUpiGiven,
+    cardAuthRef,
+    upiAuthRef,
+    customTenderGiven,
+    customTenderRef,
+    splitPart1Amount,
+    splitPart2Amount,
+    defaultOrgCountryCode,
     totalPayablePaise,
+    cartSubtotalPaise,
+    taxGstPaise,
+    deliveryFeePaise,
+    taxCalculation,
+    goToStep,
+    handleClearCart,
   ]);
 
   // Primary Action (Order / Next Step / Settle) triggered by F5 or UI button
   const handlePrimaryStepAdvance = useCallback(() => {
     if (completedOrderData) {
-      setCompletedOrderData(null);
+      handleResetToNewOrder();
       return;
     }
     if (currentStep === 1) {
       if (activeCart.items.length > 0) {
-        setCurrentStep(2);
+        goToStep(2);
       } else {
         showToast("Please add items to cart before proceeding");
       }
     } else if (currentStep === 2) {
-      setCurrentStep(3);
+      goToStep(3);
     } else if (currentStep === 3) {
       handleCompleteOrder();
     }
-  }, [currentStep, activeCart.items.length, completedOrderData, handleCompleteOrder]);
+  }, [currentStep, activeCart.items.length, completedOrderData, handleCompleteOrder, handleResetToNewOrder, goToStep]);
 
   // ==========================================
   // KEYBOARD SHORTCUTS HANDLER (F1: Search, F3: Clear, F5: Order/Checkout, Esc: Blur)
@@ -893,7 +1784,7 @@ export default function CashierPosPage() {
             aria-label="Go Back"
             onClick={() => {
               if (currentStep > 1) {
-                setCurrentStep((prev) => ((prev - 1) as 1 | 2));
+                goToStep((currentStep - 1) as 1 | 2);
               } else {
                 router.push("/dashboard");
               }
@@ -923,7 +1814,7 @@ export default function CashierPosPage() {
           {/* Step 1 */}
           <button
             type="button"
-            onClick={() => setCurrentStep(1)}
+            onClick={() => goToStep(1)}
             className={`flex items-center space-x-1.5 px-3.5 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
               currentStep === 1
                 ? "bg-stone-950 text-white shadow-sm"
@@ -950,7 +1841,7 @@ export default function CashierPosPage() {
           <button
             type="button"
             onClick={() => {
-              if (activeCart.items.length > 0) setCurrentStep(2);
+              if (activeCart.items.length > 0) goToStep(2);
               else showToast("Add items to cart first");
             }}
             className={`flex items-center space-x-1.5 px-3.5 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
@@ -981,7 +1872,7 @@ export default function CashierPosPage() {
           <button
             type="button"
             onClick={() => {
-              if (activeCart.items.length > 0) setCurrentStep(3);
+              if (activeCart.items.length > 0) goToStep(3);
               else showToast("Add items to cart first");
             }}
             className={`flex items-center space-x-1.5 px-3.5 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
@@ -1061,7 +1952,7 @@ export default function CashierPosPage() {
                     <div key={c.id} className="relative group/tab flex items-center">
                       <button
                         type="button"
-                        onClick={() => setActiveCartId(c.id)}
+                        onClick={() => switchActiveCart(c.id)}
                         className={`px-3.5 py-1 text-xs font-medium rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer ${
                           isActive
                             ? "bg-[#0c0a09] text-white shadow-xs"
@@ -1177,26 +2068,12 @@ export default function CashierPosPage() {
 
                   return (
                     <div
-                      key={cartItem.itemId}
+                      key={cartItem.cartItemId || cartItem.itemId}
                       className="grid grid-cols-12 items-center px-2 py-3 hover:bg-[#fdf8f7]/40 rounded-lg transition-colors group"
                     >
-                      {/* Item Name & Veg Indicator */}
+                      {/* Item Name & Dietary Indicator */}
                       <div className="col-span-5 pr-1 flex items-start space-x-2">
-                        <span
-                          className={`w-3.5 h-3.5 mt-0.5 rounded-xs border p-[1.5px] flex items-center justify-center shrink-0 ${
-                            cartItem.isVeg
-                              ? "border-emerald-600"
-                              : "border-red-600"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              cartItem.isVeg
-                                ? "bg-emerald-600"
-                                : "bg-red-600"
-                            }`}
-                          />
-                        </span>
+                        {renderDietaryMark(cartItem)}
                         <div className="flex flex-col">
                           <span className="text-xs font-medium text-[#141010] leading-snug">
                             {cartItem.name}
@@ -1204,12 +2081,25 @@ export default function CashierPosPage() {
                           <span className="text-[11px] text-[#8a7e75] font-light">
                             {cartItem.unit}
                           </span>
+                          {cartItem.customizations && cartItem.customizations.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {cartItem.customizations.map((c, cIdx) => (
+                                <span
+                                  key={cIdx}
+                                  className="text-[10px] bg-[#f1edec] text-[#141010] px-1.5 py-0.5 rounded font-normal"
+                                >
+                                  + {c.name || "Add-on"}{" "}
+                                  {c.price ? `(+${taxCalculation.currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
 
                       {/* Unit Price */}
                       <div className="col-span-2 text-right text-xs text-[#5e5e5e] font-mono">
-                        ₹{unitPrice}
+                        {taxCalculation.currencySymbol}{unitPrice}
                       </div>
 
                       {/* Quantity Stepper [- qty +] */}
@@ -1219,7 +2109,7 @@ export default function CashierPosPage() {
                             type="button"
                             onClick={() =>
                               handleUpdateItemQuantity(
-                                cartItem.itemId,
+                                cartItem.cartItemId || cartItem.itemId,
                                 cartItem.quantity - 1,
                               )
                             }
@@ -1234,7 +2124,7 @@ export default function CashierPosPage() {
                             type="button"
                             onClick={() =>
                               handleUpdateItemQuantity(
-                                cartItem.itemId,
+                                cartItem.cartItemId || cartItem.itemId,
                                 cartItem.quantity + 1,
                               )
                             }
@@ -1248,11 +2138,11 @@ export default function CashierPosPage() {
                       {/* Line Subtotal & Delete Button */}
                       <div className="col-span-2 text-right flex items-center justify-end space-x-1.5">
                         <span className="text-xs font-semibold text-[#141010] font-mono">
-                          ₹{lineTotal}
+                          {taxCalculation.currencySymbol}{lineTotal}
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleRemoveItem(cartItem.itemId)}
+                          onClick={() => handleRemoveItem(cartItem.cartItemId || cartItem.itemId)}
                           className="text-[#e7e5e4] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5"
                           title="Remove item"
                         >
@@ -1287,32 +2177,20 @@ export default function CashierPosPage() {
                   </span>
                 </div>
 
-                {/* Dynamic Multi-Component Split Tax Lines */}
-                {taxCalculation.componentBreakdown.length > 0 ? (
-                  taxCalculation.componentBreakdown.map((comp, cIdx) => (
-                    <div
-                      key={`${comp.name}_${comp.rate}_${cIdx}`}
-                      className="flex justify-between text-[#8a7e75] text-[11px]"
-                    >
-                      <span className="flex items-center gap-1">
-                        {comp.name} ({comp.rate}%)
-                        {comp.isInclusive && (
-                          <span className="text-[9px] bg-stone-100 text-stone-600 px-1 py-0.2 rounded border border-stone-200">
-                            Incl.
-                          </span>
-                        )}
-                      </span>
-                      <span className="font-mono text-stone-700">
-                        {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="flex justify-between text-[#8a7e75] text-[11px]">
-                    <span>Tax (0% / Exempt)</span>
-                    <span className="font-mono">{taxCalculation.currencySymbol}0.00</span>
+                {/* Dynamic Multi-Component Split Tax Lines (Exclusive Taxes Only) */}
+                {taxCalculation.componentBreakdown.map((comp, cIdx) => (
+                  <div
+                    key={`${comp.name}_${comp.rate}_${cIdx}`}
+                    className="flex justify-between text-[#8a7e75] text-[11px]"
+                  >
+                    <span>
+                      {comp.name} ({comp.rate}%)
+                    </span>
+                    <span className="font-mono text-stone-700">
+                      {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                    </span>
                   </div>
-                )}
+                ))}
               </div>
               <div className="pt-2 border-t border-[#e7e5e4]/60 flex items-center justify-between">
                 <div>
@@ -1328,7 +2206,7 @@ export default function CashierPosPage() {
                 <button
                   type="button"
                   disabled={activeCart.items.length === 0}
-                  onClick={() => setCurrentStep(2)}
+                  onClick={() => goToStep(2)}
                   className={`px-5 py-2.5 rounded-full shadow-md transition-all flex items-center space-x-2 group cursor-pointer ${
                     activeCart.items.length > 0
                       ? "bg-[#0c0a09] hover:bg-stone-900 active:scale-95 text-white"
@@ -1393,15 +2271,15 @@ export default function CashierPosPage() {
                           const selectedMatch =
                             autocompleteMatches[highlightedIndex];
                           if (selectedMatch) {
-                            handleAddItemToCart(selectedMatch.item, inputQty);
+                            handleCatalogItemClick(selectedMatch, inputQty);
                             setIsAutocompleteOpen(false);
                             setSearchQuery("");
                           }
                         }
                       } else if (e.key === "Enter") {
                         if (filteredCatalogItems.length > 0) {
-                          handleAddItemToCart(
-                            filteredCatalogItems[0].item,
+                          handleCatalogItemClick(
+                            filteredCatalogItems[0],
                             inputQty,
                           );
                           setSearchQuery("");
@@ -1461,15 +2339,15 @@ export default function CashierPosPage() {
                   type="button"
                   onClick={() => {
                     if (autocompleteMatches.length > 0) {
-                      handleAddItemToCart(
-                        autocompleteMatches[highlightedIndex || 0].item,
+                      handleCatalogItemClick(
+                        autocompleteMatches[highlightedIndex || 0],
                         inputQty,
                       );
                       setSearchQuery("");
                       setIsAutocompleteOpen(false);
                     } else if (filteredCatalogItems.length > 0) {
-                      handleAddItemToCart(
-                        filteredCatalogItems[0].item,
+                      handleCatalogItemClick(
+                        filteredCatalogItems[0],
                         inputQty,
                       );
                       setSearchQuery("");
@@ -1504,7 +2382,7 @@ export default function CashierPosPage() {
                         <div
                           key={entry.item._id || entry.item.id}
                           onClick={() => {
-                            handleAddItemToCart(entry.item, inputQty);
+                            handleCatalogItemClick(entry, inputQty);
                             setIsAutocompleteOpen(false);
                             setSearchQuery("");
                           }}
@@ -1515,21 +2393,7 @@ export default function CashierPosPage() {
                           }`}
                         >
                           <div className="flex items-center space-x-2.5">
-                            <span
-                              className={`w-3 h-3 rounded-xs border p-[1px] flex items-center justify-center shrink-0 ${
-                                entry.item.isVeg
-                                  ? "border-emerald-600"
-                                  : "border-red-600"
-                              }`}
-                            >
-                              <span
-                                className={`w-1.5 h-1.5 rounded-full ${
-                                  entry.item.isVeg
-                                    ? "bg-emerald-600"
-                                    : "bg-red-600"
-                                  }`}
-                              />
-                            </span>
+                            {renderDietaryMark(entry.item)}
                             <span
                               className={`text-xs ${
                                 isHighlighted
@@ -1545,7 +2409,7 @@ export default function CashierPosPage() {
                           </div>
                           <div className="flex items-center space-x-3">
                             <span className="font-mono font-semibold text-[#141010]">
-                              ₹{priceFormatted}
+                              {taxCalculation.currencySymbol}{priceFormatted}
                             </span>
                             <span className="text-[10px] text-[#8a7e75] font-mono">
                               ↵ Add
@@ -1634,7 +2498,7 @@ export default function CashierPosPage() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleAddItemToCart(it, 1)}
+                            onClick={() => handleCatalogItemClick(entry, 1)}
                             className="w-6 h-6 flex items-center justify-center text-sm font-medium text-[#141010] hover:bg-neutral-100 rounded-r border-l border-[#141010]/30 cursor-pointer"
                           >
                             +
@@ -1645,23 +2509,9 @@ export default function CashierPosPage() {
                       {/* Menu Item Details */}
                       <div
                         className="flex-1 px-4 flex items-center space-x-2.5 cursor-pointer"
-                        onClick={() => handleAddItemToCart(it, 1)}
+                        onClick={() => handleCatalogItemClick(entry, 1)}
                       >
-                        <span
-                          className={`w-3.5 h-3.5 rounded-xs border p-[1.5px] flex items-center justify-center shrink-0 ${
-                            it.isVeg !== false
-                              ? "border-emerald-600"
-                              : "border-red-600"
-                          }`}
-                        >
-                          <span
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              it.isVeg !== false
-                                ? "bg-emerald-600"
-                                : "bg-red-600"
-                            }`}
-                          />
-                        </span>
+                        {renderDietaryMark(it)}
                         <span className="text-xs font-medium text-[#141010]">
                           {it.name}
                         </span>
@@ -1670,6 +2520,17 @@ export default function CashierPosPage() {
                             ({it.quantityUnit})
                           </span>
                         )}
+                        {entry.customizations &&
+                          entry.customizations.filter(
+                            (c: any) =>
+                              c.published !== false &&
+                              Array.isArray(c.customization_items) &&
+                              c.customization_items.length > 0,
+                          ).length > 0 && (
+                            <span className="text-[9px] bg-amber-50 text-amber-800 border border-amber-200 px-1.5 py-0.5 rounded font-normal">
+                              Customise
+                            </span>
+                          )}
                         {currentCartQty > 0 && (
                           <span className="text-[9px] bg-[#0c0a09] text-white px-1.5 py-0.5 rounded-full font-medium tracking-wide">
                             In Cart ({currentCartQty})
@@ -1679,7 +2540,7 @@ export default function CashierPosPage() {
 
                       {/* Price */}
                       <div className="w-20 text-right text-xs font-semibold text-[#141010]">
-                        ₹{priceFormatted}
+                        {taxCalculation.currencySymbol}{priceFormatted}
                       </div>
                     </div>
                   );
@@ -1784,7 +2645,7 @@ export default function CashierPosPage() {
                                       key={ct.id}
                                       type="button"
                                       onClick={() => {
-                                        setActiveCartId(ct.id);
+                                        switchActiveCart(ct.id);
                                         setIsCartSwitcherOpen(false);
                                       }}
                                       className={`w-full flex items-center justify-between px-2.5 py-2 rounded-lg text-xs transition cursor-pointer text-left ${
@@ -1806,7 +2667,7 @@ export default function CashierPosPage() {
                                           isSelected ? "text-stone-300" : "text-stone-500"
                                         }`}
                                       >
-                                        {count} items • ₹{(total / 100).toFixed(2)}
+                                        {count} items • {taxCalculation.currencySymbol}{(total / 100).toFixed(2)}
                                       </span>
                                     </button>
                                   );
@@ -1848,28 +2709,31 @@ export default function CashierPosPage() {
                   {/* Line Items List */}
                   <ul className="space-y-4 text-sm pb-5 border-b border-stone-100 max-h-80 overflow-y-auto pr-1">
                     {activeCart.items.map((item, idx) => (
-                      <li key={item.itemId + "_" + idx} className="flex items-start justify-between">
+                      <li key={(item.cartItemId || item.itemId) + "_" + idx} className="flex items-start justify-between">
                         <div className="flex items-start space-x-2.5">
-                          <span
-                            className={`mt-1 flex items-center justify-center w-3.5 h-3.5 border ${
-                              item.isVeg ? "border-emerald-600" : "border-rose-600"
-                            } p-0.5 rounded-[3px] shrink-0`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 ${
-                                item.isVeg ? "bg-emerald-600" : "bg-rose-600"
-                              } rounded-full`}
-                            />
-                          </span>
+                          {renderDietaryMark(item)}
                           <div>
                             <div className="font-medium text-stone-900 leading-tight">{item.name}</div>
+                            {item.customizations && item.customizations.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.customizations.map((c, cIdx) => (
+                                  <span
+                                    key={cIdx}
+                                    className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
+                                  >
+                                    + {c.name || "Add-on"}{" "}
+                                    {c.price ? `(+${taxCalculation.currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <div className="text-xs text-stone-400 mt-0.5">
-                              Qty: {item.quantity} × ₹{(item.price / 100).toFixed(2)}
+                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{(item.price / 100).toFixed(2)}
                             </div>
                           </div>
                         </div>
                         <span className="font-medium text-stone-900 shrink-0">
-                          ₹{((item.price * item.quantity) / 100).toFixed(2)}
+                          {taxCalculation.currencySymbol}{((item.price * item.quantity) / 100).toFixed(2)}
                         </span>
                       </li>
                     ))}
@@ -1887,32 +2751,20 @@ export default function CashierPosPage() {
                       </span>
                     </div>
 
-                    {/* Dynamic Split Tax Component Breakdown */}
-                    {taxCalculation.componentBreakdown.length > 0 ? (
-                      taxCalculation.componentBreakdown.map((comp, cIdx) => (
-                        <div
-                          key={`step2_${comp.name}_${comp.rate}_${cIdx}`}
-                          className="flex justify-between text-stone-500"
-                        >
-                          <span className="flex items-center gap-1">
-                            {comp.name} ({comp.rate}%)
-                            {comp.isInclusive && (
-                              <span className="text-[9px] bg-stone-100 text-stone-600 px-1 py-0.2 rounded border border-stone-200 font-normal">
-                                Incl.
-                              </span>
-                            )}
-                          </span>
-                          <span className="font-medium text-stone-900">
-                            {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
-                          </span>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="flex justify-between text-stone-500">
-                        <span>Tax (0% / Exempt)</span>
-                        <span className="font-medium text-stone-900">{taxCalculation.currencySymbol}0.00</span>
+                    {/* Dynamic Split Tax Component Breakdown (Exclusive Taxes Only) */}
+                    {taxCalculation.componentBreakdown.map((comp, cIdx) => (
+                      <div
+                        key={`step2_${comp.name}_${comp.rate}_${cIdx}`}
+                        className="flex justify-between text-stone-500"
+                      >
+                        <span>
+                          {comp.name} ({comp.rate}%)
+                        </span>
+                        <span className="font-medium text-stone-900">
+                          {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                        </span>
                       </div>
-                    )}
+                    ))}
 
                     {activeCart.orderType === "Delivery" && (
                       <div className="flex justify-between text-stone-700 font-medium">
@@ -1964,7 +2816,7 @@ export default function CashierPosPage() {
                   {/* Return Action */}
                   <div className="mt-8 pt-4 border-t border-dotted border-stone-200 text-center">
                     <button
-                      onClick={() => setCurrentStep(1)}
+                      onClick={() => goToStep(1)}
                       className="inline-flex items-center text-xs font-medium text-stone-600 hover:text-stone-950 transition-colors cursor-pointer"
                       type="button"
                     >
@@ -2035,13 +2887,13 @@ export default function CashierPosPage() {
                     {/* First Name */}
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="first-name">
-                        FIRST NAME *
+                        FIRST NAME <span className="font-normal text-stone-400">(OPTIONAL)</span>
                       </label>
                       <input
                         id="first-name"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
                         type="text"
-                        placeholder="e.g. Rohit"
+                        placeholder="Enter first name..."
                         value={activeCart.customerFirstName || ""}
                         onChange={(e) => {
                           const first = e.target.value;
@@ -2063,13 +2915,13 @@ export default function CashierPosPage() {
                     {/* Last Name */}
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="last-name">
-                        LAST NAME
+                        LAST NAME <span className="font-normal text-stone-400">(OPTIONAL)</span>
                       </label>
                       <input
                         id="last-name"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
                         type="text"
-                        placeholder="e.g. Chauhan"
+                        placeholder="Enter last name..."
                         value={activeCart.customerLastName || ""}
                         onChange={(e) => {
                           const last = e.target.value;
@@ -2091,24 +2943,40 @@ export default function CashierPosPage() {
                     {/* Phone Number */}
                     <div>
                       <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="phone-number">
-                        PHONE NUMBER *
+                        PHONE NUMBER <span className="font-normal text-stone-400">(OPTIONAL)</span>
                       </label>
-                      <div className="flex rounded-lg shadow-sm border border-stone-200 overflow-hidden focus-within:ring-1 focus-within:ring-stone-900 focus-within:border-stone-900">
-                        <button
-                          className="inline-flex items-center px-3 border-r border-stone-200 bg-stone-50 text-stone-700 text-xs font-medium hover:bg-stone-100"
-                          type="button"
-                        >
-                          <span className="mr-1.5 text-base">🇮🇳</span>
-                          <span>+91</span>
-                          <svg className="ml-1 w-3 h-3 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                          </svg>
-                        </button>
+                      <div className="flex rounded-lg shadow-sm border border-stone-200 overflow-hidden focus-within:ring-1 focus-within:ring-stone-900 focus-within:border-stone-900 bg-white">
+                        {/* Dynamic Country Selector */}
+                        <div className="relative flex items-center bg-stone-50 border-r border-stone-200">
+                          <select
+                            value={activeCart.customerCountryCode || defaultOrgCountryCode}
+                            onChange={(e) => {
+                              const newCode = e.target.value;
+                              setCartTabs((prev) =>
+                                prev.map((c) =>
+                                  c.id === activeCartId ? { ...c, customerCountryCode: newCode } : c
+                                )
+                              );
+                            }}
+                            className="appearance-none bg-transparent h-full pl-3 pr-7 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none cursor-pointer flex items-center"
+                          >
+                            {COUNTRY_DIAL_OPTIONS.map((opt) => (
+                              <option key={opt.code} value={opt.code} className="text-stone-900">
+                                {opt.iso} {opt.code}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="pointer-events-none absolute right-2 flex items-center text-stone-400">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                            </svg>
+                          </div>
+                        </div>
                         <input
                           id="phone-number"
-                          className="flex-1 min-w-0 block w-full px-3.5 py-2.5 text-sm text-stone-900 font-medium focus:outline-none bg-white"
+                          className="flex-1 min-w-0 block w-full px-3.5 py-2.5 text-sm text-stone-900 font-medium focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
                           type="tel"
-                          placeholder="98250 14820"
+                          placeholder="Enter 10-digit mobile number..."
                           value={activeCart.customerPhone || ""}
                           onChange={(e) => handleCustomerPhoneChange(e.target.value)}
                         />
@@ -2122,9 +2990,9 @@ export default function CashierPosPage() {
                       </label>
                       <input
                         id="email-address"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
                         type="email"
-                        placeholder="guest@example.com"
+                        placeholder="Enter email address..."
                         value={activeCart.customerEmail || ""}
                         onChange={(e) =>
                           setCartTabs((prev) =>
@@ -2231,24 +3099,15 @@ export default function CashierPosPage() {
                         </span>
                       </button>
 
-                      {/* Delivery */}
+                      {/* Delivery (Disabled / Coming Soon) */}
                       <button
-                        onClick={() =>
-                          setCartTabs((prev) =>
-                            prev.map((c) => (c.id === activeCartId ? { ...c, orderType: "Delivery" } : c)),
-                          )
-                        }
-                        className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
-                          activeCart.orderType === "Delivery"
-                            ? "bg-black text-white shadow-md border-2 border-black"
-                            : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800"
-                        }`}
                         type="button"
+                        disabled
+                        className="relative flex items-center justify-center space-x-1.5 py-3 px-3.5 rounded-xl font-medium text-xs bg-stone-100/75 border border-dashed border-stone-300 text-stone-400 cursor-not-allowed select-none opacity-75"
+                        title="Delivery service mode is coming soon"
                       >
                         <svg
-                          className={`w-4 h-4 ${
-                            activeCart.orderType === "Delivery" ? "text-white stroke-[2.5]" : "text-stone-700"
-                          }`}
+                          className="w-4 h-4 text-stone-400 shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -2260,14 +3119,9 @@ export default function CashierPosPage() {
                             strokeWidth="2"
                           />
                         </svg>
-                        <span
-                          className={
-                            activeCart.orderType === "Delivery"
-                              ? "text-white font-semibold"
-                              : "text-stone-800 font-medium"
-                          }
-                        >
-                          Delivery
+                        <span className="text-stone-500 font-medium">Delivery</span>
+                        <span className="text-[9px] font-semibold uppercase tracking-wider bg-stone-200/80 text-stone-500 px-1.5 py-0.5 rounded-full ml-1 border border-stone-300/60 shrink-0">
+                          Soon
                         </span>
                       </button>
 
@@ -2307,7 +3161,7 @@ export default function CashierPosPage() {
                               : "text-stone-800 font-medium"
                           }
                         >
-                          Scheduled
+                          Scheduled pickup
                         </span>
                       </button>
                     </div>
@@ -2579,9 +3433,15 @@ export default function CashierPosPage() {
                               />
                             </svg>
                             <span>
-                              Kitchen Order Ticket (KOT) will route Table{" "}
-                              <strong>{activeCart.tableName || "assigned table"}</strong> straight to
-                              the <strong>Main Kitchen KDS Display</strong>.
+                              Kitchen Order Ticket (KOT) will route{" "}
+                              <strong>
+                                {activeCart.tableName
+                                  ? (/^table\b/i.test(activeCart.tableName.trim())
+                                      ? activeCart.tableName.trim()
+                                      : `Table ${activeCart.tableName.trim()}`)
+                                  : "assigned table"}
+                              </strong>{" "}
+                              straight to the <strong>Main Kitchen KDS Display</strong>.
                             </span>
                           </div>
                         </div>
@@ -2589,154 +3449,7 @@ export default function CashierPosPage() {
                     </>
                   )}
 
-                  {/* Takeaway Details Section */}
-                  {activeCart.orderType === "TakeAway" && (
-                    <div className="mt-6 bg-[#fdf8f7] border border-[#eadfd6] rounded-xl p-6 space-y-6">
-                      <h3 className="text-xs font-semibold tracking-wider text-stone-500 uppercase">
-                        TAKEAWAY DETAILS
-                      </h3>
 
-                      {/* 2-Column Pickup & Prep Config */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        {/* Pickup Location Selector */}
-                        <div>
-                          <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
-                            PICKUP LOCATION *
-                          </label>
-                          <div className="relative">
-                            <select
-                              value={activeCart.pickupLocation || "Main Counter (Front Desk)"}
-                              onChange={(e) =>
-                                setCartTabs((prev) =>
-                                  prev.map((c) =>
-                                    c.id === activeCartId ? { ...c, pickupLocation: e.target.value } : c,
-                                  ),
-                                )
-                              }
-                              className="w-full appearance-none bg-white border border-stone-300 rounded-lg px-3.5 py-2.5 text-sm text-stone-900 pr-10 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none cursor-pointer"
-                            >
-                              <option value="Main Counter (Front Desk)">Main Counter (Front Desk)</option>
-                              <option value="Express Pickup Window">Express Pickup Window</option>
-                              <option value="Curbside Station">Curbside Station</option>
-                            </select>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-stone-400">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                              </svg>
-                            </div>
-                          </div>
-                          <p className="text-[11px] text-stone-500 mt-1.5 flex items-center">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-1.5 shrink-0" />
-                            Ready for customer collection upon KOT completion
-                          </p>
-                        </div>
-
-                        {/* Estimated Prep Time */}
-                        <div>
-                          <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
-                            ESTIMATED PREPARATION TIME
-                          </label>
-                          <div className="flex items-center px-3.5 py-2.5 bg-white border border-stone-300 rounded-lg text-sm text-stone-900">
-                            <svg className="w-4 h-4 text-stone-400 mr-2 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                            </svg>
-                            <span className="font-semibold text-stone-900 mr-2">15 - 20 mins</span>
-                            <span className="text-xs text-stone-400">| Kitchen Priority: Normal</span>
-                          </div>
-                          <p className="text-[11px] text-stone-500 mt-1.5">Order will be flagged as Express Takeaway in Kitchen</p>
-                        </div>
-                      </div>
-
-                      {/* Packaging & Cutlery Preferences */}
-                      <div className="pt-2 border-t border-[#eadfd6]/60">
-                        <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-3">
-                          PACKAGING &amp; CUTLERY PREFERENCES
-                        </label>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                          <label className="flex items-center space-x-2.5 text-xs text-stone-800 bg-white/75 p-3 rounded-lg border border-stone-200 cursor-pointer hover:bg-white transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={activeCart.includeCarryBag !== false}
-                              onChange={(e) =>
-                                setCartTabs((prev) =>
-                                  prev.map((c) =>
-                                    c.id === activeCartId ? { ...c, includeCarryBag: e.target.checked } : c,
-                                  ),
-                                )
-                              }
-                              className="rounded border-stone-300 text-stone-900 focus:ring-stone-900 w-4 h-4 cursor-pointer"
-                            />
-                            <span className="font-medium">Eco-friendly carry bag included</span>
-                          </label>
-                          <label className="flex items-center space-x-2.5 text-xs text-stone-800 bg-white/75 p-3 rounded-lg border border-stone-200 cursor-pointer hover:bg-white transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={activeCart.includeCutlery !== false}
-                              onChange={(e) =>
-                                setCartTabs((prev) =>
-                                  prev.map((c) =>
-                                    c.id === activeCartId ? { ...c, includeCutlery: e.target.checked } : c,
-                                  ),
-                                )
-                              }
-                              className="rounded border-stone-300 text-stone-900 focus:ring-stone-900 w-4 h-4 cursor-pointer"
-                            />
-                            <span className="font-medium">Include disposable wooden cutlery &amp; napkins</span>
-                          </label>
-                          <label className="flex items-center space-x-2.5 text-xs text-stone-800 bg-white/75 p-3 rounded-lg border border-stone-200 cursor-pointer hover:bg-white transition-colors">
-                            <input
-                              type="checkbox"
-                              checked={activeCart.contactlessHandoff === true}
-                              onChange={(e) =>
-                                setCartTabs((prev) =>
-                                  prev.map((c) =>
-                                    c.id === activeCartId ? { ...c, contactlessHandoff: e.target.checked } : c,
-                                  ),
-                                )
-                              }
-                              className="rounded border-stone-300 text-stone-900 focus:ring-stone-900 w-4 h-4 cursor-pointer"
-                            />
-                            <span className="font-medium">Contactless handoff requested</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      {/* Pickup Note / Kitchen Instructions */}
-                      <div>
-                        <label className="block text-[11px] font-semibold text-stone-700 uppercase tracking-wider mb-1.5">
-                          PICKUP NOTE / KITCHEN INSTRUCTIONS <span className="text-stone-400 font-normal">(OPTIONAL)</span>
-                        </label>
-                        <textarea
-                          className="w-full bg-white border border-stone-300 rounded-lg p-3 text-sm text-stone-900 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none placeholder:text-stone-400"
-                          placeholder="Add a note for the kitchen or packing station (e.g., pack condiments separately, double seal soup)..."
-                          rows={2}
-                          value={activeCart.specialNotes || ""}
-                          onChange={(e) =>
-                            setCartTabs((prev) =>
-                              prev.map((c) =>
-                                c.id === activeCartId ? { ...c, specialNotes: e.target.value } : c,
-                              ),
-                            )
-                          }
-                        />
-                      </div>
-
-                      {/* Context Banner */}
-                      <div className="flex items-center space-x-2 bg-stone-100/70 text-stone-600 rounded-lg p-3 text-xs border border-stone-200/80">
-                        <svg className="w-4 h-4 text-stone-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path
-                            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                          />
-                        </svg>
-                        <span>
-                          Takeaway orders bypass dining table allocation and generate an Express Token (<strong>Token #TK-84</strong>) for counter display.
-                        </span>
-                      </div>
-                    </div>
-                  )}
 
                   {/* STATE C: DELIVERY DETAILS CONTAINER */}
                   {activeCart.orderType === "Delivery" && (
@@ -2810,7 +3523,9 @@ export default function CashierPosPage() {
                               <span>•</span>
                               <span>
                                 <strong className="font-medium text-stone-700">Contact on delivery:</strong>{" "}
-                                {activeCart.customerPhone || "+91 98250 14820"}
+                                {activeCart.customerPhone
+                                  ? `${activeCart.customerCountryCode || defaultOrgCountryCode} ${activeCart.customerPhone}`
+                                  : "Not provided"}
                               </span>
                             </p>
                           </div>
@@ -2886,70 +3601,18 @@ export default function CashierPosPage() {
                     </div>
                   )}
 
-                  {/* STATE D: SCHEDULE ORDER CONTAINER */}
+                  {/* STATE D: SCHEDULED PICKUP CONTAINER */}
                   {activeCart.orderType === "Scheduled" && (
-                    <div className="mt-6 bg-[#fdf8f7] border border-[#eadfd6] rounded-xl p-6 space-y-5" data-purpose="scheduled-order-config">
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <span className="text-[11px] uppercase font-bold tracking-wider text-stone-700">
-                          SCHEDULE ORDER FULFILLMENT
-                        </span>
-                        {/* Sub-segment selector for fulfillment type */}
-                        <div className="flex items-center space-x-1.5 bg-stone-200/60 p-1 rounded-lg">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCartTabs((prev) =>
-                                prev.map((c) =>
-                                  c.id === activeCartId
-                                    ? { ...c, scheduledSubtype: "ScheduledPickup" }
-                                    : c,
-                                ),
-                              )
-                            }
-                            className={`text-xs font-semibold px-3 py-1 rounded-md shadow-sm transition-colors cursor-pointer ${
-                              activeCart.scheduledSubtype !== "ScheduledDelivery"
-                                ? "bg-stone-900 text-white"
-                                : "bg-white border border-stone-200 text-stone-700 hover:text-black"
-                            }`}
-                          >
-                            Scheduled Pickup
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCartTabs((prev) =>
-                                prev.map((c) =>
-                                  c.id === activeCartId
-                                    ? { ...c, scheduledSubtype: "ScheduledDelivery" }
-                                    : c,
-                                ),
-                              )
-                            }
-                            className={`text-xs font-semibold px-3 py-1 rounded-md shadow-sm transition-colors cursor-pointer ${
-                              activeCart.scheduledSubtype === "ScheduledDelivery"
-                                ? "bg-stone-900 text-white"
-                                : "bg-white border border-stone-200 text-stone-700 hover:text-black"
-                            }`}
-                          >
-                            Scheduled Delivery
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Date & Time Picker Row */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-                        {/* Scheduled Date */}
-                        <div>
-                          <label
-                            className="block text-[11px] uppercase font-bold tracking-wider text-stone-600 mb-1.5"
-                            htmlFor="scheduled-date"
-                          >
-                            SCHEDULED DATE *
-                          </label>
+                    <div className="mt-6 border border-stone-200 rounded-xl p-5 bg-white space-y-4" data-purpose="scheduled-pickup-config">
+                      <div>
+                        <label className="block text-xs font-semibold text-stone-900 mb-2">
+                          Set pickup date &amp; time
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Select Date */}
                           <div className="relative">
                             <select
-                              id="scheduled-date"
-                              value={activeCart.scheduledDate || "Tomorrow — Sep 17, 2026"}
+                              value={activeCart.scheduledDate || ""}
                               onChange={(e) =>
                                 setCartTabs((prev) =>
                                   prev.map((c) =>
@@ -2959,48 +3622,37 @@ export default function CashierPosPage() {
                                   ),
                                 )
                               }
-                              className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-8 py-2.5 text-xs font-semibold text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none appearance-none cursor-pointer"
+                              className="w-full bg-white border border-stone-300 hover:border-stone-400 rounded-md px-3.5 py-2.5 text-xs text-stone-900 font-medium focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none appearance-none cursor-pointer pr-10"
                             >
-                              <option value="Tomorrow — Sep 17, 2026">Tomorrow — Sep 17, 2026</option>
-                              <option value="Fri, Sep 18, 2026">Fri, Sep 18, 2026</option>
-                              <option value="Sat, Sep 19, 2026">Sat, Sep 19, 2026</option>
-                              <option value="Sun, Sep 20, 2026">Sun, Sep 20, 2026</option>
-                              <option value="Mon, Sep 21, 2026">Mon, Sep 21, 2026</option>
+                              <option value="">Select date</option>
+                              {Array.from({ length: 7 }).map((_, idx) => {
+                                const d = new Date();
+                                d.setDate(d.getDate() + idx);
+                                const label =
+                                  idx === 0
+                                    ? `Today (${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
+                                    : idx === 1
+                                    ? `Tomorrow (${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
+                                    : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+                                const val = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+                                return (
+                                  <option key={val} value={val}>
+                                    {label}
+                                  </option>
+                                );
+                              })}
                             </select>
-                            <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-stone-500">
+                            <div className="pointer-events-none absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                />
-                              </svg>
-                            </div>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
                               </svg>
                             </div>
                           </div>
-                          <div className="text-[11px] text-stone-500 mt-1.5 flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                            <span>Pre-order buffer: Minimum 3 hours required</span>
-                          </div>
-                        </div>
 
-                        {/* Scheduled Time Window */}
-                        <div>
-                          <label
-                            className="block text-[11px] uppercase font-bold tracking-wider text-stone-600 mb-1.5"
-                            htmlFor="scheduled-time"
-                          >
-                            SCHEDULED TIME WINDOW *
-                          </label>
+                          {/* Select Time */}
                           <div className="relative">
                             <select
-                              id="scheduled-time"
-                              value={activeCart.scheduledTime || "01:30 PM - 02:00 PM (Lunch Slot)"}
+                              value={activeCart.scheduledTime || ""}
                               onChange={(e) =>
                                 setCartTabs((prev) =>
                                   prev.map((c) =>
@@ -3010,196 +3662,131 @@ export default function CashierPosPage() {
                                   ),
                                 )
                               }
-                              className="w-full bg-white border border-stone-200 rounded-lg pl-9 pr-8 py-2.5 text-xs font-semibold text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none appearance-none cursor-pointer"
+                              className="w-full bg-white border border-stone-300 hover:border-stone-400 rounded-md px-3.5 py-2.5 text-xs text-stone-900 font-medium focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none appearance-none cursor-pointer pr-10"
                             >
-                              <option value="01:30 PM - 02:00 PM (Lunch Slot)">01:30 PM - 02:00 PM (Lunch Slot)</option>
+                              <option value="">Select time</option>
+                              <option value="10:00 AM - 10:30 AM">10:00 AM - 10:30 AM</option>
+                              <option value="10:30 AM - 11:00 AM">10:30 AM - 11:00 AM</option>
+                              <option value="11:00 AM - 11:30 AM">11:00 AM - 11:30 AM</option>
+                              <option value="11:30 AM - 12:00 PM">11:30 AM - 12:00 PM</option>
+                              <option value="12:00 PM - 12:30 PM">12:00 PM - 12:30 PM</option>
+                              <option value="12:30 PM - 01:00 PM">12:30 PM - 01:00 PM</option>
+                              <option value="01:00 PM - 01:30 PM">01:00 PM - 01:30 PM</option>
+                              <option value="01:30 PM - 02:00 PM">01:30 PM - 02:00 PM</option>
                               <option value="02:00 PM - 02:30 PM">02:00 PM - 02:30 PM</option>
-                              <option value="07:00 PM - 07:30 PM (Dinner Slot)">07:00 PM - 07:30 PM (Dinner Slot)</option>
-                              <option value="08:00 PM - 08:30 PM (Dinner Slot)">08:00 PM - 08:30 PM (Dinner Slot)</option>
+                              <option value="02:30 PM - 03:00 PM">02:30 PM - 03:00 PM</option>
+                              <option value="06:30 PM - 07:00 PM">06:30 PM - 07:00 PM</option>
+                              <option value="07:00 PM - 07:30 PM">07:00 PM - 07:30 PM</option>
+                              <option value="07:30 PM - 08:00 PM">07:30 PM - 08:00 PM</option>
+                              <option value="08:00 PM - 08:30 PM">08:00 PM - 08:30 PM</option>
+                              <option value="08:30 PM - 09:00 PM">08:30 PM - 09:00 PM</option>
+                              <option value="09:00 PM - 09:30 PM">09:00 PM - 09:30 PM</option>
+                              <option value="09:30 PM - 10:00 PM">09:30 PM - 10:00 PM</option>
                             </select>
-                            <div className="pointer-events-none absolute inset-y-0 left-0 pl-3 flex items-center text-stone-500">
+                            <div className="pointer-events-none absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path
-                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                />
-                              </svg>
-                            </div>
-                            <div className="pointer-events-none absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
                               </svg>
                             </div>
                           </div>
-                          <div className="text-[11px] text-stone-500 mt-1.5 flex items-center space-x-1">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            <span>Slot availability: 8 slots open</span>
-                          </div>
                         </div>
-                      </div>
-
-                      {/* Dynamic Fulfillment Location Details */}
-                      <div className="border-t border-[#eadfd6] pt-4 mt-2">
-                        {activeCart.scheduledSubtype === "ScheduledDelivery" ? (
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-xs font-semibold text-stone-900">
-                                Delivery Address for Scheduled Drop
-                              </label>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const newAddr = prompt("Enter scheduled delivery address:");
-                                  if (newAddr) {
-                                    setCartTabs((prev) =>
-                                      prev.map((c) =>
-                                        c.id === activeCartId
-                                          ? {
-                                              ...c,
-                                              deliveryAddress: {
-                                                addressLine1: newAddr,
-                                                city: "Mumbai",
-                                                zipCode: "400001",
-                                                landmark: "Near Landmark",
-                                                label: "Scheduled Address",
-                                              },
-                                            }
-                                          : c,
-                                      ),
-                                    );
-                                  }
-                                }}
-                                className="text-xs font-medium text-stone-800 hover:text-stone-950 border border-stone-300 rounded-full px-3 py-1 bg-white hover:bg-stone-50 transition shadow-2xs cursor-pointer"
-                              >
-                                + Change Address
-                              </button>
-                            </div>
-                            <div className="p-3.5 bg-white rounded-xl border border-stone-200 flex items-center justify-between text-xs">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold uppercase bg-stone-900 text-white px-2 py-0.5 rounded">
-                                  {activeCart.deliveryAddress?.label || "Home"}
-                                </span>
-                                <span className="font-semibold text-stone-900">
-                                  {activeCart.deliveryAddress?.addressLine1 ||
-                                    "34, Example Street, Near Sunshine Heights, Bandra West, Mumbai"}
-                                </span>
-                              </div>
-                              <span className="text-stone-500 text-[11px]">
-                                Contact: {activeCart.customerPhone || "+91 98250 14820"}
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                              <label
-                                className="block text-[11px] uppercase font-bold tracking-wider text-stone-600 mb-1.5"
-                                htmlFor="pickup-counter"
-                              >
-                                PICKUP COUNTER
-                              </label>
-                              <div className="relative">
-                                <select
-                                  id="pickup-counter"
-                                  value={activeCart.scheduledPickupCounter || "Main Counter (Front Desk)"}
-                                  onChange={(e) =>
-                                    setCartTabs((prev) =>
-                                      prev.map((c) =>
-                                        c.id === activeCartId
-                                          ? { ...c, scheduledPickupCounter: e.target.value }
-                                          : c,
-                                      ),
-                                    )
-                                  }
-                                  className="w-full bg-white border border-stone-200 rounded-lg px-3 py-2 text-xs font-semibold text-stone-900 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none appearance-none cursor-pointer"
-                                >
-                                  <option value="Main Counter (Front Desk)">Main Counter (Front Desk)</option>
-                                  <option value="Express Drive-thru Bay 2">Express Drive-thru Bay 2</option>
-                                  <option value="Banquet Concierge">Banquet Concierge</option>
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 pr-3 flex items-center text-stone-400">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[11px] uppercase font-bold tracking-wider text-stone-600 mb-1.5">
-                                KITCHEN PREPARATION KICKOFF
-                              </label>
-                              <div className="bg-stone-100 border border-stone-200 rounded-lg px-3 py-2 flex items-center space-x-2 text-stone-700">
-                                <span className="w-2 h-2 rounded-full bg-blue-600 shrink-0" />
-                                <span className="text-xs font-medium">
-                                  Auto-release to KDS at <strong className="font-semibold text-stone-900">01:00 PM</strong> (30 min prep window)
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* WhatsApp Reminder Notice */}
-                      <div className="bg-white/80 border border-[#eadfd6] rounded-lg p-3 flex items-start space-x-2 text-xs text-stone-600">
-                        <svg className="w-4 h-4 text-emerald-600 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
-                          <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.599 2.679-.702c.971.531 1.769.82 2.781.821h.001c3.182 0 5.767-2.587 5.767-5.766.001-3.182-2.585-5.805-5.768-5.805zm0 10.377c-.901 0-1.745-.251-2.484-.716l-.178-.112-1.844.484.492-1.799-.122-.194c-.521-.832-.796-1.791-.795-2.774.001-2.628 2.138-4.765 4.767-4.765 2.627 0 4.765 2.137 4.765 4.765 0 2.628-2.138 4.811-4.601 4.911z" />
-                        </svg>
-                        <span>
-                          <strong className="font-semibold text-stone-800">Reminder:</strong> Customer will receive an automated WhatsApp confirmation &amp; pickup alert 15 minutes before the scheduled time slot.
-                        </span>
-                      </div>
-
-                      {/* Special Event / Packaging Note */}
-                      <div>
-                        <label
-                          className="block text-[11px] uppercase font-bold tracking-wider text-stone-600 mb-1.5"
-                          htmlFor="event-notes"
-                        >
-                          SPECIAL EVENT / PACKAGING NOTE
-                        </label>
-                        <textarea
-                          id="event-notes"
-                          className="w-full bg-white border border-stone-200 rounded-lg p-3 text-xs text-stone-800 placeholder-stone-400 focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none transition-colors"
-                          placeholder="Corporate luncheon order. Please keep hot items in insulated containers..."
-                          rows={2}
-                          value={activeCart.specialNotes || ""}
-                          onChange={(e) =>
-                            setCartTabs((prev) =>
-                              prev.map((c) =>
-                                c.id === activeCartId ? { ...c, specialNotes: e.target.value } : c,
-                              ),
-                            )
-                          }
-                        />
                       </div>
                     </div>
                   )}
 
-                  {/* Kitchen Prep Notes (For Non-Takeaway, Non-Delivery, Non-Scheduled orders) */}
-                  {activeCart.orderType !== "TakeAway" &&
-                    activeCart.orderType !== "Delivery" &&
-                    activeCart.orderType !== "Scheduled" && (
-                      <div className="mt-6">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
-                          Kitchen Preparation Notes / Dietary Requests
-                        </label>
-                        <textarea
-                          className="w-full text-xs border border-stone-200 rounded-lg p-3 text-stone-900 font-normal focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white"
-                          placeholder="Add custom notes for chefs..."
-                          rows={2}
-                          value={activeCart.specialNotes || ""}
-                          onChange={(e) =>
-                            setCartTabs((prev) =>
-                              prev.map((c) =>
-                                c.id === activeCartId ? { ...c, specialNotes: e.target.value } : c,
-                              ),
-                            )
-                          }
-                        />
+                  {/* Universal Customer Stats Section (Shown for DineIn, TakeAway, Delivery, and Scheduled) */}
+                  <div className="mt-6 border border-stone-200 rounded-md overflow-hidden bg-stone-50/50">
+                    <button
+                      type="button"
+                      onClick={() => setIsScheduleStatsOpen(!isScheduleStatsOpen)}
+                      className="w-full flex items-center space-x-2 px-4 py-3 text-xs font-semibold text-stone-900 hover:bg-stone-100/70 transition cursor-pointer"
+                    >
+                      <svg
+                        className={`w-3.5 h-3.5 text-stone-600 transition-transform ${isScheduleStatsOpen ? "rotate-180" : ""}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                      <span>Stats</span>
+                    </button>
+                    {isScheduleStatsOpen && (
+                      <div className="p-4 border-t border-stone-200 bg-white space-y-3">
+                        {/* Customer Metrics Summary Card */}
+                        <div className="border border-stone-200 rounded-lg p-5 bg-white grid grid-cols-3 text-center">
+                          <div>
+                            <span className="text-xs font-medium text-stone-700 block">Dine in orders</span>
+                            <span className="text-base font-bold text-stone-950 mt-1.5 block">
+                              {customerStats?.dineInCount !== undefined ? customerStats.dineInCount : 0}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-stone-700 block">Take away orders</span>
+                            <span className="text-base font-bold text-stone-950 mt-1.5 block">
+                              {customerStats?.takeawayCount !== undefined ? customerStats.takeawayCount : 0}
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-xs font-medium text-stone-700 block">Total spends</span>
+                            <span className="text-base font-bold text-stone-950 mt-1.5 block">
+                              {customerStats
+                                ? `${taxCalculation.currencySymbol}${(customerStats.totalSpends / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                                : `${taxCalculation.currencySymbol}0.00`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Customer Recent Orders List */}
+                        {customerStats?.recentOrders && customerStats.recentOrders.length > 0 ? (
+                          customerStats.recentOrders.map((ord, idx) => (
+                            <div key={ord._id || idx} className="border border-stone-200 rounded-lg p-4 bg-white">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] text-stone-500 font-medium">Created date</span>
+                                <Link
+                                  href={`/orders/${ord.orderNumber || ord._id}`}
+                                  className="text-xs font-semibold text-stone-900 hover:underline"
+                                  target="_blank"
+                                >
+                                  View order
+                                </Link>
+                              </div>
+                              <span className="text-xs text-stone-700 font-normal block mt-0.5">
+                                {`${new Date(ord.createdAt).toLocaleDateString("en-GB")} ${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`}
+                              </span>
+                              <p className="text-xs font-semibold text-stone-950 mt-2">
+                                {ord.itemsSummary}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="text-center py-4 text-xs text-stone-400 font-medium bg-stone-50/60 rounded-lg border border-dashed border-stone-200">
+                            No previous orders found for this customer.
+                          </div>
+                        )}
                       </div>
                     )}
+                  </div>
+
+                  {/* Universal Special Notes / Kitchen Preparation Notes */}
+                  <div className="mt-6 border border-stone-200 rounded-xl p-5 bg-white">
+                    <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
+                      Special Notes / Kitchen Instructions (Optional)
+                    </label>
+                    <textarea
+                      className="w-full text-xs border border-stone-200 rounded-lg p-3 text-stone-900 placeholder-stone-400 font-normal focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white transition-colors"
+                      placeholder="Add a note for the kitchen or packing station (e.g., extra spicy, pack condiments separately)..."
+                      rows={2}
+                      value={activeCart.specialNotes || ""}
+                      onChange={(e) =>
+                        setCartTabs((prev) =>
+                          prev.map((c) =>
+                            c.id === activeCartId ? { ...c, specialNotes: e.target.value } : c,
+                          ),
+                        )
+                      }
+                    />
+                  </div>
                 </div>
               </section>
               {/* END: RightDetailsColumn */}
@@ -3211,7 +3798,7 @@ export default function CashierPosPage() {
             <div className="w-full flex items-center justify-between">
               {/* Back Navigation Button */}
               <button
-                onClick={() => setCurrentStep(1)}
+                onClick={() => goToStep(1)}
                 className="inline-flex items-center px-6 py-2.5 rounded-full border border-stone-300 bg-white text-xs font-semibold text-stone-800 hover:bg-stone-50 transition shadow-sm cursor-pointer"
                 type="button"
               >
@@ -3228,11 +3815,11 @@ export default function CashierPosPage() {
                     Total to Collect
                   </span>
                   <span className="font-serif text-2xl font-bold text-stone-950 tracking-tight leading-tight">
-                    ₹{(totalPayablePaise / 100).toFixed(2)}
+                    {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
                   </span>
                 </div>
                 <button
-                  onClick={() => setCurrentStep(3)}
+                  onClick={() => goToStep(3)}
                   className="inline-flex items-center px-7 py-3 rounded-full bg-stone-950 text-white text-xs font-semibold hover:bg-stone-850 transition shadow-md group cursor-pointer"
                   type="button"
                 >
@@ -3275,7 +3862,7 @@ export default function CashierPosPage() {
                     <h2 className="font-serif text-2xl text-[#141010] font-normal">Order Summary</h2>
                   </div>
                   <button
-                    onClick={() => setCurrentStep(1)}
+                    onClick={() => goToStep(1)}
                     className="text-xs font-medium text-[#5e5e5e] hover:text-[#141010] underline underline-offset-4 decoration-stone-300 transition cursor-pointer"
                     type="button"
                   >
@@ -3328,28 +3915,31 @@ export default function CashierPosPage() {
 
                   <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                     {activeCart.items.map((item, idx) => (
-                      <div key={item.itemId + "_" + idx} className="flex items-start justify-between text-sm pt-1">
+                      <div key={(item.cartItemId || item.itemId) + "_" + idx} className="flex items-start justify-between text-sm pt-1">
                         <div className="flex items-start space-x-2.5">
-                          <span
-                            className={`inline-flex items-center justify-center w-3.5 h-3.5 mt-0.5 border ${
-                              item.isVeg ? "border-emerald-600" : "border-rose-600"
-                            } rounded-[3px] p-[2px] shrink-0`}
-                          >
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                item.isVeg ? "bg-emerald-600" : "bg-rose-600"
-                              }`}
-                            />
-                          </span>
+                          {renderDietaryMark(item)}
                           <div>
                             <p className="font-medium text-[#1c1b1b] leading-tight">{item.name}</p>
+                            {item.customizations && item.customizations.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {item.customizations.map((c, cIdx) => (
+                                  <span
+                                    key={cIdx}
+                                    className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
+                                  >
+                                    + {c.name || "Add-on"}{" "}
+                                    {c.price ? `(+${taxCalculation.currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <p className="text-xs text-[#8a7e75] mt-0.5">
-                              Qty: {item.quantity} × ₹{(item.price / 100).toFixed(2)}
+                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{(item.price / 100).toFixed(2)}
                             </p>
                           </div>
                         </div>
                         <span className="font-medium text-[#1c1b1b] shrink-0">
-                          ₹{((item.price * item.quantity) / 100).toFixed(2)}
+                          {taxCalculation.currencySymbol}{((item.price * item.quantity) / 100).toFixed(2)}
                         </span>
                       </div>
                     ))}
@@ -3370,31 +3960,19 @@ export default function CashierPosPage() {
                   </div>
 
                   {/* Dynamic Multi-Component Split Tax Lines */}
-                  {taxCalculation.componentBreakdown.length > 0 ? (
-                    taxCalculation.componentBreakdown.map((comp, cIdx) => (
-                      <div
-                        key={`step3_${comp.name}_${comp.rate}_${cIdx}`}
-                        className="flex justify-between text-[#5e5e5e]"
-                      >
-                        <span className="flex items-center gap-1">
-                          {comp.name} ({comp.rate}%)
-                          {comp.isInclusive && (
-                            <span className="text-[9px] bg-[#f1edec] text-[#5e5e5e] px-1 py-0.2 rounded border border-[#eadfd6] font-normal">
-                              Incl.
-                            </span>
-                          )}
-                        </span>
-                        <span className="font-medium text-[#1c1b1b]">
-                          {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="flex justify-between text-[#5e5e5e]">
-                      <span>Tax (0% / Exempt)</span>
-                      <span className="font-medium text-[#1c1b1b]">{taxCalculation.currencySymbol}0.00</span>
+                  {taxCalculation.componentBreakdown.map((comp, cIdx) => (
+                    <div
+                      key={`step3_${comp.name}_${comp.rate}_${cIdx}`}
+                      className="flex justify-between text-[#5e5e5e]"
+                    >
+                      <span>
+                        {comp.name} ({comp.rate}%)
+                      </span>
+                      <span className="font-medium text-[#1c1b1b]">
+                        {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                      </span>
                     </div>
-                  )}
+                  ))}
 
                   {activeCart.orderType === "Delivery" && (
                     <div className="flex justify-between text-[#5e5e5e]">
@@ -3422,37 +4000,6 @@ export default function CashierPosPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* Quick Draft Bill Link */}
-                <div className="mt-6 pt-4 border-t border-[#e7e5e4] text-center">
-                  <button
-                    onClick={() => {
-                      if (activeCart.items.length === 0) {
-                        showToast("Add items to cart before generating pre-bill");
-                        return;
-                      }
-                      openReceiptPdfInNewTab({
-                        order: {
-                          orderNumber: "DRAFT-KOT",
-                          createdAt: Date.now(),
-                          totalAmount: (totalPayablePaise / 100).toFixed(2),
-                          orderType: activeCart.orderType,
-                          customerName: activeCart.customerFirstName || "Walk-in Guest",
-                          customerPhone: activeCart.customerPhone,
-                        },
-                        org: activeOrg,
-                      });
-                      showToast("Generated Draft KOT / Pre-Bill");
-                    }}
-                    className="inline-flex items-center text-xs font-medium text-[#5e5e5e] hover:text-[#141010] transition cursor-pointer"
-                    type="button"
-                  >
-                    <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                    </svg>
-                    Print Draft KOT / Pre-Bill
-                  </button>
-                </div>
               </section>
 
               {/* RIGHT PANEL: Settlement Workspace (lg:col-span-7) */}
@@ -3465,100 +4012,69 @@ export default function CashierPosPage() {
                   </div>
 
                   {/* Payment Channel Filter / Mode Pills */}
-                  <div aria-label="Payment Channels" className="flex flex-wrap gap-2.5 pb-6 border-b border-[#e7e5e4]" role="tablist">
-                    {/* Cash */}
-                    <button
-                      onClick={() => {
-                        setSelectedPaymentMode("Cash");
-                        if (!tenderCashGiven) {
-                          setTenderCashGiven((totalPayablePaise / 100).toFixed(2));
-                        }
-                      }}
-                      className={`inline-flex items-center space-x-2 px-5 py-2.5 rounded-full text-xs sm:text-sm font-medium transition cursor-pointer ${
-                        selectedPaymentMode === "Cash"
-                          ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-[#0c0a09]"
-                          : "bg-white text-[#5e5e5e] hover:text-[#141010] border border-[#e7e5e4] hover:border-stone-400"
-                      }`}
-                      role="tab"
-                      type="button"
-                    >
-                      <svg className={`w-4 h-4 ${selectedPaymentMode === "Cash" ? "text-white" : "text-stone-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                      <span>Cash</span>
-                    </button>
-
-                    {/* Credit Card */}
-                    <button
-                      onClick={() => setSelectedPaymentMode("Credit Card")}
-                      className={`inline-flex items-center space-x-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-medium border transition cursor-pointer ${
-                        selectedPaymentMode === "Credit Card"
-                          ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-[#0c0a09] border-[#0c0a09]"
-                          : "bg-white text-[#5e5e5e] hover:text-[#141010] border-[#e7e5e4] hover:border-stone-400"
-                      }`}
-                      role="tab"
-                      type="button"
-                    >
-                      <svg className={`w-4 h-4 ${selectedPaymentMode === "Credit Card" ? "text-white" : "text-stone-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                      <span>Credit Card</span>
-                    </button>
-
-                    {/* Debit Card */}
-                    <button
-                      onClick={() => setSelectedPaymentMode("Debit Card")}
-                      className={`inline-flex items-center space-x-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-medium border transition cursor-pointer ${
-                        selectedPaymentMode === "Debit Card"
-                          ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-[#0c0a09] border-[#0c0a09]"
-                          : "bg-white text-[#5e5e5e] hover:text-[#141010] border-[#e7e5e4] hover:border-stone-400"
-                      }`}
-                      role="tab"
-                      type="button"
-                    >
-                      <svg className={`w-4 h-4 ${selectedPaymentMode === "Debit Card" ? "text-white" : "text-stone-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                      <span>Debit Card</span>
-                    </button>
-
-                    {/* UPI QR */}
-                    <button
-                      onClick={() => setSelectedPaymentMode("UPI QR")}
-                      className={`inline-flex items-center space-x-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-medium border transition cursor-pointer ${
-                        selectedPaymentMode === "UPI QR"
-                          ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-[#0c0a09] border-[#0c0a09]"
-                          : "bg-white text-[#5e5e5e] hover:text-[#141010] border-[#e7e5e4] hover:border-stone-400"
-                      }`}
-                      role="tab"
-                      type="button"
-                    >
-                      <svg className={`w-4 h-4 ${selectedPaymentMode === "UPI QR" ? "text-white" : "text-stone-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                      <span>UPI QR</span>
-                    </button>
-
-                    {/* Split Payment */}
-                    <button
-                      onClick={() => setSelectedPaymentMode("Split Payment")}
-                      className={`inline-flex items-center space-x-2 px-4 py-2.5 rounded-full text-xs sm:text-sm font-medium border transition cursor-pointer ${
-                        selectedPaymentMode === "Split Payment"
-                          ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-[#0c0a09] border-[#0c0a09]"
-                          : "bg-white text-[#5e5e5e] hover:text-[#141010] border-[#e7e5e4] hover:border-stone-400"
-                      }`}
-                      role="tab"
-                      type="button"
-                    >
-                      <svg className={`w-4 h-4 ${selectedPaymentMode === "Split Payment" ? "text-white" : "text-stone-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                      <span>Split Payment</span>
-                    </button>
+                  <div
+                    aria-label="Payment Channels"
+                    className="bg-[#f5f2f0] p-1.5 rounded-2xl border border-[#e5ded8] flex flex-wrap gap-1.5"
+                    role="tablist"
+                  >
+                    {activePaymentChannels.map((mode: any) => {
+                      const isSelected = selectedPaymentMode === mode.name;
+                      return (
+                        <button
+                          key={mode.id || mode.name}
+                          type="button"
+                          role="tab"
+                          aria-selected={isSelected}
+                          onClick={() => {
+                            setSelectedPaymentMode(mode.name);
+                            const required = (totalPayablePaise / 100).toFixed(2);
+                            const lower = mode.name.toLowerCase();
+                            if (lower.includes("cash") && (!tenderCashGiven.trim() || tenderCashGiven === "0")) {
+                              setTenderCashGiven(required);
+                            } else if (
+                              (lower.includes("card") || lower.includes("credit") || lower.includes("debit")) &&
+                              (!tenderCardGiven.trim() || tenderCardGiven === "0")
+                            ) {
+                              setTenderCardGiven(required);
+                            } else if (
+                              (lower.includes("upi") ||
+                                lower.includes("qr") ||
+                                lower.includes("gpay") ||
+                                lower.includes("phonepe") ||
+                                lower.includes("paytm")) &&
+                              (!tenderUpiGiven.trim() || tenderUpiGiven === "0")
+                            ) {
+                              setTenderUpiGiven(required);
+                            } else if (lower.includes("split")) {
+                              const half1 = (Math.floor(totalPayablePaise / 2) / 100).toFixed(2);
+                              const half2 = ((totalPayablePaise - Math.floor(totalPayablePaise / 2)) / 100).toFixed(2);
+                              if (!splitPart1Amount.trim()) setSplitPart1Amount(half1);
+                              if (!splitPart2Amount.trim()) setSplitPart2Amount(half2);
+                            } else {
+                              if (!customTenderGiven.trim() || customTenderGiven === "0") {
+                                setCustomTenderGiven(required);
+                              }
+                            }
+                          }}
+                          className={`flex-1 min-w-[120px] inline-flex items-center justify-center space-x-2 py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer select-none ${
+                            isSelected
+                              ? "bg-[#0c0a09] text-white shadow-sm border border-[#0c0a09]"
+                              : "bg-white/90 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/70 hover:border-stone-300 shadow-2xs"
+                          }`}
+                        >
+                          <span className={isSelected ? "text-white" : "text-stone-500"}>
+                            {mode.icon}
+                          </span>
+                          <span className={isSelected ? "text-white font-semibold" : "text-stone-700 font-medium"}>
+                            {mode.name}
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {/* TAB 1: CASH SETTLEMENT FLOW */}
-                  {selectedPaymentMode === "Cash" && (
+                  {selectedPaymentMode.toLowerCase().includes("cash") && (
                     <div className="mt-6 space-y-6" data-purpose="cash-settlement-flow">
                       {/* Target Payable Display Card */}
                       <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
@@ -3568,47 +4084,70 @@ export default function CashierPosPage() {
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
-                            ₹{(totalPayablePaise / 100).toFixed(2)}
+                            {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
                           </span>
                         </div>
                       </div>
 
                       {/* Cash Tender Input Field */}
                       <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e] mb-2" htmlFor="cash-tendered-input">
-                          Cash Tendered / Received *
-                        </label>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="cash-tendered-input">
+                            Cash Tendered / Received <span className="text-rose-500">*</span>
+                          </label>
+                          {!tenderCashGiven.trim() && (
+                            <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                              Required to settle
+                            </span>
+                          )}
+                        </div>
                         <div className="relative rounded-xl shadow-xs">
                           <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <span className="text-[#5e5e5e] font-medium text-lg">₹</span>
+                            <span className={`font-medium text-lg transition-colors ${
+                              tenderCashGiven.trim() ? "text-[#141010]" : "text-stone-300"
+                            }`}>
+                              {taxCalculation.currencySymbol}
+                            </span>
                           </div>
                           <input
                             id="cash-tendered-input"
                             name="cash-tendered"
                             type="text"
-                            placeholder={(totalPayablePaise / 100).toFixed(2)}
+                            placeholder="0.00"
                             value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
-                            className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                           />
                         </div>
                       </div>
 
                       {/* Quick Cash Buttons (Fast Tender Shortcuts) */}
                       <div>
-                        <span className="text-xs font-medium text-[#8a7e75] block mb-2.5">Fast Tender Shortcuts</span>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                            Fast Tender Shortcuts
+                          </span>
+                          <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                        </div>
                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                           {/* Exact Button */}
                           <button
                             type="button"
                             onClick={() => setTenderCashGiven((totalPayablePaise / 100).toFixed(2))}
-                            className={`px-3 py-2.5 rounded-lg border text-xs transition text-center shadow-xs cursor-pointer ${
-                              parseFloat(tenderCashGiven || "0") === totalPayablePaise / 100
-                                ? "border-2 border-[#0c0a09] bg-[#0c0a09] text-white font-semibold"
-                                : "border-[#e7e5e4] bg-[#fdf8f7] hover:bg-stone-100 font-medium text-[#141010]"
+                            className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
+                              tenderCashGiven.trim() && parseFloat(tenderCashGiven) === totalPayablePaise / 100
+                                ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                             }`}
                           >
-                            Exact ₹{(totalPayablePaise / 100).toFixed(2)}
+                            <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                              tenderCashGiven.trim() && parseFloat(tenderCashGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
+                            }`}>
+                              Exact Total
+                            </span>
+                            <span className="text-sm font-serif font-bold">
+                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                            </span>
                           </button>
 
                           {/* Dynamic Fast Denominations */}
@@ -3629,19 +4168,26 @@ export default function CashierPosPage() {
                             ).slice(0, 4);
 
                             return uniqueShortcuts.map((amt) => {
-                              const isSelected = parseFloat(tenderCashGiven || "0") === amt;
+                              const isSelected = tenderCashGiven.trim() && parseFloat(tenderCashGiven) === amt;
                               return (
                                 <button
                                   key={amt}
                                   type="button"
                                   onClick={() => setTenderCashGiven(amt.toFixed(2))}
-                                  className={`px-3 py-2.5 rounded-lg border text-xs transition text-center shadow-xs cursor-pointer ${
+                                  className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
                                     isSelected
-                                      ? "border-2 border-[#0c0a09] bg-[#0c0a09] text-white font-semibold"
-                                      : "border-[#e7e5e4] bg-[#fdf8f7] hover:bg-stone-100 font-medium text-[#141010]"
+                                      ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                      : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                                   }`}
                                 >
-                                  ₹{amt.toLocaleString("en-IN")}
+                                  <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                    isSelected ? "text-stone-300" : "text-stone-400"
+                                  }`}>
+                                    Cash Note
+                                  </span>
+                                  <span className="text-sm font-serif font-bold">
+                                    {taxCalculation.currencySymbol}{amt.toLocaleString("en-IN")}
+                                  </span>
                                 </button>
                               );
                             });
@@ -3652,8 +4198,20 @@ export default function CashierPosPage() {
                       {/* Return / Change Due Callout Box */}
                       {(() => {
                         const billVal = totalPayablePaise / 100;
-                        const givenVal = parseFloat(tenderCashGiven || billVal.toString());
+                        const isGivenFilled = !!tenderCashGiven.trim();
+                        const givenVal = parseFloat(tenderCashGiven || "0");
                         const changeVal = givenVal - billVal;
+
+                        if (!isGivenFilled) {
+                          return (
+                            <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-between">
+                              <div className="flex items-center space-x-2 text-stone-500 text-xs">
+                                <span className="text-base">ℹ️</span>
+                                <span>Enter cash tendered amount or click a quick shortcut above to calculate return change.</span>
+                              </div>
+                            </div>
+                          );
+                        }
 
                         if (changeVal >= 0) {
                           return (
@@ -3671,7 +4229,7 @@ export default function CashierPosPage() {
                               </div>
                               <div className="text-left sm:text-right">
                                 <span className="font-serif text-3xl sm:text-4xl font-semibold text-emerald-800 tracking-tight">
-                                  ₹{changeVal.toFixed(2)}
+                                  {taxCalculation.currencySymbol}{changeVal.toFixed(2)}
                                 </span>
                               </div>
                             </div>
@@ -3689,149 +4247,576 @@ export default function CashierPosPage() {
                               </div>
                               <div className="text-left sm:text-right">
                                 <span className="font-serif text-3xl sm:text-4xl font-semibold text-amber-900 tracking-tight">
-                                  ₹{Math.abs(changeVal).toFixed(2)}
+                                  {taxCalculation.currencySymbol}{Math.abs(changeVal).toFixed(2)}
                                 </span>
                               </div>
                             </div>
                           );
                         }
                       })()}
-
-                      {/* Receipt & Communication Options */}
-                      <div className="pt-4 border-t border-[#e7e5e4] space-y-3">
-                        <label className="flex items-center space-x-3 cursor-pointer select-none">
-                          <input
-                            defaultChecked
-                            className="w-4 h-4 rounded text-[#0c0a09] border-stone-300 focus:ring-[#0c0a09] cursor-pointer"
-                            type="checkbox"
-                          />
-                          <span className="text-xs sm:text-sm text-[#1c1b1b]">
-                            Print thermal customer tax invoice receipt
-                          </span>
-                        </label>
-                        <label className="flex items-center space-x-3 cursor-pointer select-none">
-                          <input
-                            defaultChecked
-                            className="w-4 h-4 rounded text-[#0c0a09] border-stone-300 focus:ring-[#0c0a09] cursor-pointer"
-                            type="checkbox"
-                          />
-                          <span className="text-xs sm:text-sm text-[#1c1b1b]">
-                            Send digital WhatsApp / SMS invoice to{" "}
-                            <strong className="font-semibold text-[#141010]">
-                              {activeCart.customerPhone || "+91 98250 14820"}
-                            </strong>
-                          </span>
-                        </label>
-                      </div>
                     </div>
                   )}
 
-                  {/* TAB 2 & 3: CARD SETTLEMENT (Credit / Debit) */}
-                  {(selectedPaymentMode === "Credit Card" || selectedPaymentMode === "Debit Card") && (
-                    <div className="mt-6 space-y-6">
-                      <div className="p-5 bg-stone-50 border border-stone-200 rounded-xl space-y-4">
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold uppercase tracking-wider text-stone-700">
-                            POS Terminal Reader / EDC Swipe
-                          </span>
-                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 flex items-center gap-1.5">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            Pinelabs / PayTM Terminal Connected
-                          </span>
-                        </div>
-                        <div className="p-4 bg-white rounded-xl border border-stone-200 flex items-center justify-between">
+                  {/* TAB 2 & 3: CARD SETTLEMENT (Credit / Debit / Card) */}
+                  {(selectedPaymentMode.toLowerCase().includes("card") ||
+                    selectedPaymentMode.toLowerCase().includes("credit") ||
+                    selectedPaymentMode.toLowerCase().includes("debit")) &&
+                    !selectedPaymentMode.toLowerCase().includes("split") && (
+                      <div className="mt-6 space-y-6" data-purpose="card-settlement-flow">
+                        {/* Target Payable Display Card */}
+                        <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
-                            <span className="text-xs text-stone-500 block">Total Amount to Charge Card</span>
-                            <span className="font-serif text-3xl font-bold text-stone-900">
-                              ₹{(totalPayablePaise / 100).toFixed(2)}
+                            <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
+                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xl font-bold text-[#141010]">
+                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
                             </span>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() => showToast("EDC Terminal triggered: Tap or Insert card")}
-                            className="px-4 py-2 bg-stone-900 text-white rounded-lg text-xs font-semibold hover:bg-black transition cursor-pointer"
-                          >
-                            Push to Terminal (Swipe)
-                          </button>
                         </div>
+
+                        {/* Card Tender Input Field */}
                         <div>
-                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="card-tendered-input">
+                              Card Amount to Charge <span className="text-rose-500">*</span>
+                            </label>
+                            {!tenderCardGiven.trim() && (
+                              <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                Required to settle
+                              </span>
+                            )}
+                          </div>
+                          <div className="relative rounded-xl shadow-xs">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                              <span className={`font-medium text-lg transition-colors ${
+                                tenderCardGiven.trim() ? "text-[#141010]" : "text-stone-300"
+                              }`}>
+                                {taxCalculation.currencySymbol}
+                              </span>
+                            </div>
+                            <input
+                              id="card-tendered-input"
+                              name="card-tendered"
+                              type="text"
+                              placeholder="0.00"
+                              value={tenderCardGiven}
+                              onChange={(e) => setTenderCardGiven(e.target.value)}
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quick Card Shortcuts (Fast Tender Shortcuts) */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                              Fast Tender Shortcuts
+                            </span>
+                            <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                            {/* Exact Button */}
+                            <button
+                              type="button"
+                              onClick={() => setTenderCardGiven((totalPayablePaise / 100).toFixed(2))}
+                              className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
+                                tenderCardGiven.trim() && parseFloat(tenderCardGiven) === totalPayablePaise / 100
+                                  ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                  : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
+                              }`}
+                            >
+                              <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                tenderCardGiven.trim() && parseFloat(tenderCardGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
+                              }`}>
+                                Exact Total
+                              </span>
+                              <span className="text-sm font-serif font-bold">
+                                {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              </span>
+                            </button>
+
+                            {/* Dynamic Fast Denominations */}
+                            {(() => {
+                              const exactVal = totalPayablePaise / 100;
+                              const d1 = Math.ceil(exactVal / 100) * 100;
+                              const d2 = Math.ceil(exactVal / 500) * 500;
+                              const d3 = Math.ceil((exactVal + 500) / 500) * 500;
+                              const d4 = Math.ceil((exactVal + 1000) / 1000) * 1000;
+
+                              const uniqueShortcuts = Array.from(
+                                new Set([
+                                  d1 > exactVal ? d1 : d1 + 100,
+                                  d2 > exactVal ? d2 : d2 + 500,
+                                  d3,
+                                  d4 > d3 ? d4 : d3 + 1000,
+                                ])
+                              ).slice(0, 4);
+
+                              return uniqueShortcuts.map((amt) => {
+                                const isSelected = tenderCardGiven.trim() && parseFloat(tenderCardGiven) === amt;
+                                return (
+                                  <button
+                                    key={amt}
+                                    type="button"
+                                    onClick={() => setTenderCardGiven(amt.toFixed(2))}
+                                    className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
+                                      isSelected
+                                        ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                        : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
+                                    }`}
+                                  >
+                                    <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                      isSelected ? "text-stone-300" : "text-stone-400"
+                                    }`}>
+                                      Note
+                                    </span>
+                                    <span className="text-sm font-serif font-bold">
+                                      {taxCalculation.currencySymbol}{amt.toLocaleString("en-IN")}
+                                    </span>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Optional Auth / Transaction Ref Code */}
+                        <div>
+                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5" htmlFor="card-ref-code">
                             Optional Auth / Transaction Ref Code (RRN)
                           </label>
                           <input
+                            id="card-ref-code"
                             type="text"
+                            value={cardAuthRef}
+                            onChange={(e) => setCardAuthRef(e.target.value)}
                             placeholder="e.g. TXN-89324810"
-                            className="w-full bg-white border border-stone-300 rounded-lg px-3.5 py-2.5 text-xs text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:outline-none"
+                            className="w-full bg-white border border-stone-300 rounded-xl px-4 py-3 text-sm text-stone-900 font-medium focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:outline-none transition"
                           />
                         </div>
                       </div>
-                    </div>
-                  )}
+                    )}
 
-                  {/* TAB 4: UPI QR SETTLEMENT */}
-                  {selectedPaymentMode === "UPI QR" && (
-                    <div className="mt-6 space-y-6">
-                      <div className="p-6 bg-stone-50 border border-stone-200 rounded-xl flex flex-col sm:flex-row items-center gap-6">
-                        {/* Dynamic Mock QR Code */}
-                        <div className="w-40 h-40 bg-white p-2.5 rounded-xl border-2 border-stone-900 flex flex-col items-center justify-center shrink-0 shadow-sm">
-                          <svg className="w-32 h-32 text-stone-900" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M2 2h8v8H2V2zm2 2v4h4V4H4zm10-2h8v8h-8V2zm2 2v4h4V4h-4zM2 14h8v8H2v-8zm2 2v4h4v-4H4zm14 0h4v2h-4v-2zm-4 0h2v4h-2v-4zm4 4h4v2h-4v-2zm-2-2h2v2h-2v-2zm-6-2h2v2h-2v-2zm2 4h2v2h-2v-2z" />
-                          </svg>
-                          <span className="text-[10px] font-bold tracking-widest uppercase text-stone-700 mt-1">BHIM UPI</span>
-                        </div>
-                        <div className="flex-1 space-y-3 text-center sm:text-left">
+                  {/* TAB 3: UPI / QR SETTLEMENT */}
+                  {(selectedPaymentMode.toLowerCase().includes("upi") ||
+                    selectedPaymentMode.toLowerCase().includes("qr") ||
+                    selectedPaymentMode.toLowerCase().includes("gpay") ||
+                    selectedPaymentMode.toLowerCase().includes("phonepe") ||
+                    selectedPaymentMode.toLowerCase().includes("paytm")) &&
+                    !selectedPaymentMode.toLowerCase().includes("split") && (
+                      <div className="mt-6 space-y-6" data-purpose="upi-settlement-flow">
+                        {/* Target Payable Display Card */}
+                        <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
-                            <span className="text-xs text-stone-500 block">Scan with any UPI App</span>
-                            <span className="font-serif text-3xl font-bold text-stone-900">
-                              ₹{(totalPayablePaise / 100).toFixed(2)}
+                            <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
+                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xl font-bold text-[#141010]">
+                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
                             </span>
                           </div>
-                          <p className="text-xs text-stone-600">
-                            UPI ID: <strong className="font-mono text-stone-900">prestpos.9825014820@icici</strong>
-                          </p>
-                          <div className="flex items-center gap-2 text-xs text-stone-500 justify-center sm:justify-start">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <span>Listening for live webhook callback (300s window)</span>
+                        </div>
+
+                        {/* UPI Tender Input Field */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="upi-tendered-input">
+                              UPI Settlement Amount <span className="text-rose-500">*</span>
+                            </label>
+                            {!tenderUpiGiven.trim() && (
+                              <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                Required to settle
+                              </span>
+                            )}
                           </div>
+                          <div className="relative rounded-xl shadow-xs">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                              <span className={`font-medium text-lg transition-colors ${
+                                tenderUpiGiven.trim() ? "text-[#141010]" : "text-stone-300"
+                              }`}>
+                                {taxCalculation.currencySymbol}
+                              </span>
+                            </div>
+                            <input
+                              id="upi-tendered-input"
+                              name="upi-tendered"
+                              type="text"
+                              placeholder="0.00"
+                              value={tenderUpiGiven}
+                              onChange={(e) => setTenderUpiGiven(e.target.value)}
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quick UPI Shortcuts (Fast Tender Shortcuts) */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                              Fast Tender Shortcuts
+                            </span>
+                            <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                            {/* Exact Button */}
+                            <button
+                              type="button"
+                              onClick={() => setTenderUpiGiven((totalPayablePaise / 100).toFixed(2))}
+                              className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
+                                tenderUpiGiven.trim() && parseFloat(tenderUpiGiven) === totalPayablePaise / 100
+                                  ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                  : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
+                              }`}
+                            >
+                              <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                tenderUpiGiven.trim() && parseFloat(tenderUpiGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
+                              }`}>
+                                Exact Total
+                              </span>
+                              <span className="text-sm font-serif font-bold">
+                                {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              </span>
+                            </button>
+
+                            {/* Dynamic Fast Denominations */}
+                            {(() => {
+                              const exactVal = totalPayablePaise / 100;
+                              const d1 = Math.ceil(exactVal / 100) * 100;
+                              const d2 = Math.ceil(exactVal / 500) * 500;
+                              const d3 = Math.ceil((exactVal + 500) / 500) * 500;
+                              const d4 = Math.ceil((exactVal + 1000) / 1000) * 1000;
+
+                              const uniqueShortcuts = Array.from(
+                                new Set([
+                                  d1 > exactVal ? d1 : d1 + 100,
+                                  d2 > exactVal ? d2 : d2 + 500,
+                                  d3,
+                                  d4 > d3 ? d4 : d3 + 1000,
+                                ])
+                              ).slice(0, 4);
+
+                              return uniqueShortcuts.map((amt) => {
+                                const isSelected = tenderUpiGiven.trim() && parseFloat(tenderUpiGiven) === amt;
+                                return (
+                                  <button
+                                    key={amt}
+                                    type="button"
+                                    onClick={() => setTenderUpiGiven(amt.toFixed(2))}
+                                    className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
+                                      isSelected
+                                        ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                        : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
+                                    }`}
+                                  >
+                                    <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                      isSelected ? "text-stone-300" : "text-stone-400"
+                                    }`}>
+                                      Note
+                                    </span>
+                                    <span className="text-sm font-serif font-bold">
+                                      {taxCalculation.currencySymbol}{amt.toLocaleString("en-IN")}
+                                    </span>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Optional UTR / Reference Input */}
+                        <div>
+                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5" htmlFor="upi-ref-code">
+                            Optional UPI UTR / Transaction ID
+                          </label>
+                          <input
+                            id="upi-ref-code"
+                            type="text"
+                            value={upiAuthRef}
+                            onChange={(e) => setUpiAuthRef(e.target.value)}
+                            placeholder="e.g. UTR-202609170123"
+                            className="w-full bg-white border border-stone-300 rounded-xl px-4 py-3 text-sm text-stone-900 font-medium focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:outline-none transition"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                  {/* TAB 4: SPLIT PAYMENT SETTLEMENT */}
+                  {selectedPaymentMode.toLowerCase().includes("split") && (
+                    <div className="mt-6 space-y-6" data-purpose="split-settlement-flow">
+                      {/* Target Payable Display Card */}
+                      <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
+                        <div>
+                          <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
+                          <span className="text-xs text-[#8a7e75]">Ticket reference: #CK-8942-02</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-xl font-bold text-[#141010]">
+                            {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Editable Split Fields Grid */}
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                            Split Tender Channels (Editable)
+                          </span>
                           <button
                             type="button"
-                            onClick={() => showToast("Simulated UPI payment verified successfully!")}
-                            className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-xs font-semibold hover:bg-emerald-800 transition cursor-pointer"
+                            onClick={() => {
+                              const p1 = parseFloat(splitPart1Amount || "0");
+                              const p1Paise = Math.round(p1 * 100);
+                              const remPaise = Math.max(0, totalPayablePaise - p1Paise);
+                              setSplitPart2Amount((remPaise / 100).toFixed(2));
+                            }}
+                            className="text-xs font-semibold text-stone-900 hover:text-black underline underline-offset-4 cursor-pointer"
                           >
-                            Fetch QR Payment Status
+                            Auto-Balance Part 2
                           </button>
                         </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          {/* Part 1 Split Card */}
+                          <div className="p-4 bg-white border border-stone-200/90 rounded-2xl space-y-3 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                                Split 1
+                              </span>
+                              <select
+                                value={splitPart1Mode}
+                                onChange={(e) => setSplitPart1Mode(e.target.value)}
+                                className="text-xs font-semibold bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1 text-stone-800 focus:outline-none cursor-pointer"
+                              >
+                                {activePaymentChannels
+                                  .filter((m: any) => !m.name.toLowerCase().includes("split"))
+                                  .map((m: any) => (
+                                    <option key={`split1_${m.name}`} value={m.name}>
+                                      {m.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <div className="relative rounded-xl">
+                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <span className="font-semibold text-base text-stone-900">
+                                  {taxCalculation.currencySymbol}
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                value={splitPart1Amount}
+                                onChange={(e) => setSplitPart1Amount(e.target.value)}
+                                placeholder="0.00"
+                                className="block w-full pl-8 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-lg font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-stone-900 focus:outline-none transition"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Part 2 Split Card */}
+                          <div className="p-4 bg-white border border-stone-200/90 rounded-2xl space-y-3 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-bold uppercase tracking-wider text-stone-500">
+                                Split 2
+                              </span>
+                              <select
+                                value={splitPart2Mode}
+                                onChange={(e) => setSplitPart2Mode(e.target.value)}
+                                className="text-xs font-semibold bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1 text-stone-800 focus:outline-none cursor-pointer"
+                              >
+                                {activePaymentChannels
+                                  .filter((m: any) => !m.name.toLowerCase().includes("split"))
+                                  .map((m: any) => (
+                                    <option key={`split2_${m.name}`} value={m.name}>
+                                      {m.name}
+                                    </option>
+                                  ))}
+                              </select>
+                            </div>
+                            <div className="relative rounded-xl">
+                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                <span className="font-semibold text-base text-stone-900">
+                                  {taxCalculation.currencySymbol}
+                                </span>
+                              </div>
+                              <input
+                                type="text"
+                                value={splitPart2Amount}
+                                onChange={(e) => setSplitPart2Amount(e.target.value)}
+                                placeholder="0.00"
+                                className="block w-full pl-8 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-lg font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-stone-900 focus:outline-none transition"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
+
+                      {/* Live Allocation Balance Card */}
+                      {(() => {
+                        const p1 = parseFloat(splitPart1Amount.trim() || "0");
+                        const p2 = parseFloat(splitPart2Amount.trim() || "0");
+                        const allocatedPaise = Math.round((p1 + p2) * 100);
+                        const diffPaise = allocatedPaise - totalPayablePaise;
+
+                        if (diffPaise === 0) {
+                          return (
+                            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800 font-medium">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-base">✓</span>
+                                <span>100% Balanced &amp; Allocated across split channels</span>
+                              </div>
+                              <span className="font-bold text-sm">
+                                {taxCalculation.currencySymbol}{(allocatedPaise / 100).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        } else if (diffPaise < 0) {
+                          return (
+                            <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-between text-xs text-amber-800 font-medium">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-base">⚠️</span>
+                                <span>
+                                  Remaining {taxCalculation.currencySymbol}{(Math.abs(diffPaise) / 100).toFixed(2)} unallocated
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const p1Val = parseFloat(splitPart1Amount || "0");
+                                  const remPaise = Math.max(0, totalPayablePaise - Math.round(p1Val * 100));
+                                  setSplitPart2Amount((remPaise / 100).toFixed(2));
+                                }}
+                                className="text-xs bg-amber-900 text-white px-2.5 py-1 rounded-lg font-semibold hover:bg-amber-950 transition cursor-pointer"
+                              >
+                                Fix Balance
+                              </button>
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-center justify-between text-xs text-rose-800 font-medium">
+                              <div className="flex items-center space-x-2">
+                                <span className="text-base">⚠️</span>
+                                <span>
+                                  Split exceeds total by {taxCalculation.currencySymbol}{(diffPaise / 100).toFixed(2)}
+                                </span>
+                              </div>
+                              <span className="font-bold">
+                                {taxCalculation.currencySymbol}{(allocatedPaise / 100).toFixed(2)} / {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              </span>
+                            </div>
+                          );
+                        }
+                      })()}
                     </div>
                   )}
 
-                  {/* TAB 5: SPLIT PAYMENT SETTLEMENT */}
-                  {selectedPaymentMode === "Split Payment" && (
-                    <div className="mt-6 space-y-4">
-                      <div className="p-4 bg-stone-50 border border-stone-200 rounded-xl space-y-3">
-                        <span className="text-xs font-semibold uppercase tracking-wider text-stone-700 block">
-                          Split Tender Allocation
-                        </span>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                          <div className="p-3 bg-white rounded-lg border border-stone-200 flex justify-between items-center">
-                            <span>Part 1: Cash</span>
-                            <span className="font-semibold text-stone-900">
-                              ₹{(totalPayablePaise / 200).toFixed(2)}
-                            </span>
+                  {/* TAB 5: CUSTOM PAYMENT MODE SETTLEMENT */}
+                  {!selectedPaymentMode.toLowerCase().includes("cash") &&
+                    !selectedPaymentMode.toLowerCase().includes("card") &&
+                    !selectedPaymentMode.toLowerCase().includes("credit") &&
+                    !selectedPaymentMode.toLowerCase().includes("debit") &&
+                    !selectedPaymentMode.toLowerCase().includes("upi") &&
+                    !selectedPaymentMode.toLowerCase().includes("qr") &&
+                    !selectedPaymentMode.toLowerCase().includes("gpay") &&
+                    !selectedPaymentMode.toLowerCase().includes("phonepe") &&
+                    !selectedPaymentMode.toLowerCase().includes("paytm") &&
+                    !selectedPaymentMode.toLowerCase().includes("split") && (
+                      <div className="mt-6 space-y-6" data-purpose="custom-settlement-flow">
+                        {/* Target Payable Display Card */}
+                        <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
+                          <div>
+                            <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
+                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode}</span>
                           </div>
-                          <div className="p-3 bg-white rounded-lg border border-stone-200 flex justify-between items-center">
-                            <span>Part 2: UPI / Card</span>
-                            <span className="font-semibold text-stone-900">
-                              ₹{(totalPayablePaise / 200).toFixed(2)}
+                          <div className="text-right">
+                            <span className="text-xl font-bold text-[#141010]">
+                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
                             </span>
                           </div>
                         </div>
-                        <p className="text-[11px] text-stone-500 text-center">
-                          Total split matches payable sum (₹{(totalPayablePaise / 100).toFixed(2)})
-                        </p>
+
+                        {/* Custom Tender Input Field */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="custom-tendered-input">
+                              {selectedPaymentMode} Amount <span className="text-rose-500">*</span>
+                            </label>
+                            {!customTenderGiven.trim() && (
+                              <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                Required to settle
+                              </span>
+                            )}
+                          </div>
+                          <div className="relative rounded-xl shadow-xs">
+                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                              <span className={`font-medium text-lg transition-colors ${
+                                customTenderGiven.trim() ? "text-[#141010]" : "text-stone-300"
+                              }`}>
+                                {taxCalculation.currencySymbol}
+                              </span>
+                            </div>
+                            <input
+                              id="custom-tendered-input"
+                              name="custom-tendered"
+                              type="text"
+                              placeholder="0.00"
+                              value={customTenderGiven}
+                              onChange={(e) => setCustomTenderGiven(e.target.value)}
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Quick Exact Button */}
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+                              Fast Tender Shortcuts
+                            </span>
+                            <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                          </div>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => setCustomTenderGiven((totalPayablePaise / 100).toFixed(2))}
+                              className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
+                                customTenderGiven.trim() && parseFloat(customTenderGiven) === totalPayablePaise / 100
+                                  ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
+                                  : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
+                              }`}
+                            >
+                              <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                customTenderGiven.trim() && parseFloat(customTenderGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
+                              }`}>
+                                Exact Total
+                              </span>
+                              <span className="text-sm font-serif font-bold">
+                                {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              </span>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Optional Reference / Voucher / Note Input */}
+                        <div>
+                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5" htmlFor="custom-ref-code">
+                            Optional {selectedPaymentMode} Reference / Note / Voucher #
+                          </label>
+                          <input
+                            id="custom-ref-code"
+                            type="text"
+                            value={customTenderRef}
+                            onChange={(e) => setCustomTenderRef(e.target.value)}
+                            placeholder={`e.g. ${selectedPaymentMode} Reference ID or Note`}
+                            className="w-full bg-white border border-stone-300 rounded-xl px-4 py-3 text-sm text-stone-900 font-medium focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:outline-none transition"
+                          />
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
                 </div>
               </section>
             </div>
@@ -3842,7 +4827,7 @@ export default function CashierPosPage() {
             <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
               {/* Back Link */}
               <button
-                onClick={() => setCurrentStep(2)}
+                onClick={() => goToStep(2)}
                 className="inline-flex items-center px-4 py-2.5 rounded-full border border-[#e7e5e4] hover:bg-stone-50 text-xs sm:text-sm font-medium text-[#141010] transition cursor-pointer"
                 type="button"
               >
@@ -3857,15 +4842,115 @@ export default function CashierPosPage() {
                 <div className="text-right">
                   <span className="text-[11px] text-[#8a7e75] uppercase tracking-wider block">Total Received</span>
                   <span className="text-base font-semibold text-[#141010]">
-                    ₹{tenderCashGiven ? parseFloat(tenderCashGiven).toFixed(2) : (totalPayablePaise / 100).toFixed(2)}
+                    {selectedPaymentMode.toLowerCase().includes("cash")
+                      ? tenderCashGiven.trim()
+                        ? `${taxCalculation.currencySymbol}${parseFloat(tenderCashGiven).toFixed(2)}`
+                        : `${taxCalculation.currencySymbol}0.00`
+                      : selectedPaymentMode.toLowerCase().includes("card") ||
+                        selectedPaymentMode.toLowerCase().includes("credit") ||
+                        selectedPaymentMode.toLowerCase().includes("debit")
+                      ? tenderCardGiven.trim()
+                        ? `${taxCalculation.currencySymbol}${parseFloat(tenderCardGiven).toFixed(2)}`
+                        : `${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}`
+                      : selectedPaymentMode.toLowerCase().includes("upi") ||
+                        selectedPaymentMode.toLowerCase().includes("qr") ||
+                        selectedPaymentMode.toLowerCase().includes("gpay") ||
+                        selectedPaymentMode.toLowerCase().includes("phonepe") ||
+                        selectedPaymentMode.toLowerCase().includes("paytm")
+                      ? tenderUpiGiven.trim()
+                        ? `${taxCalculation.currencySymbol}${parseFloat(tenderUpiGiven).toFixed(2)}`
+                        : `${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}`
+                      : selectedPaymentMode.toLowerCase().includes("split")
+                      ? `${taxCalculation.currencySymbol}${(
+                          parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0")
+                        ).toFixed(2)}`
+                      : customTenderGiven.trim()
+                      ? `${taxCalculation.currencySymbol}${parseFloat(customTenderGiven).toFixed(2)}`
+                      : `${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}`}
                   </span>
                 </div>
 
                 <button
                   type="button"
-                  disabled={isProcessingOrder}
+                  disabled={
+                    isProcessingOrder ||
+                    (selectedPaymentMode.toLowerCase().includes("cash") &&
+                      (!tenderCashGiven.trim() ||
+                        isNaN(parseFloat(tenderCashGiven)) ||
+                        Math.round(parseFloat(tenderCashGiven) * 100) < totalPayablePaise)) ||
+                    ((selectedPaymentMode.toLowerCase().includes("card") ||
+                      selectedPaymentMode.toLowerCase().includes("credit") ||
+                      selectedPaymentMode.toLowerCase().includes("debit")) &&
+                      (!tenderCardGiven.trim() ||
+                        isNaN(parseFloat(tenderCardGiven)) ||
+                        parseFloat(tenderCardGiven) <= 0)) ||
+                    ((selectedPaymentMode.toLowerCase().includes("upi") ||
+                      selectedPaymentMode.toLowerCase().includes("qr") ||
+                      selectedPaymentMode.toLowerCase().includes("gpay") ||
+                      selectedPaymentMode.toLowerCase().includes("phonepe") ||
+                      selectedPaymentMode.toLowerCase().includes("paytm")) &&
+                      (!tenderUpiGiven.trim() ||
+                        isNaN(parseFloat(tenderUpiGiven)) ||
+                        parseFloat(tenderUpiGiven) <= 0)) ||
+                    (selectedPaymentMode.toLowerCase().includes("split") &&
+                      Math.round(
+                        (parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0")) * 100
+                      ) !== totalPayablePaise) ||
+                    (!selectedPaymentMode.toLowerCase().includes("cash") &&
+                      !selectedPaymentMode.toLowerCase().includes("card") &&
+                      !selectedPaymentMode.toLowerCase().includes("credit") &&
+                      !selectedPaymentMode.toLowerCase().includes("debit") &&
+                      !selectedPaymentMode.toLowerCase().includes("upi") &&
+                      !selectedPaymentMode.toLowerCase().includes("qr") &&
+                      !selectedPaymentMode.toLowerCase().includes("gpay") &&
+                      !selectedPaymentMode.toLowerCase().includes("phonepe") &&
+                      !selectedPaymentMode.toLowerCase().includes("paytm") &&
+                      !selectedPaymentMode.toLowerCase().includes("split") &&
+                      (!customTenderGiven.trim() ||
+                        isNaN(parseFloat(customTenderGiven)) ||
+                        parseFloat(customTenderGiven) <= 0))
+                  }
                   onClick={handleCompleteOrder}
-                  className="inline-flex items-center justify-center space-x-2.5 px-7 py-3 rounded-full bg-[#0c0a09] hover:bg-stone-800 text-white text-sm font-semibold shadow-md transition transform active:scale-98 cursor-pointer disabled:opacity-50"
+                  className={`inline-flex items-center justify-center space-x-2.5 px-7 py-3 rounded-full text-white text-sm font-semibold shadow-md transition transform active:scale-98 ${
+                    isProcessingOrder ||
+                    (selectedPaymentMode.toLowerCase().includes("cash") &&
+                      (!tenderCashGiven.trim() ||
+                        isNaN(parseFloat(tenderCashGiven)) ||
+                        Math.round(parseFloat(tenderCashGiven) * 100) < totalPayablePaise)) ||
+                    ((selectedPaymentMode.toLowerCase().includes("card") ||
+                      selectedPaymentMode.toLowerCase().includes("credit") ||
+                      selectedPaymentMode.toLowerCase().includes("debit")) &&
+                      (!tenderCardGiven.trim() ||
+                        isNaN(parseFloat(tenderCardGiven)) ||
+                        parseFloat(tenderCardGiven) <= 0)) ||
+                    ((selectedPaymentMode.toLowerCase().includes("upi") ||
+                      selectedPaymentMode.toLowerCase().includes("qr") ||
+                      selectedPaymentMode.toLowerCase().includes("gpay") ||
+                      selectedPaymentMode.toLowerCase().includes("phonepe") ||
+                      selectedPaymentMode.toLowerCase().includes("paytm")) &&
+                      (!tenderUpiGiven.trim() ||
+                        isNaN(parseFloat(tenderUpiGiven)) ||
+                        parseFloat(tenderUpiGiven) <= 0)) ||
+                    (selectedPaymentMode.toLowerCase().includes("split") &&
+                      Math.round(
+                        (parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0")) * 100
+                      ) !== totalPayablePaise) ||
+                    (!selectedPaymentMode.toLowerCase().includes("cash") &&
+                      !selectedPaymentMode.toLowerCase().includes("card") &&
+                      !selectedPaymentMode.toLowerCase().includes("credit") &&
+                      !selectedPaymentMode.toLowerCase().includes("debit") &&
+                      !selectedPaymentMode.toLowerCase().includes("upi") &&
+                      !selectedPaymentMode.toLowerCase().includes("qr") &&
+                      !selectedPaymentMode.toLowerCase().includes("gpay") &&
+                      !selectedPaymentMode.toLowerCase().includes("phonepe") &&
+                      !selectedPaymentMode.toLowerCase().includes("paytm") &&
+                      !selectedPaymentMode.toLowerCase().includes("split") &&
+                      (!customTenderGiven.trim() ||
+                        isNaN(parseFloat(customTenderGiven)) ||
+                        parseFloat(customTenderGiven) <= 0))
+                      ? "bg-stone-400 cursor-not-allowed opacity-60"
+                      : "bg-[#0c0a09] hover:bg-stone-800 cursor-pointer"
+                  }`}
                 >
                   {isProcessingOrder ? (
                     <span>Settle &amp; Processing...</span>
@@ -3908,7 +4993,11 @@ export default function CashierPosPage() {
             <div className="p-4 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] text-left text-xs space-y-2">
               <div className="flex justify-between">
                 <span className="text-[#7a716b]">Total Paid:</span>
-                <span className="font-bold text-[#141010]">₹{completedOrderData.totalAmount}</span>
+                <span className="font-bold text-[#141010]">
+                  {taxCalculation.currencySymbol}
+                  {completedOrderData.display_total_amount ||
+                    (completedOrderData.totalAmount / 100).toFixed(2)}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#7a716b]">Payment Mode:</span>
@@ -3946,7 +5035,7 @@ export default function CashierPosPage() {
 
               <button
                 type="button"
-                onClick={() => setCompletedOrderData(null)}
+                onClick={handleResetToNewOrder}
                 className="flex-1 py-2.5 bg-[#0c0a09] hover:bg-stone-900 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 New Order (F5)
@@ -3955,7 +5044,235 @@ export default function CashierPosPage() {
           </div>
         </div>
       )}
+
+      {/* ========================================================================= */}
+      {/* ITEM CUSTOMIZATION MODAL (Defx-POS Layout & Dietary / Price Responsive)    */}
+      {/* ========================================================================= */}
+      {customizingCatalogEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 font-sans animate-scaleUp max-h-[90vh] flex flex-col">
+            {/* Top Item Summary Row matching screenshot */}
+            <div className="flex items-center justify-between gap-4">
+              {/* Stepper */}
+              <div className="inline-flex items-center border border-stone-800 rounded-lg bg-white overflow-hidden shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setCustomizationQty((prev) => Math.max(1, prev - 1))}
+                  className="w-8 h-8 flex items-center justify-center text-sm font-bold text-stone-900 hover:bg-stone-100 border-r border-stone-800/20 cursor-pointer"
+                >
+                  -
+                </button>
+                <span className="w-8 text-center text-xs font-bold text-stone-900">
+                  {customizationQty}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCustomizationQty((prev) => prev + 1)}
+                  className="w-8 h-8 flex items-center justify-center text-sm font-bold text-stone-900 hover:bg-stone-100 border-l border-stone-800/20 cursor-pointer"
+                >
+                  +
+                </button>
+              </div>
+
+              {/* Item Details with Dietary Icon */}
+              <div className="flex items-center space-x-2 flex-1 min-w-0">
+                {renderDietaryMark(customizingCatalogEntry.item)}
+                <span className="font-semibold text-xs sm:text-sm text-stone-900 truncate">
+                  {customizingCatalogEntry.item.name}
+                  {customizingCatalogEntry.item.quantityUnit && (
+                    <span className="text-stone-500 font-normal ml-1">
+                      ({customizingCatalogEntry.item.quantityUnit})
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              {/* Base Price */}
+              <div className="text-sm font-bold text-stone-900 shrink-0">
+                {taxCalculation.currencySymbol}
+                {customizingCatalogEntry.item.price % 100 === 0
+                  ? (customizingCatalogEntry.item.price / 100).toString()
+                  : (customizingCatalogEntry.item.price / 100).toFixed(2)}
+              </div>
+            </div>
+
+            <hr className="border-stone-200" />
+
+            {/* Subtitle */}
+            <h4 className="text-center font-bold text-xs sm:text-sm text-stone-900">
+              Customise as per requirements
+            </h4>
+
+            {/* Scrollable Groups & Items Area */}
+            <div className="flex-1 overflow-y-auto space-y-5 pr-1 max-h-[50vh]">
+              {customizingCatalogEntry.customizations.map((group) => {
+                const gid = group.id || group._id;
+                const isSingleChoice = (group.max_selected ?? (group.required ? 1 : 99)) === 1;
+                const selectedInGroup = selectedCustomizationOptions[gid] || [];
+                const availableOptions = (group.customization_items || []).filter(
+                  (ci: any) => ci.is_available !== false && ci.isAvailable !== false
+                );
+
+                return (
+                  <div key={gid} className="space-y-2">
+                    {/* Group Header */}
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-stone-900 uppercase tracking-wide">
+                          {group.name}
+                        </span>
+                        <span className="text-[11px] text-stone-500 font-normal">
+                          {isSingleChoice
+                            ? "Select any 1"
+                            : group.required
+                            ? `Select up to ${group.max_selected || 1} (Required)`
+                            : `Select up to ${group.max_selected || "any"} (Optional)`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Options List */}
+                    <div className="space-y-2">
+                      {availableOptions.map((option: any) => {
+                        const oid = option.id || option._id;
+                        const isSelected = selectedInGroup.some((o) => (o.id || o._id) === oid);
+                        const optPrice = option.price || 0;
+                        const optPriceFormatted =
+                          optPrice % 100 === 0 ? (optPrice / 100).toString() : (optPrice / 100).toFixed(2);
+
+                        return (
+                          <div
+                            key={oid}
+                            onClick={() => handleToggleCustomizationOption(group, option)}
+                            className={`w-full border rounded-xl p-3 flex items-center justify-between transition-all cursor-pointer select-none ${
+                              isSelected
+                                ? "border-stone-900 bg-stone-50/70 shadow-2xs"
+                                : "border-stone-200 hover:border-stone-300 bg-white"
+                            }`}
+                          >
+                            {/* Left: Dietary Icon + Option Name */}
+                            <div className="flex items-center space-x-2.5 min-w-0 pr-3">
+                              {renderDietaryMark(option)}
+                              <div className="min-w-0">
+                                <span
+                                  className={`text-xs block truncate ${
+                                    isSelected ? "font-bold text-stone-950" : "font-medium text-stone-800"
+                                  }`}
+                                >
+                                  {option.name}
+                                </span>
+                                {option.description && (
+                                  <p className="text-[10px] text-stone-400 mt-0.5 line-clamp-1">
+                                    {option.description}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Right: Extra Price + Check/Radio Box */}
+                            <div className="flex items-center space-x-3 shrink-0">
+                              <span className="text-xs font-semibold text-stone-900">
+                                {optPrice > 0 ? `${taxCalculation.currencySymbol}${optPriceFormatted}` : "Free"}
+                              </span>
+
+                              {isSingleChoice ? (
+                                <div
+                                  className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${
+                                    isSelected ? "border-stone-900 bg-stone-900" : "border-stone-300 bg-white"
+                                  }`}
+                                >
+                                  <div
+                                    className={`w-1.5 h-1.5 rounded-full ${
+                                      isSelected ? "bg-white" : "bg-transparent"
+                                    }`}
+                                  />
+                                </div>
+                              ) : (
+                                <div
+                                  className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                                    isSelected ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white"
+                                  }`}
+                                >
+                                  {isSelected && (
+                                    <svg
+                                      className="w-3 h-3"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        d="M5 13l4 4L19 7"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2.5"
+                                      />
+                                    </svg>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Actions */}
+            <div className="pt-3 border-t border-stone-200 flex items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCustomizingCatalogEntry(null)}
+                className="px-6 py-2.5 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-lg text-xs font-semibold transition cursor-pointer"
+              >
+                Close
+              </button>
+
+              {(() => {
+                const totalAddonPaise = Object.values(selectedCustomizationOptions)
+                  .flat()
+                  .reduce((acc, curr) => acc + (curr.price || 0), 0);
+                const modalTotalPaise = (customizingCatalogEntry.item.price + totalAddonPaise) * customizationQty;
+                const modalTotalFormatted =
+                  modalTotalPaise % 100 === 0
+                    ? (modalTotalPaise / 100).toString()
+                    : (modalTotalPaise / 100).toFixed(2);
+
+                return (
+                  <button
+                    type="button"
+                    onClick={handleConfirmCustomizationModal}
+                    className="px-6 py-2.5 bg-[#0c0a09] hover:bg-stone-800 active:scale-98 text-white rounded-lg text-xs font-semibold shadow-md transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <span>Add to cart | {modalTotalFormatted}</span>
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+// ==========================================
+// DEFAULT EXPORT WITH SUSPENSE BOUNDARY
+// ==========================================
+
+export default function CashierPosPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="h-screen bg-[#f5f5f5] flex items-center justify-center text-xs font-semibold text-[#8a7e75]">
+          Loading Cashier POS...
+        </div>
+      }
+    >
+      <CashierPosContent />
+    </Suspense>
   );
 }
 

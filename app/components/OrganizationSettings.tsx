@@ -1711,7 +1711,7 @@ export function OrganizationSettings() {
                                       DAYS.forEach(d => { if (d !== day) newSelections[d] = checked; });
                                       setCopySelections(newSelections);
                                     }}
-                                    className="h-4 w-4 rounded border-[#d1c4c1] text-[#191513] focus:ring-[#191513]"
+                                    className="h-4 w-4 rounded border-[#d1c4c1] text-[#191513] focus:ring-[#191513] accent-[#0c0a09]"
                                   />
                                 </label>
                                 <div className="my-1 border-b border-[#eadfd6]" />
