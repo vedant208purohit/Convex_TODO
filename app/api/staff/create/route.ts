@@ -125,10 +125,51 @@ export async function POST(req: Request) {
     // ----------------------------------------------------
     // 3. Connect to Store Convex & Verify Admin Rights
     // ----------------------------------------------------
-    const storeConvexUrl =
+    let storeConvexUrl =
       process.env.NEXT_PUBLIC_CONVEX_URL ||
       process.env.CONVEX_URL ||
       "https://test-store.convex.cloud";
+
+    const bridgeSecret = process.env.BRIDGE_SECRET;
+    const masterBaseUrl =
+      process.env.MASTER_POS_URL ||
+      process.env.NEXT_PUBLIC_MASTER_POS_URL ||
+      "http://localhost:3001";
+
+    if (bridgeSecret) {
+      try {
+        const resolveTimestamp = Date.now();
+        const resolveSignature = crypto
+          .createHmac("sha256", bridgeSecret)
+          .update(`${userId}:${resolveTimestamp}`)
+          .digest("hex");
+
+        const resolveRes = await fetch(
+          `${masterBaseUrl.replace(/\/$/, "")}/api/bridge/resolve-store`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-bridge-signature": resolveSignature,
+              "x-bridge-timestamp": resolveTimestamp.toString(),
+            },
+            body: JSON.stringify({ defaultClerkId: userId }),
+            cache: "no-store",
+          }
+        );
+
+        const resolveData = await resolveRes.json().catch(() => ({}));
+        if (resolveRes.ok && resolveData.success) {
+          const resolvedUrl =
+            resolveData.deployment?.url || resolveData.deploymentUrl;
+          if (resolvedUrl && typeof resolvedUrl === "string" && resolvedUrl.trim()) {
+            storeConvexUrl = resolvedUrl.trim();
+          }
+        }
+      } catch (resolveErr) {
+        // Graceful fallback to default storeConvexUrl
+      }
+    }
 
     const storeConvexClient = new ConvexHttpClient(storeConvexUrl);
 
@@ -229,8 +270,6 @@ export async function POST(req: Request) {
     // ----------------------------------------------------
     // 4. Check Bridge Secret & Sign Server-to-Server Request
     // ----------------------------------------------------
-    const bridgeSecret = process.env.BRIDGE_SECRET;
-
     if (!bridgeSecret) {
       console.error("BRIDGE_SECRET is not configured on Default POS server.");
       return NextResponse.json(
@@ -242,11 +281,6 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
-
-    const masterBaseUrl =
-      process.env.MASTER_POS_URL ||
-      process.env.NEXT_PUBLIC_MASTER_POS_URL ||
-      "http://localhost:3001";
 
     const bridgeUrl = `${masterBaseUrl.replace(/\/$/, "")}/api/bridge/staff/create`;
     const timestamp = Date.now();
