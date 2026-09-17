@@ -856,16 +856,34 @@ export function OrganizationEmployees() {
           : undefined;
 
       if (drawerMode === "add") {
-        await createEmployeeMutation({
-          userId: effectiveUserId,
-          firstName: formFirstName.trim(),
-          lastName: formLastName.trim(),
-          ...(effectiveUserId.includes("@") ? { email: effectiveUserId } : {}),
-          userType: formRoles,
-          ...(permissionPayload ? { userPermission: permissionPayload } : {}),
+        const primaryRole =
+          formRoles.find((r) => STAFF_ROLE_CARDS.some((c) => c.key === r)) ||
+          formRoles[0] ||
+          "cashier";
+
+        const res = await fetch("/api/staff/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            firstName: formFirstName.trim(),
+            lastName: formLastName.trim(),
+            email: effectiveUserId,
+            role: primaryRole,
+            userType: formRoles,
+            userPermission: permissionPayload,
+          }),
         });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Failed to create employee.");
+        }
+
         setSuccessMessage(
-          `Employee "${formFirstName} ${formLastName}" created successfully!`,
+          `Employee "${formFirstName.trim()} ${formLastName.trim()}" created successfully. An invitation has been sent!`,
         );
       } else if (editingId) {
         await updateEmployeeMutation({

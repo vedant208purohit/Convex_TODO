@@ -406,6 +406,25 @@ export const getRoleModuleMapping = query({
     return ROLE_MODULE_MAPPING;
   },
 });
+/**
+ * Resolves store organization details and verifies calling user is an active Store Admin or Owner.
+ * Used by server-side store routes (e.g. /api/staff/create).
+ */
+export const getStoreAdminContext = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const { org, callerMember, identity } = await requireAdmin(ctx, args.organizationId);
+    return {
+      organizationId: org._id,
+      slug: org.slug,
+      name: org.name,
+      callerUserId: callerMember?.userId || identity.subject,
+      callerRoles: callerMember?.userType || ["admin"],
+    };
+  },
+});
 
 /**
  * Fetches the active organization membership for the currently authenticated caller
