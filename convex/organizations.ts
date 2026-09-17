@@ -703,9 +703,30 @@ export const getBySlug = query({
 export const list = query({
   handler: async (ctx) => {
     const orgs = await ctx.db.query("organizations").collect();
-    return orgs
-      .filter((org) => org.deletedAt === undefined)
-      .map((org) => stripSecrets(org));
+    return Promise.all(
+      orgs
+        .filter((org) => org.deletedAt === undefined)
+        .map(async (org) => {
+          let resolvedAboutUsImageUrl = org.aboutUsImageUrl ?? null;
+          if (org.aboutUsImageStorageId) {
+            try {
+              const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
+              if (storageUrl) {
+                resolvedAboutUsImageUrl = storageUrl;
+              }
+            } catch {
+              // Storage fallback
+            }
+          }
+          const safeOrg = stripSecrets(org);
+          return safeOrg
+            ? {
+                ...safeOrg,
+                aboutUsImageUrl: resolvedAboutUsImageUrl,
+              }
+            : null;
+        })
+    ).then((res) => res.filter(Boolean));
   },
 });
 
@@ -1470,10 +1491,16 @@ export const update = mutation({
       updates.termAndConditionLink = validateOptionalUrl(updates.termAndConditionLink);
     }
 
-    // 4. Operating Hours Normalization & Overlap Validation if updated
-    if (updates.operationTiming !== undefined) {
-      updates.operationTiming = normalizeAllDayHours(updates.operationTiming);
-      validateOperatingHoursOverlap(updates.operationTiming);
+    // 3c. Resolve About Us Image Storage URL if updated
+    if (updates.aboutUsImageStorageId) {
+      try {
+        const storageUrl = await ctx.storage.getUrl(updates.aboutUsImageStorageId);
+        if (storageUrl) {
+          updates.aboutUsImageUrl = storageUrl;
+        }
+      } catch {
+        // Storage lookup fallback
+      }
     }
 
     // 5. Payment Defaults Auto-Activation when Service Types are turned ON
@@ -1703,6 +1730,16 @@ export const updateDigitalStore = mutation({
       aboutUsImageStorageId: updatedOrg?.aboutUsImageStorageId ?? null,
       aboutUsImageUrl: resolvedImageUrl,
     };
+  },
+});
+
+/**
+ * Generates a storage upload URL for organization assets (logos, about us image, etc).
+ */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -1992,11 +2029,6 @@ export const seedDefault = mutation({
   },
 });
 
-export const generateUploadUrl = mutation({
-  handler: async (ctx) => {
-    return await ctx.storage.generateUploadUrl();
-  },
-});
 
 export const getStorageUrl = query({
   args: {

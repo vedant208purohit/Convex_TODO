@@ -554,34 +554,27 @@ export function OrganizationEmployees() {
     api.organizationUsers.getCurrentMembership,
     {},
   );
-  const getRoleModuleMappingFn = (api.organizationUsers as any)
-    .getRoleModuleMapping;
-  const backendRoleModules = useQuery(
-    getRoleModuleMappingFn ? getRoleModuleMappingFn : "skip",
-  );
 
   const roleModuleMapping = useMemo<Record<string, string[]>>(() => {
-    return (
-      backendRoleModules || {
-        admin: [
-          "customer_data",
-          "dashboard",
-          "orders",
-          "menu",
-          "kds",
-          "queue",
-          "inventory",
-          "report",
-          "survey",
-        ],
-        cashier: ["orders", "customer_data", "dashboard", "report"],
-        captain: ["orders", "queue", "dashboard", "menu"],
-        waiter: ["orders", "queue"],
-        chef: ["kds", "inventory"],
-        worker: ["orders", "kds"],
-      }
-    );
-  }, [backendRoleModules]);
+    return {
+      admin: [
+        "customer_data",
+        "dashboard",
+        "orders",
+        "menu",
+        "kds",
+        "queue",
+        "inventory",
+        "report",
+        "survey",
+      ],
+      cashier: ["orders", "customer_data", "dashboard", "report"],
+      captain: ["orders", "queue", "dashboard", "menu"],
+      waiter: ["orders", "queue"],
+      chef: ["kds", "inventory"],
+      worker: ["dashboard"],
+    };
+  }, []);
 
   // Convex Mutations
   const createEmployeeMutation = useMutation(api.organizationUsers.create);

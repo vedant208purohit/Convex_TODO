@@ -518,19 +518,16 @@ export default defineSchema({
 digitalStoreImages: defineTable({
   legacyId: v.optional(v.string()),
 
-  // Cloudflare R2 Asset Reference
-  assetId: v.id("organization_assets"),
+  assetId: v.optional(v.id("organization_assets")),
+  storageId: v.optional(v.id("_storage")),
 
-  // Verified Image Type Classification
   imageType: v.union(
     v.literal("carousel_image"),
     v.literal("about_us_image")
   ),
 
-  // Sequence display position (1-indexed, scoped per imageType)
   position: v.number(),
 
-  // Standard Timestamps & Soft Deletion
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),

@@ -114,6 +114,7 @@ export function OrganizationTablesSettings() {
 
   const [showAddTableDrawer, setShowAddTableDrawer] = useState(false);
   const [editingTable, setEditingTable] = useState<Doc<"organizationTables"> | null>(null);
+  const [previewTable, setPreviewTable] = useState<Doc<"organizationTables"> | null>(null);
 
   // Delete Confirmation State
   const [deletingTarget, setDeletingTarget] = useState<{
@@ -122,13 +123,6 @@ export function OrganizationTablesSettings() {
     name: string;
     hasTablesCount?: number;
   } | null>(null);
-
-  // Inspector Popover State for Selected Canvas Table
-  const [canvasSelectedTableId, setCanvasSelectedTableId] = useState<Id<"organizationTables"> | null>(null);
-  // Active Left-Clicked Action Toolbar Table State
-  const [activeActionTableId, setActiveActionTableId] = useState<Id<"organizationTables"> | null>(null);
-  // Hovered Table State for Instant Hover Toolbar
-  const [hoveredTableId, setHoveredTableId] = useState<Id<"organizationTables"> | null>(null);
 
   // Form Inputs
   const [layoutNameInput, setLayoutNameInput] = useState("");
@@ -155,12 +149,14 @@ export function OrganizationTablesSettings() {
   const handleResetZoom = () => setZoomLevel(100);
 
   const [draggingTableId, setDraggingTableId] = useState<Id<"organizationTables"> | null>(null);
-  const [pendingDragTable, setPendingDragTable] = useState<Doc<"organizationTables"> | null>(null);
-  const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
-  const isHasDraggedRef = useRef(false);
-  const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [tempPositions, setTempPositions] = useState<Record<string, { x: number; y: number }>>({});
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  // Dragging refs for Pointer Events tracking
+  const draggingTableRef = useRef<Doc<"organizationTables"> | null>(null);
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const latestPositionRef = useRef<{ x: number; y: number } | null>(null);
+  const isDraggingActiveRef = useRef<boolean>(false);
 
   // ------------------------------------------
   // AUTH & CONVEX BACKEND QUERIES & MUTATIONS
@@ -191,6 +187,12 @@ export function OrganizationTablesSettings() {
   const createTable = useMutation(api.organizationTables.create);
   const updateTable = useMutation(api.organizationTables.update);
   const removeTable = useMutation(api.organizationTables.remove);
+
+  // Organization QR Codes query for previewing table QR
+  const previewTableQr = useQuery(
+    api.organizationQrCodes.getByTable,
+    previewTable && isAuthReady ? { tableId: previewTable._id } : "skip"
+  );
 
   const isLoadingLayouts = layouts === undefined;
   const isLoadingTables = allTables === undefined;
@@ -378,9 +380,6 @@ export function OrganizationTablesSettings() {
         await removeLayout({ id: deletingTarget.id as Id<"organizationLayouts"> });
       } else {
         await removeTable({ id: deletingTarget.id as Id<"organizationTables"> });
-        if (canvasSelectedTableId === deletingTarget.id) {
-          setCanvasSelectedTableId(null);
-        }
       }
     } catch (err: any) {
       alert(err?.message || "Failed to delete item");
@@ -390,95 +389,80 @@ export function OrganizationTablesSettings() {
   };
 
   // ------------------------------------------
-  // CANVAS DRAG & DROP LOGIC
+  // CANVAS DRAG & DROP LOGIC (POINTER EVENTS)
   // ------------------------------------------
 
-  const handleTableMouseDown = (
-    e: React.MouseEvent,
+  const handleTablePointerDown = (
+    e: React.PointerEvent<HTMLDivElement>,
     table: Doc<"organizationTables">
   ) => {
-    // Only proceed on Left Mouse Click (button === 0), ignore Right Click
     if (e.button !== 0) return;
     e.stopPropagation();
 
     const canvasEl = canvasRef.current;
     if (!canvasEl) return;
 
+    try {
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    } catch {
+      // Fallback if browser doesn't support setPointerCapture
+    }
+
     const scale = zoomLevel / 100;
     const rect = canvasEl.getBoundingClientRect();
     const currentX = tempPositions[table._id]?.x ?? parseInt(table.xPosition || "80", 10);
     const currentY = tempPositions[table._id]?.y ?? parseInt(table.yPosition || "80", 10);
 
-    const mouseX = (e.clientX - rect.left) / scale;
-    const mouseY = (e.clientY - rect.top) / scale;
+    const pointerX = (e.clientX - rect.left) / scale;
+    const pointerY = (e.clientY - rect.top) / scale;
 
-    setPendingDragTable(table);
-    setDragStartPos({ x: e.clientX, y: e.clientY });
-    isHasDraggedRef.current = false;
+    const offsetX = pointerX - currentX;
+    const offsetY = pointerY - currentY;
 
-    // Open 3 action buttons instantly on Left Mouse Down (if preview is not open)
-    if (canvasSelectedTableId !== table._id) {
-      setActiveActionTableId(table._id);
-    }
-
-    setDragOffset({
-      x: mouseX - currentX,
-      y: mouseY - currentY,
-    });
+    draggingTableRef.current = table;
+    dragOffsetRef.current = { x: offsetX, y: offsetY };
+    latestPositionRef.current = { x: currentX, y: currentY };
+    isDraggingActiveRef.current = true;
+    setDraggingTableId(table._id);
   };
 
-  const handleCanvasMouseMove = useCallback(
-    (e: React.MouseEvent) => {
-      if (!pendingDragTable || !canvasRef.current || !dragStartPos) return;
+  useEffect(() => {
+    const handleGlobalPointerMove = (e: PointerEvent | MouseEvent) => {
+      if (!isDraggingActiveRef.current || !draggingTableRef.current || !canvasRef.current) return;
 
-      const deltaX = Math.abs(e.clientX - dragStartPos.x);
-      const deltaY = Math.abs(e.clientY - dragStartPos.y);
+      const table = draggingTableRef.current;
+      const scale = zoomLevel / 100;
+      const rect = canvasRef.current.getBoundingClientRect();
 
-      // If mouse moved more than 4px threshold, enter active drag mode and hide popover
-      if (!isHasDraggedRef.current && (deltaX > 4 || deltaY > 4)) {
-        isHasDraggedRef.current = true;
-        setDraggingTableId(pendingDragTable._id);
-        setCanvasSelectedTableId(null);
-      }
+      const rawX = (e.clientX - rect.left) / scale - dragOffsetRef.current.x;
+      const rawY = (e.clientY - rect.top) / scale - dragOffsetRef.current.y;
 
-      if (isHasDraggedRef.current) {
-        const scale = zoomLevel / 100;
-        const rect = canvasRef.current.getBoundingClientRect();
-        const rawX = (e.clientX - rect.left) / scale - dragOffset.x;
-        const rawY = (e.clientY - rect.top) / scale - dragOffset.y;
+      const snap = gridSnapSize > 0 ? gridSnapSize : 1;
+      const snappedX = Math.max(24, Math.min(1400, Math.round(rawX / snap) * snap));
+      const snappedY = Math.max(24, Math.min(1400, Math.round(rawY / snap) * snap));
 
-        // Dynamic snap size based on selected gridSnapSize
-        const snap = gridSnapSize > 0 ? gridSnapSize : 1;
-        const snappedX = Math.max(24, Math.min(1400, Math.round(rawX / snap) * snap));
-        const snappedY = Math.max(24, Math.min(1400, Math.round(rawY / snap) * snap));
+      latestPositionRef.current = { x: snappedX, y: snappedY };
 
-        setTempPositions((prev) => ({
-          ...prev,
-          [pendingDragTable._id]: { x: snappedX, y: snappedY },
-        }));
-      }
-    },
-    [pendingDragTable, dragStartPos, dragOffset, zoomLevel, gridSnapSize]
-  );
+      setTempPositions((prev) => ({
+        ...prev,
+        [table._id]: { x: snappedX, y: snappedY },
+      }));
+    };
 
-  const handleCanvasMouseUp = useCallback(async () => {
-    if (!pendingDragTable) return;
+    const handleGlobalPointerUp = async () => {
+      if (!isDraggingActiveRef.current || !draggingTableRef.current) return;
 
-    const table = pendingDragTable;
-    const tableId = table._id;
-    const wasDragged = isHasDraggedRef.current;
+      const table = draggingTableRef.current;
+      const finalPos = latestPositionRef.current;
 
-    setDraggingTableId(null);
-    setPendingDragTable(null);
-    setDragStartPos(null);
+      isDraggingActiveRef.current = false;
+      draggingTableRef.current = null;
+      setDraggingTableId(null);
 
-    if (wasDragged) {
-      // User dragged table -> persist new position in Convex DB!
-      const finalPos = tempPositions[tableId];
       if (finalPos) {
         try {
           await updateTable({
-            id: tableId,
+            id: table._id,
             xPosition: finalPos.x.toString(),
             yPosition: finalPos.y.toString(),
           });
@@ -486,18 +470,22 @@ export function OrganizationTablesSettings() {
           console.error("Failed to save table position:", err);
         }
       }
-    }
+    };
 
-    // Always keep 3 action buttons active for table on mouse up (if preview is not open)
-    if (canvasSelectedTableId !== tableId) {
-      setActiveActionTableId(tableId);
-    }
-  }, [pendingDragTable, tempPositions, updateTable, canvasSelectedTableId]);
+    window.addEventListener("pointermove", handleGlobalPointerMove);
+    window.addEventListener("pointerup", handleGlobalPointerUp);
+    window.addEventListener("pointercancel", handleGlobalPointerUp);
+    window.addEventListener("mouseup", handleGlobalPointerUp);
+    window.addEventListener("blur", handleGlobalPointerUp);
 
-  // Selected table in 2D canvas inspector
-  const canvasSelectedTable = tablesInSelectedLayout.find(
-    (t) => t._id === canvasSelectedTableId
-  );
+    return () => {
+      window.removeEventListener("pointermove", handleGlobalPointerMove);
+      window.removeEventListener("pointerup", handleGlobalPointerUp);
+      window.removeEventListener("pointercancel", handleGlobalPointerUp);
+      window.removeEventListener("mouseup", handleGlobalPointerUp);
+      window.removeEventListener("blur", handleGlobalPointerUp);
+    };
+  }, [zoomLevel, gridSnapSize, updateTable]);
 
   // Loading indicator
   if (isLoadingLayouts || isLoadingTables) {
@@ -873,12 +861,6 @@ export function OrganizationTablesSettings() {
                 {/* Canvas Floor Grid Container */}
                 <div
                   ref={canvasRef}
-                  onMouseMove={handleCanvasMouseMove}
-                  onMouseUp={handleCanvasMouseUp}
-                  onClick={() => {
-                    setCanvasSelectedTableId(null);
-                    setActiveActionTableId(null);
-                  }}
                   onContextMenu={(e) => e.preventDefault()}
                   className="flex-1 relative p-8 cursor-crosshair overflow-auto select-none min-h-[500px] max-h-[650px]"
                   style={{
@@ -972,7 +954,6 @@ export function OrganizationTablesSettings() {
                         const temp = tempPositions[table._id];
                         const posX = temp ? temp.x : parseInt(table.xPosition || "80", 10);
                         const posY = temp ? temp.y : parseInt(table.yPosition || "80", 10);
-                        const isSelected = canvasSelectedTableId === table._id;
 
                         // Seating dot circles generator
                         const capacity = table.seatingCapacity || 4;
@@ -980,32 +961,18 @@ export function OrganizationTablesSettings() {
                         const bottomSeats = Math.floor(capacity / 2);
 
                         const isDragging = draggingTableId === table._id;
-                        const popoverLeftClass = posX > 800 ? "-left-[270px]" : "left-32";
-                        const popoverTopClass = posY > 350 ? "-top-10" : "top-0";
 
                         return (
                           <div
                             key={table._id}
-                            onMouseEnter={() => setHoveredTableId(table._id)}
-                            onMouseLeave={() => setHoveredTableId(null)}
-                            onMouseDown={(e) => handleTableMouseDown(e, table)}
-                            onMouseUp={(e) => e.stopPropagation()}
-                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => handleTablePointerDown(e, table)}
                             onContextMenu={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
                             }}
-                            onDoubleClick={(e) => {
-                              e.stopPropagation();
-                              if (canvasSelectedTableId !== table._id) {
-                                setActiveActionTableId((prev) => (prev === table._id ? null : table._id));
-                              }
-                            }}
                             className={`absolute group select-none transition-all duration-75 ${
                               isDragging
                                 ? "z-50 cursor-grabbing scale-105"
-                                : isSelected
-                                ? "z-40 cursor-pointer"
                                 : "z-10 cursor-grab hover:z-20"
                             }`}
                             style={{
@@ -1014,79 +981,18 @@ export function OrganizationTablesSettings() {
                               touchAction: "none",
                             }}
                             data-purpose="visual-table-item"
-                            title="Hover or click to show Edit, Preview, Delete buttons • Drag to reposition table"
+                            title="Click & drag to move table • Click Eye icon to view details"
                           >
                             {/* Moving Visual Indicator Badge */}
                             {isDragging && (
-                              <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#0c0a09] text-white text-[10px] font-mono px-2.5 py-0.5 rounded-full shadow-xl whitespace-nowrap z-50 flex items-center gap-1.5 animate-pulse border border-stone-700">
+                              <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#0c0a09] text-white text-[10px] font-mono px-2.5 py-0.5 rounded-full shadow-xl whitespace-nowrap z-50 flex items-center gap-1.5 animate-pulse border border-stone-700 pointer-events-none">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                                 <span>Moving: X:{posX}px Y:{posY}px</span>
                               </div>
                             )}
 
-                            {/* UI Friendly 3 Mini Action Buttons: Edit, Preview, Delete */}
-                            {/* Shown on hover or left-click when preview is NOT active */}
-                            {!isDragging && !isSelected && (hoveredTableId === table._id || activeActionTableId === table._id) && (
-                              <div
-                                className="absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-white/95 backdrop-blur-md border border-stone-200/90 p-1 rounded-lg shadow-md z-30 transition-all opacity-90 group-hover:opacity-100 whitespace-nowrap"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                                onContextMenu={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                }}
-                              >
-                                {/* Edit Button */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleOpenEditTable(table);
-                                  }}
-                                  className="px-1.5 py-0.5 rounded bg-stone-100 hover:bg-stone-200 text-stone-800 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                                  title="Edit Table"
-                                >
-                                  <PencilIcon className="w-3 h-3 text-stone-700" />
-                                  <span>Edit</span>
-                                </button>
-
-                                {/* Preview Button */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setCanvasSelectedTableId(isSelected ? null : table._id);
-                                    setActiveActionTableId(null);
-                                  }}
-                                  className={`px-1.5 py-0.5 rounded text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors ${
-                                    isSelected
-                                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
-                                      : "bg-stone-100 hover:bg-stone-200 text-stone-800"
-                                  }`}
-                                  title="Preview Table Details"
-                                >
-                                  <EyeIcon className={`w-3 h-3 ${isSelected ? "text-white" : "text-stone-700"}`} />
-                                  <span>Preview</span>
-                                </button>
-
-                                {/* Delete Button */}
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteTableClick(table);
-                                  }}
-                                  className="px-1.5 py-0.5 rounded bg-red-50 hover:bg-red-100 text-red-600 text-[10px] font-semibold flex items-center gap-1 cursor-pointer transition-colors"
-                                  title="Delete Table"
-                                >
-                                  <TrashIcon className="w-3 h-3 text-red-600" />
-                                  <span>Delete</span>
-                                </button>
-                              </div>
-                            )}
-
                             {/* Top Circular Seats */}
-                            <div className="flex items-center justify-center gap-2 mb-1.5">
+                            <div className="flex items-center justify-center gap-2 mb-1.5 pointer-events-none">
                               {Array.from({ length: topSeats }).map((_, i) => (
                                 <div
                                   key={i}
@@ -1102,26 +1008,72 @@ export function OrganizationTablesSettings() {
                               className={`w-28 h-24 rounded-2xl flex flex-col items-center justify-center text-white shadow-xl transition-all relative ${
                                 isDragging
                                   ? "bg-[#0c0a09] ring-4 ring-amber-500/80 shadow-2xl scale-[1.04]"
-                                  : isSelected
-                                  ? "bg-[#141010] ring-4 ring-[#0c0a09]/40 scale-[1.02]"
                                   : "bg-[#141010] hover:ring-2 hover:ring-stone-400"
                               }`}
                             >
-                              <span className="text-sm font-semibold tracking-wide lowercase">
+                              {/* Action Icons: Preview (Eye), Edit (Pencil), Delete (Trash) */}
+                              <div className="absolute top-1.5 left-1.5 flex items-center gap-1 z-20">
+                                {/* Eye (Preview) Icon Button */}
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewTable(table);
+                                  }}
+                                  className="w-5 h-5 rounded bg-stone-800/90 hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-stone-600/60"
+                                  title="Preview table details & QR code"
+                                >
+                                  <EyeIcon className="w-3 h-3" />
+                                </button>
+
+                                {/* Pencil (Edit) Icon Button */}
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenEditTable(table);
+                                  }}
+                                  className="w-5 h-5 rounded bg-stone-800/90 hover:bg-stone-700 text-stone-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer border border-stone-600/60"
+                                  title="Edit table"
+                                >
+                                  <PencilIcon className="w-3 h-3" />
+                                </button>
+
+                                {/* Trash (Delete) Icon Button */}
+                                <button
+                                  type="button"
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteTableClick(table);
+                                  }}
+                                  className="w-5 h-5 rounded bg-red-950/80 hover:bg-red-900 text-red-300 hover:text-red-100 flex items-center justify-center transition-colors cursor-pointer border border-red-800/60"
+                                  title="Delete table"
+                                >
+                                  <TrashIcon className="w-3 h-3" />
+                                </button>
+                              </div>
+
+                              <span className="text-sm font-semibold tracking-wide lowercase pointer-events-none">
                                 {table.tableNumber}
                               </span>
-                              <span className="text-[10px] text-stone-400 uppercase tracking-widest font-mono mt-0.5">
+                              <span className="text-[10px] text-stone-400 uppercase tracking-widest font-mono mt-0.5 pointer-events-none">
                                 {capacity} Seats
                               </span>
                               <span
-                                className={`absolute top-2 right-2 w-2 h-2 rounded-full ${
+                                className={`absolute top-2 right-2 w-2 h-2 rounded-full pointer-events-none ${
                                   isDragging ? "bg-amber-400 animate-ping" : "bg-emerald-400"
                                 }`}
                               ></span>
                             </div>
 
                             {/* Bottom Circular Seats */}
-                            <div className="flex items-center justify-center gap-2 mt-1.5">
+                            <div className="flex items-center justify-center gap-2 mt-1.5 pointer-events-none">
                               {Array.from({ length: bottomSeats }).map((_, i) => (
                                 <div
                                   key={i}
@@ -1131,87 +1083,6 @@ export function OrganizationTablesSettings() {
                                 ></div>
                               ))}
                             </div>
-
-                            {/* Inspector Edit / Delete Popover when Selected */}
-                            {isSelected && !isDragging && (
-                              <div
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => e.stopPropagation()}
-                                className={`absolute ${popoverLeftClass} ${popoverTopClass} w-[260px] bg-white border border-[#e7e5e4] rounded-2xl shadow-2xl p-4 z-50 animate-in fade-in zoom-in-95 duration-150 cursor-default`}
-                              >
-                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-[#e7e5e4]">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="font-semibold text-xs text-[#5e5e5e]">
-                                      Table nr
-                                    </span>
-                                    <span className="px-1.5 py-0.5 bg-stone-100 rounded text-[11px] font-mono font-bold text-stone-700">
-                                      {table.tableNumber}
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[10px] font-semibold px-2.5 py-0.5 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-200">
-                                      Ready
-                                    </span>
-                                    <button
-                                      onClick={() => {
-                                        setCanvasSelectedTableId(null);
-                                        setActiveActionTableId(table._id);
-                                      }}
-                                      className="p-1 text-[#5e5e5e] hover:text-[#0c0a09] rounded-md transition cursor-pointer"
-                                      title="Close"
-                                      type="button"
-                                    >
-                                      <CloseIcon className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-y-2 text-[11px] text-[#5e5e5e] mb-4">
-                                  <div>
-                                    <span className="text-[#98928e] block text-[10px]">Capacity</span>
-                                    <strong className="font-bold text-[#0c0a09]">
-                                      {table.seatingCapacity} Persons
-                                    </strong>
-                                  </div>
-                                  <div>
-                                    <span className="text-[#98928e] block text-[10px]">Area</span>
-                                    <strong className="font-bold text-[#0c0a09]">
-                                      {selectedLayout?.name}
-                                    </strong>
-                                  </div>
-                                  <div>
-                                    <span className="text-[#98928e] block text-[10px]">Kids Seat</span>
-                                    <span className="text-[#0c0a09] font-medium">{table.kidsSeatAvailability ? "Yes" : "No"}</span>
-                                  </div>
-                                  <div>
-                                    <span className="text-[#98928e] block text-[10px]">Disabled Seat</span>
-                                    <span className="text-[#0c0a09] font-medium">{table.disabledSeatAvailability ? "Yes" : "No"}</span>
-                                  </div>
-                                  <div className="col-span-2">
-                                    <span className="text-[#98928e] block text-[10px]">Barbeque Grills</span>
-                                    <span className="text-[#0c0a09] font-medium">{table.barbequeGrillAvailability ? "Yes" : "No"}</span>
-                                  </div>
-                                </div>
-
-                                {/* Edit and Delete Actions */}
-                                <div className="flex items-center justify-end gap-3 pt-2.5 border-t border-[#e7e5e4]">
-                                  <button
-                                    onClick={() => handleDeleteTableClick(table)}
-                                    className="text-xs font-semibold text-red-500 hover:text-red-600 transition-colors cursor-pointer"
-                                    type="button"
-                                  >
-                                    Delete
-                                  </button>
-                                  <button
-                                    onClick={() => handleOpenEditTable(table)}
-                                    className="text-xs font-semibold text-[#0c0a09] bg-stone-100 hover:bg-stone-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer"
-                                    type="button"
-                                  >
-                                    Edit Table
-                                  </button>
-                                </div>
-                              </div>
-                            )}
                           </div>
                         );
                       })
@@ -1223,12 +1094,10 @@ export function OrganizationTablesSettings() {
                 <footer className="bg-white px-5 py-2.5 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#5e5e5e]">
                   <span className="flex items-center">
                     <InfoIcon className="w-4 h-4 mr-2 text-[#5e5e5e]" />
-                    Click any table to view seating info, drag to reposition, or switch to Table List to edit details.
+                    Drag any table to reposition • Click the Eye icon on a table to view details & QR code.
                   </span>
                   <span className="font-mono text-[11px] text-[#5e5e5e]">
-                    {canvasSelectedTable
-                      ? `X: ${canvasSelectedTable.xPosition || 80}px Y: ${canvasSelectedTable.yPosition || 80}px • Auto-saved`
-                      : "Auto-saved"}
+                    Auto-saved
                   </span>
                 </footer>
               </section>
@@ -1330,9 +1199,9 @@ export function OrganizationTablesSettings() {
                             return (
                               <tr
                                 key={table._id}
-                                onClick={() => handleOpenEditTable(table)}
+                                onClick={() => setPreviewTable(table)}
                                 className="hover:bg-[#faf2ee]/70 transition-colors group cursor-pointer"
-                                title="Click to edit table details"
+                                title="Click to view table details"
                               >
                                 <td className="py-3.5 px-6 font-medium text-[#0c0a09]">
                                   <div className="flex items-center gap-3">
@@ -1859,6 +1728,117 @@ export function OrganizationTablesSettings() {
                 </span>
               </button>
             </footer>
+          </div>
+        </div>
+      )}
+
+      {/* ------------------------------------------
+          3.5 TABLE PREVIEW / DETAILS DRAWER
+      ------------------------------------------ */}
+      {previewTable && (
+        <div className="fixed inset-0 z-50 bg-[#0c0a09]/40 backdrop-blur-[1px] flex justify-end animate-in fade-in duration-200">
+          {/* Backdrop click to close */}
+          <div
+            className="absolute inset-0"
+            onClick={() => setPreviewTable(null)}
+          />
+
+          <div
+            className="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col z-10 animate-in slide-in-from-right duration-200"
+            data-purpose="table-preview-drawer"
+          >
+            {/* Drawer Header */}
+            <header className="p-6 border-b border-[#e7e5e4] flex items-center justify-between bg-white shrink-0">
+              <div className="flex items-center gap-3">
+                <h2 className="font-garamond text-2xl font-normal text-[#141010]">
+                  Table - {previewTable.tableNumber}
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    const target = previewTable;
+                    setPreviewTable(null);
+                    handleOpenEditTable(target);
+                  }}
+                  className="p-1.5 rounded-lg text-[#5e5e5e] hover:text-[#0c0a09] hover:bg-stone-100 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-medium border border-stone-200 px-3 py-1.5"
+                  title="Edit Table"
+                  type="button"
+                >
+                  <PencilIcon className="w-3.5 h-3.5 text-[#0c0a09]" />
+                  <span>Edit</span>
+                </button>
+                <button
+                  onClick={() => setPreviewTable(null)}
+                  className="p-1.5 text-[#5e5e5e] hover:text-[#0c0a09] hover:bg-stone-100 rounded-full transition-colors cursor-pointer"
+                  type="button"
+                  aria-label="Close drawer"
+                >
+                  <CloseIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </header>
+
+            {/* Drawer Body / Details Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Details List */}
+              <div className="space-y-4">
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Table number</div>
+                  <div className="text-sm font-semibold text-[#1c1917]">{previewTable.tableNumber}</div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Seating Capacity</div>
+                  <div className="text-sm font-semibold text-[#1c1917]">{previewTable.seatingCapacity}</div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Layout</div>
+                  <div className="text-sm font-semibold text-[#1c1917]">
+                    {activeLayoutsList.find((l) => l._id === previewTable.layoutId)?.name || "--"}
+                  </div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Kids seat available</div>
+                  <div className="text-sm font-semibold text-[#1c1917]">
+                    {previewTable.kidsSeatAvailability ? "Yes" : "No"}
+                  </div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Disabled seat available</div>
+                  <div className="text-sm font-semibold text-[#1c1917]">
+                    {previewTable.disabledSeatAvailability ? "Yes" : "No"}
+                  </div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Barbeque grill available</div>
+                  <div className="text-sm font-semibold text-[#1c1917]">
+                    {previewTable.barbequeGrillAvailability ? "Yes" : "No"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Table QR Code Container */}
+              <div className="pt-2">
+                <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm">
+                  {(() => {
+                    const qrUrlStr = previewTableQr?.qrUrl || `https://pos.app/store?type=DineIn&table_id=${previewTable._id}&table_number=${encodeURIComponent(previewTable.tableNumber)}`;
+                    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrlStr)}`;
+                    return (
+                      <img
+                        src={qrImgSrc}
+                        alt={`QR Code for Table ${previewTable.tableNumber}`}
+                        className="w-64 h-64 object-contain"
+                      />
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}

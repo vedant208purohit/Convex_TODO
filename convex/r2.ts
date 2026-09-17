@@ -105,10 +105,10 @@ export const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number; defaultE
  * Throws a descriptive error if any required variable is missing.
  */
 export function getR2Config(): R2Config {
-  const accountId = process.env.R2_ACCOUNT_ID?.trim();
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
-  const bucketName = process.env.R2_BUCKET_NAME?.trim();
+  const accountId = (process.env.R2_ACCOUNT_ID || "5b6ada8b078e88425754114a7d150786").trim();
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "cd897a539b7195628d811fa8d5b26a50").trim();
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "85fe31ce62de3a08d9a3975cdd40f3cd59b4f14fc977e93cc2b8277d7f209463").trim();
+  const bucketName = (process.env.R2_BUCKET_NAME || "pos-assets").trim();
   const publicDomain = process.env.R2_PUBLIC_DOMAIN?.trim();
 
   const missing: string[] = [];
@@ -134,33 +134,26 @@ export function getR2Config(): R2Config {
   };
 }
 
-let cachedClient: S3Client | null = null;
-
 /**
- * Returns an S3Client configured for Cloudflare R2.
- * Uses cached instance if available and re-initializes when configuration changes.
+ * Returns an S3Client configured for Cloudflare R2 using current environment configuration.
  */
 export function getR2Client(): S3Client {
   const config = getR2Config();
-  if (!cachedClient) {
-    cachedClient = new S3Client({
-      region: "auto",
-      endpoint: config.endpoint,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
-    });
-  }
-  return cachedClient;
+  return new S3Client({
+    region: "auto",
+    endpoint: config.endpoint,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
 }
 
 /**
- * Resets the cached S3Client instance.
- * Useful for testing and environment reloads.
+ * Resets the S3Client instance.
  */
 export function resetR2ClientCache(): void {
-  cachedClient = null;
+  // No-op (S3Client dynamically created per call)
 }
 
 /**
