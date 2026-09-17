@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveNotificationsForOrderStatus } from "./processNotifications";
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -22,6 +23,7 @@ export const createOrder = mutation({
     membersOnTable: v.optional(v.number()),
 
     // Customer Information
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -33,7 +35,8 @@ export const createOrder = mutation({
       v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed"))
     ),
 
-    // Delivery Address
+    // Delivery Address Details
+    userAddressId: v.optional(v.id("userAddresses")),
     deliveryAddress: v.optional(
       v.object({
         addressLine1: v.string(),
@@ -367,6 +370,7 @@ export const createOrder = mutation({
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
+      customerId: args.customerId,
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
       customerEmail: args.customerEmail,
@@ -374,6 +378,7 @@ export const createOrder = mutation({
       taxTotal,
       discountAmount: args.discountAmount,
       deliveryCharge: args.deliveryCharge,
+      userAddressId: args.userAddressId,
       deliveryAddress: args.deliveryAddress,
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",
@@ -744,7 +749,21 @@ export const updateOrderStatus = mutation({
       updatedAt: now,
     });
 
-    return { success: true, statusName: process.name };
+    // 4. Resolve process notifications if order status actually transitioned and not suppressed
+    let notifications: any[] = [];
+    try {
+      if (!order.isModify) {
+        notifications = await resolveNotificationsForOrderStatus(
+          ctx,
+          { ...order, orderStatusId: process._id, orderStatusName: process.name },
+          process._id
+        );
+      }
+    } catch (err) {
+      console.error("Failed to resolve process notifications:", err);
+    }
+
+    return { success: true, statusName: process.name, notifications };
   },
 });
 

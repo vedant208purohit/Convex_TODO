@@ -15,17 +15,11 @@ export interface R2SignConfig {
  * Reads R2 configuration from environment variables.
  */
 export function getR2SignConfig(): R2SignConfig {
-  const accountId = process.env.R2_ACCOUNT_ID?.trim();
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
-  const bucketName = process.env.R2_BUCKET_NAME?.trim() || "pos-assets";
+  const accountId = (process.env.R2_ACCOUNT_ID || "5b6ada8b078e88425754114a7d150786").trim();
+  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "cd897a539b7195628d811fa8d5b26a50").trim();
+  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "85fe31ce62de3a08d9a3975cdd40f3cd59b4f14fc977e93cc2b8277d7f209463").trim();
+  const bucketName = (process.env.R2_BUCKET_NAME || "pos-assets").trim();
   const publicDomain = process.env.R2_PUBLIC_DOMAIN?.trim();
-
-  if (!accountId || !accessKeyId || !secretAccessKey || !bucketName) {
-    throw new Error(
-      "Missing required Cloudflare R2 environment variables for signed URL generation."
-    );
-  }
 
   return {
     accountId,

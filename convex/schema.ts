@@ -174,11 +174,16 @@ export default defineSchema({
   }).index("by_org", ["organizationId"]),
 
   paymentModes: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     name: v.string(),
     active: v.boolean(),
     createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_active", ["organizationId", "active"])
+    .index("by_legacy_id", ["legacyId"]),
 
   inventoryCategories: defineTable({
     organizationId: v.id("organizations"),
@@ -204,6 +209,70 @@ export default defineSchema({
     .index("by_user", ["userId"])
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
+
+  // Customer Domain Table (Migrated from legacy Rails users where user_type includes 'customer')
+  customers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Identity & Contact Details
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    email: v.optional(v.string()),
+
+    // Payment Gateway Identifier (e.g. Razorpay Customer ID from legacy user.razorpay_customer_id)
+    razorpayCustomerId: v.optional(v.string()),
+
+    // Optional Avatar Asset / Storage reference
+    avatarStorageId: v.optional(v.id("_storage")),
+    avatarAssetId: v.optional(v.id("organization_assets")),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_email", ["email"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Customer Addresses Domain Table (Migrated from legacy Rails user_addresses)
+  userAddresses: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Customer Relationship
+    customerId: v.id("customers"),
+
+    // Address Details
+    addressLine1: v.string(),
+    addressLine2: v.optional(v.string()),
+    landmark: v.optional(v.string()),
+    city: v.string(),
+    zipCode: v.string(),
+    otherLocationDetail: v.optional(v.string()),
+    addressType: v.string(), // "Home", "Work", "Other", etc.
+
+    // Geocoordinates (Decimal in Rails)
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+
+    // Formatted & Delivery Notes
+    completeAddress: v.optional(v.string()),
+    deliveryInstructions: v.optional(v.string()),
+
+    // Default Address Flag
+    isDefault: v.optional(v.boolean()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_legacy_id", ["legacyId"]),
 
   // Master Global Features Catalog (Super Admin & Base Features)
   features: defineTable({
@@ -518,19 +587,16 @@ export default defineSchema({
 digitalStoreImages: defineTable({
   legacyId: v.optional(v.string()),
 
-  // Cloudflare R2 Asset Reference
-  assetId: v.id("organization_assets"),
+  assetId: v.optional(v.id("organization_assets")),
+  storageId: v.optional(v.id("_storage")),
 
-  // Verified Image Type Classification
   imageType: v.union(
     v.literal("carousel_image"),
     v.literal("about_us_image")
   ),
 
-  // Sequence display position (1-indexed, scoped per imageType)
   position: v.number(),
 
-  // Standard Timestamps & Soft Deletion
   createdAt: v.number(),
   updatedAt: v.number(),
   deletedAt: v.optional(v.number()),
@@ -569,6 +635,76 @@ postpaidOrderRequests: defineTable({
   .index("by_user", ["userId"])
   .index("by_order", ["orderId"])
   .index("by_status", ["status"]),
+
+  // Order Delivery / 3PL Logistics Domain Table (Migrated from legacy order_delivers)
+  orderDelivers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Relationship to Store Order
+    orderId: v.id("orders"),
+
+    // Delivery Provider & Status Classification
+    provider: v.union(
+      v.literal("porter"),
+      v.literal("internal"),
+      v.literal("custom")
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("open"),
+      v.literal("accepted"),
+      v.literal("live"),
+      v.literal("ended"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+
+    // External Provider Identifiers & Tracking
+    providerOrderId: v.optional(v.string()),
+    trackingUrl: v.optional(v.string()),
+
+    // Financials (Delivery Fee in Minor Units / Paise / Cents) - Optional for historical migration compatibility
+    fare: v.optional(v.number()),
+
+    // Assigned Delivery Partner / Driver Details
+    partnerInfo: v.optional(
+      v.object({
+        name: v.optional(v.string()),
+        vehicleNumber: v.optional(v.string()),
+        vehicleType: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        secondaryPhone: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
+      })
+    ),
+
+    // Timing Estimates & Actual Milestones
+    estimatedPickupTime: v.optional(v.number()),
+    orderTimings: v.optional(
+      v.object({
+        orderAcceptedTime: v.optional(v.number()),
+        pickupTime: v.optional(v.number()),
+        orderStartedTime: v.optional(v.number()),
+        orderEndedTime: v.optional(v.number()),
+      })
+    ),
+
+    // Outbound Request & Response Audit Snapshots
+    apiRequestSnapshot: v.optional(v.any()),
+    apiResponseSnapshot: v.optional(v.any()),
+    failureReason: v.optional(v.string()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_provider_order_id", ["providerOrderId"])
+    .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
 
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({
@@ -759,7 +895,8 @@ postpaidOrderRequests: defineTable({
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
 
-    // Customer Information (from Frontend POS / Online)
+    // Customer Relationship & Information (from Frontend POS / Online)
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -772,6 +909,7 @@ postpaidOrderRequests: defineTable({
     totalAmount: v.number(),
 
     // Delivery Address Details
+    userAddressId: v.optional(v.id("userAddresses")),
     deliveryAddress: v.optional(
       v.object({
         addressLine1: v.string(),
@@ -795,7 +933,9 @@ postpaidOrderRequests: defineTable({
     .index("by_org", ["organizationId"])
     .index("by_org_status", ["organizationId", "orderStatusId"])
     .index("by_org_table", ["organizationId", "tableId"])
-    .index("by_created_at", ["organizationId", "createdAt"]),
+    .index("by_created_at", ["organizationId", "createdAt"])
+    .index("by_customer", ["customerId"])
+    .index("by_user_address", ["userAddressId"]),
 
   orderItems: defineTable({
     organizationId: v.id("organizations"),
@@ -1017,5 +1157,41 @@ postpaidOrderRequests: defineTable({
     .index("by_organization_asset_type", ["organizationId", "assetType"])
     .index("by_storage_key", ["storageKey"])
     .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Process Notifications Domain Table
+  processNotifications: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationOrderProcessId: v.id("organizationOrderProcesses"),
+
+    notificationType: v.union(
+      v.literal("At"),
+      v.literal("Before"),
+      v.literal("After")
+    ),
+
+    notificationVia: v.union(
+      v.literal("sms"),
+      v.literal("whatsapp"),
+      v.literal("push"),
+      v.literal("email")
+    ),
+
+    notificationText: v.string(),
+
+    customerType: v.optional(
+      v.union(
+        v.literal("all"),
+        v.literal("dine_in"),
+        v.literal("takeaway"),
+        v.literal("delivery")
+      )
+    ),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_process", ["organizationOrderProcessId"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

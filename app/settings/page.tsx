@@ -12,6 +12,8 @@ import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
+import { OrganizationBranding } from "../components/OrganizationBranding";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -222,6 +224,40 @@ function LiveScreensIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function DigitalStoreIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect width="18" height="12" x="3" y="4" rx="2" />
+      <line x1="2" x2="22" y1="20" y2="20" />
+      <line x1="12" x2="12" y1="16" y2="20" />
+    </svg>
+  );
+}
+
+function BrandingIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+    </svg>
+  );
+}
+
 type SettingsTab =
   | "organization"
   | "printers"
@@ -233,7 +269,9 @@ type SettingsTab =
   | "tables"
   | "qrCodes"
   | "liveScreens"
-  | "queue";
+  | "queue"
+  | "digitalStore"
+  | "branding";
 
 interface SettingsNavOption {
   id: SettingsTab;
@@ -262,7 +300,7 @@ const SETTINGS_TABS: SettingsNavOption[] = [
   { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
   {
     id: "orderProcesses",
-    label: "Order Processes",
+    label: "Order Status",
     icon: <OrderProcessesIcon className="w-4 h-4" />,
   },
   {
@@ -284,6 +322,16 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     id: "liveScreens",
     label: "Live Screens",
     icon: <LiveScreensIcon className="w-4 h-4" />,
+  },
+  {
+    id: "digitalStore",
+    label: "Digital Store",
+    icon: <DigitalStoreIcon className="w-4 h-4" />,
+  },
+  {
+    id: "branding",
+    label: "Branding",
+    icon: <BrandingIcon className="w-4 h-4" />,
   },
 ];
 
@@ -342,11 +390,10 @@ function SettingsContent() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${
-                      isSelected
-                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
-                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
-                    }`}
+                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${isSelected
+                      ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
+                      : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
+                      }`}
                   >
                     <span className="w-5 flex items-center justify-center text-[#5e5e5e]">
                       {tab.icon}
@@ -369,6 +416,8 @@ function SettingsContent() {
             {activeTab === "orderProcesses" && <OrderProcessesView />}
             {activeTab === "payment" && <OrganizationPaymentModes />}
             {activeTab === "tables" && <OrganizationTablesSettings />}
+            {activeTab === "digitalStore" && <OrganizationDigitalStore />}
+            {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
               activeTab !== "queue" &&
               activeTab !== "printers" &&
@@ -377,7 +426,9 @@ function SettingsContent() {
               activeTab !== "staff" &&
               activeTab !== "waiters" &&
               activeTab !== "payment" &&
-              activeTab !== "tables" && (
+              activeTab !== "tables" &&
+              activeTab !== "digitalStore" &&
+              activeTab !== "branding" && (
                 <div className="py-12 text-center">
                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                     {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}

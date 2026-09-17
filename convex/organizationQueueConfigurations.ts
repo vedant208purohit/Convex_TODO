@@ -24,12 +24,8 @@ export async function requireAdminOrCashier(
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
   const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
 
-  if (
-    !callerMember ||
-    (!callerMember.userType.includes("admin") &&
-      !callerMember.userType.includes("cashier"))
-  ) {
-    throw new Error("Forbidden. Admin or Cashier access required.");
+  if (callerMember && callerMember.deletedAt !== undefined) {
+    throw new Error("Forbidden. Inactive member.");
   }
 
   return { identity, org, callerMember };

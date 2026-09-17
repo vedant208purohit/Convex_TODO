@@ -61,6 +61,16 @@ export async function resolveAssetOrStorageUrl(
           }
         }
       }
+
+      // Check if asset document contains a direct storageId fallback
+      if (asset && (asset as any).storageId) {
+        try {
+          const storageUrl = await ctx.storage.getUrl((asset as any).storageId);
+          if (storageUrl) {
+            return storageUrl;
+          }
+        } catch {}
+      }
     } catch {
       // Asset DB lookup fallback
     }

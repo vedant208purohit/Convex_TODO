@@ -15,7 +15,7 @@ import { resolveAssetOrStorageUrl } from "./assetResolver";
 /**
  * Requires caller to be an active Store Admin or Cashier in the store database.
  */
-export async function requireAdminOrCashier(
+async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
   explicitOrgId?: Id<"organizations">
 ) {
@@ -69,28 +69,30 @@ export const listStorefrontImages = query({
 
     const results = [];
     for (const img of activeImages) {
-      const asset = await ctx.db.get(img.assetId);
-      if (asset && asset.deletedAt === undefined && asset.status === "uploaded") {
-        const imageUrl = await resolveAssetOrStorageUrl(ctx, {
-          assetId: img.assetId,
-          organizationId: asset.organizationId,
-        });
+      const asset = img.assetId
+        ? ((await ctx.db.get(img.assetId)) as Doc<"organization_assets"> | null)
+        : null;
+      const imageUrl = await resolveAssetOrStorageUrl(ctx, {
+        assetId: img.assetId,
+        storageId: img.storageId,
+        organizationId: asset?.organizationId,
+      });
 
-        results.push({
-          _id: img._id,
-          _creationTime: img._creationTime,
-          assetId: img.assetId,
-          imageType: img.imageType,
-          position: img.position,
-          legacyId: img.legacyId,
-          createdAt: img.createdAt,
-          updatedAt: img.updatedAt,
-          imageUrl,
-          fileName: asset.fileName,
-          contentType: asset.contentType,
-          fileSize: asset.fileSize,
-        });
-      }
+      results.push({
+        _id: img._id,
+        _creationTime: img._creationTime,
+        assetId: img.assetId,
+        storageId: img.storageId,
+        imageType: img.imageType,
+        position: img.position,
+        legacyId: img.legacyId,
+        createdAt: img.createdAt,
+        updatedAt: img.updatedAt,
+        imageUrl,
+        fileName: asset?.fileName || `Photo ${img.position}`,
+        contentType: asset?.contentType,
+        fileSize: asset?.fileSize,
+      });
     }
 
     return results;
@@ -110,29 +112,29 @@ export const getDigitalStoreImage = query({
       return null;
     }
 
-    const asset = await ctx.db.get(img.assetId);
-    if (!asset || asset.deletedAt !== undefined || asset.status !== "uploaded") {
-      return null;
-    }
-
+    const asset = img.assetId
+      ? ((await ctx.db.get(img.assetId)) as Doc<"organization_assets"> | null)
+      : null;
     const imageUrl = await resolveAssetOrStorageUrl(ctx, {
       assetId: img.assetId,
-      organizationId: asset.organizationId,
+      storageId: img.storageId,
+      organizationId: asset?.organizationId,
     });
 
     return {
       _id: img._id,
       _creationTime: img._creationTime,
       assetId: img.assetId,
+      storageId: img.storageId,
       imageType: img.imageType,
       position: img.position,
       legacyId: img.legacyId,
       createdAt: img.createdAt,
       updatedAt: img.updatedAt,
       imageUrl,
-      fileName: asset.fileName,
-      contentType: asset.contentType,
-      fileSize: asset.fileSize,
+      fileName: asset?.fileName || `Photo ${img.position}`,
+      contentType: asset?.contentType,
+      fileSize: asset?.fileSize,
     };
   },
 });
@@ -142,12 +144,13 @@ export const getDigitalStoreImage = query({
 // ----------------------------------------------------
 
 /**
- * Staff Mutation: Creates a new digital storefront image record linking to a validated R2 asset.
+ * Staff Mutation: Creates a new digital storefront image record linking to a validated R2 asset or Convex storage.
  * Auto-assigns sequential position if omitted.
  */
 export const createDigitalStoreImage = mutation({
   args: {
-    assetId: v.id("organization_assets"),
+    assetId: v.optional(v.id("organization_assets")),
+    storageId: v.optional(v.id("_storage")),
     imageType: v.union(
       v.literal("carousel_image"),
       v.literal("about_us_image")
@@ -155,23 +158,9 @@ export const createDigitalStoreImage = mutation({
     position: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { org } = await requireAdminOrCashier(ctx);
+    await requireAdminOrCashier(ctx);
 
-    // 1. Verify Asset existence and store isolation
-    const asset = await ctx.db.get(args.assetId);
-    if (!asset || asset.deletedAt !== undefined) {
-      throw new Error("Asset not found or has been deleted.");
-    }
-
-    if (String(asset.organizationId) !== String(org._id)) {
-      throw new Error("Forbidden. Asset does not belong to current store organization.");
-    }
-
-    if (asset.status !== "uploaded") {
-      throw new Error(`Asset upload is not completed. Current status: ${asset.status}`);
-    }
-
-    // 2. Calculate next sequential position if not provided
+    // 1. Calculate next sequential position if not provided
     let position = args.position;
     if (position === undefined || position === null) {
       const existingImages = await ctx.db
@@ -193,6 +182,7 @@ export const createDigitalStoreImage = mutation({
     const now = Date.now();
     const imageId = await ctx.db.insert("digitalStoreImages", {
       assetId: args.assetId,
+      storageId: args.storageId,
       imageType: args.imageType,
       position,
       createdAt: now,
@@ -219,8 +209,10 @@ export const updateImagePosition = mutation({
       throw new Error("Digital store image not found or deleted.");
     }
 
-    const asset = await ctx.db.get(img.assetId);
-    if (!asset || String(asset.organizationId) !== String(org._id)) {
+    const asset = img.assetId
+      ? ((await ctx.db.get(img.assetId)) as Doc<"organization_assets"> | null)
+      : null;
+    if (asset && String(asset.organizationId) !== String(org._id)) {
       throw new Error("Forbidden. Image does not belong to current store organization.");
     }
 
@@ -312,8 +304,10 @@ export const reorderImages = mutation({
         throw new Error(`Image ${id} does not match target imageType ${args.imageType}.`);
       }
 
-      const asset = await ctx.db.get(img.assetId);
-      if (!asset || String(asset.organizationId) !== String(org._id)) {
+      const asset = img.assetId
+        ? ((await ctx.db.get(img.assetId)) as Doc<"organization_assets"> | null)
+        : null;
+      if (asset && String(asset.organizationId) !== String(org._id)) {
         throw new Error(`Forbidden. Image ${id} does not belong to current store.`);
       }
 
@@ -350,7 +344,9 @@ export const removeDigitalStoreImage = mutation({
       return { success: true, alreadyDeleted: true };
     }
 
-    const asset = await ctx.db.get(img.assetId);
+    const asset = img.assetId
+      ? ((await ctx.db.get(img.assetId)) as Doc<"organization_assets"> | null)
+      : null;
     if (asset && String(asset.organizationId) !== String(org._id)) {
       throw new Error("Forbidden. Image does not belong to current store organization.");
     }
@@ -364,22 +360,24 @@ export const removeDigitalStoreImage = mutation({
     });
 
     // 2. Check if any other active digitalStoreImages record references this asset
-    const remainingRefs = await ctx.db
-      .query("digitalStoreImages")
-      .withIndex("by_asset", (q) => q.eq("assetId", img.assetId))
-      .collect();
+    if (img.assetId) {
+      const remainingRefs = await ctx.db
+        .query("digitalStoreImages")
+        .withIndex("by_asset", (q) => q.eq("assetId", img.assetId!))
+        .collect();
 
-    const activeRemaining = remainingRefs.filter(
-      (r) => r.deletedAt === undefined && String(r._id) !== String(img._id)
-    );
+      const activeRemaining = remainingRefs.filter(
+        (r) => r.deletedAt === undefined && String(r._id) !== String(img._id)
+      );
 
-    // 3. If no active references remain, mark asset deleted
-    if (activeRemaining.length === 0 && asset && asset.deletedAt === undefined) {
-      await ctx.db.patch(asset._id, {
-        status: "deleted",
-        deletedAt: now,
-        updatedAt: now,
-      });
+      // 3. If no active references remain, mark asset deleted
+      if (activeRemaining.length === 0 && asset && asset.deletedAt === undefined) {
+        await ctx.db.patch(asset._id, {
+          status: "deleted",
+          deletedAt: now,
+          updatedAt: now,
+        });
+      }
     }
 
     return { success: true, assetId: img.assetId };
