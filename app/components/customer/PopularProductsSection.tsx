@@ -28,7 +28,7 @@ export function PopularProductsSection({
     : `Most ordered by guests at ${storeName} today`;
 
   return (
-    <section className="flex flex-col gap-3">
+    <section id="products-section" className="flex flex-col gap-3 scroll-mt-24">
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
