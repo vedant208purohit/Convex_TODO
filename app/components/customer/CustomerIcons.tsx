@@ -182,42 +182,122 @@ export function NonVegFssaiBadge() {
 
 export function CategoryIcon({ name, className = "w-6 h-6" }: { name: string; className?: string }) {
   const lower = (name || "").toLowerCase();
-  if (lower.includes("combo") || lower.includes("meal") || lower.includes("set")) {
+
+  // 1. Viral / Trending / Specials
+  if (lower.includes("viral") || lower.includes("trending") || lower.includes("popular") || lower.includes("special") || lower.includes("hot")) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-        <rect x="2" y="4" width="20" height="16" rx="2" />
-        <path d="M6 8h12M6 12h8M6 16h4" />
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
       </svg>
     );
   }
+
+  // 2. Mains / Curries / Entrees / Bowls
+  if (lower.includes("main") || lower.includes("curry") || lower.includes("gravy") || lower.includes("entree") || lower.includes("thali") || lower.includes("dal") || lower.includes("paneer")) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2a10 10 0 0 0-10 10h20a10 10 0 0 0-10-10Z" />
+        <path d="M2 16h20" />
+        <path d="M4 12v4a8 8 0 0 0 16 0v-4" />
+      </svg>
+    );
+  }
+
+  // 3. Starters / Appetizers / Snacks / Finger Food
+  if (lower.includes("starter") || lower.includes("appetizer") || lower.includes("snack") || lower.includes("finger") || lower.includes("chaat")) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m2 2 20 20" />
+        <path d="m5 16 3-3" />
+        <path d="m9 20 3-3" />
+        <path d="m14 11 5-5a3 3 0 0 0-4-4l-5 5" />
+      </svg>
+    );
+  }
+
+  // 4. Combos / Meals / Platters
+  if (lower.includes("combo") || lower.includes("meal") || lower.includes("set") || lower.includes("platter")) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="4" width="20" height="16" rx="3" />
+        <path d="M6 9h12" />
+        <path d="M6 14h6" />
+      </svg>
+    );
+  }
+
+  // 5. Momos / Dim Sum / Dumplings / Soups
   if (lower.includes("momo") || lower.includes("dumpling") || lower.includes("soup") || lower.includes("dim sum")) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
         <path d="M19 6c-1.5 2-4 2-5 0-1 2-3.5 2-5 0" />
       </svg>
     );
   }
-  if (lower.includes("bao") || lower.includes("bread") || lower.includes("bakery") || lower.includes("roti") || lower.includes("naan")) {
+
+  // 6. Bao, Breads, Roti, Naan, Bakery
+  if (lower.includes("bao") || lower.includes("bread") || lower.includes("bakery") || lower.includes("roti") || lower.includes("naan") || lower.includes("paratha")) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="m3.5 13 2.5-4a6 6 0 0 1 10 0l2.5 4" />
         <path d="M2 13h20v2a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4v-2Z" />
       </svg>
     );
   }
-  if (lower.includes("burger") || lower.includes("sandwich") || lower.includes("snack") || lower.includes("lunch")) {
+
+  // 7. Burgers / Sandwiches
+  if (lower.includes("burger") || lower.includes("sandwich") || lower.includes("lunch")) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 11h16a1 1 0 0 0 1-1A7 7 0 0 0 3 10a1 1 0 0 0 1 1Z" />
         <rect x="2" y="14" width="20" height="3" rx="1" />
         <path d="M4 18h16a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3Z" />
       </svg>
     );
   }
-  if (lower.includes("beverage") || lower.includes("drink") || lower.includes("coffee") || lower.includes("tea") || lower.includes("shake") || lower.includes("brew")) {
+
+  // 8. Pizza
+  if (lower.includes("pizza")) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15 11h.01" />
+        <path d="M11 15h.01" />
+        <path d="M16 16h.01" />
+        <path d="m2 16 18.5-8.5a1.5 1.5 0 0 0 .5-2 1.5 1.5 0 0 0-2-.5L2 16Z" />
+        <path d="M5.7 17.5a16 16 0 0 0 12.8-5" />
+      </svg>
+    );
+  }
+
+  // 9. Pasta / Noodles / Chinese
+  if (lower.includes("pasta") || lower.includes("noodle") || lower.includes("chinese") || lower.includes("spaghetti") || lower.includes("ramen")) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12H3a9 9 0 0 0 18 0Z" />
+        <path d="M8 12V5" />
+        <path d="M12 12V3" />
+        <path d="M16 12V5" />
+      </svg>
+    );
+  }
+
+  // 10. Rice / Biryani / Pulao
+  if (lower.includes("rice") || lower.includes("biryani") || lower.includes("pulao") || lower.includes("fried rice")) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z" />
+        <circle cx="12" cy="7" r="1" />
+        <circle cx="9" cy="8" r="1" />
+        <circle cx="15" cy="8" r="1" />
+      </svg>
+    );
+  }
+
+  // 11. Beverages / Drinks / Coffee / Tea / Brews
+  if (lower.includes("beverage") || lower.includes("drink") || lower.includes("coffee") || lower.includes("tea") || lower.includes("shake") || lower.includes("brew") || lower.includes("juice")) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M18 8h1a4 4 0 0 1 0 8h-1" />
         <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8Z" />
         <line x1="6" y1="2" x2="6" y2="4" />
@@ -226,9 +306,11 @@ export function CategoryIcon({ name, className = "w-6 h-6" }: { name: string; cl
       </svg>
     );
   }
-  if (lower.includes("dessert") || lower.includes("sweet") || lower.includes("ice cream") || lower.includes("cake")) {
+
+  // 12. Desserts / Sweets / Ice Cream / Bakery
+  if (lower.includes("dessert") || lower.includes("sweet") || lower.includes("ice cream") || lower.includes("cake") || lower.includes("pastry")) {
     return (
-      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
         <path d="M7 11c0-2.5 2-4.5 5-4.5s5 2 5 4.5" />
         <path d="M12 2v4.5" />
         <path d="m8 11 4 11 4-11" />
@@ -236,10 +318,14 @@ export function CategoryIcon({ name, className = "w-6 h-6" }: { name: string; cl
       </svg>
     );
   }
+
+  // 13. Default Restaurant Dish Cloche
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-      <circle cx="12" cy="12" r="9" />
-      <path d="m9 12 2 2 4-4" />
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 4a8 8 0 0 0-8 8h16a8 8 0 0 0-8-8Z" />
+      <path d="M12 2v2" />
+      <path d="M2 18h20" />
+      <path d="M4 14h16" />
     </svg>
   );
 }
