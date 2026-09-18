@@ -453,6 +453,71 @@ export const getRoleModuleMapping = query({
     return ROLE_MODULE_MAPPING;
   },
 });
+/**
+ * Resolves store organization details and verifies calling user is an active Store Admin or Owner.
+ * Used by server-side store routes (e.g. /api/staff/create).
+ */
+export const getStoreAdminContext = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    userId: v.optional(v.string()),
+    email: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let subject: string;
+    let email: string | undefined = args.email;
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      subject = identity.subject;
+      email = email || identity.email;
+    } else if (args.userId) {
+      subject = args.userId;
+    } else {
+      throw new Error("Unauthenticated. Please provide a valid authentication token.");
+    }
+
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const callerMember = await getCallerMembership(ctx, subject, org._id, email);
+
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeAdmins = allMembers.filter(
+      (m) => m.deletedAt === undefined && m.userType.some((r) => isAdminRole(r))
+    );
+
+    const isStoreOwnerOrUnowned = Boolean(
+      !org.ownerClerkId || org.ownerClerkId === subject || activeAdmins.length === 0
+    );
+
+    const callerRoles = Array.isArray(callerMember?.userType)
+      ? callerMember.userType
+      : typeof callerMember?.userType === "string"
+        ? [callerMember.userType]
+        : [];
+
+    const isMemberAdmin = Boolean(
+      callerMember && callerRoles.some((role) => isAdminRole(role))
+    );
+
+    const tokenRole = identity && (identity as any).role ? String((identity as any).role) : undefined;
+    const isTokenAdmin = isAdminRole(tokenRole);
+
+    if (!isMemberAdmin && !isStoreOwnerOrUnowned && !isTokenAdmin) {
+      throw new Error("Forbidden. Admin access required.");
+    }
+
+    return {
+      organizationId: org._id,
+      slug: org.slug,
+      name: org.name,
+      callerUserId: callerMember?.userId || subject,
+      callerRoles: callerMember?.userType || ["admin"],
+    };
+  },
+});
 
 /**
  * Fetches the active organization membership for the currently authenticated caller

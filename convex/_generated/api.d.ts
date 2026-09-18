@@ -11,9 +11,9 @@
 import type * as assetResolver from "../assetResolver.js";
 import type * as customers from "../customers.js";
 import type * as deliveryProvider from "../deliveryProvider.js";
-import type * as http from "../http.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
 import type * as features from "../features.js";
+import type * as http from "../http.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
 import type * as menuImport from "../menuImport.js";
@@ -57,9 +57,9 @@ declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
   customers: typeof customers;
   deliveryProvider: typeof deliveryProvider;
-  http: typeof http;
   digitalStoreImages: typeof digitalStoreImages;
   features: typeof features;
+  http: typeof http;
   inventory: typeof inventory;
   menu: typeof menu;
   menuImport: typeof menuImport;

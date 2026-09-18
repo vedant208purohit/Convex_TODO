@@ -14,6 +14,7 @@ import { OrganizationQueueSettings } from "../components/OrganizationQueueSettin
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
+import { OrganizationPrinters } from "../components/OrganizationPrinters";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS

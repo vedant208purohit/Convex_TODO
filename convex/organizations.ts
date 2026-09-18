@@ -1320,6 +1320,7 @@ export const update = mutation({
   args: {
     id: v.id("organizations"),
     name: v.optional(v.string()),
+    slug: v.optional(v.string()),
     legalEntityName: v.optional(v.string()),
     published: v.optional(v.boolean()),
     isTest: v.optional(v.boolean()),
@@ -1762,6 +1763,36 @@ export const liveOrganization = mutation({
       published: true,
       updatedAt: Date.now(),
     });
+  },
+});
+
+// Store Profile Update via Server Provisioning HMAC
+export const updateStoreProfileFromProvisioning = mutation({
+  args: {
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
+    name: v.string(),
+    slug: v.string(),
+    ownerClerkId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const firstOrg = await ctx.db.query("organizations").first();
+    if (!firstOrg) {
+      throw new Error("Store organization not found");
+    }
+    await requireProvisioningAuth(ctx, {
+      slug: firstOrg.slug,
+      provisioningToken: args.provisioningToken,
+      timestamp: args.timestamp,
+    });
+    const now = Date.now();
+    await ctx.db.patch(firstOrg._id, {
+      name: args.name,
+      slug: args.slug,
+      ownerClerkId: args.ownerClerkId || firstOrg.ownerClerkId,
+      updatedAt: now,
+    });
+    return { success: true, organizationId: firstOrg._id };
   },
 });
 
