@@ -482,12 +482,26 @@ function CustomerOrderingHomeView({
   if (activeTab === "orders") {
     return (
       <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
-        <CustomerCartView
+        {/* 1. Fixed Header */}
+        <CustomerHeader
           organization={organization}
-          table={table}
-          rawMenu={rawMenu}
-          onBackToMenu={() => onSelectTab("home")}
+          isSearchOpen={isSearchOpen}
+          onToggleSearch={onToggleSearch}
+          searchQuery={searchQuery}
+          onSearchChange={onSearchChange}
         />
+
+        {/* 2. Main Content Container (Max 480px with top & bottom clearance) */}
+        <main className="flex-1 w-full max-w-[480px] mx-auto pt-20 pb-44 px-4 flex flex-col gap-3 min-h-screen">
+          <CustomerCartView
+            organization={organization}
+            table={table}
+            rawMenu={rawMenu}
+            onBackToMenu={() => onSelectTab("home")}
+          />
+        </main>
+
+        {/* 3. Fixed Bottom Navigation */}
         <CustomerBottomNav
           activeTab={activeTab}
           onSelectTab={onSelectTab}
