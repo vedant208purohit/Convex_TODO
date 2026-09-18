@@ -124,10 +124,17 @@ export function OrganizationTablesSettings() {
     hasTablesCount?: number;
   } | null>(null);
 
-  // Form Inputs
+  // Form Inputs & Validation Refs/States
+  const layoutNameInputRef = useRef<HTMLInputElement>(null);
+  const tableNumberInputRef = useRef<HTMLInputElement>(null);
+  const seatingCapacityInputRef = useRef<HTMLInputElement>(null);
+  const tableLayoutDropdownRef = useRef<HTMLButtonElement>(null);
+
   const [layoutNameInput, setLayoutNameInput] = useState("");
   const [layoutErrorMessage, setLayoutErrorMessage] = useState<string | null>(null);
   const [isLayoutSubmitting, setIsLayoutSubmitting] = useState(false);
+  const [layoutPendingErrors, setLayoutPendingErrors] = useState<string[]>([]);
+  const [layoutPendingFields, setLayoutPendingFields] = useState<Record<string, boolean>>({});
 
   const [tableNumberInput, setTableNumberInput] = useState("");
   const [seatingCapacityInput, setSeatingCapacityInput] = useState<number>(4);
@@ -138,6 +145,8 @@ export function OrganizationTablesSettings() {
   const [barbequeGrillInput, setBarbequeGrillInput] = useState(false);
   const [tableErrorMessage, setTableErrorMessage] = useState<string | null>(null);
   const [isTableSubmitting, setIsTableSubmitting] = useState(false);
+  const [tablePendingErrors, setTablePendingErrors] = useState<string[]>([]);
+  const [tablePendingFields, setTablePendingFields] = useState<Record<string, boolean>>({});
 
   // Canvas Drag State & Zoom / Grid Snap State
   const [zoomLevel, setZoomLevel] = useState<number>(100);
@@ -237,6 +246,8 @@ export function OrganizationTablesSettings() {
   const handleOpenAddLayout = () => {
     setLayoutNameInput("");
     setLayoutErrorMessage(null);
+    setLayoutPendingErrors([]);
+    setLayoutPendingFields({});
     setShowAddLayoutDrawer(true);
   };
 
@@ -244,28 +255,48 @@ export function OrganizationTablesSettings() {
     setEditingLayout(layout);
     setLayoutNameInput(layout.name);
     setLayoutErrorMessage(null);
+    setLayoutPendingErrors([]);
+    setLayoutPendingFields({});
   };
 
   const handleSaveLayout = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!layoutNameInput.trim()) {
-      setLayoutErrorMessage("Layout name can't be blank");
+    const errors: string[] = [];
+    const pending: Record<string, boolean> = {};
+
+    const trimmed = layoutNameInput.trim();
+    if (!trimmed) {
+      errors.push("Layout name is required.");
+      pending["layoutName"] = true;
+    }
+
+    if (errors.length > 0) {
+      setLayoutPendingErrors(errors);
+      setLayoutPendingFields(pending);
+      setTimeout(() => {
+        if (layoutNameInputRef.current) {
+          layoutNameInputRef.current.focus();
+          layoutNameInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
       return;
     }
 
     setIsLayoutSubmitting(true);
+    setLayoutPendingErrors([]);
+    setLayoutPendingFields({});
     setLayoutErrorMessage(null);
 
     try {
       if (editingLayout) {
         await updateLayout({
           id: editingLayout._id,
-          name: layoutNameInput.trim(),
+          name: trimmed,
         });
         setEditingLayout(null);
       } else {
         await createLayout({
-          name: layoutNameInput.trim(),
+          name: trimmed,
         });
         setShowAddLayoutDrawer(false);
       }
@@ -299,6 +330,8 @@ export function OrganizationTablesSettings() {
     setDisabledSeatInput(false);
     setBarbequeGrillInput(false);
     setTableErrorMessage(null);
+    setTablePendingErrors([]);
+    setTablePendingFields({});
     setShowAddTableDrawer(true);
   };
 
@@ -311,20 +344,49 @@ export function OrganizationTablesSettings() {
     setDisabledSeatInput(Boolean(table.disabledSeatAvailability));
     setBarbequeGrillInput(Boolean(table.barbequeGrillAvailability));
     setTableErrorMessage(null);
+    setTablePendingErrors([]);
+    setTablePendingFields({});
   };
 
   const handleSaveTable = async (e: React.FormEvent) => {
     e.preventDefault();
+    const errors: string[] = [];
+    const pending: Record<string, boolean> = {};
+
     if (!tableNumberInput.trim()) {
-      setTableErrorMessage("Table number can't be blank");
-      return;
+      errors.push("Table number is required.");
+      pending["tableNumber"] = true;
     }
     if (!seatingCapacityInput || seatingCapacityInput <= 0) {
-      setTableErrorMessage("Seating capacity must be greater than 0");
+      errors.push("Seating capacity must be at least 1.");
+      pending["seatingCapacity"] = true;
+    }
+    if (!tableLayoutIdInput) {
+      errors.push("Layout selection is required.");
+      pending["tableLayoutId"] = true;
+    }
+
+    if (errors.length > 0) {
+      setTablePendingErrors(errors);
+      setTablePendingFields(pending);
+      setTimeout(() => {
+        if (pending["tableNumber"] && tableNumberInputRef.current) {
+          tableNumberInputRef.current.focus();
+          tableNumberInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else if (pending["seatingCapacity"] && seatingCapacityInputRef.current) {
+          seatingCapacityInputRef.current.focus();
+          seatingCapacityInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else if (pending["tableLayoutId"] && tableLayoutDropdownRef.current) {
+          tableLayoutDropdownRef.current.focus();
+          tableLayoutDropdownRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
       return;
     }
 
     setIsTableSubmitting(true);
+    setTablePendingErrors([]);
+    setTablePendingFields({});
     setTableErrorMessage(null);
 
     const targetLayoutId = tableLayoutIdInput ? (tableLayoutIdInput as Id<"organizationLayouts">) : undefined;
@@ -1356,6 +1418,28 @@ export function OrganizationTablesSettings() {
               </div>
 
               <form onSubmit={handleSaveLayout} className="p-8 space-y-6" id="add-layout-form">
+                {/* Action Required Banner for Layout Drawer */}
+                {layoutPendingErrors.length > 0 && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg">⚠️</span>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-rose-900">
+                          Action Required ({layoutPendingErrors.length} pending field{layoutPendingErrors.length > 1 ? "s" : ""})
+                        </h4>
+                        <p className="mt-1 text-xs text-rose-700">
+                          Please fill in all required fields before saving:
+                        </p>
+                        <ul className="mt-2 list-inside list-disc text-xs font-medium text-rose-800 space-y-1">
+                          {layoutPendingErrors.map((err, idx) => (
+                            <li key={idx}>{err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {layoutErrorMessage && (
                   <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
                     {layoutErrorMessage}
@@ -1364,20 +1448,44 @@ export function OrganizationTablesSettings() {
 
                 <div className="space-y-2">
                   <label className="block text-[11px] uppercase font-semibold tracking-wider text-[#5e5e5e]" htmlFor="layout-name">
-                    Layout name <span className="text-red-500">*</span>
+                    Layout name <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
+                    ref={layoutNameInputRef}
                     id="layout-name"
                     type="text"
                     value={layoutNameInput}
-                    onChange={(e) => setLayoutNameInput(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLayoutNameInput(val);
+                      if (layoutPendingFields["layoutName"]) {
+                        setLayoutPendingFields((prev) => {
+                          const copy = { ...prev };
+                          delete copy["layoutName"];
+                          return copy;
+                        });
+                        setLayoutPendingErrors((prev) =>
+                          prev.filter((msg) => !msg.toLowerCase().includes("layout name"))
+                        );
+                      }
+                    }}
                     placeholder="Enter layout name"
-                    className="w-full h-[44px] px-3.5 bg-white border border-[#e7e5e4] rounded-lg text-sm text-[#0c0a09] placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition shadow-sm"
-                    required
+                    style={{ backgroundColor: layoutPendingFields["layoutName"] ? "#fff5f5" : "#ffffff" }}
+                    className={`w-full h-[44px] px-3.5 border rounded-lg text-sm text-[#0c0a09] placeholder-stone-400 focus:outline-none transition shadow-sm ${
+                      layoutPendingFields["layoutName"]
+                        ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
+                        : "border-[#e7e5e4] bg-white focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    }`}
                   />
-                  <p className="text-[12px] text-[#5e5e5e]">
-                    Use a name such as Main Dining, Outdoor or Rooftop.
-                  </p>
+                  {layoutPendingFields["layoutName"] ? (
+                    <p className="mt-1 text-xs font-medium text-rose-600">
+                      ⚠️ Layout name is required.
+                    </p>
+                  ) : (
+                    <p className="text-[12px] text-[#5e5e5e]">
+                      Use a name such as Main Dining, Outdoor or Rooftop.
+                    </p>
+                  )}
                 </div>
 
                 <div className="bg-[#f7f3f2] border border-[#e7e5e4] rounded-lg p-4 text-[12px] text-[#0c0a09] leading-relaxed flex items-start gap-3">
@@ -1436,6 +1544,28 @@ export function OrganizationTablesSettings() {
               </div>
 
               <form onSubmit={handleSaveLayout} className="p-8 space-y-6" id="edit-layout-form">
+                {/* Action Required Banner for Edit Layout Drawer */}
+                {layoutPendingErrors.length > 0 && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg">⚠️</span>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-rose-900">
+                          Action Required ({layoutPendingErrors.length} pending field{layoutPendingErrors.length > 1 ? "s" : ""})
+                        </h4>
+                        <p className="mt-1 text-xs text-rose-700">
+                          Please fill in all required fields before saving:
+                        </p>
+                        <ul className="mt-2 list-inside list-disc text-xs font-medium text-rose-800 space-y-1">
+                          {layoutPendingErrors.map((err, idx) => (
+                            <li key={idx}>{err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {layoutErrorMessage && (
                   <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
                     {layoutErrorMessage}
@@ -1450,17 +1580,41 @@ export function OrganizationTablesSettings() {
                     <span className="text-[11px] text-[#5e5e5e]">Required</span>
                   </div>
                   <input
+                    ref={layoutNameInputRef}
                     id="edit-layout-name"
                     type="text"
                     value={layoutNameInput}
-                    onChange={(e) => setLayoutNameInput(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setLayoutNameInput(val);
+                      if (layoutPendingFields["layoutName"]) {
+                        setLayoutPendingFields((prev) => {
+                          const copy = { ...prev };
+                          delete copy["layoutName"];
+                          return copy;
+                        });
+                        setLayoutPendingErrors((prev) =>
+                          prev.filter((msg) => !msg.toLowerCase().includes("layout name"))
+                        );
+                      }
+                    }}
                     placeholder="e.g. Indoor-DineIn"
-                    className="w-full h-[44px] px-3.5 bg-white border border-[#e7e5e4] rounded-lg text-sm text-[#0c0a09] placeholder-stone-400 focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition shadow-sm"
-                    required
+                    style={{ backgroundColor: layoutPendingFields["layoutName"] ? "#fff5f5" : "#ffffff" }}
+                    className={`w-full h-[44px] px-3.5 border rounded-lg text-sm text-[#0c0a09] placeholder-stone-400 focus:outline-none transition shadow-sm ${
+                      layoutPendingFields["layoutName"]
+                        ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
+                        : "border-[#e7e5e4] bg-white focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    }`}
                   />
-                  <p className="text-[12px] text-[#5e5e5e]">
-                    Ex: Bar, Indoor, Outdoor etc
-                  </p>
+                  {layoutPendingFields["layoutName"] ? (
+                    <p className="mt-1 text-xs font-medium text-rose-600">
+                      ⚠️ Layout name is required.
+                    </p>
+                  ) : (
+                    <p className="text-[12px] text-[#5e5e5e]">
+                      Ex: Bar, Indoor, Outdoor etc
+                    </p>
+                  )}
                 </div>
 
                 <div className="rounded-lg bg-[#faf9f8] border border-[#e7e5e4] p-4 space-y-3">
@@ -1536,6 +1690,28 @@ export function OrganizationTablesSettings() {
               </div>
 
               <form onSubmit={handleSaveTable} className="p-8 space-y-6" id="table-form">
+                {/* Action Required Banner for Table Drawer */}
+                {tablePendingErrors.length > 0 && (
+                  <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg">⚠️</span>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold text-rose-900">
+                          Action Required ({tablePendingErrors.length} pending field{tablePendingErrors.length > 1 ? "s" : ""})
+                        </h4>
+                        <p className="mt-1 text-xs text-rose-700">
+                          Please fill in all required fields before saving:
+                        </p>
+                        <ul className="mt-2 list-inside list-disc text-xs font-medium text-rose-800 space-y-1">
+                          {tablePendingErrors.map((err, idx) => (
+                            <li key={idx}>{err}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {tableErrorMessage && (
                   <div className="p-3.5 bg-red-50 border border-red-200 rounded-lg text-xs text-red-700 font-medium">
                     {tableErrorMessage}
@@ -1548,17 +1724,41 @@ export function OrganizationTablesSettings() {
                     Table number <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
+                    ref={tableNumberInputRef}
                     id="table-num"
                     type="text"
                     value={tableNumberInput}
-                    onChange={(e) => setTableNumberInput(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTableNumberInput(val);
+                      if (tablePendingFields["tableNumber"]) {
+                        setTablePendingFields((prev) => {
+                          const copy = { ...prev };
+                          delete copy["tableNumber"];
+                          return copy;
+                        });
+                        setTablePendingErrors((prev) =>
+                          prev.filter((msg) => !msg.toLowerCase().includes("table number"))
+                        );
+                      }
+                    }}
                     placeholder="Enter table number"
-                    className="w-full text-xs text-[#0c0a09] placeholder-stone-400 rounded-lg border border-[#e7e5e4] px-3.5 py-2.5 shadow-sm focus:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09] transition"
-                    required
+                    style={{ backgroundColor: tablePendingFields["tableNumber"] ? "#fff5f5" : "#ffffff" }}
+                    className={`w-full text-xs text-[#0c0a09] placeholder-stone-400 rounded-lg border px-3.5 py-2.5 shadow-sm outline-none transition-all ${
+                      tablePendingFields["tableNumber"]
+                        ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
+                        : "border-[#e7e5e4] bg-white focus:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09]"
+                    }`}
                   />
-                  <p className="text-[11px] text-[#5e5e5e]">
-                    Table number is unique within this dining layout.
-                  </p>
+                  {tablePendingFields["tableNumber"] ? (
+                    <p className="mt-1 text-xs font-medium text-rose-600">
+                      ⚠️ Table number is required.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#5e5e5e]">
+                      Table number is unique within this dining layout.
+                    </p>
+                  )}
                 </div>
 
                 {/* Seating Capacity */}
@@ -1567,19 +1767,43 @@ export function OrganizationTablesSettings() {
                     Seating capacity <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
+                    ref={seatingCapacityInputRef}
                     id="seating-cap"
                     type="number"
                     min={1}
                     max={50}
                     value={seatingCapacityInput}
-                    onChange={(e) => setSeatingCapacityInput(Number(e.target.value))}
+                    onChange={(e) => {
+                      const val = Number(e.target.value);
+                      setSeatingCapacityInput(val);
+                      if (tablePendingFields["seatingCapacity"] && val > 0) {
+                        setTablePendingFields((prev) => {
+                          const copy = { ...prev };
+                          delete copy["seatingCapacity"];
+                          return copy;
+                        });
+                        setTablePendingErrors((prev) =>
+                          prev.filter((msg) => !msg.toLowerCase().includes("seating capacity"))
+                        );
+                      }
+                    }}
                     placeholder="Enter seating capacity"
-                    className="w-full text-xs text-[#0c0a09] placeholder-stone-400 rounded-lg border border-[#e7e5e4] px-3.5 py-2.5 shadow-sm focus:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09] transition"
-                    required
+                    style={{ backgroundColor: tablePendingFields["seatingCapacity"] ? "#fff5f5" : "#ffffff" }}
+                    className={`w-full text-xs text-[#0c0a09] placeholder-stone-400 rounded-lg border px-3.5 py-2.5 shadow-sm outline-none transition-all ${
+                      tablePendingFields["seatingCapacity"]
+                        ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
+                        : "border-[#e7e5e4] bg-white focus:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09]"
+                    }`}
                   />
-                  <p className="text-[11px] text-[#5e5e5e]">
-                    Enter the number of seats available at this table.
-                  </p>
+                  {tablePendingFields["seatingCapacity"] ? (
+                    <p className="mt-1 text-xs font-medium text-rose-600">
+                      ⚠️ Seating capacity must be at least 1.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#5e5e5e]">
+                      Enter the number of seats available at this table.
+                    </p>
+                  )}
                 </div>
 
                 {/* Select Layout */}
@@ -1590,9 +1814,15 @@ export function OrganizationTablesSettings() {
                   
                   <div className="relative">
                     <button
+                      ref={tableLayoutDropdownRef}
                       type="button"
                       onClick={() => setIsDrawerLayoutDropdownOpen(!isDrawerLayoutDropdownOpen)}
-                      className="w-full flex items-center justify-between h-[44px] px-3.5 bg-white border border-[#e7e5e4] rounded-lg text-xs text-[#0c0a09] shadow-sm hover:border-[#0c0a09] focus:outline-none focus:ring-1 focus:ring-[#0c0a09] transition cursor-pointer text-left"
+                      style={{ backgroundColor: tablePendingFields["tableLayoutId"] ? "#fff5f5" : "#ffffff" }}
+                      className={`w-full flex items-center justify-between h-[44px] px-3.5 border rounded-lg text-xs shadow-sm focus:outline-none transition-all cursor-pointer text-left ${
+                        tablePendingFields["tableLayoutId"]
+                          ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09]"
+                          : "border-[#e7e5e4] bg-white text-[#0c0a09] hover:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09]"
+                      }`}
                     >
                       <span className="font-medium text-[#0c0a09]">
                         {activeLayoutsList.find((l) => l._id === tableLayoutIdInput)?.name || "-- Select Layout --"}
@@ -1620,6 +1850,16 @@ export function OrganizationTablesSettings() {
                                 onClick={() => {
                                   setTableLayoutIdInput(l._id);
                                   setIsDrawerLayoutDropdownOpen(false);
+                                  if (tablePendingFields["tableLayoutId"]) {
+                                    setTablePendingFields((prev) => {
+                                      const copy = { ...prev };
+                                      delete copy["tableLayoutId"];
+                                      return copy;
+                                    });
+                                    setTablePendingErrors((prev) =>
+                                      prev.filter((msg) => !msg.toLowerCase().includes("layout selection"))
+                                    );
+                                  }
                                 }}
                                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-colors cursor-pointer text-left ${
                                   isSelected
@@ -1641,9 +1881,15 @@ export function OrganizationTablesSettings() {
                     )}
                   </div>
 
-                  <p className="text-[11px] text-[#5e5e5e]">
-                    Assigns table coordinates and floor availability to this zone.
-                  </p>
+                  {tablePendingFields["tableLayoutId"] ? (
+                    <p className="mt-1 text-xs font-medium text-rose-600">
+                      ⚠️ Layout selection is required.
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-[#5e5e5e]">
+                      Assigns table coordinates and floor availability to this zone.
+                    </p>
+                  )}
                 </div>
 
                 {/* Table Amenities Checkboxes */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id, Doc } from "../../convex/_generated/dataModel";
@@ -547,6 +547,13 @@ const MODULE_ACCESS_CARDS = [
   },
 ];
 
+export function isValidEmail(email: string): boolean {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim();
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(trimmed);
+}
+
 export function OrganizationEmployees() {
   // Query Convex Database for Employees / Staff List & Backend Role Module Mapping
   const employees = useQuery(api.organizationUsers.list, {});
@@ -609,6 +616,24 @@ export function OrganizationEmployees() {
   >({});
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Drawer Validation & Pending Field State
+  const [drawerPendingErrors, setDrawerPendingErrors] = useState<string[]>([]);
+  const [pendingFields, setPendingFields] = useState<{
+    firstName?: boolean;
+    lastName?: boolean;
+    email?: boolean;
+    staffRoles?: boolean;
+    moduleAccess?: boolean;
+  }>({});
+
+  // Form Element Refs for Auto-Scroll & Focus
+  const firstNameInputRef = useRef<HTMLInputElement>(null);
+  const lastNameInputRef = useRef<HTMLInputElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const staffRolesSectionRef = useRef<HTMLDivElement>(null);
+  const moduleAccessSectionRef = useRef<HTMLDivElement>(null);
+  const drawerBodyRef = useRef<HTMLDivElement>(null);
 
   // View Details Modal / Drawer State
   const [viewingTarget, setViewingTarget] =
@@ -767,6 +792,8 @@ export function OrganizationEmployees() {
     setCustomPermissions({});
     setIsAdvancedOpen(false);
     setErrorMessage(null);
+    setDrawerPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(true);
     setTimeout(() => setIsDrawerVisible(true), 20);
   };
@@ -785,7 +812,7 @@ export function OrganizationEmployees() {
       setFormLastName(nameParts.slice(1).join(" ") || "");
     }
 
-    setFormUserIdentifier(emp.userId);
+    setFormUserIdentifier(emp.email || emp.userId);
     if (emp.userType && emp.userType.length > 0) {
       setFormRoles(emp.userType);
     } else {
@@ -797,6 +824,8 @@ export function OrganizationEmployees() {
     setCustomPermissions(emp.userPermission || {});
     setIsAdvancedOpen(false);
     setErrorMessage(null);
+    setDrawerPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(true);
     setTimeout(() => setIsDrawerVisible(true), 20);
   };
@@ -828,28 +857,83 @@ export function OrganizationEmployees() {
   };
 
   const handleSaveEmployee = async () => {
-    if (!formFirstName.trim()) {
-      setErrorMessage("First name is required.");
-      return;
+    const errors: string[] = [];
+    const pending: {
+      firstName?: boolean;
+      lastName?: boolean;
+      email?: boolean;
+      staffRoles?: boolean;
+      moduleAccess?: boolean;
+    } = {};
+
+    const firstNameVal = formFirstName.trim();
+    const lastNameVal = formLastName.trim();
+    const emailVal = formUserIdentifier.trim();
+
+    if (!firstNameVal) {
+      errors.push("First Name is missing");
+      pending.firstName = true;
     }
-    if (!formLastName.trim()) {
-      setErrorMessage("Last name is required.");
-      return;
+
+    if (!lastNameVal) {
+      errors.push("Last Name is missing");
+      pending.lastName = true;
     }
-    if (!formUserIdentifier.trim()) {
-      setErrorMessage("User identifier / Email is required.");
-      return;
+
+    if (!emailVal) {
+      errors.push("Email Address is missing");
+      pending.email = true;
+    } else if (!isValidEmail(emailVal)) {
+      errors.push("Valid Email Address format is required (e.g. name@domain.com)");
+      pending.email = true;
     }
-    if (formRoles.length === 0) {
-      setErrorMessage("Please select at least one role or module access.");
+
+    const hasStaffRole = formRoles.some((r) =>
+      STAFF_ROLE_CARDS.some((card) => card.key === r),
+    );
+    if (!hasStaffRole) {
+      errors.push("Staff Role is missing (select Cashier, Captain, Waiter, Chef, Worker, or Admin)");
+      pending.staffRoles = true;
+    }
+
+    const hasModuleAccess = formRoles.some((m) =>
+      MODULE_ACCESS_CARDS.some((card) => card.key === m),
+    );
+    if (!hasModuleAccess) {
+      errors.push("Access Module is missing (select at least one module under 'What can this employee access?')");
+      pending.moduleAccess = true;
+    }
+
+    if (errors.length > 0) {
+      setDrawerPendingErrors(errors);
+      setPendingFields(pending);
+      setErrorMessage(null);
+
+      // Auto-scroll drawer and focus the first pending field
+      if (pending.firstName) {
+        firstNameInputRef.current?.focus();
+        firstNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (pending.lastName) {
+        lastNameInputRef.current?.focus();
+        lastNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (pending.email) {
+        emailInputRef.current?.focus();
+        emailInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (pending.staffRoles) {
+        staffRolesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (pending.moduleAccess) {
+        moduleAccessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return;
     }
 
+    setDrawerPendingErrors([]);
+    setPendingFields({});
     setErrorMessage(null);
     setIsSaving(true);
 
     try {
-      const effectiveUserId = formUserIdentifier.trim();
+      const effectiveUserId = emailVal;
       const permissionPayload =
         Object.keys(customPermissions).length > 0
           ? customPermissions
@@ -858,20 +942,21 @@ export function OrganizationEmployees() {
       if (drawerMode === "add") {
         await createEmployeeMutation({
           userId: effectiveUserId,
-          firstName: formFirstName.trim(),
-          lastName: formLastName.trim(),
-          ...(effectiveUserId.includes("@") ? { email: effectiveUserId } : {}),
+          firstName: firstNameVal,
+          lastName: lastNameVal,
+          email: effectiveUserId,
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
         setSuccessMessage(
-          `Employee "${formFirstName} ${formLastName}" created successfully!`,
+          `Employee "${firstNameVal} ${lastNameVal}" created successfully!`,
         );
       } else if (editingId) {
         await updateEmployeeMutation({
           id: editingId,
-          firstName: formFirstName.trim(),
-          lastName: formLastName.trim(),
+          firstName: firstNameVal,
+          lastName: lastNameVal,
+          email: effectiveUserId,
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
@@ -1683,7 +1768,36 @@ export function OrganizationEmployees() {
             </div>
 
             {/* Drawer Scrollable Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+            <div ref={drawerBodyRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+              {/* TOP DRAWER PENDING ERRORS POPUP */}
+              {drawerPendingErrors.length > 0 && (
+                <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-md text-xs text-rose-900 space-y-2.5 animate-fade-in shrink-0">
+                  <div className="flex items-center justify-between font-bold text-rose-900 border-b border-rose-200/80 pb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white text-xs font-black shadow-xs">
+                        !
+                      </span>
+                      <span>Action Required: {drawerPendingErrors.length} pending item{drawerPendingErrors.length > 1 ? "s" : ""}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerPendingErrors([])}
+                      className="text-rose-400 hover:text-rose-800 text-sm font-bold cursor-pointer transition"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-rose-700 font-medium">
+                    Please complete the missing details highlighted below to save this employee profile:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-rose-800">
+                    {drawerPendingErrors.map((err, idx) => (
+                      <li key={idx}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* SECTION 1: EMPLOYEE DETAILS */}
               <div className="space-y-3.5">
                 <div className="flex items-center justify-between">
@@ -1703,77 +1817,136 @@ export function OrganizationEmployees() {
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label
-                      className="block text-xs font-semibold text-neutral-700"
+                      className={`block text-xs font-semibold ${pendingFields.firstName ? "text-rose-600" : "text-neutral-700"}`}
                       htmlFor="first-name"
                     >
                       First Name <span className="text-rose-500">*</span>
                     </label>
                     <input
+                      ref={firstNameInputRef}
                       id="first-name"
                       type="text"
                       value={formFirstName}
-                      onChange={(e) => setFormFirstName(e.target.value)}
+                      onChange={(e) => {
+                        setFormFirstName(e.target.value);
+                        if (pendingFields.firstName && e.target.value.trim()) {
+                          setPendingFields((prev) => ({ ...prev, firstName: false }));
+                        }
+                      }}
                       placeholder="e.g. John"
-                      className="w-full text-sm rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-900 focus:border-black focus:ring-1 focus:ring-black transition"
+                      className={`w-full text-sm rounded-md border px-3 py-2 text-neutral-900 focus:outline-none transition ${
+                        pendingFields.firstName
+                          ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
+                          : "border-neutral-300 bg-white focus:border-black focus:ring-1 focus:ring-black"
+                      }`}
                     />
+                    {pendingFields.firstName && (
+                      <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                        <span>⚠️</span> First Name is required.
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-1.5">
                     <label
-                      className="block text-xs font-semibold text-neutral-700"
+                      className={`block text-xs font-semibold ${pendingFields.lastName ? "text-rose-600" : "text-neutral-700"}`}
                       htmlFor="last-name"
                     >
                       Last Name <span className="text-rose-500">*</span>
                     </label>
                     <input
+                      ref={lastNameInputRef}
                       id="last-name"
                       type="text"
                       value={formLastName}
-                      onChange={(e) => setFormLastName(e.target.value)}
+                      onChange={(e) => {
+                        setFormLastName(e.target.value);
+                        if (pendingFields.lastName && e.target.value.trim()) {
+                          setPendingFields((prev) => ({ ...prev, lastName: false }));
+                        }
+                      }}
                       placeholder="e.g. Doe"
-                      className="w-full text-sm rounded-md border border-neutral-300 bg-white px-3 py-2 text-neutral-900 focus:border-black focus:ring-1 focus:ring-black transition"
+                      className={`w-full text-sm rounded-md border px-3 py-2 text-neutral-900 focus:outline-none transition ${
+                        pendingFields.lastName
+                          ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
+                          : "border-neutral-300 bg-white focus:border-black focus:ring-1 focus:ring-black"
+                      }`}
                     />
+                    {pendingFields.lastName && (
+                      <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                        <span>⚠️</span> Last Name is required.
+                      </p>
+                    )}
                   </div>
                 </div>
 
                 {/* Email Address */}
                 <div className="space-y-1.5">
                   <label
-                    className="block text-xs font-semibold text-neutral-700"
+                    className={`block text-xs font-semibold ${pendingFields.email ? "text-rose-600" : "text-neutral-700"}`}
                     htmlFor="user-identifier"
                   >
                     Email Address <span className="text-rose-500">*</span>
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
-                      <EnvelopeIcon className="w-4 h-4" />
+                      <EnvelopeIcon className={`w-4 h-4 ${pendingFields.email ? "text-rose-500" : "text-neutral-400"}`} />
                     </div>
                     <input
+                      ref={emailInputRef}
                       id="user-identifier"
-                      type="text"
-                      disabled={drawerMode === "edit"}
+                      type="email"
                       value={formUserIdentifier}
-                      onChange={(e) => setFormUserIdentifier(e.target.value)}
+                      onChange={(e) => {
+                        setFormUserIdentifier(e.target.value);
+                        if (pendingFields.email && isValidEmail(e.target.value.trim())) {
+                          setPendingFields((prev) => ({ ...prev, email: false }));
+                        }
+                      }}
                       placeholder="e.g. john@gmail.com"
-                      className="w-full text-sm rounded-md border border-neutral-300 bg-white pl-9 pr-3 py-2 text-neutral-800 focus:border-black focus:ring-1 focus:ring-black transition disabled:bg-neutral-50 disabled:text-neutral-500"
+                      className={`w-full text-sm rounded-md border pl-9 pr-3 py-2 text-neutral-800 focus:outline-none transition ${
+                        pendingFields.email
+                          ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
+                          : "border-neutral-300 bg-white focus:border-black focus:ring-1 focus:ring-black"
+                      }`}
                     />
                   </div>
-                  <p className="text-[12px] text-neutral-500">
-                    Enter the employee's email address.
-                  </p>
+                  {pendingFields.email ? (
+                    <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                      <span>⚠️</span> {formUserIdentifier.trim() ? "Please enter a valid email address (e.g. name@domain.com)." : "Email Address is required."}
+                    </p>
+                  ) : (
+                    <p className="text-[12px] text-neutral-500">
+                      Enter the employee's email address.
+                    </p>
+                  )}
                 </div>
               </div>
 
               <hr className="border-neutral-200" />
 
               {/* SECTION 2: STAFF ROLES */}
-              <div className="space-y-3">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-                    STAFF ROLES
-                  </h3>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Select what this employee does in the restaurant.
-                  </p>
+              <div
+                ref={staffRolesSectionRef}
+                className={`space-y-3 transition p-2.5 rounded-xl ${
+                  pendingFields.staffRoles
+                    ? "border-2 border-rose-400 bg-rose-50/40 ring-2 ring-rose-200"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className={`text-xs font-bold uppercase tracking-wider ${pendingFields.staffRoles ? "text-rose-700" : "text-neutral-600"}`}>
+                      STAFF ROLES <span className="text-rose-500">*</span>
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      Select what this employee does in the restaurant.
+                    </p>
+                  </div>
+                  {pendingFields.staffRoles && (
+                    <span className="text-[11px] font-bold text-rose-600 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                      <span>⚠️</span> Select a Role
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-2.5">
@@ -1784,11 +1957,18 @@ export function OrganizationEmployees() {
                     return (
                       <label
                         key={card.key}
-                        onClick={() => handleSelectRole(card.key)}
+                        onClick={() => {
+                          handleSelectRole(card.key);
+                          if (pendingFields.staffRoles) {
+                            setPendingFields((prev) => ({ ...prev, staffRoles: false }));
+                          }
+                        }}
                         className={`flex flex-col justify-between p-3 rounded-lg cursor-pointer select-none transition ${
                           isChecked
                             ? "border-2 border-black bg-neutral-50 shadow-sm"
-                            : "border border-neutral-200 hover:border-neutral-300 bg-white"
+                            : pendingFields.staffRoles
+                              ? "border border-rose-300 bg-white hover:border-rose-400"
+                              : "border border-neutral-200 hover:border-neutral-300 bg-white"
                         }`}
                       >
                         <div>
@@ -1831,14 +2011,28 @@ export function OrganizationEmployees() {
               <hr className="border-neutral-200" />
 
               {/* SECTION 3: MODULE ACCESS */}
-              <div className="space-y-3">
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-600">
-                    What can this employee access?
-                  </h3>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    Select the areas this employee needs to use.
-                  </p>
+              <div
+                ref={moduleAccessSectionRef}
+                className={`space-y-3 transition p-2.5 rounded-xl ${
+                  pendingFields.moduleAccess
+                    ? "border-2 border-rose-400 bg-rose-50/40 ring-2 ring-rose-200"
+                    : ""
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className={`text-xs font-bold uppercase tracking-wider ${pendingFields.moduleAccess ? "text-rose-700" : "text-neutral-600"}`}>
+                      What can this employee access? <span className="text-rose-500">*</span>
+                    </h3>
+                    <p className="text-xs text-neutral-500 mt-0.5">
+                      Select the areas this employee needs to use.
+                    </p>
+                  </div>
+                  {pendingFields.moduleAccess && (
+                    <span className="text-[11px] font-bold text-rose-600 bg-rose-100 border border-rose-300 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+                      <span>⚠️</span> Select Modules
+                    </span>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-3 gap-2">
@@ -1848,11 +2042,18 @@ export function OrganizationEmployees() {
                     return (
                       <label
                         key={mod.key}
-                        onClick={() => handleToggleModule(mod.key)}
+                        onClick={() => {
+                          handleToggleModule(mod.key);
+                          if (pendingFields.moduleAccess) {
+                            setPendingFields((prev) => ({ ...prev, moduleAccess: false }));
+                          }
+                        }}
                         className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer select-none transition ${
                           isChecked
                             ? "border-2 border-black bg-neutral-50 shadow-sm"
-                            : "border border-neutral-200 hover:border-neutral-300 bg-white"
+                            : pendingFields.moduleAccess
+                              ? "border border-rose-300 bg-white hover:border-rose-400"
+                              : "border border-neutral-200 hover:border-neutral-300 bg-white"
                         }`}
                       >
                         <input

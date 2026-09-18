@@ -888,14 +888,94 @@ describe("Organization Users Domain Unit & Business Logic Tests", () => {
     // Token signed for store-beta, but target store is store-alpha
     const badToken = await generateHmacSha256(TEST_SECRET, `store-beta:${now}`);
 
+    try {
+      await expect(
+        t.mutation(api.organizationUsers.syncStaffFromMaster, {
+          slug: "store-beta",
+          provisioningToken: badToken,
+          timestamp: now,
+          defaultClerkId: "user_clerk_cross_1",
+          role: "cashier",
+        })
+      ).rejects.toThrow('Store slug mismatch: target store "store-alpha" does not match provisioning token slug "store-beta".');
+    } finally {
+      delete process.env.PROVISIONING_SECRET;
+    }
+  });
+
+  // 29. Employee Email Validation Unit Tests (isValidEmail & validateEmail)
+  test("29. Employee Email Format Validation accepts valid and rejects invalid email formats", async () => {
+    const { isValidEmail } = await import("./organizationUsers");
+
+    expect(isValidEmail("john@example.com")).toBe(true);
+    expect(isValidEmail("john.doe@gmail.com")).toBe(true);
+    expect(isValidEmail("user@company.in")).toBe(true);
+
+    expect(isValidEmail("user_3J7g7H9OB4VcPPyJuSSXzKXuV2q")).toBe(false);
+    expect(isValidEmail("john@")).toBe(false);
+    expect(isValidEmail("@gmail.com")).toBe(false);
+    expect(isValidEmail("john@gmail")).toBe(false);
+    expect(isValidEmail("john.com")).toBe(false);
+  });
+
+  // 30. organizationUsers.create rejects invalid email addresses
+  test("30. organizationUsers.create accepts valid email and rejects invalid email format", async () => {
+    const { orgId, asAdmin } = await setupStoreWithAdmin();
+
+    // Valid email creation
+    const validStaffId = await asAdmin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "john@example.com",
+      email: "john@example.com",
+      userType: ["cashier"],
+    });
+    expect(validStaffId).toBeDefined();
+
+    // Invalid email creation
     await expect(
-      t.mutation(api.organizationUsers.syncStaffFromMaster, {
-        slug: "store-beta",
-        provisioningToken: badToken,
-        timestamp: now,
-        defaultClerkId: "user_clerk_cross_1",
-        role: "cashier",
+      asAdmin.mutation(api.organizationUsers.create, {
+        organizationId: orgId,
+        userId: "invalid@staff",
+        email: "user_3J7g7H9OB4VcPPyJuSSXzKXuV2q",
+        userType: ["cashier"],
       })
-    ).rejects.toThrow('Store slug mismatch: target store "store-alpha" does not match provisioning token slug "store-beta".');
+    ).rejects.toThrow("Please enter a valid email address.");
+
+    await expect(
+      asAdmin.mutation(api.organizationUsers.create, {
+        organizationId: orgId,
+        userId: "john@gmail",
+        userType: ["cashier"],
+      })
+    ).rejects.toThrow("Please enter a valid email address.");
+  });
+
+  // 31. organizationUsers.update rejects invalid email addresses
+  test("31. organizationUsers.update accepts valid email and rejects invalid email format", async () => {
+    const { orgId, asAdmin } = await setupStoreWithAdmin();
+
+    const staffId = await asAdmin.mutation(api.organizationUsers.create, {
+      organizationId: orgId,
+      userId: "staff_valid@example.com",
+      email: "staff_valid@example.com",
+      userType: ["waiter"],
+    });
+
+    // Valid email update
+    await asAdmin.mutation(api.organizationUsers.update, {
+      id: staffId,
+      email: "john.doe@gmail.com",
+    });
+
+    const updated = await asAdmin.query(api.organizationUsers.get, { id: staffId });
+    expect(updated?.email).toBe("john.doe@gmail.com");
+
+    // Invalid email update
+    await expect(
+      asAdmin.mutation(api.organizationUsers.update, {
+        id: staffId,
+        email: "user_3J7g7H9OB4VcPPyJuSSXzKXuV2q",
+      })
+    ).rejects.toThrow("Please enter a valid email address.");
   });
 });

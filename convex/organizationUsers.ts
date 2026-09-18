@@ -101,6 +101,26 @@ export function validateAndNormalizeUserTypes(types: string[]): string[] {
 }
 
 /**
+ * Validates email format according to standard specification.
+ */
+export function isValidEmail(email?: string | null): boolean {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim();
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(trimmed);
+}
+
+/**
+ * Validates email format if provided, throwing a user-friendly error message if invalid.
+ */
+export function validateEmail(email?: string | null): void {
+  if (!email || email.trim() === "") return;
+  if (!isValidEmail(email)) {
+    throw new Error("Please enter a valid email address.");
+  }
+}
+
+/**
  * Automatically synchronizes granular CRUD permissions based on userType array.
  * Mirrors legacy Rails `update_permissions` callback:
  * - Injects default CRUD permissions for newly assigned roles.
@@ -265,9 +285,22 @@ export async function requireAdmin(
     (m) => m.deletedAt === undefined && m.userType.some((r) => isAdminRole(r))
   );
 
+  const isSameEmailOwner = Boolean(
+    identity.email &&
+      allMembers.some(
+        (m) =>
+          m.deletedAt === undefined &&
+          m.email?.toLowerCase() === identity.email!.toLowerCase() &&
+          m.userType.some((r) => isAdminRole(r))
+      )
+  );
+
   // 3. Store Owner / Pre-existing Store Repair Check
   const isStoreOwnerOrUnowned = Boolean(
-    !org.ownerClerkId || org.ownerClerkId === identity.subject || activeAdmins.length === 0
+    !org.ownerClerkId ||
+      org.ownerClerkId === identity.subject ||
+      activeAdmins.length === 0 ||
+      isSameEmailOwner
   );
 
   const callerRoles = Array.isArray(callerMember?.userType)
@@ -293,7 +326,7 @@ export async function requireAdmin(
     const now = Date.now();
 
     // Backfill ownerClerkId on organization document if missing or unclaimed
-    if ((!org.ownerClerkId || activeAdmins.length === 0) && "patch" in ctx.db) {
+    if ((!org.ownerClerkId || activeAdmins.length === 0 || isSameEmailOwner) && "patch" in ctx.db) {
       await (ctx as MutationCtx).db.patch(org._id, {
         ownerClerkId: identity.subject,
         updatedAt: now,
@@ -345,7 +378,21 @@ export async function requireMember(
   const tokenRole = (identity as any).role ? String((identity as any).role) : undefined;
   const isTokenAdmin = isAdminRole(tokenRole);
 
-  const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject || nonDeletedMembers.length === 0 || isTokenAdmin;
+  const isSameEmailMember = Boolean(
+    identity.email &&
+      allMembers.some(
+        (m) =>
+          m.deletedAt === undefined &&
+          m.email?.toLowerCase() === identity.email!.toLowerCase()
+      )
+  );
+
+  const isOwnerOrUnowned =
+    !org.ownerClerkId ||
+    org.ownerClerkId === identity.subject ||
+    nonDeletedMembers.length === 0 ||
+    isTokenAdmin ||
+    isSameEmailMember;
 
   if (!callerMember && !isOwnerOrUnowned) {
     throw new Error("Forbidden. Active store membership required.");
@@ -590,6 +637,12 @@ export const create = mutation({
       throw new Error("User ID is required");
     }
 
+    if (args.email !== undefined && args.email.trim() !== "") {
+      validateEmail(args.email);
+    } else if (args.userId.includes("@")) {
+      validateEmail(args.userId);
+    }
+
     const org = await resolveStoreOrganization(ctx, args.organizationId);
 
     // Authorization: If members already exist, require admin rights.
@@ -656,6 +709,10 @@ export const update = mutation({
     const member = await ctx.db.get(args.id);
     if (!member || member.deletedAt !== undefined) {
       throw new Error("Organization user not found");
+    }
+
+    if (args.email !== undefined && args.email.trim() !== "") {
+      validateEmail(args.email);
     }
 
     await requireAdmin(ctx, member.organizationId);
