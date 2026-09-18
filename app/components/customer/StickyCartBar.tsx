@@ -20,7 +20,7 @@ export function StickyCartBar({ table, onViewCart }: StickyCartBarProps) {
   const tableNum = table?.tableNumber || "T12";
 
   return (
-    <div className="sticky bottom-20 z-40 w-full mt-auto mb-2 animate-slide-up">
+    <div className="sticky bottom-[72px] sm:bottom-[76px] z-40 w-full mt-auto mb-2 animate-slide-up">
       <div className="bg-[#4338ca] text-white p-3.5 rounded-2xl shadow-xl flex items-center justify-between gap-3 border border-indigo-400/30 backdrop-blur-xs">
         {/* Left: Cart details */}
         <div className="flex items-center gap-3 min-w-0">

@@ -485,7 +485,7 @@ function CustomerOrderingHomeView({
       />
 
       {/* 2. Main Content Container (Max 480px) */}
-      <main className="flex-1 w-full max-w-[480px] mx-auto pt-24 pb-28 px-4 flex flex-col gap-5">
+      <main className="flex-1 w-full max-w-[480px] mx-auto pt-20 pb-36 px-4 flex flex-col gap-5">
         {/* Table Context Card */}
         <TableContextCard table={table} qr={qr} />
 
