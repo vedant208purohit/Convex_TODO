@@ -110,6 +110,22 @@ export interface SelectedCustomization {
   price: number;
 }
 
+export interface BillSummary {
+  itemTotal: number; // in paise
+  gstRate: number; // e.g. 5
+  gstAmount: number; // in paise
+  serviceTaxRate: number; // e.g. 6
+  serviceTaxAmount: number; // in paise
+  coverCharge: number; // 0 for free dine-in
+  grandTotal: number; // in paise
+  formattedItemTotal: string;
+  formattedGstAmount: string;
+  formattedServiceTaxAmount: string;
+  formattedGrandTotal: string;
+}
+
+export type CustomerServiceMode = "dine_in" | "takeaway" | "delivery";
+
 export interface CartItem {
   cartItemId: string; // composite key
   itemId: string;
