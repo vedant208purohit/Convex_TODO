@@ -33,40 +33,46 @@ export function ServiceModeSwitcher({ table, organization }: ServiceModeSwitcher
         <button
           type="button"
           onClick={() => handleSelectMode("Delivery")}
-          className={`flex-1 py-1.5 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
             selectedMode === "Delivery"
               ? "bg-[#4338ca] text-white shadow-xs"
               : "text-stone-600 hover:text-stone-900"
           }`}
         >
-          <MopedIcon className="w-4 h-4" />
-          <span>Delivery</span>
+          <MopedIcon className={`w-4 h-4 ${selectedMode === "Delivery" ? "text-white" : "text-stone-600"}`} />
+          <span className={selectedMode === "Delivery" ? "text-white font-semibold" : "text-stone-600"}>
+            Delivery
+          </span>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectMode("Dine In")}
-          className={`flex-1 py-1.5 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
             selectedMode === "Dine In"
               ? "bg-[#4338ca] text-white shadow-xs"
               : "text-stone-600 hover:text-stone-900"
           }`}
         >
-          <TableBarIcon className="w-4 h-4" />
-          <span>Dine In</span>
+          <TableBarIcon className={`w-4 h-4 ${selectedMode === "Dine In" ? "text-white" : "text-stone-600"}`} />
+          <span className={selectedMode === "Dine In" ? "text-white font-semibold" : "text-stone-600"}>
+            Dine In
+          </span>
         </button>
 
         <button
           type="button"
           onClick={() => handleSelectMode("Take Away")}
-          className={`flex-1 py-1.5 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
+          className={`flex-1 py-2 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
             selectedMode === "Take Away"
               ? "bg-[#4338ca] text-white shadow-xs"
               : "text-stone-600 hover:text-stone-900"
           }`}
         >
-          <ShoppingBagIcon className="w-4 h-4" />
-          <span>Take Away</span>
+          <ShoppingBagIcon className={`w-4 h-4 ${selectedMode === "Take Away" ? "text-white" : "text-stone-600"}`} />
+          <span className={selectedMode === "Take Away" ? "text-white font-semibold" : "text-stone-600"}>
+            Take Away
+          </span>
         </button>
       </div>
 

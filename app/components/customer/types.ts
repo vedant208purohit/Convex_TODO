@@ -97,6 +97,7 @@ export interface CustomerCategory {
     name: string;
     position: number;
     published: boolean;
+    imageUrl?: string | null;
     items: CustomerCategoryItem[];
   };
 }
