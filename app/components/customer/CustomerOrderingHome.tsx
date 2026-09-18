@@ -309,6 +309,7 @@ function CustomerOrderingHomeView({
           name: item.category.name,
           position: item.category.position,
           published: item.category.published ?? true,
+          imageUrl: item.category.imageUrl || null,
           items: (item.category.items || []).map((ci: any) => ({
             category_item_id: ci.category_item_id,
             customizations: ci.customizations || [],
@@ -340,6 +341,15 @@ function CustomerOrderingHomeView({
     }
     return DEMO_CATEGORIES;
   }, [rawMenu]);
+
+  // Smooth scroll to products section
+  const scrollToProducts = () => {
+    onSelectCategory(null);
+    const el = document.getElementById("products-section");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
 
   // Flatten and filter products
   const displayProducts: CustomerMenuItem[] = useMemo(() => {
@@ -396,12 +406,7 @@ function CustomerOrderingHomeView({
         {/* Promotional / Hero Card */}
         <PromotionHeroCard
           slides={carouselSlides}
-          onExploreSpecials={() => {
-            // Select first category or scroll to popular
-            if (categories.length > 0) {
-              onSelectCategory(categories[0].category.id);
-            }
-          }}
+          onExploreSpecials={scrollToProducts}
         />
 
         {/* Menu Category Scroll */}
@@ -409,6 +414,7 @@ function CustomerOrderingHomeView({
           categories={categories}
           selectedCategoryId={selectedCategoryId}
           onSelectCategory={onSelectCategory}
+          onViewAllClick={scrollToProducts}
         />
 
         {/* Popular Right Now Products */}
