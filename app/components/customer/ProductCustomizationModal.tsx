@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { CustomerMenuItem, CustomizationGroup, SelectedCustomization } from "./types";
 import { VegFssaiBadge, NonVegFssaiBadge, PlusIcon, MinusIcon } from "./CustomerIcons";
 
@@ -32,6 +33,12 @@ export function ProductCustomizationModal({
   onAddToCart,
   currencySymbol = "₹",
 }: ProductCustomizationModalProps) {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const customizations: CustomizationGroup[] = useMemo(() => {
     return item.customizations || [];
   }, [item]);
@@ -66,7 +73,9 @@ export function ProductCustomizationModal({
     customizations.forEach((group) => {
       // If group is required single-select, select the first available option by default
       if (group.required && group.max_selected === 1 && group.customization_items?.length > 0) {
-        const firstAvailable = group.customization_items.find((i) => i.is_available !== false) || group.customization_items[0];
+        const firstAvailable =
+          group.customization_items.find((i) => i.is_available !== false) ||
+          group.customization_items[0];
         if (firstAvailable) {
           initialOptions[group.id] = [firstAvailable.id];
         }
@@ -79,6 +88,18 @@ export function ProductCustomizationModal({
     setSelectedPreferences([]);
     setQuantity(1);
   }, [isOpen, item.id, customizations]);
+
+  // Prevent background body scroll when modal is open on mobile
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -171,21 +192,22 @@ export function ProductCustomizationModal({
   const badgeText = item.badge || (item.mark_as_bestseller ? "Bestseller" : undefined);
 
   // Resolved preferences list (from prepGroups if present, else fallback)
-  const availablePreferences: string[] = prepGroups.length > 0
-    ? prepGroups.flatMap((g) => g.customization_items.map((i) => i.name))
-    : DEFAULT_PREFERENCES;
+  const availablePreferences: string[] =
+    prepGroups.length > 0
+      ? prepGroups.flatMap((g) => g.customization_items.map((i) => i.name))
+      : DEFAULT_PREFERENCES;
 
-  return (
+  const modalContent = (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex flex-col justify-end sm:justify-center items-center bg-black/65 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] max-h-[90vh] rounded-t-[28px] shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300"
+        className="bg-white w-full max-w-[480px] max-h-[85dvh] sm:max-h-[85vh] rounded-t-[28px] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Grabber Handle & Sheet Header */}
-        <div className="pt-2.5 pb-2 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0">
+        <div className="pt-3 pb-2 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0">
           <div className="w-10 h-1 bg-stone-300 rounded-full mb-2" />
           <div className="w-full flex items-center justify-between">
             <span className="text-[11px] font-extrabold tracking-widest text-stone-500 uppercase">
@@ -203,7 +225,7 @@ export function ProductCustomizationModal({
         </div>
 
         {/* Scrollable Modal Body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-5 scrollbar-thin">
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-5 scrollbar-thin">
           {/* 1. Product Summary Card */}
           <div className="flex items-start gap-3 p-3 bg-[#f8f9ff] rounded-2xl border border-stone-200/60">
             {/* Product Image */}
@@ -410,7 +432,7 @@ export function ProductCustomizationModal({
         </div>
 
         {/* Sticky Bottom Action Area */}
-        <div className="p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-3 flex-shrink-0">
+        <div className="p-4 pb-6 sm:pb-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
           {/* Quantity Stepper */}
           <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1.5 shadow-xs h-11">
             <button
@@ -451,4 +473,10 @@ export function ProductCustomizationModal({
       </div>
     </div>
   );
+
+  if (mounted && typeof document !== "undefined") {
+    return createPortal(modalContent, document.body);
+  }
+
+  return modalContent;
 }
