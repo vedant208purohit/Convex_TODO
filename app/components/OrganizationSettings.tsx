@@ -225,6 +225,9 @@ export function OrganizationSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fssaiFileInputRef = useRef<HTMLInputElement>(null);
   const gstFileInputRef = useRef<HTMLInputElement>(null);
+  const taxGroupNameInputRef = useRef<HTMLInputElement>(null);
+  const taxCompInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const taxDrawerScrollRef = useRef<HTMLDivElement>(null);
 
   const [activeTab, setActiveTab] = useState<TabType>("details");
 
@@ -244,6 +247,8 @@ export function OrganizationSettings() {
     { id: "2", name: "State GST", code: "SGST", rate: "2.5" },
   ]);
   const [hiddenFallbackGroups, setHiddenFallbackGroups] = useState<string[]>([]);
+  const [taxGroupPendingErrors, setTaxGroupPendingErrors] = useState<string[]>([]);
+  const [taxGroupPendingFields, setTaxGroupPendingFields] = useState<Record<string, boolean>>({});
 
   // Popover States for Timings Edit
   const [activeCopyMenu, setActiveCopyMenu] = useState<string | null>(null);
@@ -547,6 +552,8 @@ export function OrganizationSettings() {
     setTaxGroupName("");
     setTaxGroupMode(formData.inclusiveGst ? "Inclusive" : "Exclusive");
     setTaxComponents([{ id: "1", name: "", code: "", rate: "" }]);
+    setTaxGroupPendingErrors([]);
+    setTaxGroupPendingFields({});
     setIsTaxGroupDrawerOpen(true);
     setTimeout(() => setIsTaxGroupDrawerVisible(true), 20);
   };
@@ -569,6 +576,8 @@ export function OrganizationSettings() {
         rate: c.rate,
       }))
     );
+    setTaxGroupPendingErrors([]);
+    setTaxGroupPendingFields({});
     setIsTaxGroupDrawerOpen(true);
     setTimeout(() => setIsTaxGroupDrawerVisible(true), 20);
   };
@@ -591,6 +600,8 @@ export function OrganizationSettings() {
   };
 
   const handleCloseTaxGroupDrawer = () => {
+    setTaxGroupPendingErrors([]);
+    setTaxGroupPendingFields({});
     setIsTaxGroupDrawerVisible(false);
     setTimeout(() => setIsTaxGroupDrawerOpen(false), 300);
   };
@@ -606,6 +617,16 @@ export function OrganizationSettings() {
   // Remove component row from Tax Group drawer
   const handleRemoveComponentRow = (id: string) => {
     if (taxComponents.length === 1) return;
+    delete taxCompInputRefs.current[`comp_name_${id}`];
+    delete taxCompInputRefs.current[`comp_code_${id}`];
+    delete taxCompInputRefs.current[`comp_rate_${id}`];
+    setTaxGroupPendingFields((prev) => {
+      const copy = { ...prev };
+      delete copy[`comp_name_${id}`];
+      delete copy[`comp_code_${id}`];
+      delete copy[`comp_rate_${id}`];
+      return copy;
+    });
     setTaxComponents((prev) => prev.filter((c) => c.id !== id));
   };
 
@@ -614,14 +635,89 @@ export function OrganizationSettings() {
     setTaxComponents((prev) =>
       prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
     );
+    const key =
+      field === "name"
+        ? `comp_name_${id}`
+        : field === "code"
+        ? `comp_code_${id}`
+        : field === "rate"
+        ? `comp_rate_${id}`
+        : null;
+    if (key && taxGroupPendingFields[key]) {
+      setTaxGroupPendingFields((prev) => {
+        const copy = { ...prev };
+        delete copy[key];
+        return copy;
+      });
+      setTaxGroupPendingErrors((prev) =>
+        prev.filter((msg) =>
+          !msg.toLowerCase().includes(field === "name" ? "component" : field === "code" ? "code" : "rate")
+        )
+      );
+    }
   };
 
   // Save Tax Group directly into Convex Database (`taxComponents` and `taxGroups` tables)
   const handleSaveTaxGroup = async () => {
+    const errors: string[] = [];
+    const pending: Record<string, boolean> = {};
+
     if (!taxGroupName.trim()) {
-      setErrorMessage("Tax Group Name is required.");
+      errors.push("Tax Group Name is required.");
+      pending["taxGroupName"] = true;
+    }
+
+    if (taxComponents.length === 0) {
+      errors.push("At least one Tax Component is required.");
+    } else {
+      taxComponents.forEach((comp, idx) => {
+        const rowNum = idx + 1;
+        if (!comp.name.trim()) {
+          errors.push(`Tax Component #${rowNum} Name is required.`);
+          pending[`comp_name_${comp.id}`] = true;
+        }
+        if (!comp.code.trim()) {
+          errors.push(`Tax Component #${rowNum} Code is required.`);
+          pending[`comp_code_${comp.id}`] = true;
+        }
+        if (comp.rate === "" || isNaN(parseFloat(comp.rate)) || parseFloat(comp.rate) < 0) {
+          errors.push(`Tax Component #${rowNum} Rate must be a valid non-negative number.`);
+          pending[`comp_rate_${comp.id}`] = true;
+        }
+      });
+    }
+
+    if (errors.length > 0) {
+      setTaxGroupPendingErrors(errors);
+      setTaxGroupPendingFields(pending);
+
+      setTimeout(() => {
+        if (pending["taxGroupName"] && taxGroupNameInputRef.current) {
+          taxGroupNameInputRef.current.focus();
+          taxGroupNameInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        } else {
+          const firstCompId = taxComponents.find(
+            (c) => pending[`comp_name_${c.id}`] || pending[`comp_code_${c.id}`] || pending[`comp_rate_${c.id}`]
+          )?.id;
+          if (firstCompId) {
+            const targetKey = pending[`comp_name_${firstCompId}`]
+              ? `comp_name_${firstCompId}`
+              : pending[`comp_code_${firstCompId}`]
+              ? `comp_code_${firstCompId}`
+              : `comp_rate_${firstCompId}`;
+            const el = taxCompInputRefs.current[targetKey];
+            if (el) {
+              el.focus();
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }
+        }
+      }, 50);
       return;
     }
+
+    setTaxGroupPendingErrors([]);
+    setTaxGroupPendingFields({});
 
     if (!org?._id) {
       setErrorMessage("No organization context found.");
@@ -2215,69 +2311,69 @@ export function OrganizationSettings() {
             </div>
 
             {/* Drawer Content (Scrollable) */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-6">
+            <div ref={taxDrawerScrollRef} className="flex-1 overflow-y-auto p-8 space-y-6">
+              {/* Action Required Banner for Tax Group Drawer */}
+              {taxGroupPendingErrors.length > 0 && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
+                  <div className="flex items-start gap-3">
+                    <span className="text-lg">⚠️</span>
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-rose-900">
+                        Action Required ({taxGroupPendingErrors.length} pending field{taxGroupPendingErrors.length > 1 ? "s" : ""})
+                      </h4>
+                      <p className="mt-1 text-xs text-rose-700">
+                        Please fill in all required fields before saving:
+                      </p>
+                      <ul className="mt-2 list-inside list-disc text-xs font-medium text-rose-800 space-y-1">
+                        {taxGroupPendingErrors.map((err, idx) => (
+                          <li key={idx}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Section 1: Tax Group Details */}
               <div className="space-y-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-[#6f655e]">DETAILS</h3>
                 
-                {/* <div>
-                  <label className="block text-sm font-medium text-[#1f1a17]">Tax Group Name</label>
+                <div>
+                  <label className="block text-sm font-medium text-[#1f1a17]">
+                    Tax Group Name <span className="text-red-600">*</span>
+                  </label>
                   <input
+                    ref={taxGroupNameInputRef}
                     type="text"
                     value={taxGroupName}
-                    onChange={(e) => setTaxGroupName(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTaxGroupName(val);
+                      if (taxGroupPendingFields["taxGroupName"]) {
+                        setTaxGroupPendingFields((prev) => {
+                          const copy = { ...prev };
+                          delete copy["taxGroupName"];
+                          return copy;
+                        });
+                        setTaxGroupPendingErrors((prev) =>
+                          prev.filter((msg) => !msg.toLowerCase().includes("group name"))
+                        );
+                      }
+                    }}
                     placeholder="e.g. GST"
-                    style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
+                    style={{ backgroundColor: taxGroupPendingFields["taxGroupName"] ? "#fff5f5" : "#fdf8f7", color: "#1f1a17" }}
+                    className={`mt-2 w-full rounded-xl border px-4 py-3 text-sm focus:outline-none transition-all ${
+                      taxGroupPendingFields["taxGroupName"]
+                        ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#1f1a17]"
+                        : "border-[#eadfd6] bg-[#fdf8f7] text-[#1f1a17] focus:border-[#1f1a17]"
+                    }`}
                   />
-                </div> */}
-<div>
-  <label className="block text-sm font-medium text-[#1f1a17]">
-    Tax Group Name <span className="text-red-600">*</span>
-  </label>
-  <input
-    type="text"
-    value={taxGroupName}
-    onChange={(e) => setTaxGroupName(e.target.value)}
-    placeholder="e.g. GST"
-    style={{ backgroundColor: "#fdf8f7", color: "#1f1a17" }}
-    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] focus:border-[#1f1a17] focus:outline-none"
-  />
-</div>
-                {/* Temporarily disabled Tax Mode selection in Tax Group drawer
-                <div>
-                  <label className="block text-sm font-medium text-[#1f1a17]">Tax Mode</label>
-                  <div className="mt-2 flex rounded-xl border border-[#eadfd6] bg-[#f5efec] p-1">
-                    <button
-                      type="button"
-                      onClick={() => setTaxGroupMode("Inclusive")}
-                      className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
-                        taxGroupMode === "Inclusive"
-                          ? "bg-white text-[#1f1a17] shadow-sm font-semibold"
-                          : "text-[#6f655e] hover:text-[#1f1a17]"
-                      }`}
-                    >
-                      Inclusive
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTaxGroupMode("Exclusive")}
-                      className={`flex-1 py-2 text-xs font-medium rounded-lg transition-all ${
-                        taxGroupMode === "Exclusive"
-                          ? "bg-white text-[#1f1a17] shadow-sm font-semibold"
-                          : "text-[#6f655e] hover:text-[#1f1a17]"
-                      }`}
-                    >
-                      Exclusive
-                    </button>
-                  </div>
-                  <p className="mt-2 text-xs text-[#8a7e75]">
-                    {taxGroupMode === "Exclusive"
-                      ? "Exclusive: Tax is added to the item price."
-                      : "Inclusive: Tax is included in the item price."}
-                  </p>
+                  {taxGroupPendingFields["taxGroupName"] && (
+                    <p className="mt-1.5 text-xs font-medium text-rose-600">
+                      ⚠️ Tax Group Name is required.
+                    </p>
+                  )}
                 </div>
-                */}
               </div>
 
               <hr className="border-[#eadfd6]" />
@@ -2295,55 +2391,91 @@ export function OrganizationSettings() {
                 {taxComponents.map((comp) => (
                   <div
                     key={comp.id}
-                    className="flex gap-3 items-end rounded-xl border border-[#eadfd6] bg-[#fbf7f5] p-4"
+                    className="flex gap-3 items-start rounded-xl border border-[#eadfd6] bg-[#fbf7f5] p-4"
                   >
                     <div className="flex-1 space-y-1">
                       <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6f655e]">
-                        Component Name
+                        Component Name <span className="text-red-600">*</span>
                       </label>
                       <input
+                        ref={(el) => {
+                          taxCompInputRefs.current[`comp_name_${comp.id}`] = el;
+                        }}
                         type="text"
                         value={comp.name}
                         onChange={(e) => handleUpdateComponentRow(comp.id, "name", e.target.value)}
                         placeholder="Central GST"
-                        style={{ backgroundColor: "#ffffff", color: "#1f1a17" }}
-                        className="w-full rounded-lg border border-[#eadfd6] bg-white px-3 py-2 text-xs text-[#1f1a17] focus:outline-none"
+                        style={{ backgroundColor: taxGroupPendingFields[`comp_name_${comp.id}`] ? "#fff5f5" : "#ffffff", color: "#1f1a17" }}
+                        className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none transition-all ${
+                          taxGroupPendingFields[`comp_name_${comp.id}`]
+                            ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#1f1a17]"
+                            : "border-[#eadfd6] bg-white text-[#1f1a17] focus:border-[#1f1a17]"
+                        }`}
                       />
+                      {taxGroupPendingFields[`comp_name_${comp.id}`] && (
+                        <p className="mt-1 text-[10px] font-medium text-rose-600">
+                          ⚠️ Component name required.
+                        </p>
+                      )}
                     </div>
 
                     <div className="w-1/4 space-y-1">
                       <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6f655e]">
-                        Code
+                        Code <span className="text-red-600">*</span>
                       </label>
                       <input
+                        ref={(el) => {
+                          taxCompInputRefs.current[`comp_code_${comp.id}`] = el;
+                        }}
                         type="text"
                         value={comp.code}
                         onChange={(e) => handleUpdateComponentRow(comp.id, "code", e.target.value.toUpperCase())}
                         placeholder="CGST"
-                        style={{ backgroundColor: "#ffffff", color: "#1f1a17" }}
-                        className="w-full rounded-lg border border-[#eadfd6] bg-white px-3 py-2 text-xs text-[#1f1a17] uppercase focus:outline-none"
+                        style={{ backgroundColor: taxGroupPendingFields[`comp_code_${comp.id}`] ? "#fff5f5" : "#ffffff", color: "#1f1a17" }}
+                        className={`w-full rounded-lg border px-3 py-2 text-xs uppercase focus:outline-none transition-all ${
+                          taxGroupPendingFields[`comp_code_${comp.id}`]
+                            ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#1f1a17]"
+                            : "border-[#eadfd6] bg-white text-[#1f1a17] focus:border-[#1f1a17]"
+                        }`}
                       />
+                      {taxGroupPendingFields[`comp_code_${comp.id}`] && (
+                        <p className="mt-1 text-[10px] font-medium text-rose-600">
+                          ⚠️ Code required.
+                        </p>
+                      )}
                     </div>
 
                     <div className="w-1/4 space-y-1">
                       <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6f655e]">
-                        Rate (%)
+                        Rate (%) <span className="text-red-600">*</span>
                       </label>
                       <input
+                        ref={(el) => {
+                          taxCompInputRefs.current[`comp_rate_${comp.id}`] = el;
+                        }}
                         type="number"
                         step="0.1"
                         value={comp.rate}
                         onChange={(e) => handleUpdateComponentRow(comp.id, "rate", e.target.value)}
                         placeholder="2.5"
-                        style={{ backgroundColor: "#ffffff", color: "#1f1a17" }}
-                        className="w-full rounded-lg border border-[#eadfd6] bg-white px-3 py-2 text-xs text-[#1f1a17] focus:outline-none text-right"
+                        style={{ backgroundColor: taxGroupPendingFields[`comp_rate_${comp.id}`] ? "#fff5f5" : "#ffffff", color: "#1f1a17" }}
+                        className={`w-full rounded-lg border px-3 py-2 text-xs focus:outline-none text-right transition-all ${
+                          taxGroupPendingFields[`comp_rate_${comp.id}`]
+                            ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#1f1a17]"
+                            : "border-[#eadfd6] bg-white text-[#1f1a17] focus:border-[#1f1a17]"
+                        }`}
                       />
+                      {taxGroupPendingFields[`comp_rate_${comp.id}`] && (
+                        <p className="mt-1 text-[10px] font-medium text-rose-600 text-right">
+                          ⚠️ Rate required.
+                        </p>
+                      )}
                     </div>
 
                     <button
                       type="button"
                       onClick={() => handleRemoveComponentRow(comp.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded text-[#8a7e75] hover:text-red-600 transition"
+                      className="flex h-9 w-9 items-center justify-center rounded text-[#8a7e75] hover:text-red-600 transition mt-5 shrink-0"
                       title="Remove component"
                     >
                       🗑️
@@ -2412,7 +2544,7 @@ export function OrganizationSettings() {
               <button
                 type="button"
                 onClick={handleSaveTaxGroup}
-                disabled={!taxGroupName.trim() || isSaving}
+                disabled={isSaving}
                 className="flex h-10 items-center justify-center rounded-full bg-[#191513] px-6 text-xs font-medium text-white shadow-sm transition hover:bg-[#2e2824] disabled:opacity-40"
               >
                 {isSaving ? "Saving..." : "Save Changes"}
