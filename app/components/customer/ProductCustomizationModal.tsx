@@ -199,12 +199,15 @@ export function ProductCustomizationModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex flex-col justify-end sm:justify-center items-center bg-black/65 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 backdrop-blur-xs p-3 sm:p-4 transition-opacity animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] max-h-[85dvh] sm:max-h-[85vh] rounded-t-[28px] sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom duration-300 relative"
+        className="bg-white w-full max-w-[440px] h-[82vh] h-[82dvh] max-h-[580px] rounded-3xl shadow-2xl flex flex-col min-h-0 overflow-hidden relative animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
+        style={{
+          maxHeight: "min(580px, 82vh)",
+        }}
       >
         {/* Grabber Handle & Sheet Header */}
         <div className="pt-3 pb-2 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0">
@@ -225,7 +228,7 @@ export function ProductCustomizationModal({
         </div>
 
         {/* Scrollable Modal Body */}
-        <div className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-5 scrollbar-thin">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-5 scrollbar-thin">
           {/* 1. Product Summary Card */}
           <div className="flex items-start gap-3 p-3 bg-[#f8f9ff] rounded-2xl border border-stone-200/60">
             {/* Product Image */}
@@ -432,9 +435,9 @@ export function ProductCustomizationModal({
         </div>
 
         {/* Sticky Bottom Action Area */}
-        <div className="p-4 pb-6 sm:pb-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.04)]">
+        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
           {/* Quantity Stepper */}
-          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1.5 shadow-xs h-11">
+          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1.5 shadow-xs h-11 flex-shrink-0">
             <button
               type="button"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
