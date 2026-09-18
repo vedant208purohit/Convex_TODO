@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -166,6 +166,19 @@ export function OrganizationWaiters() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Drawer Validation & Pending Field State
+  const [drawerPendingErrors, setDrawerPendingErrors] = useState<string[]>([]);
+  const [pendingFields, setPendingFields] = useState<{
+    firstName?: boolean;
+    lastName?: boolean;
+    waiterCode?: boolean;
+  }>({});
+
+  // Element Refs for Auto-Focus & Auto-Scroll
+  const firstNameInputRef = useRef<HTMLInputElement>(null);
+  const lastNameInputRef = useRef<HTMLInputElement>(null);
+  const waiterCodeInputRef = useRef<HTMLInputElement>(null);
+
   // Delete Modal Confirmation State
   const [deletingWaiter, setDeletingWaiter] = useState<any | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -198,6 +211,8 @@ export function OrganizationWaiters() {
     setLastName("");
     setWaiterCode("");
     setFormError(null);
+    setDrawerPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(true);
   };
 
@@ -208,6 +223,8 @@ export function OrganizationWaiters() {
     setLastName(waiter.lastName || "");
     setWaiterCode(waiter.waiterCode || "");
     setFormError(null);
+    setDrawerPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(true);
   };
 
@@ -216,6 +233,8 @@ export function OrganizationWaiters() {
     setIsDrawerOpen(false);
     setEditingWaiter(null);
     setFormError(null);
+    setDrawerPendingErrors([]);
+    setPendingFields({});
   };
 
   // Form Submit Handler
@@ -227,11 +246,48 @@ export function OrganizationWaiters() {
     const trimmedLast = lastName.trim();
     const trimmedCode = waiterCode.trim();
 
+    const errors: string[] = [];
+    const pending: {
+      firstName?: boolean;
+      lastName?: boolean;
+      waiterCode?: boolean;
+    } = {};
+
     if (!trimmedFirst) {
-      setFormError("First name is required.");
+      errors.push("First Name is missing");
+      pending.firstName = true;
+    }
+
+    if (!trimmedLast) {
+      errors.push("Last Name is missing");
+      pending.lastName = true;
+    }
+
+    if (!trimmedCode) {
+      errors.push("Waiter Code is missing");
+      pending.waiterCode = true;
+    }
+
+    if (errors.length > 0) {
+      setDrawerPendingErrors(errors);
+      setPendingFields(pending);
+
+      // Auto-scroll & Auto-focus to the first pending field
+      if (pending.firstName) {
+        firstNameInputRef.current?.focus();
+        firstNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (pending.lastName) {
+        lastNameInputRef.current?.focus();
+        lastNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else if (pending.waiterCode) {
+        waiterCodeInputRef.current?.focus();
+        waiterCodeInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
       return;
     }
 
+    setDrawerPendingErrors([]);
+    setPendingFields({});
     setIsSubmitting(true);
 
     try {
@@ -563,62 +619,137 @@ export function OrganizationWaiters() {
             onSubmit={handleFormSubmit}
             className="p-7 flex-1 overflow-y-auto space-y-6"
           >
+            {/* TOP DRAWER PENDING ERRORS POPUP */}
+            {drawerPendingErrors.length > 0 && (
+              <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-md text-xs text-rose-900 space-y-2.5 animate-fade-in shrink-0">
+                <div className="flex items-center justify-between font-bold text-rose-900 border-b border-rose-200/80 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white text-xs font-black shadow-xs">
+                      !
+                    </span>
+                    <span>Action Required: {drawerPendingErrors.length} pending item{drawerPendingErrors.length > 1 ? "s" : ""}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setDrawerPendingErrors([])}
+                    className="text-rose-400 hover:text-rose-800 text-sm font-bold cursor-pointer transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <p className="text-[11px] text-rose-700 font-medium">
+                  Please complete the missing details highlighted below to save this waiter profile:
+                </p>
+                <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-rose-800">
+                  {drawerPendingErrors.map((err, idx) => (
+                    <li key={idx}>{err}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Field 1: First Name (Required) */}
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
+              <label className={`block text-[11px] font-semibold tracking-wider uppercase ${pendingFields.firstName ? "text-rose-600" : "text-[#141010]"}`}>
                 FIRST NAME <span className="text-[#ef4444]">*</span>
               </label>
               <input
+                ref={firstNameInputRef}
                 type="text"
                 maxLength={50}
                 value={firstName}
-                onChange={(e) => setFirstName(e.target.value)}
+                onChange={(e) => {
+                  setFirstName(e.target.value);
+                  if (pendingFields.firstName && e.target.value.trim()) {
+                    setPendingFields((prev) => ({ ...prev, firstName: false }));
+                  }
+                }}
                 placeholder="e.g. Rahul"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#e7e5e4] rounded-lg text-[14px] text-[#141010] placeholder-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition"
-              />
-              <p className="text-[12px] text-[#8a7e75]">
-                Enter the waiter's first name.
-              </p>
-            </div>
-
-            {/* Field 2: Last Name (Optional) */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
-                LAST NAME
-              </label>
-              <input
-                type="text"
-                maxLength={50}
-                value={lastName}
-                onChange={(e) => setLastName(e.target.value)}
-                placeholder="e.g. Patel"
-                className="w-full px-3.5 py-2.5 bg-white border border-[#e7e5e4] rounded-lg text-[14px] text-[#141010] placeholder-[#928c8a] focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] transition"
-              />
-              <p className="text-[12px] text-[#8a7e75]">
-                Optional.
-              </p>
-            </div>
-
-            {/* Field 3: Waiter Code (Optional) */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-[#141010] tracking-wider uppercase">
-                WAITER CODE
-              </label>
-              <input
-                type="text"
-                maxLength={20}
-                value={waiterCode}
-                onChange={(e) => setWaiterCode(e.target.value)}
-                placeholder="e.g. W-04"
-                className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-[14px] font-mono text-[#141010] placeholder-[#928c8a] focus:outline-none transition ${
-                  formError
-                    ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-[14px] text-[#141010] placeholder-[#928c8a] focus:outline-none transition ${
+                  pendingFields.firstName
+                    ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
                     : "border-[#e7e5e4] focus:border-[#141010] focus:ring-1 focus:ring-[#141010]"
                 }`}
               />
-              <p className="text-[12px] text-[#8a7e75] leading-relaxed pt-1">
-                A short code used to identify the waiter on orders and receipts. Leave this blank if you don't use waiter codes.
-              </p>
+              {pendingFields.firstName ? (
+                <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                  <span>⚠️</span> First Name is required.
+                </p>
+              ) : (
+                <p className="text-[12px] text-[#8a7e75]">
+                  Enter the waiter's first name.
+                </p>
+              )}
+            </div>
+
+            {/* Field 2: Last Name (Required) */}
+            <div className="space-y-1.5">
+              <label className={`block text-[11px] font-semibold tracking-wider uppercase ${pendingFields.lastName ? "text-rose-600" : "text-[#141010]"}`}>
+                LAST NAME <span className="text-[#ef4444]">*</span>
+              </label>
+              <input
+                ref={lastNameInputRef}
+                type="text"
+                maxLength={50}
+                value={lastName}
+                onChange={(e) => {
+                  setLastName(e.target.value);
+                  if (pendingFields.lastName && e.target.value.trim()) {
+                    setPendingFields((prev) => ({ ...prev, lastName: false }));
+                  }
+                }}
+                placeholder="e.g. Patel"
+                className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-[14px] text-[#141010] placeholder-[#928c8a] focus:outline-none transition ${
+                  pendingFields.lastName
+                    ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
+                    : "border-[#e7e5e4] focus:border-[#141010] focus:ring-1 focus:ring-[#141010]"
+                }`}
+              />
+              {pendingFields.lastName ? (
+                <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                  <span>⚠️</span> Last Name is required.
+                </p>
+              ) : (
+                <p className="text-[12px] text-[#8a7e75]">
+                  Enter the waiter's last name.
+                </p>
+              )}
+            </div>
+
+            {/* Field 3: Waiter Code (Required) */}
+            <div className="space-y-1.5">
+              <label className={`block text-[11px] font-semibold tracking-wider uppercase ${pendingFields.waiterCode ? "text-rose-600" : "text-[#141010]"}`}>
+                WAITER CODE <span className="text-[#ef4444]">*</span>
+              </label>
+              <input
+                ref={waiterCodeInputRef}
+                type="text"
+                maxLength={20}
+                value={waiterCode}
+                onChange={(e) => {
+                  setWaiterCode(e.target.value);
+                  if (pendingFields.waiterCode && e.target.value.trim()) {
+                    setPendingFields((prev) => ({ ...prev, waiterCode: false }));
+                  }
+                }}
+                placeholder="e.g. W-04"
+                className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-[14px] font-mono text-[#141010] placeholder-[#928c8a] focus:outline-none transition ${
+                  pendingFields.waiterCode
+                    ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
+                    : formError
+                      ? "border-red-400 focus:border-red-500 focus:ring-1 focus:ring-red-500"
+                      : "border-[#e7e5e4] focus:border-[#141010] focus:ring-1 focus:ring-[#141010]"
+                }`}
+              />
+              {pendingFields.waiterCode ? (
+                <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                  <span>⚠️</span> Waiter Code is required.
+                </p>
+              ) : (
+                <p className="text-[12px] text-[#8a7e75] leading-relaxed pt-1">
+                  A short unique code used to identify the waiter on orders and receipts.
+                </p>
+              )}
             </div>
 
             {/* Form Error Banner */}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -115,8 +115,9 @@ export function OrganizationPaymentModes() {
   const removeMode = useMutation(api.organizationPaymentModes.remove);
 
   // ------------------------------------------
-  // LOCAL UI STATES
+  // LOCAL UI STATES & REFS
   // ------------------------------------------
+  const inputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   // Toast Banner State
@@ -134,6 +135,8 @@ export function OrganizationPaymentModes() {
     active: true,
   });
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingErrors, setPendingErrors] = useState<string[]>([]);
+  const [pendingFields, setPendingFields] = useState<Record<string, boolean>>({});
 
   // Delete Confirmation Dialog State
   const [deletingItem, setDeletingItem] = useState<PaymentModeDoc | null>(null);
@@ -180,45 +183,77 @@ export function OrganizationPaymentModes() {
   const handleOpenAddDrawer = () => {
     setEditingItem(null);
     setFormData({ name: "", active: true });
+    setPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(true);
   };
 
   const handleOpenEditDrawer = (item: PaymentModeDoc) => {
     setEditingItem(item);
     setFormData({ name: item.name, active: item.active });
+    setPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(true);
   };
 
   const handleCloseDrawer = () => {
     if (isSaving) return;
+    setPendingErrors([]);
+    setPendingFields({});
     setIsDrawerOpen(false);
     setEditingItem(null);
   };
 
   const handleSaveDrawer = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name.trim() || nameError || isSaving) return;
+    const errors: string[] = [];
+    const pending: Record<string, boolean> = {};
+
+    const trimmedName = formData.name.trim();
+
+    if (!trimmedName) {
+      errors.push("Payment Mode Name is required.");
+      pending["name"] = true;
+    } else if (nameError) {
+      errors.push(nameError);
+      pending["name"] = true;
+    }
+
+    if (errors.length > 0) {
+      setPendingErrors(errors);
+      setPendingFields(pending);
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 50);
+      return;
+    }
+
+    setPendingErrors([]);
+    setPendingFields({});
 
     setIsSaving(true);
     try {
       if (editingItem) {
         await updateMode({
           id: editingItem._id,
-          name: formData.name.trim(),
+          name: trimmedName,
           active: formData.active,
         });
         showToast(
-          `Successfully updated ${formData.name.trim()} payment mode.`,
+          `Successfully updated ${trimmedName} payment mode.`,
           "success",
           "Changes sync in real-time across active Cashier POS terminals."
         );
       } else {
         await createMode({
-          name: formData.name.trim(),
+          name: trimmedName,
           active: formData.active,
         });
         showToast(
-          `Successfully created ${formData.name.trim()} payment mode.`,
+          `Successfully created ${trimmedName} payment mode.`,
           "success",
           "New payment mode is now available for cashier checkout."
         );
@@ -579,6 +614,28 @@ export function OrganizationPaymentModes() {
 
             {/* Drawer Body Form */}
             <form onSubmit={handleSaveDrawer} className="flex-1 p-6 space-y-6 overflow-y-auto bg-white">
+              {/* Action Required Banner for Payment Mode Drawer */}
+              {pendingErrors.length > 0 && (
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
+                  <div className="flex items-start gap-3">
+                    <AlertCircleIcon className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-semibold text-rose-900">
+                        Action Required ({pendingErrors.length} pending field{pendingErrors.length > 1 ? "s" : ""})
+                      </h4>
+                      <p className="mt-1 text-xs text-rose-700">
+                        Please fill in all required fields before saving:
+                      </p>
+                      <ul className="mt-2 list-inside list-disc text-xs font-medium text-rose-800 space-y-1">
+                        {pendingErrors.map((err, idx) => (
+                          <li key={idx}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Field 1: PAYMENT MODE NAME */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -592,29 +649,50 @@ export function OrganizationPaymentModes() {
 
                 <div className="relative">
                   <input
+                    ref={inputRef}
                     id="payment-mode-name"
                     type="text"
-                    required
                     value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData({ ...formData, name: val });
+                      if (pendingFields["name"]) {
+                        setPendingFields((prev) => {
+                          const copy = { ...prev };
+                          delete copy["name"];
+                          return copy;
+                        });
+                        setPendingErrors((prev) =>
+                          prev.filter((msg) => !msg.toLowerCase().includes("payment mode name"))
+                        );
+                      }
+                    }}
                     placeholder="Enter payment mode name"
-                    className={`w-full rounded-lg border px-4 py-3 text-sm text-[#141010] placeholder-[#a8a29e] shadow-sm outline-none transition ${
-                      nameError
-                        ? "border-[#ef4444] ring-1 ring-[#ef4444] focus:border-[#ef4444]"
+                    style={{ backgroundColor: pendingFields["name"] ? "#fff5f5" : "#ffffff" }}
+                    className={`w-full rounded-lg border px-4 py-3 text-sm text-[#141010] placeholder-[#a8a29e] shadow-sm outline-none transition-all ${
+                      pendingFields["name"] || nameError
+                        ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#141010] focus:border-rose-500"
                         : "border-[#e7e5e4] focus:border-[#141010] focus:ring-1 focus:ring-[#141010]"
                     }`}
                   />
-                  {nameError && (
-                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-[#ef4444]">
+                  {(nameError || pendingFields["name"]) && (
+                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-rose-600">
                       <AlertCircleIcon className="w-4 h-4" />
                     </div>
                   )}
                 </div>
 
                 {/* Validation Error Message */}
-                {nameError ? (
+                {pendingFields["name"] ? (
                   <div className="flex items-center gap-1.5 pt-0.5">
-                    <span className="text-[#ef4444] text-[13px] leading-none">⚠</span>
+                    <span className="text-rose-600 text-[13px] leading-none">⚠️</span>
+                    <p className="font-sans text-[12px] font-medium text-rose-600 tracking-tight">
+                      Payment Mode Name is required.
+                    </p>
+                  </div>
+                ) : nameError ? (
+                  <div className="flex items-center gap-1.5 pt-0.5">
+                    <span className="text-[#ef4444] text-[13px] leading-none">⚠️</span>
                     <p className="font-sans text-[12px] font-medium text-[#ef4444] tracking-tight">
                       {nameError}
                     </p>
@@ -677,9 +755,9 @@ export function OrganizationPaymentModes() {
                 </button>
                 <button
                   type="submit"
-                  disabled={!formData.name.trim() || !!nameError || isSaving}
+                  disabled={isSaving}
                   className={`rounded-full px-6 py-2.5 text-sm font-medium tracking-tight shadow-md transition-all ${
-                    !formData.name.trim() || !!nameError || isSaving
+                    isSaving
                       ? "bg-[#0c0a09] text-white opacity-60 cursor-not-allowed"
                       : "bg-[#0c0a09] hover:bg-black text-white cursor-pointer"
                   }`}
