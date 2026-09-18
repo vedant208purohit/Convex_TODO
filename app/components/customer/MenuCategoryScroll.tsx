@@ -51,7 +51,7 @@ export function MenuCategoryScroll({
       </div>
 
       {/* Horizontally Scrollable Category Row */}
-      <div className="flex items-start gap-2.5 overflow-x-auto pb-1.5 -mx-4 px-4 scrollbar-none">
+      <div className="flex items-start gap-3 overflow-x-auto py-1.5 -mx-4 px-4 scrollbar-none">
         {categories.map((catObj) => {
           const cat = catObj.category;
           const isSelected = selectedCategoryId === cat.id;
@@ -67,8 +67,8 @@ export function MenuCategoryScroll({
               <div
                 className={`w-16 h-16 rounded-2xl flex flex-col items-center justify-center transition-all duration-200 overflow-hidden relative ${
                   isSelected
-                    ? "bg-[#4338ca] text-white shadow-md scale-105 ring-2 ring-[#4338ca] ring-offset-1"
-                    : "bg-[#eaedff] text-stone-700 hover:bg-[#dae2fd] group-hover:scale-105"
+                    ? "bg-[#4338ca] text-white shadow-md ring-2 ring-[#4338ca]"
+                    : "bg-[#f0f2fe] text-stone-700 hover:bg-[#e2e7fc] border border-stone-200/50"
                 }`}
               >
                 {cat.imageUrl ? (
@@ -94,7 +94,7 @@ export function MenuCategoryScroll({
                   />
                 )}
               </div>
-              <span className={`text-xs font-semibold max-w-[72px] truncate leading-tight ${
+              <span className={`text-xs font-semibold max-w-[76px] truncate leading-tight ${
                 isSelected ? "text-[#4338ca] font-bold" : "text-[#131b2e]"
               }`}>
                 {cat.name}
