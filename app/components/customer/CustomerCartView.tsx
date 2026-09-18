@@ -1,11 +1,10 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState } from "react";
 import {
   CustomerOrganization,
   CustomerTable,
   CustomerMenuItem,
-  SelectedCustomization,
   CartItem,
 } from "./types";
 import { useCustomerCart } from "./CustomerCartContext";
@@ -66,7 +65,7 @@ export function CustomerCartView({
   // State for editing customizations on an existing cart item
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
 
-  const storeName = organization?.name || "Prest Bistro & Banquet";
+  const storeName = organization?.name || "Skyz Bistro & Banquet";
   const tableNum = table?.tableNumber || "T12";
 
   // Helper to find full product details (including all customization groups) from raw menu
@@ -154,13 +153,12 @@ export function CustomerCartView({
     if (onProceedToPayment) {
       onProceedToPayment();
     } else {
-      // In Screen 3: User confirms order and triggers KOT notification / next step
       alert(`Order for Table ${tableNum} placed successfully! Instant KOT sent to Kitchen Chef Station.`);
     }
   };
 
   return (
-    <div className="flex flex-col w-full pb-10 gap-3 animate-in fade-in duration-200">
+    <div className="flex flex-col w-full gap-3 pb-8 animate-in fade-in duration-200">
       {/* 1. Top Dine-In Context & Back Bar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2.5 min-w-0">
@@ -168,35 +166,35 @@ export function CustomerCartView({
             type="button"
             aria-label="Go back"
             onClick={onBackToMenu}
-            className="w-9 h-9 rounded-full bg-[#eaedff] flex items-center justify-center text-[#131b2e] hover:bg-[#dae2fd] transition-colors flex-shrink-0 cursor-pointer"
+            className="w-9 h-9 rounded-full bg-[#eaedff] flex items-center justify-center text-[#131b2e] hover:bg-[#dae2fd] transition-colors flex-shrink-0 cursor-pointer shadow-2xs"
           >
             <ArrowBackIcon className="w-4.5 h-4.5" />
           </button>
           <div className="flex flex-col min-w-0">
-            <h2 className="text-[15px] font-bold text-[#131b2e] leading-tight">
+            <h2 className="text-[16px] font-semibold text-[#131b2e] leading-tight">
               Your Cart
             </h2>
-            <span className="text-[11px] font-semibold text-[#4338ca] truncate mt-0.5">
+            <span className="text-[11px] font-semibold text-[#2a14b4] truncate mt-0.5">
               {storeName} • Table {tableNum}
             </span>
           </div>
         </div>
 
-        <span className="px-2.5 py-1 rounded-full bg-[#005e3f] text-[#6ffbbe] text-xs font-bold flex items-center gap-1 shadow-xs flex-shrink-0">
+        <span className="px-2.5 py-1 rounded-full bg-[#005e3f] text-[#6ffbbe] text-[11px] font-semibold flex items-center gap-1 shadow-2xs flex-shrink-0">
           <TableBarIcon className="w-3.5 h-3.5" />
           <span>{tableNum} Active</span>
         </span>
       </div>
 
       {/* 2. Persistent 3-Way Service Selector */}
-      <div className="flex items-center p-1 bg-[#eaedff] rounded-full w-full">
+      <div className="flex items-center p-1 bg-[#eaedff] rounded-full w-full shadow-2xs">
         <button
           type="button"
           onClick={() => setServiceMode("delivery")}
           className={`flex-1 py-1.5 rounded-full text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
             serviceMode === "delivery"
-              ? "bg-[#4338ca] text-white shadow-xs font-bold"
-              : "text-stone-600 hover:text-stone-900 font-semibold"
+              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
+              : "text-[#464554] hover:text-[#131b2e] font-medium"
           }`}
         >
           <MopedIcon className="w-3.5 h-3.5" />
@@ -207,8 +205,8 @@ export function CustomerCartView({
           onClick={() => setServiceMode("dine_in")}
           className={`flex-1 py-1.5 rounded-full text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
             serviceMode === "dine_in"
-              ? "bg-[#4338ca] text-white shadow-xs font-bold"
-              : "text-stone-600 hover:text-stone-900 font-semibold"
+              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
+              : "text-[#464554] hover:text-[#131b2e] font-medium"
           }`}
         >
           <TableBarIcon className="w-3.5 h-3.5" />
@@ -219,8 +217,8 @@ export function CustomerCartView({
           onClick={() => setServiceMode("takeaway")}
           className={`flex-1 py-1.5 rounded-full text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
             serviceMode === "takeaway"
-              ? "bg-[#4338ca] text-white shadow-xs font-bold"
-              : "text-stone-600 hover:text-stone-900 font-semibold"
+              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
+              : "text-[#464554] hover:text-[#131b2e] font-medium"
           }`}
         >
           <ShoppingBagIcon className="w-3.5 h-3.5" />
@@ -229,21 +227,21 @@ export function CustomerCartView({
       </div>
 
       {/* 3. Table Session Notice Card */}
-      <div className="bg-[#f2f3ff] rounded-2xl p-3.5 flex items-start gap-3 border border-indigo-100/60 shadow-2xs">
-        <div className="w-8 h-8 rounded-xl bg-[#e2e7ff] flex items-center justify-center text-[#4338ca] flex-shrink-0">
+      <div className="bg-[#f2f3ff] rounded-xl p-3 flex items-start gap-3 shadow-sm border border-[#e2e7ff]/80">
+        <div className="w-8 h-8 rounded-lg bg-[#e2e7ff] flex items-center justify-center text-[#4338ca] flex-shrink-0">
           <KitchenIcon className="w-4.5 h-4.5 text-[#4338ca]" />
         </div>
         <div className="flex flex-col gap-0.5 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs font-bold text-[#131b2e]">
+            <span className="text-xs font-semibold text-[#131b2e]">
               Serving to Table {tableNum}
             </span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#005e3f]" />
-            <span className="text-[11px] text-[#005e3f] font-bold">
+            <span className="text-[11px] text-[#005e3f] font-semibold">
               Instant KDS Push
             </span>
           </div>
-          <p className="text-[11px] text-stone-500 leading-relaxed">
+          <p className="text-[11px] text-[#464554] leading-relaxed">
             Zero delivery or packaging charges. Dishes are routed immediately to kitchen display screens.
           </p>
         </div>
@@ -252,22 +250,22 @@ export function CustomerCartView({
       {/* 4. Cart Items Section */}
       {items.length === 0 ? (
         /* Empty Cart State */
-        <div className="bg-white rounded-2xl p-8 shadow-xs border border-stone-100 text-center flex flex-col items-center gap-3 my-2">
+        <div className="bg-white rounded-xl p-8 shadow-sm border border-[#eaedff] text-center flex flex-col items-center gap-3 my-2">
           <div className="w-16 h-16 rounded-2xl bg-[#eaedff] text-[#4338ca] flex items-center justify-center">
             <ShoppingBagIcon className="w-8 h-8 text-[#4338ca]" />
           </div>
           <div>
-            <h3 className="text-base font-bold text-[#131b2e]">
+            <h3 className="text-base font-semibold text-[#131b2e]">
               Your Table Order is Empty
             </h3>
-            <p className="text-xs text-stone-500 mt-1 max-w-xs mx-auto">
+            <p className="text-xs text-[#464554] mt-1 max-w-xs mx-auto">
               Explore our menu and add your favorite dishes to the table order.
             </p>
           </div>
           <button
             type="button"
             onClick={onBackToMenu}
-            className="mt-2 bg-[#4338ca] hover:bg-[#372abf] text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-md flex items-center gap-1.5 cursor-pointer"
+            className="mt-2 bg-[#4338ca] hover:bg-[#372abf] text-white px-5 py-2.5 rounded-xl text-xs font-semibold transition shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
             <span>Browse Menu & Add Dishes</span>
             <ArrowForwardIcon className="w-3.5 h-3.5" />
@@ -278,10 +276,10 @@ export function CustomerCartView({
         <div className="flex flex-col gap-2.5">
           {/* Section Subheader */}
           <div className="flex items-center justify-between px-0.5">
-            <span className="text-xs font-bold text-stone-600 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-[#464554] uppercase tracking-wider">
               TABLE ORDER ({totalItemCount} {totalItemCount === 1 ? "ITEM" : "ITEMS"})
             </span>
-            <span className="text-xs text-[#005e3f] font-bold flex items-center gap-1">
+            <span className="text-xs text-[#005e3f] font-semibold flex items-center gap-0.5">
               <BoltIcon className="w-3.5 h-3.5 text-[#005e3f]" />
               <span>Live Prep</span>
             </span>
@@ -291,12 +289,14 @@ export function CustomerCartView({
           {items.map((cartItem) => {
             const summaryText = formatCustomizationSummary(cartItem);
             const formattedItemPrice = `${currencySymbol}${((cartItem.totalUnitPrice * cartItem.quantity) / 100).toFixed(2)}`;
-            const hasCustomizations = (cartItem.customizations && cartItem.customizations.length > 0) || (cartItem.preferences && cartItem.preferences.length > 0);
+            const hasCustomizations =
+              (cartItem.customizations && cartItem.customizations.length > 0) ||
+              (cartItem.preferences && cartItem.preferences.length > 0);
 
             return (
               <div
                 key={cartItem.cartItemId}
-                className="bg-white rounded-2xl p-3.5 shadow-xs border border-stone-100/80 flex flex-col gap-2.5"
+                className="bg-white rounded-xl p-3.5 shadow-sm border border-[#eaedff]/80 flex flex-col gap-2.5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-2.5 flex-1 min-w-0">
@@ -307,12 +307,12 @@ export function CustomerCartView({
 
                     {/* Details */}
                     <div className="flex flex-col min-w-0 flex-1">
-                      <h4 className="text-[14px] font-bold text-[#131b2e] leading-snug truncate">
+                      <h4 className="text-[14px] font-semibold text-[#131b2e] leading-snug truncate">
                         {cartItem.name}
                       </h4>
 
                       {summaryText && (
-                        <span className="text-xs text-stone-500 line-clamp-2 mt-0.5">
+                        <span className="text-xs text-[#464554] line-clamp-2 mt-0.5">
                           {summaryText}
                         </span>
                       )}
@@ -321,7 +321,7 @@ export function CustomerCartView({
                         <button
                           type="button"
                           onClick={() => setEditingCartItem(cartItem)}
-                          className="text-xs font-bold text-[#4338ca] hover:underline pt-1 text-left cursor-pointer"
+                          className="text-xs font-semibold text-[#4338ca] hover:underline pt-1 text-left cursor-pointer"
                         >
                           Edit options
                         </button>
@@ -330,7 +330,7 @@ export function CustomerCartView({
                   </div>
 
                   {/* Thumbnail Image */}
-                  <div className="w-16 h-16 rounded-xl overflow-hidden flex-shrink-0 bg-[#eaedff] border border-stone-200/60 shadow-2xs">
+                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-[#eaedff] border border-stone-200/50 shadow-2xs">
                     {cartItem.imageUrl ? (
                       <img
                         src={cartItem.imageUrl}
@@ -349,29 +349,29 @@ export function CustomerCartView({
                 </div>
 
                 {/* Price & Quantity Stepper */}
-                <div className="flex items-center justify-between pt-1 border-t border-stone-100/60">
-                  <span className="text-[15px] font-extrabold text-[#131b2e]">
+                <div className="flex items-center justify-between pt-1 border-t border-[#eaedff]/60">
+                  <span className="text-[15px] font-bold text-[#131b2e]">
                     {formattedItemPrice}
                   </span>
 
                   {/* Stepper */}
-                  <div className="flex items-center bg-[#f2f3ff] rounded-xl p-0.5 shadow-2xs border border-indigo-100/50">
+                  <div className="flex items-center bg-[#f2f3ff] rounded-lg p-0.5 shadow-2xs border border-[#e2e7ff]">
                     <button
                       type="button"
                       aria-label="Decrease quantity"
                       onClick={() => updateQuantity(cartItem.cartItemId, -1)}
-                      className="w-8 h-8 rounded-lg bg-white text-[#131b2e] flex items-center justify-center hover:bg-stone-100 active:scale-95 transition-all shadow-2xs cursor-pointer"
+                      className="w-8 h-8 rounded-md bg-white text-[#131b2e] flex items-center justify-center hover:bg-[#eaedff] active:scale-95 transition-all shadow-2xs cursor-pointer"
                     >
                       <MinusIcon className="w-3.5 h-3.5" />
                     </button>
-                    <span className="w-8 text-center text-xs font-bold text-[#131b2e]">
+                    <span className="w-8 text-center text-xs font-semibold text-[#131b2e]">
                       {cartItem.quantity}
                     </span>
                     <button
                       type="button"
                       aria-label="Increase quantity"
                       onClick={() => updateQuantity(cartItem.cartItemId, 1)}
-                      className="w-8 h-8 rounded-lg bg-[#4338ca] text-white flex items-center justify-center hover:bg-[#372abf] active:scale-95 transition-all shadow-2xs cursor-pointer"
+                      className="w-8 h-8 rounded-md bg-[#4338ca] text-white flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-2xs cursor-pointer"
                     >
                       <PlusIcon className="w-3.5 h-3.5" />
                     </button>
@@ -385,18 +385,18 @@ export function CustomerCartView({
           <button
             type="button"
             onClick={onBackToMenu}
-            className="w-full py-2.5 px-4 rounded-xl bg-[#e2e7ff] text-[#4338ca] hover:bg-[#dae2fd] text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-2xs cursor-pointer"
+            className="w-full py-2.5 px-4 rounded-xl bg-[#e2e7ff] text-[#2a14b4] hover:bg-[#dae2fd] text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer"
           >
-            <AddCircleIcon className="w-4 h-4 text-[#4338ca]" />
+            <AddCircleIcon className="w-4 h-4 text-[#2a14b4]" />
             <span>+ Add More Food to Order</span>
           </button>
         </div>
       )}
 
       {/* 5. Customer Details (Digital Invoice & Ticket) */}
-      <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-stone-100/80 flex flex-col gap-3">
+      <div className="bg-white rounded-xl p-3.5 shadow-sm border border-[#eaedff]/80 flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-[#131b2e]">
+          <span className="text-xs font-semibold text-[#131b2e]">
             Customer Details (Digital Invoice & Ticket)
           </span>
           <ReceiptIcon className="w-4.5 h-4.5 text-[#005e3f]" />
@@ -404,23 +404,23 @@ export function CustomerCartView({
 
         {/* Mobile Number */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-semibold text-stone-500">
+          <label className="text-[11px] font-medium text-[#464554]">
             Mobile Number (For Table Invoice SMS)
           </label>
-          <div className="flex items-center justify-between bg-[#eaedff] px-3.5 py-2.5 rounded-xl border border-indigo-100/50">
+          <div className="flex items-center justify-between bg-[#eaedff] px-3.5 py-2 rounded-lg border border-indigo-100/30">
             <div className="flex items-center gap-2 flex-1 min-w-0">
               <span className="text-sm">🇮🇳</span>
-              <span className="text-xs font-semibold text-stone-700">+91</span>
+              <span className="text-xs font-medium text-[#131b2e]">+91</span>
               <input
                 type="tel"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="Enter 10-digit mobile"
+                placeholder="98765 43210"
                 maxLength={10}
-                className="bg-transparent text-xs font-semibold text-[#131b2e] w-full outline-none"
+                className="bg-transparent text-xs font-medium text-[#131b2e] w-full outline-none placeholder-[#777586]"
               />
             </div>
-            <span className="text-[10px] font-bold text-[#005e3f] bg-white px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-2xs flex-shrink-0">
+            <span className="text-[11px] font-semibold text-[#005e3f] bg-white px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-2xs flex-shrink-0">
               <VerifiedCheckIcon className="w-3 h-3 text-[#005e3f]" />
               <span>Verified</span>
             </span>
@@ -429,61 +429,61 @@ export function CustomerCartView({
 
         {/* Guest Name */}
         <div className="flex flex-col gap-1.5">
-          <label className="text-[11px] font-semibold text-stone-500">
+          <label className="text-[11px] font-medium text-[#464554]">
             Guest Name (Optional)
           </label>
-          <div className="bg-[#eaedff] px-3.5 py-2.5 rounded-xl border border-indigo-100/50 flex items-center">
+          <div className="bg-[#eaedff] px-3.5 py-2 rounded-lg border border-indigo-100/30 flex items-center">
             <input
               type="text"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="Enter name for kitchen ticket"
-              className="bg-transparent text-xs font-semibold text-[#131b2e] w-full outline-none placeholder-stone-400"
+              placeholder="Enter name"
+              className="bg-transparent text-xs font-medium text-[#131b2e] w-full outline-none placeholder-[#777586]"
             />
           </div>
         </div>
       </div>
 
       {/* 6. Kitchen Instructions */}
-      <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-stone-100/80 flex flex-col gap-2">
+      <div className="bg-white rounded-xl p-3.5 shadow-sm border border-[#eaedff]/80 flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
-            <SkilletIcon className="w-4 h-4 text-[#4338ca]" />
-            <span className="text-xs font-bold text-[#131b2e]">
+            <SkilletIcon className="w-4 h-4 text-[#2a14b4]" />
+            <span className="text-xs font-semibold text-[#131b2e]">
               Kitchen Instructions
             </span>
           </div>
-          <span className="text-[10px] text-[#005e3f] font-bold flex items-center gap-0.5 bg-[#6ffbbe]/20 px-2 py-0.5 rounded-full">
-            <VerifiedCheckIcon className="w-2.5 h-2.5 text-[#005e3f]" />
+          <span className="text-[11px] text-[#005e3f] font-semibold flex items-center gap-0.5">
+            <VerifiedCheckIcon className="w-3 h-3 text-[#005e3f]" />
             <span>Saved</span>
           </span>
         </div>
 
-        <div className="bg-[#eaedff] px-3.5 py-2.5 rounded-xl border border-indigo-100/50 flex items-center gap-2">
-          <EditNoteIcon className="w-4 h-4 text-stone-500 flex-shrink-0" />
+        <div className="bg-[#eaedff] px-3.5 py-2 rounded-lg border border-indigo-100/30 flex items-center gap-2">
+          <EditNoteIcon className="w-4 h-4 text-[#464554] flex-shrink-0" />
           <input
             type="text"
             value={kitchenInstructions}
             onChange={(e) => setKitchenInstructions(e.target.value)}
             placeholder="Add specific cooking or serving request"
-            className="bg-transparent text-xs text-[#131b2e] font-medium w-full outline-none placeholder-stone-400"
+            className="bg-transparent text-xs text-[#131b2e] font-normal w-full outline-none placeholder-[#777586]"
           />
         </div>
       </div>
 
       {/* 7. Bill Details (Dine-in Breakdown) */}
-      <div className="bg-white rounded-2xl p-3.5 shadow-xs border border-stone-100/80 flex flex-col gap-2.5">
-        <div className="flex items-center justify-between pb-1 border-b border-stone-100/60">
-          <span className="text-xs font-bold text-[#131b2e]">Bill Summary</span>
-          <span className="text-[11px] font-semibold text-stone-500">
+      <div className="bg-white rounded-xl p-3.5 shadow-sm border border-[#eaedff]/80 flex flex-col gap-2.5">
+        <div className="flex items-center justify-between pb-1 border-b border-[#eaedff]/60">
+          <span className="text-xs font-semibold text-[#131b2e]">Bill Summary</span>
+          <span className="text-[11px] font-medium text-[#464554]">
             Table {tableNum}
           </span>
         </div>
 
-        <div className="flex flex-col gap-2 text-xs text-stone-600">
+        <div className="flex flex-col gap-2 text-xs text-[#464554]">
           <div className="flex justify-between items-center">
             <span>Item Total</span>
-            <span className="text-[#131b2e] font-semibold">
+            <span className="text-[#131b2e] font-medium">
               {billSummary.formattedItemTotal}
             </span>
           </div>
@@ -491,9 +491,9 @@ export function CustomerCartView({
           <div className="flex justify-between items-center">
             <span className="flex items-center gap-1">
               <span>GST ({billSummary.gstRate}%)</span>
-              <InfoIcon className="w-3.5 h-3.5 text-stone-400" />
+              <InfoIcon className="w-3.5 h-3.5 text-[#777586]" />
             </span>
-            <span className="text-[#131b2e] font-semibold">
+            <span className="text-[#131b2e] font-medium">
               {billSummary.formattedGstAmount}
             </span>
           </div>
@@ -501,28 +501,28 @@ export function CustomerCartView({
           <div className="flex justify-between items-center">
             <span className="flex items-center gap-1">
               <span>Restaurant Service Tax ({billSummary.serviceTaxRate}%)</span>
-              <InfoIcon className="w-3.5 h-3.5 text-stone-400" />
+              <InfoIcon className="w-3.5 h-3.5 text-[#777586]" />
             </span>
-            <span className="text-[#131b2e] font-semibold">
+            <span className="text-[#131b2e] font-medium">
               {billSummary.formattedServiceTaxAmount}
             </span>
           </div>
 
-          <div className="flex justify-between items-center text-[#005e3f] font-bold">
+          <div className="flex justify-between items-center text-[#005e3f] font-semibold">
             <span>Dine-In Cover & Table Service</span>
             <span>FREE</span>
           </div>
         </div>
 
         {/* Grand Total Row */}
-        <div className="pt-2 mt-1 bg-[#eaedff]/60 -mx-3.5 px-3.5 py-2.5 rounded-b-2xl flex items-center justify-between border-t border-indigo-100/50">
+        <div className="pt-2 mt-1 bg-[#e2e7ff]/40 -mx-3.5 -mb-3.5 px-3.5 py-2.5 rounded-b-xl flex items-center justify-between border-t border-[#e2e7ff]">
           <div className="flex flex-col">
-            <span className="text-xs font-bold text-[#131b2e]">Grand Total</span>
-            <span className="text-[10px] text-stone-500">
+            <span className="text-sm font-semibold text-[#131b2e]">Grand Total</span>
+            <span className="text-[11px] text-[#464554]">
               All applicable taxes included
             </span>
           </div>
-          <span className="text-base font-extrabold text-[#4338ca]">
+          <span className="text-[18px] font-bold text-[#2a14b4]">
             {billSummary.formattedGrandTotal}
           </span>
         </div>
@@ -530,37 +530,37 @@ export function CustomerCartView({
 
       {/* 8. Sticky Dine-In Payment & KOT Trigger Floating Container */}
       <div className="sticky bottom-2 inset-x-0 z-40 pt-1">
-        <div className="bg-white p-2.5 rounded-2xl shadow-xl flex flex-col gap-1.5 border border-stone-100">
+        <div className="bg-white p-2.5 rounded-2xl shadow-xl flex flex-col gap-1.5 border border-[#eaedff]">
           <button
             type="button"
             disabled={items.length === 0}
             onClick={handlePayClick}
-            className="w-full py-3.5 px-4 rounded-xl bg-[#4338ca] hover:bg-[#372abf] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white text-xs sm:text-sm font-bold flex items-center justify-between shadow-md transition-all cursor-pointer"
+            className="w-full py-3.5 px-4 rounded-xl bg-[#4338ca] hover:opacity-95 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-semibold flex items-center justify-between shadow-md transition-all cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-                <TouchAppIcon className="w-3.5 h-3.5 text-white" />
+                <TouchAppIcon className="w-4 h-4 text-white" />
               </span>
               <span>Pay for Dine In</span>
             </div>
 
-            <div className="flex items-center gap-1.5 font-extrabold">
+            <div className="flex items-center gap-1.5 font-bold">
               <span>{billSummary.formattedGrandTotal}</span>
               <ArrowForwardIcon className="w-4 h-4" />
             </div>
           </button>
 
-          <div className="flex items-center justify-center gap-1 px-2 py-0.5">
-            <BoltIcon className="w-3 h-3 text-[#005e3f]" />
-            <span className="text-[10px] text-stone-500 text-center font-medium">
+          <div className="flex items-center justify-center gap-1.5 px-2 py-0.5">
+            <BoltIcon className="w-3.5 h-3.5 text-[#005e3f]" />
+            <span className="text-[11px] text-[#464554] text-center font-normal">
               Instant KOT sent straight to kitchen chef station upon payment
             </span>
           </div>
         </div>
       </div>
 
-      {/* Extra bottom spacer for mobile devices */}
-      <div className="h-16 w-full flex-shrink-0" aria-hidden="true" />
+      {/* Extra Bottom Clearance so full bill summary & Grand Total can scroll way past sticky elements */}
+      <div className="h-28 w-full flex-shrink-0" aria-hidden="true" />
 
       {/* 9. Edit Options Modal for existing Cart Item */}
       {editingCartItem && (
