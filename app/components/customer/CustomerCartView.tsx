@@ -11,8 +11,6 @@ import { useCustomerCart } from "./CustomerCartContext";
 import {
   ArrowBackIcon,
   TableBarIcon,
-  MopedIcon,
-  ShoppingBagIcon,
   KitchenIcon,
   BoltIcon,
   SkilletIcon,
@@ -28,6 +26,7 @@ import {
   MinusIcon,
   ArrowForwardIcon,
 } from "./CustomerIcons";
+import { ServiceModeSwitcher } from "./ServiceModeSwitcher";
 import { ProductCustomizationModal } from "./ProductCustomizationModal";
 
 interface CustomerCartViewProps {
@@ -48,8 +47,6 @@ export function CustomerCartView({
   const {
     items,
     totalItemCount,
-    serviceMode,
-    setServiceMode,
     customerPhone,
     setCustomerPhone,
     customerName,
@@ -181,50 +178,13 @@ export function CustomerCartView({
         </div>
 
         <span className="px-2.5 py-1 rounded-full bg-[#005e3f] text-[#6ffbbe] text-[11px] font-semibold flex items-center gap-1 shadow-2xs flex-shrink-0">
-          <TableBarIcon className="w-3.5 h-3.5" />
+          <TableBarIcon className="w-3.5 h-3.5 text-[#6ffbbe]" />
           <span>{tableNum} Active</span>
         </span>
       </div>
 
-      {/* 2. Persistent 3-Way Service Selector */}
-      <div className="flex items-center p-1 bg-[#eaedff] rounded-full w-full shadow-2xs">
-        <button
-          type="button"
-          onClick={() => setServiceMode("delivery")}
-          className={`flex-1 py-1.5 rounded-full text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
-            serviceMode === "delivery"
-              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
-              : "text-[#464554] hover:text-[#131b2e] font-medium"
-          }`}
-        >
-          <MopedIcon className="w-3.5 h-3.5" />
-          <span>Delivery</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setServiceMode("dine_in")}
-          className={`flex-1 py-1.5 rounded-full text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
-            serviceMode === "dine_in"
-              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
-              : "text-[#464554] hover:text-[#131b2e] font-medium"
-          }`}
-        >
-          <TableBarIcon className="w-3.5 h-3.5" />
-          <span>Dine In</span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setServiceMode("takeaway")}
-          className={`flex-1 py-1.5 rounded-full text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
-            serviceMode === "takeaway"
-              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
-              : "text-[#464554] hover:text-[#131b2e] font-medium"
-          }`}
-        >
-          <ShoppingBagIcon className="w-3.5 h-3.5" />
-          <span>Take Away</span>
-        </button>
-      </div>
+      {/* 2. Persistent 3-Way Service Selector (Shared Component) */}
+      <ServiceModeSwitcher table={table} showContextLine={false} />
 
       {/* 3. Table Session Notice Card */}
       <div className="bg-[#f2f3ff] rounded-xl p-3 flex items-start gap-3 shadow-sm border border-[#e2e7ff]/80">
@@ -252,7 +212,7 @@ export function CustomerCartView({
         /* Empty Cart State */
         <div className="bg-white rounded-xl p-8 shadow-sm border border-[#eaedff] text-center flex flex-col items-center gap-3 my-2">
           <div className="w-16 h-16 rounded-2xl bg-[#eaedff] text-[#4338ca] flex items-center justify-center">
-            <ShoppingBagIcon className="w-8 h-8 text-[#4338ca]" />
+            <AddCircleIcon className="w-8 h-8 text-[#4338ca]" />
           </div>
           <div>
             <h3 className="text-base font-semibold text-[#131b2e]">
@@ -373,7 +333,7 @@ export function CustomerCartView({
                       onClick={() => updateQuantity(cartItem.cartItemId, 1)}
                       className="w-8 h-8 rounded-md bg-[#4338ca] text-white flex items-center justify-center hover:opacity-90 active:scale-95 transition-all shadow-2xs cursor-pointer"
                     >
-                      <PlusIcon className="w-3.5 h-3.5" />
+                      <PlusIcon className="w-3.5 h-3.5 text-white" />
                     </button>
                   </div>
                 </div>

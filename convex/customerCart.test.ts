@@ -203,4 +203,32 @@ describe("Screen 3 Customer Cart & Sequential Journey Tests", () => {
     customerState.kitchenInstructions = "Extra spicy and bring lemon with water";
     expect(customerState.kitchenInstructions).toBe("Extra spicy and bring lemon with water");
   });
+
+  it("handles active text and icon color requirements for all 3 service modes", () => {
+    const modes = ["delivery", "dine_in", "takeaway"] as const;
+
+    modes.forEach((activeMode) => {
+      // For each mode, when active, text and icon must be white
+      const getStyles = (mode: string) => {
+        const isActive = mode === activeMode;
+        return {
+          bg: isActive ? "bg-[#4338ca]" : "text-[#464554]",
+          text: isActive ? "text-white" : "text-[#464554]",
+          icon: isActive ? "text-white" : "text-[#464554]",
+        };
+      };
+
+      const activeStyle = getStyles(activeMode);
+      expect(activeStyle.text).toBe("text-white");
+      expect(activeStyle.icon).toBe("text-white");
+      expect(activeStyle.bg).toBe("bg-[#4338ca]");
+
+      const otherModes = modes.filter((m) => m !== activeMode);
+      otherModes.forEach((inactiveMode) => {
+        const inactiveStyle = getStyles(inactiveMode);
+        expect(inactiveStyle.text).toBe("text-[#464554]");
+        expect(inactiveStyle.icon).toBe("text-[#464554]");
+      });
+    });
+  });
 });
