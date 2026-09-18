@@ -10,6 +10,54 @@ import EditOrderDrawer from "../components/orders/EditOrderDrawer";
 import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
 import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
 
+function formatOrderPhoneDisplay(phone?: string): string {
+  if (!phone || !phone.trim()) return "-";
+  const trimmed = phone.trim();
+
+  // If already formatted with space like "+91 9173393946", return as is
+  if (/^\+\d{1,4}\s\d+/.test(trimmed)) {
+    return trimmed;
+  }
+
+  // If starts with country code without space, format with space
+  if (trimmed.startsWith("+91")) {
+    const local = trimmed.slice(3).trim();
+    return `+91 ${local}`;
+  } else if (trimmed.startsWith("+971")) {
+    const local = trimmed.slice(4).trim();
+    return `+971 ${local}`;
+  } else if (trimmed.startsWith("+1")) {
+    const local = trimmed.slice(2).trim();
+    return `+1 ${local}`;
+  } else if (trimmed.startsWith("+44")) {
+    const local = trimmed.slice(3).trim();
+    return `+44 ${local}`;
+  } else if (trimmed.startsWith("+33")) {
+    const local = trimmed.slice(3).trim();
+    return `+33 ${local}`;
+  } else if (trimmed.startsWith("+61")) {
+    const local = trimmed.slice(3).trim();
+    return `+61 ${local}`;
+  }
+
+  // If raw digits without '+' (e.g. 10 digits for India)
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `+91 ${digits}`;
+  }
+
+  return trimmed;
+}
+
+function formatTableDisplay(tableNum?: string): string {
+  if (!tableNum || !tableNum.trim()) return "";
+  const clean = tableNum.trim();
+  if (/^table\b/i.test(clean)) {
+    return clean;
+  }
+  return `Table ${clean}`;
+}
+
 // ==========================================
 // PIXEL-PERFECT SVG ICONS (PREST THEME)
 // ==========================================
@@ -1359,11 +1407,11 @@ export default function OrdersPage() {
                     <span
                       className="text-xs font-semibold text-[#0c0a09] truncate block"
                       title={
-                        order?.table ? `Table ${order.table.number}` : "N/A"
+                        order?.table ? formatTableDisplay(order.table.number) : "N/A"
                       }
                     >
                       {order?.table
-                        ? `Table ${order.table.number}`
+                        ? formatTableDisplay(order.table.number)
                         : "Counter / Takeaway"}
                     </span>
                   </div>
@@ -1410,7 +1458,7 @@ export default function OrdersPage() {
                           Contact Phone
                         </span>
                         <p className="text-sm font-semibold text-[#0c0a09] mt-0.5">
-                          {order?.customerPhone || "+91 98200 12345"}
+                          {formatOrderPhoneDisplay(order?.customerPhone)}
                         </p>
                       </div>
                       <div>
@@ -1433,7 +1481,7 @@ export default function OrdersPage() {
                           {order?.deliveryAddress
                             ? `${order.deliveryAddress.addressLine1}, ${order.deliveryAddress.city || ""}`
                             : order?.table
-                              ? `Table ${order.table.number} (Ground Floor)`
+                              ? `${formatTableDisplay(order.table.number)} (Ground Floor)`
                               : "Standard Counter Pickup"}
                         </span>
                       </div>
@@ -1657,7 +1705,9 @@ export default function OrdersPage() {
                                   hour12: true,
                                 },
                               );
-                              const isCredit = p.paymentType === "Credit";
+                              const isDebit = p.paymentType === "Debit";
+                              const isCredit = !isDebit;
+                              const typeDisplay = p.paymentType || "Credit";
 
                               return (
                                 <tr key={p._id || idx}>
@@ -1680,7 +1730,7 @@ export default function OrdersPage() {
                                   <td
                                     className={`py-2.5 font-semibold ${isCredit ? "text-emerald-700" : "text-red-700"}`}
                                   >
-                                    {p.paymentType}
+                                    {typeDisplay}
                                   </td>
                                   <td className="py-2.5 text-right font-bold text-[#0c0a09]">
                                     {isCredit ? "" : "-"}₹
@@ -3009,7 +3059,7 @@ export default function OrdersPage() {
                             )}
                           </div>
                           <div className="text-[12px] text-[#5e5e5e]">
-                            {order.customerPhone || "-"}
+                            {formatOrderPhoneDisplay(order.customerPhone)}
                           </div>
                         </td>
 
@@ -3021,7 +3071,7 @@ export default function OrdersPage() {
                               <>
                                 <span className="text-[#5e5e5e]">•</span>
                                 <span className="font-semibold text-[#0c0a09]">
-                                  Table {order.table.number}
+                                  {formatTableDisplay(order.table.number)}
                                 </span>
                               </>
                             )}

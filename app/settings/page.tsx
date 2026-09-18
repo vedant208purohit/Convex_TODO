@@ -11,6 +11,7 @@ import { OrganizationWaiters } from "../components/OrganizationWaiters";
 import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes";
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
+import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
@@ -18,6 +19,24 @@ import { OrganizationPrinters } from "../components/OrganizationPrinters";
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
 // ==========================================
+
+function PrinterIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <polyline points="6 9 6 2 18 2 18 9" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+      <rect width="12" height="8" x="6" y="14" />
+    </svg>
+  );
+}
 
 function QueueIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
@@ -272,7 +291,7 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     label: "Queue & Waitlist",
     icon: <QueueIcon className="w-4 h-4" />,
   },
-  // { id: "printers", label: "Printers", icon: <PrinterIcon className="w-4 h-4" /> },
+  { id: "printers", label: "Printers", icon: <PrinterIcon className="w-4 h-4" /> },
   {
     id: "features",
     label: "Features",
@@ -391,6 +410,7 @@ function SettingsContent() {
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
+            {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {activeTab === "waiters" && <OrganizationWaiters />}
@@ -401,6 +421,7 @@ function SettingsContent() {
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
               activeTab !== "queue" &&
+              activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&

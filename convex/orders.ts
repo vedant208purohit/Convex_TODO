@@ -31,6 +31,9 @@ export const createOrder = mutation({
     // Financial Overrides (in minor units)
     discountAmount: v.optional(v.number()),
     deliveryCharge: v.optional(v.number()),
+    paymentStatus: v.optional(
+      v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed"))
+    ),
 
     // Delivery Address Details
     userAddressId: v.optional(v.id("userAddresses")),
@@ -111,7 +114,7 @@ export const createOrder = mutation({
     const dateStr = new Date(now).toISOString().slice(0, 10).replace(/-/g, "");
     const orderNumber = "ORD-" + dateStr + "-" + tokenCount.toString().padStart(3, "0");
 
-    // 3. Resolve Store Default Tax Group
+    // 3. Resolve Organization Taxes & Default Groups
     const defaultTaxGroups = await ctx.db
       .query("taxGroups")
       .withIndex("by_org_default", (q) =>
@@ -119,26 +122,18 @@ export const createOrder = mutation({
       )
       .collect();
 
-    const taxGroup = defaultTaxGroups.length > 0 ? defaultTaxGroups[0] : null;
-    let taxMode: "inclusive" | "exclusive" = "exclusive";
-    let totalTaxRate = 0;
-    const taxComponents: Array<any> = [];
+    const fallbackTaxGroup = defaultTaxGroups.length > 0 ? defaultTaxGroups[0] : null;
 
-    if (taxGroup) {
-      taxMode = taxGroup.taxMode;
-      for (const compId of taxGroup.componentIds) {
-        const comp = await ctx.db.get(compId);
-        if (comp) {
-          taxComponents.push(comp);
-          totalTaxRate += comp.rate;
-        }
-      }
-    }
+    // Cache tax groups and components
+    const taxGroupCache = new Map<string, any>();
+    const taxCompCache = new Map<string, any>();
 
     // 4. Calculate Subtotal, Line Items, and Tax Amounts
     let rawSubTotal = 0;
-    let rawTaxTotal = 0;
+    let rawTaxInclusive = 0;
+    let rawTaxExclusive = 0;
     const lineItemConfigs: Array<any> = [];
+    const taxCompAccumulator = new Map<string, { name: string; code: string; rate: number; amountPaise: number }>();
 
     for (const inputItem of args.items) {
       const dbItem = await ctx.db.get(inputItem.itemId);
@@ -151,7 +146,7 @@ export const createOrder = mutation({
         for (const custInput of inputItem.customizations) {
           const custGroup = await ctx.db.get(custInput.customizationId);
           const custOption = await ctx.db.get(custInput.optionId);
-          if (custGroup && custOption) {
+          if (custGroup && custOption && custOption.deletedAt === undefined) {
             itemUnitPrice += custOption.price;
             resolvedCustomizations.push({
               customizationId: custGroup._id,
@@ -159,6 +154,9 @@ export const createOrder = mutation({
               optionId: custOption._id,
               optionName: custOption.name,
               price: custOption.price,
+              isGst: custOption.isGst,
+              taxGroupId: custOption.taxGroupId,
+              taxMode: custOption.taxMode,
             });
           }
         }
@@ -167,13 +165,131 @@ export const createOrder = mutation({
       const itemLineTotal = itemUnitPrice * inputItem.quantity;
       rawSubTotal += itemLineTotal;
 
-      // Item level tax calculation if isGst is true
-      if (dbItem.isGst && totalTaxRate > 0) {
-        const linePriceUnits = itemLineTotal / 100.0;
-        if (taxMode === "inclusive") {
-          rawTaxTotal += linePriceUnits * (totalTaxRate / (100 + totalTaxRate)) * 100;
-        } else {
-          rawTaxTotal += linePriceUnits * (totalTaxRate / 100.0) * 100;
+      // 1. Base item tax calculation
+      const baseLineTotal = dbItem.price * inputItem.quantity;
+      if (dbItem.isGst && baseLineTotal > 0) {
+        let itemTg = null;
+        const tgId = dbItem.taxGroupId || fallbackTaxGroup?._id;
+        if (tgId) {
+          if (taxGroupCache.has(tgId)) {
+            itemTg = taxGroupCache.get(tgId);
+          } else {
+            itemTg = await ctx.db.get(tgId);
+            taxGroupCache.set(tgId, itemTg);
+          }
+        }
+
+        if (itemTg && itemTg.componentIds && itemTg.componentIds.length > 0) {
+          const itemMode = dbItem.taxMode || itemTg.taxMode || "inclusive";
+          const comps: Array<any> = [];
+          let totalRate = 0;
+
+          for (const cid of itemTg.componentIds) {
+            let comp = null;
+            if (taxCompCache.has(cid)) {
+              comp = taxCompCache.get(cid);
+            } else {
+              comp = await ctx.db.get(cid);
+              taxCompCache.set(cid, comp);
+            }
+            if (comp) {
+              comps.push(comp);
+              totalRate += comp.rate;
+            }
+          }
+
+          if (totalRate > 0) {
+            let lineTaxPaise = 0;
+            if (itemMode === "inclusive") {
+              lineTaxPaise = Math.round(baseLineTotal * (totalRate / (100 + totalRate)));
+              rawTaxInclusive += lineTaxPaise;
+            } else {
+              lineTaxPaise = Math.round(baseLineTotal * (totalRate / 100));
+              rawTaxExclusive += lineTaxPaise;
+
+              for (const comp of comps) {
+                const compShare = totalRate > 0 ? comp.rate / totalRate : 0;
+                const compTaxPaise = Math.round(lineTaxPaise * compShare);
+                const key = `${comp.name}_${comp.rate}`;
+                const existing = taxCompAccumulator.get(key);
+                if (existing) {
+                  existing.amountPaise += compTaxPaise;
+                } else {
+                  taxCompAccumulator.set(key, {
+                    name: comp.name,
+                    code: comp.code ?? comp.name,
+                    rate: comp.rate,
+                    amountPaise: compTaxPaise,
+                  });
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // 2. Customization items tax calculation
+      for (const cust of resolvedCustomizations) {
+        const custLineTotal = (cust.price || 0) * inputItem.quantity;
+        if (cust.isGst && custLineTotal > 0) {
+          let custTg = null;
+          const tgId = cust.taxGroupId || fallbackTaxGroup?._id;
+          if (tgId) {
+            if (taxGroupCache.has(tgId)) {
+              custTg = taxGroupCache.get(tgId);
+            } else {
+              custTg = await ctx.db.get(tgId);
+              taxGroupCache.set(tgId, custTg);
+            }
+          }
+
+          if (custTg && custTg.componentIds && custTg.componentIds.length > 0) {
+            const custMode = cust.taxMode || custTg.taxMode || "inclusive";
+            const comps: Array<any> = [];
+            let totalRate = 0;
+
+            for (const cid of custTg.componentIds) {
+              let comp = null;
+              if (taxCompCache.has(cid)) {
+                comp = taxCompCache.get(cid);
+              } else {
+                comp = await ctx.db.get(cid);
+                taxCompCache.set(cid, comp);
+              }
+              if (comp) {
+                comps.push(comp);
+                totalRate += comp.rate;
+              }
+            }
+
+            if (totalRate > 0) {
+              let lineTaxPaise = 0;
+              if (custMode === "inclusive") {
+                lineTaxPaise = Math.round(custLineTotal * (totalRate / (100 + totalRate)));
+                rawTaxInclusive += lineTaxPaise;
+              } else {
+                lineTaxPaise = Math.round(custLineTotal * (totalRate / 100));
+                rawTaxExclusive += lineTaxPaise;
+
+                for (const comp of comps) {
+                  const compShare = totalRate > 0 ? comp.rate / totalRate : 0;
+                  const compTaxPaise = Math.round(lineTaxPaise * compShare);
+                  const key = `${comp.name}_${comp.rate}`;
+                  const existing = taxCompAccumulator.get(key);
+                  if (existing) {
+                    existing.amountPaise += compTaxPaise;
+                  } else {
+                    taxCompAccumulator.set(key, {
+                      name: comp.name,
+                      code: comp.code ?? comp.name,
+                      rate: comp.rate,
+                      amountPaise: compTaxPaise,
+                    });
+                  }
+                }
+              }
+            }
+          }
         }
       }
 
@@ -188,26 +304,26 @@ export const createOrder = mutation({
     }
 
     const subTotal = Math.round(rawSubTotal);
-    const taxTotal = Math.round(rawTaxTotal);
+    const taxTotal = Math.round(rawTaxInclusive + rawTaxExclusive);
     const discount = args.discountAmount ?? 0;
     const delivery = args.deliveryCharge ?? 0;
 
-    let baseAmount = taxMode === "inclusive" ? subTotal : subTotal + taxTotal;
-    const totalAmount = Math.max(0, baseAmount - discount + delivery);
+    // Inclusive tax is already inside subTotal, exclusive tax is added on top
+    const totalAmount = Math.max(0, subTotal + rawTaxExclusive - discount + delivery);
 
     // Build Tax Snapshot
     const taxInfoSnapshot = {
-      tax_mode: taxMode,
-      total_tax_rate: totalTaxRate,
+      tax_mode: rawTaxExclusive > 0 ? "exclusive" : "inclusive",
       tax_amount: (taxTotal / 100).toFixed(2),
       sub_total: (subTotal / 100).toFixed(2),
       discount_amount: (discount / 100).toFixed(2),
       delivery_charge: (delivery / 100).toFixed(2),
       total_amount: (totalAmount / 100).toFixed(2),
-      components: taxComponents.map((c) => ({
+      components: Array.from(taxCompAccumulator.values()).map((c) => ({
         name: c.name,
-        code: c.code ?? c.name,
+        code: c.code,
         rate: c.rate,
+        amount: (c.amountPaise / 100).toFixed(2),
       })),
     };
 
@@ -222,6 +338,22 @@ export const createOrder = mutation({
 
     const initialStatus = sequenceProcesses.length > 0 ? sequenceProcesses[0] : null;
 
+    const resolvedPaymentStatus =
+      args.paymentStatus ??
+      (args.orderSource === "Prest-Cashier" || (args.paymentMode && args.orderSource !== "Prest-Online")
+        ? "Paid"
+        : "Pending");
+
+    // Fallback unique non-repeating phone number generator for guest orders
+    const generateUniquePhone = () => {
+      const timeSlice = (now % 1000000).toString().padStart(6, "0");
+      const randomSeed = Math.floor(10 + Math.random() * 90).toString();
+      return `+91 90${timeSlice}${randomSeed}`;
+    };
+
+    const resolvedCustomerPhone = args.customerPhone?.trim() || generateUniquePhone();
+    const resolvedCustomerName = args.customerName?.trim() || "Guest Customer";
+
     // 6. Insert Order Header
     const orderId = await ctx.db.insert("orders", {
       organizationId: args.organizationId,
@@ -231,7 +363,7 @@ export const createOrder = mutation({
       orderSource: args.orderSource ?? "Prest-Cashier",
       orderStatusId: initialStatus?._id,
       orderStatusName: initialStatus?.name ?? "Accepted",
-      isCompleted: false,
+      isCompleted: resolvedPaymentStatus === "Paid",
       isRejected: false,
       isModify: false,
       tableId: args.tableId,
@@ -239,8 +371,8 @@ export const createOrder = mutation({
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
       customerId: args.customerId,
-      customerName: args.customerName,
-      customerPhone: args.customerPhone,
+      customerName: resolvedCustomerName,
+      customerPhone: resolvedCustomerPhone,
       customerEmail: args.customerEmail,
       subTotal,
       taxTotal,
@@ -250,7 +382,7 @@ export const createOrder = mutation({
       deliveryAddress: args.deliveryAddress,
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",
-      paymentStatus: "Pending",
+      paymentStatus: resolvedPaymentStatus,
       specialNotes: args.specialNotes,
       taxInfoSnapshot,
       createdAt: now,
@@ -283,17 +415,60 @@ export const createOrder = mutation({
       createdAt: now,
     });
 
-    // 8.5 Record Initial Order Credit Payment Entry
-    await ctx.db.insert("orderPayments", {
-      organizationId: args.organizationId,
-      orderId,
-      paymentModeName: args.paymentMode ?? "Cash",
-      paymentType: "Credit",
-      amount: totalAmount,
-      payAmount: totalAmount,
-      refundAmount: 0,
-      createdAt: now,
-    });
+    // 8.5 Record Initial Order Credit Payment Entry (if settled)
+    if (resolvedPaymentStatus === "Paid") {
+      await ctx.db.insert("orderPayments", {
+        organizationId: args.organizationId,
+        orderId,
+        paymentModeName: args.paymentMode ?? "Cash",
+        paymentType: "Credit",
+        amount: totalAmount,
+        payAmount: totalAmount,
+        refundAmount: 0,
+        createdAt: now,
+      });
+    }
+
+    // 8.6 Auto-sync customer to organizationUsers (matching defx-pos v1 set_order_user)
+    if (args.customerPhone || args.customerName) {
+      const cleanPhone = args.customerPhone?.replace(/\D/g, "");
+      const existingUsers = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+        .collect();
+
+      const existingCust = existingUsers.find((u) => {
+        if (!cleanPhone || !u.phone) return false;
+        const uDigits = u.phone.replace(/\D/g, "");
+        return uDigits.endsWith(cleanPhone) || cleanPhone.endsWith(uDigits);
+      });
+
+      if (existingCust) {
+        // Update customer profile details
+        await ctx.db.patch(existingCust._id, {
+          firstName: existingCust.firstName || args.customerName?.split(" ")[0],
+          lastName: existingCust.lastName || args.customerName?.split(" ").slice(1).join(" ") || undefined,
+          email: args.customerEmail || existingCust.email,
+          updatedAt: now,
+        });
+      } else if (cleanPhone && cleanPhone.length >= 4) {
+        // Insert new customer record
+        const nameParts = (args.customerName || "Customer").trim().split(" ");
+        const firstName = nameParts[0] || "Customer";
+        const lastName = nameParts.slice(1).join(" ") || undefined;
+        await ctx.db.insert("organizationUsers", {
+          organizationId: args.organizationId,
+          userId: "cust_" + now + "_" + Math.random().toString(36).slice(2, 7),
+          firstName,
+          lastName,
+          phone: args.customerPhone,
+          email: args.customerEmail,
+          userType: ["customer"],
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    }
 
     // 9. Dine-In Table Locking & Postpaid Request Linking
     if (reqTableId) {
@@ -458,6 +633,77 @@ export const getOrderDetails = query({
       activities: activities.sort((a, b) => a.position - b.position),
       payments,
       table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+    };
+  },
+});
+
+export const getCustomerStats = query({
+  args: {
+    organizationId: v.id("organizations"),
+    phone: v.optional(v.string()),
+    name: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    if (!args.phone || !args.phone.trim() || args.phone.trim().replace(/\D/g, "").length < 10) {
+      return {
+        dineInCount: 0,
+        takeawayCount: 0,
+        totalSpends: 0,
+        recentOrders: [],
+      };
+    }
+
+    const cleanP = args.phone.trim().replace(/\D/g, "");
+    const allOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    const customerOrders = allOrders.filter((o) => {
+      if (!o.customerPhone) return false;
+      const oClean = o.customerPhone.replace(/\D/g, "");
+      return oClean.endsWith(cleanP) || cleanP.endsWith(oClean);
+    });
+
+    const dineInCount = customerOrders.filter((o) => o.orderType === "DineIn").length;
+    const takeawayCount = customerOrders.filter((o) => o.orderType === "TakeAway" || o.orderType === "ScheduledPickup").length;
+    const totalSpends = customerOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+    const sortedOrders = customerOrders.sort((a, b) => b.createdAt - a.createdAt);
+    const recentOrders: Array<{
+      _id: any;
+      orderNumber: string;
+      createdAt: number;
+      totalAmount: number;
+      orderType: string;
+      itemsSummary: string;
+    }> = [];
+
+    // Return only the single most recent order (last order)
+    for (const ord of sortedOrders.slice(0, 1)) {
+      const items = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", ord._id))
+        .collect();
+      const itemsSummary = items.length > 0
+        ? items.map((it) => `${it.quantity} x ${it.itemName}`).join(", ")
+        : "Standard order items";
+
+      recentOrders.push({
+        _id: ord._id,
+        orderNumber: ord.orderNumber,
+        createdAt: ord.createdAt,
+        totalAmount: ord.totalAmount,
+        orderType: ord.orderType,
+        itemsSummary,
+      });
+    }
+
+    return {
+      dineInCount,
+      takeawayCount,
+      totalSpends,
+      recentOrders,
     };
   },
 });
@@ -1157,15 +1403,33 @@ export const seedSampleOrders = mutation({
       }
     }
 
-    // 2. Ensure Sample Dine-In Tables exist
+    // 2. Ensure Sample Dine-In Tables exist & are linked to a Layout
     let tables = await ctx.db.query("organizationTables").collect();
 
     if (tables.length === 0) {
+      let defaultLayout = (await ctx.db.query("organizationLayouts").collect()).find(
+        (l) => l.deletedAt === undefined
+      );
+      if (!defaultLayout) {
+        const layoutId = await ctx.db.insert("organizationLayouts", {
+          name: "Indoor-DineIn",
+          createdAt: now,
+          updatedAt: now,
+        });
+        defaultLayout = await ctx.db.get(layoutId) || undefined;
+      }
+
       const tableNumbers = ["01", "02", "04", "06", "10"];
-      for (const tNum of tableNumbers) {
+      for (let i = 0; i < tableNumbers.length; i++) {
+        const tNum = tableNumbers[i];
+        const col = i % 4;
+        const row = Math.floor(i / 4);
         const tId = await ctx.db.insert("organizationTables", {
           tableNumber: tNum,
           seatingCapacity: 4,
+          layoutId: defaultLayout?._id,
+          xPosition: (100 + col * 180).toString(),
+          yPosition: (100 + row * 160).toString(),
           createdAt: now,
           updatedAt: now,
         });

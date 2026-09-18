@@ -81,6 +81,20 @@ function SupportIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function CashierIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 14h2" />
+      <path d="M10 14h2" />
+      <path d="M14 14h4" />
+      <path d="M6 17h4" />
+      <path d="M14 17h4" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
@@ -102,6 +116,11 @@ const navItems: NavItem[] = [
     href: "/orders",
     label: "Orders",
     icon: <OrdersIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/cashier",
+    label: "Cashier",
+    icon: <CashierIcon className="w-4 h-4" />,
   },
   {
     href: "/inventory",

@@ -639,7 +639,7 @@ export const getOrganizationMenu = query({
         .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
 
-      const activeDefault = defaultMenus.find((m) => m.isActive);
+      const activeDefault = defaultMenus.find((m) => m.isActive) || defaultMenus[0];
       if (activeDefault) {
         targetMenuId = activeDefault._id;
       } else {
@@ -648,32 +648,34 @@ export const getOrganizationMenu = query({
           .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
           .filter((q) => q.eq(q.field("deletedAt"), undefined))
           .collect();
-        const firstActive = orgMenus.find((m) => m.isActive);
+        const firstActive = orgMenus.find((m) => m.isActive) || orgMenus[0];
         if (firstActive) {
           targetMenuId = firstActive._id;
         }
       }
     }
 
-    if (!targetMenuId) {
-      return [];
+    // 2. Query Categories for the resolved menu or organization
+    let categories: Array<any> = [];
+    if (targetMenuId) {
+      categories = await ctx.db
+        .query("categories")
+        .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
     }
 
-    const targetMenu = await ctx.db.get(targetMenuId);
-    if (!targetMenu || targetMenu.deletedAt !== undefined) {
-      return [];
+    if (categories.length === 0) {
+      categories = await ctx.db
+        .query("categories")
+        .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
     }
-
-    // 2. Query Categories for the resolved menu
-    const categories = await ctx.db
-      .query("categories")
-      .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
-      .filter((q) => q.eq(q.field("deletedAt"), undefined))
-      .collect();
 
     const activeCategories = categories
-      .filter((c) => c.published)
-      .sort((a, b) => a.position - b.position);
+      .filter((c) => c.published !== false)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
     const resultMenu: Array<any> = [];
     const searchQuery = args.search?.trim().toLowerCase();
@@ -694,7 +696,7 @@ export const getOrganizationMenu = query({
 
       for (const ci of activeCatItems) {
         const item = await ctx.db.get(ci.itemId);
-        if (!item || item.deletedAt !== undefined || !item.published) continue;
+        if (!item || item.deletedAt !== undefined || item.published === false || item.isAvailable === false) continue;
 
         // Apply attribute filters
         if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
@@ -752,7 +754,7 @@ export const getOrganizationMenu = query({
           .collect();
 
         const activeCustomizations = itemCustomizations
-          .filter((cust) => cust.published)
+          .filter((cust) => cust.published !== false)
           .sort((a, b) => a.position - b.position);
 
         const serializedCustomizations: Array<any> = [];
@@ -764,7 +766,8 @@ export const getOrganizationMenu = query({
             .filter((q) => q.eq(q.field("deletedAt"), undefined))
             .collect();
 
-          const sortedCustItems = custItems.sort((a, b) => a.position - b.position);
+          const activeCustItems = custItems.filter((ci) => ci.isAvailable !== false);
+          const sortedCustItems = activeCustItems.sort((a, b) => a.position - b.position);
 
           const serializedCustItems: Array<any> = [];
           for (const ciOpt of sortedCustItems) {
@@ -778,7 +781,7 @@ export const getOrganizationMenu = query({
             if (ciOpt.itemTypeIds) {
               for (const typeId of ciOpt.itemTypeIds) {
                 const itemTypeObj = await ctx.db.get(typeId);
-                if (itemTypeObj) {
+                if (itemTypeObj && itemTypeObj.deletedAt === undefined) {
                   custItemTypes.push({
                     id: itemTypeObj._id,
                     name: itemTypeObj.name,
@@ -788,12 +791,99 @@ export const getOrganizationMenu = query({
               }
             }
 
+            // Resolve Tax Calculation for Customization Item if isGst is true
+            let custTaxInfo: any = {
+              is_gst: ciOpt.isGst ?? false,
+              tax_mode: ciOpt.taxMode || "inclusive",
+              total_tax_rate: 0,
+              tax_amount: "0.00",
+              base_price: (ciOpt.price / 100).toFixed(2),
+              final_price: (ciOpt.price / 100).toFixed(2),
+              components: [],
+            };
+
+            if (ciOpt.isGst) {
+              let taxGroup = null;
+              if (ciOpt.taxGroupId) {
+                taxGroup = await ctx.db.get(ciOpt.taxGroupId);
+              }
+              if (!taxGroup) {
+                const defaultTaxGroups = await ctx.db
+                  .query("taxGroups")
+                  .withIndex("by_org_default", (q) =>
+                    q.eq("organizationId", args.organizationId).eq("isDefault", true)
+                  )
+                  .collect();
+                if (defaultTaxGroups.length > 0) {
+                  taxGroup = defaultTaxGroups[0];
+                }
+              }
+
+              if (taxGroup) {
+                const resolvedMode = ciOpt.taxMode || taxGroup.taxMode || "inclusive";
+                let totalRate = 0;
+                const components: Array<any> = [];
+
+                for (const compId of taxGroup.componentIds) {
+                  const comp = await ctx.db.get(compId);
+                  if (comp) {
+                    components.push(comp);
+                    totalRate += comp.rate;
+                  }
+                }
+
+                const rawPrice = ciOpt.price / 100.0;
+                let basePrice = rawPrice;
+                let taxAmount = 0;
+                let finalPrice = rawPrice;
+
+                if (resolvedMode === "inclusive") {
+                  taxAmount = rawPrice * (totalRate / (100 + totalRate));
+                  basePrice = rawPrice - taxAmount;
+                  finalPrice = rawPrice;
+                } else {
+                  taxAmount = rawPrice * (totalRate / 100.0);
+                  basePrice = rawPrice;
+                  finalPrice = rawPrice + taxAmount;
+                }
+
+                const compBreakdown = components.map((c) => {
+                  const compTaxVal = totalRate > 0 ? taxAmount * (c.rate / totalRate) : 0;
+                  return {
+                    name: c.name,
+                    code: c.code ?? c.name,
+                    rate: c.rate,
+                    tax_amount: compTaxVal.toFixed(2),
+                  };
+                });
+
+                custTaxInfo = {
+                  is_gst: true,
+                  tax_mode: resolvedMode,
+                  tax_group_name: taxGroup.name,
+                  total_tax_rate: totalRate,
+                  tax_amount: taxAmount.toFixed(2),
+                  base_price: basePrice.toFixed(2),
+                  final_price: finalPrice.toFixed(2),
+                  components: compBreakdown,
+                };
+              }
+            }
+
             serializedCustItems.push({
               id: ciOpt._id,
               name: ciOpt.name,
               price: ciOpt.price,
               display_price: (ciOpt.price / 100).toFixed(2),
               is_gst: ciOpt.isGst ?? false,
+              isGst: ciOpt.isGst ?? false,
+              is_veg: ciOpt.isVeg,
+              dietary_type: ciOpt.dietaryType,
+              tax_group_id: ciOpt.taxGroupId,
+              taxGroupId: ciOpt.taxGroupId,
+              tax_mode: ciOpt.taxMode || custTaxInfo.tax_mode,
+              taxMode: ciOpt.taxMode || custTaxInfo.tax_mode,
+              tax_info: custTaxInfo,
               show_quantity: ciOpt.showQuantity ?? false,
               quantity: ciOpt.quantity,
               quantity_unit: ciOpt.quantityUnit,
@@ -824,7 +914,7 @@ export const getOrganizationMenu = query({
         // Resolve Tax Calculation if is_gst is true
         let taxInfo: any = {
           is_gst: item.isGst,
-          tax_mode: "exclusive",
+          tax_mode: item.taxMode || "inclusive",
           total_tax_rate: 0,
           tax_amount: "0.00",
           base_price: (item.price / 100).toFixed(2),
@@ -833,15 +923,24 @@ export const getOrganizationMenu = query({
         };
 
         if (item.isGst) {
-          const defaultTaxGroups = await ctx.db
-            .query("taxGroups")
-            .withIndex("by_org_default", (q) =>
-              q.eq("organizationId", args.organizationId).eq("isDefault", true)
-            )
-            .collect();
+          let taxGroup = null;
+          if (item.taxGroupId) {
+            taxGroup = await ctx.db.get(item.taxGroupId);
+          }
+          if (!taxGroup) {
+            const defaultTaxGroups = await ctx.db
+              .query("taxGroups")
+              .withIndex("by_org_default", (q) =>
+                q.eq("organizationId", args.organizationId).eq("isDefault", true)
+              )
+              .collect();
+            if (defaultTaxGroups.length > 0) {
+              taxGroup = defaultTaxGroups[0];
+            }
+          }
 
-          if (defaultTaxGroups.length > 0) {
-            const taxGroup = defaultTaxGroups[0];
+          if (taxGroup) {
+            const resolvedMode = item.taxMode || taxGroup.taxMode || "inclusive";
             let totalRate = 0;
             const components: Array<any> = [];
 
@@ -858,7 +957,7 @@ export const getOrganizationMenu = query({
             let taxAmount = 0;
             let finalPrice = rawPrice;
 
-            if (taxGroup.taxMode === "inclusive") {
+            if (resolvedMode === "inclusive") {
               taxAmount = rawPrice * (totalRate / (100 + totalRate));
               basePrice = rawPrice - taxAmount;
               finalPrice = rawPrice;
@@ -880,7 +979,7 @@ export const getOrganizationMenu = query({
 
             taxInfo = {
               is_gst: true,
-              tax_mode: taxGroup.taxMode,
+              tax_mode: resolvedMode,
               tax_group_name: taxGroup.name,
               total_tax_rate: totalRate,
               tax_amount: taxAmount.toFixed(2),
@@ -896,6 +995,7 @@ export const getOrganizationMenu = query({
           category_item_id: ci._id,
           item: {
             id: item._id,
+            _id: item._id,
             name: item.name,
             price: item.price,
             display_price: (item.price / 100).toFixed(2),
@@ -905,6 +1005,11 @@ export const getOrganizationMenu = query({
             is_gst: item.isGst,
             is_veg: item.isVeg,
             is_spicy: item.isSpicy,
+            taxGroupId: item.taxGroupId,
+            tax_group_id: item.taxGroupId,
+            taxMode: item.taxMode || taxInfo.tax_mode,
+            tax_mode: item.taxMode || taxInfo.tax_mode,
+            show_item_type: item.showItemType,
             show_quantity: item.showQuantity,
             quantity: item.quantity,
             quantity_unit: item.quantityUnit,
@@ -939,6 +1044,80 @@ export const getOrganizationMenu = query({
             position: category.position,
             published: category.published,
             items: serializedItems,
+          },
+        });
+      }
+    }
+
+    // Fallback: If no category-linked items were found, query all items for the organization directly
+    if (resultMenu.length === 0) {
+      const allOrgItems = await ctx.db
+        .query("items")
+        .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      const directSerializedItems: Array<any> = [];
+
+      for (const item of allOrgItems) {
+        if (item.published === false || item.isAvailable === false) continue;
+        if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
+        if (args.isSpicy !== undefined && item.isSpicy !== args.isSpicy) continue;
+        if (searchQuery) {
+          const matchName = item.name.toLowerCase().includes(searchQuery);
+          const matchDesc = item.description?.toLowerCase().includes(searchQuery) ?? false;
+          if (!matchName && !matchDesc) continue;
+        }
+
+        const imageUrl = await resolveAssetOrStorageUrl(ctx, {
+          assetId: item.imageAssetId,
+          storageId: item.imageStorageId,
+          organizationId: args.organizationId,
+        });
+
+        directSerializedItems.push({
+          category_item_id: item._id,
+          item: {
+            id: item._id,
+            name: item.name,
+            price: item.price,
+            display_price: (item.price / 100).toFixed(2),
+            description: item.description,
+            published: item.published ?? true,
+            is_available: item.isAvailable ?? true,
+            is_gst: item.isGst ?? false,
+            is_veg: item.isVeg ?? true,
+            is_spicy: item.isSpicy ?? false,
+            show_quantity: item.showQuantity ?? false,
+            quantity: item.quantity,
+            quantity_unit: item.quantityUnit,
+            sku_number: item.skuNumber,
+            mark_as_bestseller: item.markAsBestseller ?? false,
+            favourite_item: item.favouriteItem ?? false,
+            items_item_types: [],
+            tax_info: {
+              is_gst: item.isGst ?? false,
+              tax_mode: "exclusive",
+              total_tax_rate: 0,
+              tax_amount: "0.00",
+              base_price: (item.price / 100).toFixed(2),
+              final_price: (item.price / 100).toFixed(2),
+              components: [],
+            },
+          },
+          customizations: [],
+          item_image_url: imageUrl,
+        });
+      }
+
+      if (directSerializedItems.length > 0) {
+        resultMenu.push({
+          category: {
+            id: "all-items",
+            name: "All Items",
+            position: 0,
+            published: true,
+            items: directSerializedItems,
           },
         });
       }

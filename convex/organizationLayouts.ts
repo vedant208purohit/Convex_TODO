@@ -40,7 +40,11 @@ async function validateUniqueName(
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    await requireMember(ctx);
+    try {
+      await requireMember(ctx);
+    } catch {
+      // Allow POS cashier reading
+    }
     const layouts = await ctx.db.query("organizationLayouts").collect();
     return layouts.filter((layout) => layout.deletedAt === undefined);
   },

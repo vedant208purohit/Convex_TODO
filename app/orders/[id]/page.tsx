@@ -11,6 +11,45 @@ import EditOrderDrawer from "../../components/orders/EditOrderDrawer";
 import { openReceiptPdfInNewTab } from "../../utils/generateReceiptPdf";
 import { generateDefxReceiptPlainString } from "../../utils/defxReceiptFormatter";
 
+function formatOrderPhoneDisplay(phone?: string): string {
+  if (!phone || !phone.trim()) return "-";
+  const trimmed = phone.trim();
+
+  if (/^\+\d{1,4}\s\d+/.test(trimmed)) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("+91")) {
+    return `+91 ${trimmed.slice(3).trim()}`;
+  } else if (trimmed.startsWith("+971")) {
+    return `+971 ${trimmed.slice(4).trim()}`;
+  } else if (trimmed.startsWith("+1")) {
+    return `+1 ${trimmed.slice(2).trim()}`;
+  } else if (trimmed.startsWith("+44")) {
+    return `+44 ${trimmed.slice(3).trim()}`;
+  } else if (trimmed.startsWith("+33")) {
+    return `+33 ${trimmed.slice(3).trim()}`;
+  } else if (trimmed.startsWith("+61")) {
+    return `+61 ${trimmed.slice(3).trim()}`;
+  }
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits.length === 10) {
+    return `+91 ${digits}`;
+  }
+
+  return trimmed;
+}
+
+function formatTableDisplay(tableNum?: string): string {
+  if (!tableNum || !tableNum.trim()) return "";
+  const clean = tableNum.trim();
+  if (/^table\b/i.test(clean)) {
+    return clean;
+  }
+  return `Table ${clean}`;
+}
+
 // ==========================================
 // PIXEL-PERFECT SVG ICONS (PREST THEME)
 // ==========================================
@@ -748,10 +787,10 @@ export default function OrderDetailsDynamicPage() {
                   </span>
                   <span
                     className="text-xs font-semibold text-[#0c0a09] truncate block"
-                    title={order.table ? `Table ${order.table.number}` : "N/A"}
+                    title={order.table ? formatTableDisplay(order.table.number) : "N/A"}
                   >
                     {order.table
-                      ? `Table ${order.table.number}`
+                      ? formatTableDisplay(order.table.number)
                       : "Counter / Takeaway"}
                   </span>
                 </div>
@@ -796,7 +835,7 @@ export default function OrderDetailsDynamicPage() {
                         Contact Phone
                       </span>
                       <p className="text-sm font-semibold text-[#0c0a09] mt-0.5">
-                        {order.customerPhone || "+91 98200 12345"}
+                        {formatOrderPhoneDisplay(order.customerPhone)}
                       </p>
                     </div>
                     <div>
@@ -819,7 +858,7 @@ export default function OrderDetailsDynamicPage() {
                         {order.deliveryAddress
                           ? `${order.deliveryAddress.addressLine1}, ${order.deliveryAddress.city || ""}`
                           : order.table
-                            ? `Table ${order.table.number} (Ground Floor)`
+                            ? `${formatTableDisplay(order.table.number)} (Ground Floor)`
                             : "Standard Counter Pickup"}
                       </span>
                     </div>
@@ -1040,7 +1079,9 @@ export default function OrderDetailsDynamicPage() {
                               minute: "2-digit",
                               hour12: true,
                             });
-                            const isCredit = p.paymentType === "Credit";
+                            const isDebit = p.paymentType === "Debit";
+                            const isCredit = !isDebit;
+                            const typeDisplay = p.paymentType || "Credit";
 
                             return (
                               <tr key={p._id || idx}>
@@ -1063,7 +1104,7 @@ export default function OrderDetailsDynamicPage() {
                                 <td
                                   className={`py-2.5 font-semibold ${isCredit ? "text-emerald-700" : "text-red-700"}`}
                                 >
-                                  {p.paymentType}
+                                  {typeDisplay}
                                 </td>
                                 <td className="py-2.5 text-right font-bold text-[#0c0a09]">
                                   {isCredit ? "" : "-"}₹

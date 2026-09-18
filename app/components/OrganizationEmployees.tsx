@@ -2078,7 +2078,7 @@ export function OrganizationEmployees() {
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {}}
-                          className="h-4 w-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer"
+                          className="h-4 w-4 rounded border-neutral-300 text-black focus:ring-black cursor-pointer accent-[#0c0a09]"
                         />
                         <span
                           className={`text-xs font-medium truncate ${isChecked ? "text-neutral-900 font-bold" : "text-neutral-700"}`}
