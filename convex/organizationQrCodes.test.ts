@@ -203,4 +203,81 @@ describe("Organization QR Codes Domain Unit & Integration Tests", () => {
       expect(fetched).toBeNull();
     });
   });
+
+  // 4. Customer Table Session Resolution (Screen 1 Read-Only Public Query)
+  describe("Customer Table Session Resolution (resolveCustomerSession)", () => {
+    test("resolves active table session with layout name and org details without mutating counters", async () => {
+      const { t, asAdmin } = await setupStoreWithAdmin();
+
+      // Create layout
+      const layoutId = await asAdmin.mutation(api.organizationLayouts.create, {
+        name: "Ground Terrace",
+      });
+
+      // Create table
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T12",
+        seatingCapacity: 4,
+        layoutId,
+        placement: "Terrace Window",
+      });
+
+      // Create QR
+      const qr = await asAdmin.mutation(api.organizationQrCodes.create, {
+        name: "Table T12 QR",
+        qrType: "DineIn",
+        tableNumber: "T12",
+        tableId: tableId,
+      });
+
+      // Query customer session (Public unauthenticated)
+      const session = await t.query(api.organizationQrCodes.resolveCustomerSession, {
+        qrId: qr._id,
+      });
+
+      expect(session.valid).toBe(true);
+      expect(session.organization).toBeDefined();
+      expect(session.organization?.name).toBe("QR Test Store");
+      expect(session.table).toBeDefined();
+      expect(session.table?.tableNumber).toBe("T12");
+      expect(session.table?.layoutName).toBe("Ground Terrace");
+      expect(session.table?.isBlock).toBe(false);
+      expect(session.qr?.name).toBe("Table T12 QR");
+
+      // Verify read-only: counter did not increment
+      const qrDoc = await asAdmin.query(api.organizationQrCodes.get, { id: qr._id });
+      expect(qrDoc?.counter).toBe(0);
+    });
+
+    test("returns TABLE_NOT_FOUND when non-existent table is requested", async () => {
+      const { t } = await setupStoreWithAdmin();
+
+      const session = await t.query(api.organizationQrCodes.resolveCustomerSession, {
+        tableNumber: "NON_EXISTENT_999",
+      });
+
+      expect(session.valid).toBe(false);
+      expect(session.errorCode).toBe("TABLE_NOT_FOUND");
+      expect(session.error).toContain("This table QR code is no longer active");
+    });
+
+    test("returns TABLE_BLOCKED when table has isBlock enabled", async () => {
+      const { t, asAdmin } = await setupStoreWithAdmin();
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T99",
+        seatingCapacity: 2,
+        isBlock: true,
+      });
+
+      const session = await t.query(api.organizationQrCodes.resolveCustomerSession, {
+        tableId: tableId,
+      });
+
+      expect(session.valid).toBe(false);
+      expect(session.errorCode).toBe("TABLE_BLOCKED");
+      expect(session.error).toContain("This table is currently unavailable");
+    });
+  });
 });
+
