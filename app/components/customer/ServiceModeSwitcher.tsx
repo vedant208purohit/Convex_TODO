@@ -1,91 +1,108 @@
 "use client";
 
 import React, { useState } from "react";
-import { CustomerTable, CustomerOrganization } from "./types";
+import { CustomerTable, CustomerOrganization, CustomerServiceMode } from "./types";
+import { useCustomerCart } from "./CustomerCartContext";
 import { MopedIcon, TableBarIcon, ShoppingBagIcon, VerifiedCheckIcon } from "./CustomerIcons";
 
 interface ServiceModeSwitcherProps {
   table?: CustomerTable;
   organization?: CustomerOrganization;
+  showContextLine?: boolean;
 }
 
-export function ServiceModeSwitcher({ table, organization }: ServiceModeSwitcherProps) {
-  const [selectedMode, setSelectedMode] = useState<"Delivery" | "Dine In" | "Take Away">("Dine In");
+export function ServiceModeSwitcher({
+  table,
+  organization,
+  showContextLine = true,
+}: ServiceModeSwitcherProps) {
+  const { serviceMode, setServiceMode } = useCustomerCart();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const tableNum = table?.tableNumber || "T12";
 
-  const handleSelectMode = (mode: "Delivery" | "Dine In" | "Take Away") => {
-    setSelectedMode(mode);
-    if (mode === "Delivery") {
-      setToastMessage("Table QR session active — items will be prepared for Dine In Table " + tableNum);
+  const handleSelectMode = (mode: CustomerServiceMode) => {
+    setServiceMode(mode);
+    if (mode === "delivery") {
+      setToastMessage("Table QR session active — order will be routed for Table " + tableNum);
       setTimeout(() => setToastMessage(null), 3000);
-    } else if (mode === "Take Away") {
-      setToastMessage("Table QR session active — notify staff if you wish to pack your order");
+    } else if (mode === "takeaway") {
+      setToastMessage("Table QR session active — kitchen will package order for takeaway");
       setTimeout(() => setToastMessage(null), 3000);
     }
   };
 
+  const isDelivery = serviceMode === "delivery";
+  const isDineIn = serviceMode === "dine_in";
+  const isTakeaway = serviceMode === "takeaway";
+
   return (
-    <section className="flex flex-col gap-1.5">
+    <section className="flex flex-col gap-1.5 w-full">
       {/* 3-Option Switcher */}
-      <div className="flex p-1 bg-[#eaedff] rounded-xl w-full">
+      <div className="flex p-1 bg-[#eaedff] rounded-full w-full shadow-2xs">
+        {/* Delivery Button */}
         <button
           type="button"
-          onClick={() => handleSelectMode("Delivery")}
-          className={`flex-1 py-2 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
-            selectedMode === "Delivery"
-              ? "bg-[#4338ca] text-white shadow-xs"
-              : "text-stone-600 hover:text-stone-900"
+          onClick={() => handleSelectMode("delivery")}
+          className={`flex-1 py-1.5 px-1 rounded-full text-xs transition-all flex items-center justify-center gap-1 cursor-pointer ${
+            isDelivery
+              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
+              : "text-[#464554] hover:text-[#131b2e] font-medium"
           }`}
         >
-          <MopedIcon className={`w-4 h-4 ${selectedMode === "Delivery" ? "text-white" : "text-stone-600"}`} />
-          <span className={selectedMode === "Delivery" ? "text-white font-semibold" : "text-stone-600"}>
+          <MopedIcon className={`w-3.5 h-3.5 ${isDelivery ? "text-white" : "text-[#464554]"}`} />
+          <span className={isDelivery ? "text-white" : "text-[#464554]"}>
             Delivery
           </span>
         </button>
 
+        {/* Dine In Button */}
         <button
           type="button"
-          onClick={() => handleSelectMode("Dine In")}
-          className={`flex-1 py-2 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
-            selectedMode === "Dine In"
-              ? "bg-[#4338ca] text-white shadow-xs"
-              : "text-stone-600 hover:text-stone-900"
+          onClick={() => handleSelectMode("dine_in")}
+          className={`flex-1 py-1.5 px-1 rounded-full text-xs transition-all flex items-center justify-center gap-1 cursor-pointer ${
+            isDineIn
+              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
+              : "text-[#464554] hover:text-[#131b2e] font-medium"
           }`}
         >
-          <TableBarIcon className={`w-4 h-4 ${selectedMode === "Dine In" ? "text-white" : "text-stone-600"}`} />
-          <span className={selectedMode === "Dine In" ? "text-white font-semibold" : "text-stone-600"}>
+          <TableBarIcon className={`w-3.5 h-3.5 ${isDineIn ? "text-white" : "text-[#464554]"}`} />
+          <span className={isDineIn ? "text-white" : "text-[#464554]"}>
             Dine In
           </span>
         </button>
 
+        {/* Take Away Button */}
         <button
           type="button"
-          onClick={() => handleSelectMode("Take Away")}
-          className={`flex-1 py-2 px-1 rounded-lg text-xs transition-all flex items-center justify-center gap-1.5 font-medium ${
-            selectedMode === "Take Away"
-              ? "bg-[#4338ca] text-white shadow-xs"
-              : "text-stone-600 hover:text-stone-900"
+          onClick={() => handleSelectMode("takeaway")}
+          className={`flex-1 py-1.5 px-1 rounded-full text-xs transition-all flex items-center justify-center gap-1 cursor-pointer ${
+            isTakeaway
+              ? "bg-[#4338ca] text-white shadow-sm font-semibold"
+              : "text-[#464554] hover:text-[#131b2e] font-medium"
           }`}
         >
-          <ShoppingBagIcon className={`w-4 h-4 ${selectedMode === "Take Away" ? "text-white" : "text-stone-600"}`} />
-          <span className={selectedMode === "Take Away" ? "text-white font-semibold" : "text-stone-600"}>
+          <ShoppingBagIcon className={`w-3.5 h-3.5 ${isTakeaway ? "text-white" : "text-[#464554]"}`} />
+          <span className={isTakeaway ? "text-white" : "text-[#464554]"}>
             Take Away
           </span>
         </button>
       </div>
 
       {/* Contextual Status Line */}
-      <div className="flex items-center justify-center gap-1.5 text-stone-600">
-        <VerifiedCheckIcon className="w-3.5 h-3.5 text-[#005e3f]" />
-        <span className="text-[11px] font-medium">
-          Dine In: Table {tableNum} • Direct Kitchen Dispatch
-        </span>
-      </div>
+      {showContextLine && (
+        <div className="flex items-center justify-center gap-1.5 text-[#464554] pt-0.5">
+          <VerifiedCheckIcon className="w-3.5 h-3.5 text-[#005e3f]" />
+          <span className="text-[11px] font-medium">
+            {isDineIn && `Dine In: Table ${tableNum} • Direct Kitchen Dispatch`}
+            {isDelivery && `Delivery Mode: Table ${tableNum} Order Dispatch`}
+            {isTakeaway && `Take Away: Packed for Table ${tableNum}`}
+          </span>
+        </div>
+      )}
 
       {toastMessage && (
-        <div className="text-[11px] text-center text-[#4338ca] bg-[#eaedff]/70 px-2 py-1 rounded-md animate-fade-in">
+        <div className="text-[11px] text-center text-[#4338ca] bg-[#eaedff]/90 border border-indigo-200/50 px-2 py-1 rounded-lg animate-fade-in">
           {toastMessage}
         </div>
       )}

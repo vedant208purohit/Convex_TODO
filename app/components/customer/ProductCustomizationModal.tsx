@@ -117,7 +117,6 @@ export function ProductCustomizationModal({
       if (maxSelected === 1) {
         // Single select (radio behavior)
         if (isCurrentlySelected) {
-          // If required, cannot deselect the only selected option
           return required ? prev : { ...prev, [groupId]: [] };
         }
         return { ...prev, [groupId]: [optionId] };
@@ -199,21 +198,18 @@ export function ProductCustomizationModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 backdrop-blur-xs p-3 sm:p-4 transition-opacity animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 transition-opacity animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[440px] h-[82vh] h-[82dvh] max-h-[580px] rounded-3xl shadow-2xl flex flex-col min-h-0 overflow-hidden relative animate-in zoom-in-95 duration-200"
+        className="bg-white w-full max-w-[480px] max-h-[88dvh] sm:max-h-[82dvh] h-auto flex flex-col rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
-        style={{
-          maxHeight: "min(580px, 82vh)",
-        }}
       >
         {/* Grabber Handle & Sheet Header */}
         <div className="pt-3 pb-2 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0">
           <div className="w-10 h-1 bg-stone-300 rounded-full mb-2" />
           <div className="w-full flex items-center justify-between">
-            <span className="text-[11px] font-extrabold tracking-widest text-stone-500 uppercase">
+            <span className="text-[11px] font-extrabold tracking-widest text-[#464554] uppercase">
               CUSTOMISE DISH
             </span>
             <button
@@ -227,12 +223,12 @@ export function ProductCustomizationModal({
           </div>
         </div>
 
-        {/* Scrollable Modal Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-5 scrollbar-thin">
+        {/* Scrollable Modal Body with safe padding */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-8 space-y-5 scrollbar-thin">
           {/* 1. Product Summary Card */}
-          <div className="flex items-start gap-3 p-3 bg-[#f8f9ff] rounded-2xl border border-stone-200/60">
+          <div className="flex items-start gap-3 p-3 bg-[#f8f9ff] rounded-2xl border border-stone-200/60 min-w-0">
             {/* Product Image */}
-            <div className="w-20 h-20 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 border border-stone-200/70 shadow-2xs">
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 border border-stone-200/70 shadow-2xs">
               {item.item_image_url ? (
                 <img
                   src={item.item_image_url}
@@ -259,11 +255,11 @@ export function ProductCustomizationModal({
                   </span>
                 )}
               </div>
-              <h3 className="text-[15px] font-bold text-[#131b2e] leading-snug truncate">
+              <h3 className="text-[14px] sm:text-[15px] font-bold text-[#131b2e] leading-snug truncate">
                 {item.name}
               </h3>
               {item.description && (
-                <p className="text-[11px] text-stone-500 line-clamp-1 mt-0.5">
+                <p className="text-[11px] text-[#464554] line-clamp-1 mt-0.5">
                   {item.description}
                 </p>
               )}
@@ -293,7 +289,7 @@ export function ProductCustomizationModal({
                       <h4 className="text-xs font-bold text-[#131b2e] tracking-tight uppercase">
                         {group.name}
                       </h4>
-                      <p className="text-[11px] text-stone-500">
+                      <p className="text-[11px] text-[#464554]">
                         {isSingleSelect
                           ? "Select 1 option"
                           : `Select up to ${group.max_selected} options`}
@@ -329,14 +325,14 @@ export function ProductCustomizationModal({
                               group.required
                             )
                           }
-                          className={`w-full p-3 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer ${
+                          className={`w-full p-3 rounded-xl border flex items-center justify-between text-left transition-all cursor-pointer min-w-0 gap-2 ${
                             isSelected
                               ? "border-2 border-[#4338ca] bg-[#eaedff]/30 shadow-xs"
                               : "border border-stone-200 hover:border-stone-300 bg-white"
                           }`}
                         >
                           {/* Left: Radio / Checkbox Indicator & Option Name */}
-                          <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex items-center gap-2.5 min-w-0 flex-1">
                             {isSingleSelect ? (
                               <div
                                 className={`w-4.5 h-4.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
@@ -363,12 +359,12 @@ export function ProductCustomizationModal({
                               </div>
                             )}
 
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <span className="text-xs font-semibold text-[#131b2e] block truncate">
                                 {opt.name}
                               </span>
                               {opt.description && (
-                                <span className="text-[10px] text-stone-500 block truncate">
+                                <span className="text-[10px] text-[#464554] block truncate">
                                   {opt.description}
                                 </span>
                               )}
@@ -401,7 +397,7 @@ export function ProductCustomizationModal({
                 <h4 className="text-xs font-bold text-[#131b2e] tracking-tight uppercase">
                   CHEF PREP PREFERENCES
                 </h4>
-                <p className="text-[11px] text-stone-500">
+                <p className="text-[11px] text-[#464554]">
                   Tailor spice levels, toppings & ingredients
                 </p>
               </div>
@@ -435,7 +431,7 @@ export function ProductCustomizationModal({
         </div>
 
         {/* Sticky Bottom Action Area */}
-        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
+        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-2.5 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))]">
           {/* Quantity Stepper */}
           <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1.5 shadow-xs h-11 flex-shrink-0">
             <button
@@ -464,10 +460,10 @@ export function ProductCustomizationModal({
             type="button"
             disabled={!isComplete}
             onClick={handleConfirm}
-            className="flex-1 bg-[#4338ca] hover:bg-[#372abf] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white h-11 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-between shadow-md cursor-pointer"
+            className="flex-1 bg-[#4338ca] hover:bg-[#372abf] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white h-11 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-between shadow-md cursor-pointer min-w-0"
           >
-            <span>{isComplete ? "Add to Cart" : "Select required options"}</span>
-            <span className="flex items-center gap-1 font-extrabold text-sm">
+            <span className="truncate mr-1">{isComplete ? "Add to Cart" : "Select required"}</span>
+            <span className="flex items-center gap-1 font-extrabold text-xs sm:text-sm flex-shrink-0">
               <span>{formattedGrandTotal}</span>
               <span className="text-xs">→</span>
             </span>
