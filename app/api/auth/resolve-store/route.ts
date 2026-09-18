@@ -78,7 +78,7 @@ export async function resolveStoreForAuthenticatedUser() {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.success) {
-      if (process.env.NODE_ENV === "development" && process.env.NEXT_PUBLIC_CONVEX_URL) {
+      if (process.env.NEXT_PUBLIC_CONVEX_URL) {
         return NextResponse.json(
           {
             success: true,
