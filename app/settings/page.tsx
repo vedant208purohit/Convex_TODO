@@ -13,6 +13,7 @@ import { OrganizationTablesSettings } from "../components/OrganizationTablesSett
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
+import { OrganizationPrinters } from "../components/OrganizationPrinters";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -241,6 +242,7 @@ function BrandingIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 type SettingsTab =
   | "organization"
+  | "printers"
   | "features"
   | "staff"
   | "waiters"

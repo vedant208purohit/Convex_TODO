@@ -939,29 +939,47 @@ export function OrganizationEmployees() {
           ? customPermissions
           : undefined;
 
-      if (drawerMode === "add") {
-        await createEmployeeMutation({
-          userId: effectiveUserId,
-          firstName: firstNameVal,
-          lastName: lastNameVal,
-          email: effectiveUserId,
-          userType: formRoles,
-          ...(permissionPayload ? { userPermission: permissionPayload } : {}),
+           if (drawerMode === "add") {
+        const primaryRole =
+          formRoles.find((r) => STAFF_ROLE_CARDS.some((c) => c.key === r)) ||
+          formRoles[0] ||
+          "cashier";
+
+        const res = await fetch("/api/staff/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            firstName: formFirstName.trim(),
+            lastName: formLastName.trim(),
+            email: effectiveUserId,
+            role: primaryRole,
+            userType: formRoles,
+            userPermission: permissionPayload,
+          }),
         });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Failed to create employee.");
+        }
+
         setSuccessMessage(
-          `Employee "${firstNameVal} ${lastNameVal}" created successfully!`,
+          `Employee "${formFirstName.trim()} ${formLastName.trim()}" created successfully. An invitation has been sent!`,
         );
       } else if (editingId) {
         await updateEmployeeMutation({
           id: editingId,
-          firstName: firstNameVal,
-          lastName: lastNameVal,
-          email: effectiveUserId,
+          firstName: formFirstName.trim(),
+          lastName: formLastName.trim(),
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
         setSuccessMessage(`Employee updated successfully!`);
       }
+
 
       handleCloseDrawer();
       setTimeout(() => setSuccessMessage(null), 3500);
