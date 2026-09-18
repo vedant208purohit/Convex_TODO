@@ -8,7 +8,12 @@ interface CustomerCartContextType {
   totalItemCount: number;
   subTotal: number; // in paise (minor units)
   formattedTotal: string; // e.g. "₹699.00"
-  addItem: (item: CustomerMenuItem, customizations?: SelectedCustomization[], quantity?: number) => void;
+  addItem: (
+    item: CustomerMenuItem,
+    customizations?: SelectedCustomization[],
+    quantity?: number,
+    preferences?: string[]
+  ) => void;
   updateQuantity: (cartItemId: string, delta: number) => void;
   setItemQuantity: (cartItemId: string, quantity: number) => void;
   getItemQuantity: (itemId: string) => number;
@@ -19,12 +24,20 @@ interface CustomerCartContextType {
 
 const CustomerCartContext = createContext<CustomerCartContextType | undefined>(undefined);
 
-function buildCartItemId(itemId: string, customizations?: SelectedCustomization[]): string {
-  if (!customizations || customizations.length === 0) {
-    return itemId;
-  }
-  const optionIds = customizations.map((c) => c.optionId).sort().join("_");
-  return `${itemId}_${optionIds}`;
+function buildCartItemId(
+  itemId: string,
+  customizations?: SelectedCustomization[],
+  preferences?: string[]
+): string {
+  const custKeys = (customizations || [])
+    .map((c) => c.optionId)
+    .sort()
+    .join("_");
+  const prefKeys = (preferences || [])
+    .sort()
+    .join("_");
+  const suffix = [custKeys, prefKeys].filter(Boolean).join("__");
+  return suffix ? `${itemId}_${suffix}` : itemId;
 }
 
 export function CustomerCartProvider({
@@ -70,8 +83,13 @@ export function CustomerCartProvider({
   }, [items, storageKey, isInitialized]);
 
   const addItem = useCallback(
-    (item: CustomerMenuItem, customizations: SelectedCustomization[] = [], quantity = 1) => {
-      const cartItemId = buildCartItemId(item.id, customizations);
+    (
+      item: CustomerMenuItem,
+      customizations: SelectedCustomization[] = [],
+      quantity = 1,
+      preferences: string[] = []
+    ) => {
+      const cartItemId = buildCartItemId(item.id, customizations, preferences);
       const customAddonsPrice = customizations.reduce((acc, c) => acc + (c.price || 0), 0);
       const totalUnitPrice = item.price + customAddonsPrice;
 
@@ -97,6 +115,7 @@ export function CustomerCartProvider({
               imageUrl: item.item_image_url,
               isVeg: item.is_veg,
               customizations: customizations.length > 0 ? customizations : undefined,
+              preferences: preferences.length > 0 ? preferences : undefined,
             },
           ];
         }

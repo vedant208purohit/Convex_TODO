@@ -120,4 +120,5 @@ export interface CartItem {
   imageUrl?: string;
   isVeg?: boolean;
   customizations?: SelectedCustomization[];
+  preferences?: string[];
 }
