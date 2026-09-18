@@ -4,7 +4,8 @@ import React, { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { CustomerCartProvider } from "./CustomerCartContext";
+import { CustomerCartProvider, useCustomerCart } from "./CustomerCartContext";
+import { CustomerCartView } from "./CustomerCartView";
 import { CustomerHeader } from "./CustomerHeader";
 import { TableContextCard } from "./TableContextCard";
 import { ServiceModeSwitcher } from "./ServiceModeSwitcher";
@@ -29,6 +30,7 @@ interface CustomerOrderingHomeProps {
   tableId?: string;
   tableNumber?: string;
   identifier?: string;
+  initialTab?: CustomerNavTab;
 }
 
 // Fallback demo categories & items if the store menu has not been populated yet
@@ -275,9 +277,10 @@ export function CustomerOrderingHome({
   tableId,
   tableNumber,
   identifier,
+  initialTab = "home",
 }: CustomerOrderingHomeProps) {
   // Navigation & Search State
-  const [activeTab, setActiveTab] = useState<CustomerNavTab>("home");
+  const [activeTab, setActiveTab] = useState<CustomerNavTab>(initialTab);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
@@ -469,9 +472,30 @@ function CustomerOrderingHomeView({
     return allItems;
   }, [categories, selectedCategoryId, searchQuery]);
 
+  const { totalItemCount } = useCustomerCart();
+
   const activeCategoryTitle = selectedCategoryId
     ? categories.find((c) => c.category.id === selectedCategoryId)?.category.name
     : undefined;
+
+  // Render SCREEN 3: Your Cart / Table Order when on the "orders" tab
+  if (activeTab === "orders") {
+    return (
+      <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
+        <CustomerCartView
+          organization={organization}
+          table={table}
+          rawMenu={rawMenu}
+          onBackToMenu={() => onSelectTab("home")}
+        />
+        <CustomerBottomNav
+          activeTab={activeTab}
+          onSelectTab={onSelectTab}
+          orderCount={totalItemCount}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
@@ -520,9 +544,7 @@ function CustomerOrderingHomeView({
         {/* Sticky Floating Dine-In Cart Bar */}
         <StickyCartBar
           table={table}
-          onViewCart={() => {
-            // Navigate to Cart screen (Screen 6 in roadmap)
-          }}
+          onViewCart={() => onSelectTab("orders")}
         />
 
         {/* Extra Bottom Scroll Clearance for Mobile Screens */}
@@ -533,6 +555,7 @@ function CustomerOrderingHomeView({
       <CustomerBottomNav
         activeTab={activeTab}
         onSelectTab={onSelectTab}
+        orderCount={totalItemCount}
       />
     </div>
   );
