@@ -238,6 +238,9 @@ export const createCategory = mutation({
     published: v.optional(v.boolean()),
     name_hi: v.optional(v.string()),
     name_gu: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
+    imageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -249,6 +252,9 @@ export const createCategory = mutation({
       published: args.published ?? true,
       name_hi: args.name_hi,
       name_gu: args.name_gu,
+      imageStorageId: args.imageStorageId,
+      imageAssetId: args.imageAssetId,
+      imageUrl: args.imageUrl?.trim() || undefined,
       createdAt: now,
       updatedAt: now,
     });
@@ -1072,6 +1078,12 @@ export const getOrganizationMenu = query({
       }
 
       const catMenu = category.menuId ? menuMap.get(category.menuId) : null;
+      const categoryImageUrl =
+        (await resolveAssetOrStorageUrl(ctx, {
+          assetId: category.imageAssetId,
+          storageId: category.imageStorageId,
+          organizationId: args.organizationId,
+        })) || category.imageUrl || null;
       if (serializedItems.length > 0 || !searchQuery) {
         resultMenu.push({
           category: {
@@ -1086,6 +1098,7 @@ export const getOrganizationMenu = query({
             name_gu: category.name_gu,
             position: category.position,
             published: category.published,
+            imageUrl: categoryImageUrl,
             items: serializedItems,
           },
         });
@@ -1232,6 +1245,9 @@ export const updateCategory = mutation({
     published: v.optional(v.boolean()),
     name_hi: v.optional(v.string()),
     name_gu: v.optional(v.string()),
+    imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
+    imageUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
