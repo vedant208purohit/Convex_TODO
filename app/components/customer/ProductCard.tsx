@@ -182,8 +182,8 @@ export function ProductCard({ item, currencySymbol = "₹" }: ProductCardProps) 
           item={item}
           isOpen={isCustomizing}
           onClose={() => setIsCustomizing(false)}
-          onAddToCart={(customizations, quantity) => {
-            addItem(item, customizations, quantity);
+          onAddToCart={(customizations, quantity, preferences) => {
+            addItem(item, customizations, quantity, preferences);
           }}
           currencySymbol={currencySymbol}
         />
