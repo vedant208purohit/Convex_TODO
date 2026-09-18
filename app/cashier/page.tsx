@@ -4014,7 +4014,7 @@ function CashierPosContent() {
                   {/* Payment Channel Filter / Mode Pills */}
                   <div
                     aria-label="Payment Channels"
-                    className="bg-[#f5f2f0] p-1.5 rounded-2xl border border-[#e5ded8] flex flex-wrap gap-1.5"
+                    className="bg-[#f5f2f0] p-1.5 rounded-2xl border border-[#e5ded8] grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2"
                     role="tablist"
                   >
                     {activePaymentChannels.map((mode: any) => {
@@ -4056,10 +4056,10 @@ function CashierPosContent() {
                               }
                             }
                           }}
-                          className={`flex-1 min-w-[120px] inline-flex items-center justify-center space-x-2 py-2.5 px-3.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer select-none ${
+                          className={`w-full min-h-[46px] inline-flex items-center justify-center space-x-2 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 cursor-pointer select-none whitespace-nowrap ${
                             isSelected
                               ? "bg-[#0c0a09] text-white shadow-sm border border-[#0c0a09]"
-                              : "bg-white/90 hover:bg-white text-stone-700 hover:text-stone-950 border border-stone-200/70 hover:border-stone-300 shadow-2xs"
+                              : "bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-950 border border-stone-200/80 hover:border-stone-300 shadow-2xs"
                           }`}
                         >
                           <span className={isSelected ? "text-white" : "text-stone-500"}>
@@ -4080,7 +4080,7 @@ function CashierPosContent() {
                       <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                         <div>
                           <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                          <span className="text-xs text-[#8a7e75]">Ticket reference: #CK-8942-02</span>
+                          <span className="text-xs text-[#8a7e75]">Ticket: {activeCart.label} • {activeCart.orderType}</span>
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
@@ -4267,7 +4267,7 @@ function CashierPosContent() {
                         <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
                             <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode}</span>
+                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode} • {activeCart.label}</span>
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
@@ -4280,7 +4280,7 @@ function CashierPosContent() {
                         <div>
                           <div className="flex items-center justify-between mb-2">
                             <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="card-tendered-input">
-                              Card Amount to Charge <span className="text-rose-500">*</span>
+                              {selectedPaymentMode} Amount to Charge <span className="text-rose-500">*</span>
                             </label>
                             {!tenderCardGiven.trim() && (
                               <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -4411,7 +4411,7 @@ function CashierPosContent() {
                         <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
                             <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode}</span>
+                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode} • {activeCart.label}</span>
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
@@ -4550,7 +4550,7 @@ function CashierPosContent() {
                       <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                         <div>
                           <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                          <span className="text-xs text-[#8a7e75]">Ticket reference: #CK-8942-02</span>
+                          <span className="text-xs text-[#8a7e75]">Ticket: {activeCart.label} • {activeCart.orderType}</span>
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
@@ -4730,7 +4730,7 @@ function CashierPosContent() {
                         <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
                             <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode}</span>
+                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode} • {activeCart.label}</span>
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
