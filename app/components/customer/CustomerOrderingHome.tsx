@@ -485,7 +485,7 @@ function CustomerOrderingHomeView({
       />
 
       {/* 2. Main Content Container (Max 480px) */}
-      <main className="flex-1 w-full max-w-[480px] mx-auto pt-20 pb-36 px-4 flex flex-col gap-5">
+      <main className="flex-1 w-full max-w-[480px] mx-auto pt-20 pb-44 px-4 flex flex-col gap-5">
         {/* Table Context Card */}
         <TableContextCard table={table} qr={qr} />
 
@@ -524,6 +524,9 @@ function CustomerOrderingHomeView({
             // Navigate to Cart screen (Screen 6 in roadmap)
           }}
         />
+
+        {/* Extra Bottom Scroll Clearance for Mobile Screens */}
+        <div className="h-20 w-full flex-shrink-0" aria-hidden="true" />
       </main>
 
       {/* 3. Fixed Bottom Navigation */}
