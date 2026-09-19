@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { Doc } from "./_generated/dataModel";
 
 // ==========================================
 // 1. SUPPLIER MANAGEMENT MUTATIONS & QUERIES
@@ -245,7 +246,7 @@ export const getItemRecipe = query({
 
     const result: Array<any> = [];
     for (const r of recipesList) {
-      const invItem = await ctx.db.get(r.inventoryItemId);
+      const invItem = (await ctx.db.get(r.inventoryItemId)) as Doc<"inventoryItems"> | null;
       result.push({
         ...r,
         ingredientName: invItem?.name ?? "Unknown Ingredient",

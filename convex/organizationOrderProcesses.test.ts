@@ -329,6 +329,26 @@ describe("Organization Order Processes Domain Unit & Business Logic Tests", () =
 
   // 4. Update Operations
   describe("Update Logic & Revalidations", () => {
+    test("Can update process description", async () => {
+      const { asAdmin } = await setupStoreWithAdmin();
+
+      const pId = await asAdmin.mutation(api.organizationOrderProcesses.create, {
+        name: "Initial Stage",
+        description: "Initial description",
+        isSequence: true,
+        processColor: "#111111",
+      });
+
+      await asAdmin.mutation(api.organizationOrderProcesses.update, {
+        id: pId,
+        description: "Updated description text",
+      });
+
+      const updated = await asAdmin.query(api.organizationOrderProcesses.get, { id: pId });
+      expect(updated?.description).toBe("Updated description text");
+    });
+
+
     test("Store Admin can update process attributes", async () => {
       const { asAdmin } = await setupStoreWithAdmin();
 
@@ -390,6 +410,50 @@ describe("Organization Order Processes Domain Unit & Business Logic Tests", () =
 
       expect(namesInOrder).toEqual(["Step 1", "Step 4", "Step 2", "Step 3"]);
       expect(list.map((doc) => doc.position)).toEqual([1, 2, 3, 4]);
+    });
+
+    test("Reordering all statuses (including 7th status and newly created statuses) via { id, position }", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      // Seed 7 default processes (4 sequential, 3 non-sequential)
+      await t.mutation(api.organizations.initializeStore, { id: orgId });
+
+      let allProcesses = await asAdmin.query(api.organizationOrderProcesses.list, {});
+      expect(allProcesses).toHaveLength(7);
+
+      // Create an 8th new process
+      const p8 = await asAdmin.mutation(api.organizationOrderProcesses.create, {
+        name: "Quality Check",
+        isSequence: true,
+        processColor: "#000000",
+      });
+
+      allProcesses = await asAdmin.query(api.organizationOrderProcesses.list, {});
+      expect(allProcesses).toHaveLength(8);
+
+      const rejectDoc = allProcesses.find((p) => p.name === "Reject")!;
+      const qualityDoc = allProcesses.find((p) => p.name === "Quality Check")!;
+
+      // 1. Move Reject (7th status) to position 1
+      await asAdmin.mutation(api.organizationOrderProcesses.reorder, {
+        id: rejectDoc._id,
+        position: 1,
+      });
+
+      let updatedList = await asAdmin.query(api.organizationOrderProcesses.list, {});
+      expect(updatedList[0].name).toBe("Reject");
+      expect(updatedList.map((p) => p.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+
+      // 2. Move Quality Check (newly created status) to position 2
+      await asAdmin.mutation(api.organizationOrderProcesses.reorder, {
+        id: qualityDoc._id,
+        position: 2,
+      });
+
+      updatedList = await asAdmin.query(api.organizationOrderProcesses.list, {});
+      expect(updatedList[0].name).toBe("Reject");
+      expect(updatedList[1].name).toBe("Quality Check");
+      expect(updatedList.map((p) => p.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     });
   });
 

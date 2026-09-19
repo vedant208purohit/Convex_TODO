@@ -240,4 +240,67 @@ describe("Organization Carousel Screens Domain Unit & Integration Tests", () => 
       ).rejects.toThrow("Forbidden. Admin or Cashier access required.");
     });
   });
+
+  // 6. R2 Asset ID Support
+  describe("R2 Asset ID Support", () => {
+    test("Can create and update carousel screen with R2 assetId", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      const assetId = await t.run(async (ctx) => {
+        return await ctx.db.insert("organization_assets", {
+          organizationId: orgId,
+          storageKey: `organizations/${orgId}/carousel_image/banner1.jpg`,
+          fileName: "banner1.jpg",
+          contentType: "image/jpeg",
+          fileSize: 4096,
+          assetType: "carousel_image",
+          status: "uploaded",
+          createdBy: "user_admin_99",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      });
+
+      const created = await asAdmin.mutation(
+        api.organizationCarouselScreens.create,
+        {
+          fileName: "banner1.jpg",
+          assetId,
+        }
+      );
+
+      expect(created.assetId).toBe(assetId);
+
+      // Verify list returns assetId
+      const list = await asAdmin.query(api.organizationCarouselScreens.list, {});
+      const found = list.find((s) => s._id === created._id);
+      expect(found?.assetId).toBe(assetId);
+
+      // Update with new assetId
+      const newAssetId = await t.run(async (ctx) => {
+        return await ctx.db.insert("organization_assets", {
+          organizationId: orgId,
+          storageKey: `organizations/${orgId}/carousel_image/banner2.jpg`,
+          fileName: "banner2.jpg",
+          contentType: "image/jpeg",
+          fileSize: 8192,
+          assetType: "carousel_image",
+          status: "uploaded",
+          createdBy: "user_admin_99",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      });
+
+      const updated = await asAdmin.mutation(
+        api.organizationCarouselScreens.update,
+        {
+          id: created._id,
+          assetId: newAssetId,
+        }
+      );
+
+      expect(updated.assetId).toBe(newAssetId);
+    });
+  });
 });

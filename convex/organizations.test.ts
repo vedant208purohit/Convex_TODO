@@ -361,7 +361,7 @@ describe("Organization Domain Business Logic Tests", () => {
         country: "India",
         phone: "987654321",
       })
-    ).rejects.toThrow("Phone must be 10 digits long for other countries");
+    ).rejects.toThrow("Phone must be 10 digits long for India");
 
     // Rejects formatting characters (spaces, hyphens, slashes)
     await expect(
@@ -510,5 +510,397 @@ describe("Organization Domain Business Logic Tests", () => {
       id: orgId,
     });
     expect(internalOrg?.deletedAt).toBeDefined();
+  });
+
+  // 23. FSSAI & GST Compliance Document Storage & URL Fields
+  test("23. Saves, updates, and clears FSSAI and GST document storage IDs and URLs", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "Document Compliance Store",
+    });
+
+    // Store blob to generate valid storage ID via t.run
+    const fssaiStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["fssai doc"])));
+    const gstStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["gst doc"])));
+
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentStorageId: fssaiStorageId,
+      fssaiDocumentUrl: "https://example.com/fssai.pdf",
+      gstDocumentStorageId: gstStorageId,
+      gstDocumentUrl: "https://example.com/gst.pdf",
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.fssaiDocumentStorageId).toBe(fssaiStorageId);
+    expect(org?.fssaiDocumentUrl).toBe("https://example.com/fssai.pdf");
+    expect(org?.gstDocumentStorageId).toBe(gstStorageId);
+    expect(org?.gstDocumentUrl).toBe("https://example.com/gst.pdf");
+
+    // Clear document fields by updating URL to empty string or replacing
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentUrl: "",
+      gstDocumentUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.fssaiDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.gstDocumentStorageId).toBeUndefined();
+  });
+
+  // 24. Organization Logo R2 Asset ID Persistence & Dual Schema
+  test("24. Accepts and persists logoAssetId while preserving dual schema logoStorageId", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "R2 Logo Store",
+    });
+
+    const legacyStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["legacy logo"])));
+    const assetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/logo/test.png`,
+        fileName: "test.png",
+        contentType: "image/png",
+        fileSize: 1024,
+        assetType: "logo",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    // Update organization with logoAssetId
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      logoStorageId: legacyStorageId,
+      logoAssetId: assetId,
+    });
+
+    // Verify organization query returns logoAssetId
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.logoAssetId).toBe(assetId);
+    expect(org?.logoStorageId).toBe(legacyStorageId);
+
+    // Verify organizations.list query returns logoAssetId
+    const orgs = await t.query(api.organizations.list);
+    const listedOrg = orgs.find((o) => o?._id === orgId);
+    expect(listedOrg?.logoAssetId).toBe(assetId);
+    expect(listedOrg?.logoStorageId).toBe(legacyStorageId);
+
+    // Verify clearing logo removes logoAssetId
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      logoUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.logoAssetId).toBeUndefined();
+    expect(clearedOrg?.logoStorageId).toBeUndefined();
+  });
+
+  // 25. Organization FSSAI & GST R2 Asset ID Persistence
+  test("25. Accepts and persists fssaiDocumentAssetId and gstDocumentAssetId", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await createTestOrg(t, {
+      name: "R2 Compliance Store",
+    });
+
+    const fssaiAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/document/fssai.pdf`,
+        fileName: "fssai.pdf",
+        contentType: "application/pdf",
+        fileSize: 2048,
+        assetType: "document",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    const gstAssetId = await t.run(async (ctx) => {
+      return await ctx.db.insert("organization_assets", {
+        organizationId: orgId,
+        storageKey: `organizations/${orgId}/document/gst.pdf`,
+        fileName: "gst.pdf",
+        contentType: "application/pdf",
+        fileSize: 2048,
+        assetType: "document",
+        status: "uploaded",
+        createdBy: "user_test",
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    });
+
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      isFssai: true,
+      fssaiRegistrationNumber: "12345678901234",
+      fssaiDocumentAssetId: fssaiAssetId,
+      isGst: true,
+      gstNumber: "22AAAAA0000A1Z5",
+      gstDocumentAssetId: gstAssetId,
+    });
+
+    const org = await t.query(api.organizations.get, { id: orgId });
+    expect(org?.fssaiDocumentAssetId).toBe(fssaiAssetId);
+    expect(org?.gstDocumentAssetId).toBe(gstAssetId);
+    expect(org?.isFssai).toBe(true);
+    expect(org?.isGst).toBe(true);
+
+    // Verify clearing FSSAI and GST documents removes their asset IDs
+    await t.withIdentity({ name: "Tester", subject: "user_test" }).mutation(api.organizations.update, {
+      id: orgId,
+      fssaiDocumentUrl: "",
+      gstDocumentUrl: "",
+    });
+
+    const clearedOrg = await t.query(api.organizations.get, { id: orgId });
+    expect(clearedOrg?.fssaiDocumentAssetId).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.fssaiDocumentUrl).toBeUndefined();
+    expect(clearedOrg?.gstDocumentAssetId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentStorageId).toBeUndefined();
+    expect(clearedOrg?.gstDocumentUrl).toBeUndefined();
+  });
+
+  // ----------------------------------------------------
+  // DIGITAL STORE / ONLINE STOREFRONT TESTS
+  // ----------------------------------------------------
+  describe("Digital Store / Online Storefront Configuration Tests", () => {
+    test("24. getDigitalStore returns default digital store settings for an organization", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Default Digital Store",
+        ownerClerkId: "admin_ds_1",
+      });
+
+      const asAdmin = t.withIdentity({ subject: "admin_ds_1" });
+      const ds = await asAdmin.query(api.organizations.getDigitalStore, { id: orgId });
+
+      expect(ds).toBeDefined();
+      expect(ds?.digitalStoreStatus).toBe(false);
+      expect(ds?.aboutUsContent).toBeNull();
+      expect(ds?.facebookAccountLink).toBeNull();
+      expect(ds?.instagramAccountLink).toBeNull();
+      expect(ds?.policyLink).toBeNull();
+      expect(ds?.refundLink).toBeNull();
+      expect(ds?.termAndConditionLink).toBeNull();
+      expect(ds?.aboutUsImageStorageId).toBeNull();
+      expect(ds?.aboutUsImageUrl).toBeNull();
+    });
+
+    test("25. updateDigitalStore updates content, status, social links, and legal URLs", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Full Digital Store",
+        ownerClerkId: "admin_ds_2",
+      });
+
+      const asAdmin = t.withIdentity({ subject: "admin_ds_2" });
+
+      const updated = await asAdmin.mutation(api.organizations.updateDigitalStore, {
+        id: orgId,
+        digitalStoreStatus: true,
+        aboutUsContent: "We craft authentic wood-fired artisanal pizzas.",
+        facebookAccountLink: "https://facebook.com/artisanalpizza",
+        instagramAccountLink: "https://instagram.com/artisanalpizza",
+        policyLink: "https://example.com/privacy",
+        refundLink: "https://example.com/refund",
+        termAndConditionLink: "https://example.com/terms",
+        aboutUsImageUrl: "https://example.com/hero.jpg",
+      });
+
+      expect(updated.digitalStoreStatus).toBe(true);
+      expect(updated.aboutUsContent).toBe("We craft authentic wood-fired artisanal pizzas.");
+      expect(updated.facebookAccountLink).toBe("https://facebook.com/artisanalpizza");
+      expect(updated.instagramAccountLink).toBe("https://instagram.com/artisanalpizza");
+      expect(updated.policyLink).toBe("https://example.com/privacy");
+      expect(updated.refundLink).toBe("https://example.com/refund");
+      expect(updated.termAndConditionLink).toBe("https://example.com/terms");
+      expect(updated.aboutUsImageUrl).toBe("https://example.com/hero.jpg");
+    });
+
+    test("26. updateDigitalStore supports partial updates without erasing omitted fields", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Partial Update Store",
+        ownerClerkId: "admin_ds_3",
+      });
+
+      const asAdmin = t.withIdentity({ subject: "admin_ds_3" });
+
+      // Initial populate
+      await asAdmin.mutation(api.organizations.updateDigitalStore, {
+        id: orgId,
+        digitalStoreStatus: true,
+        aboutUsContent: "Original About Us",
+        facebookAccountLink: "https://facebook.com/mybrand",
+      });
+
+      // Partial update only updating instagramAccountLink
+      const partialRes = await asAdmin.mutation(api.organizations.updateDigitalStore, {
+        id: orgId,
+        instagramAccountLink: "https://instagram.com/mybrand",
+      });
+
+      expect(partialRes.digitalStoreStatus).toBe(true);
+      expect(partialRes.aboutUsContent).toBe("Original About Us");
+      expect(partialRes.facebookAccountLink).toBe("https://facebook.com/mybrand");
+      expect(partialRes.instagramAccountLink).toBe("https://instagram.com/mybrand");
+    });
+
+    test("27. Resolves aboutUsImageUrl dynamically from Convex storage ID", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Storage Image Store",
+        ownerClerkId: "admin_ds_4",
+      });
+
+      const asAdmin = t.withIdentity({ subject: "admin_ds_4" });
+
+      const imageStorageId = await t.run(async (ctx) => await ctx.storage.store(new Blob(["about us image"])));
+
+      await asAdmin.mutation(api.organizations.updateDigitalStore, {
+        id: orgId,
+        aboutUsImageStorageId: imageStorageId,
+      });
+
+      const ds = await asAdmin.query(api.organizations.getDigitalStore, { id: orgId });
+      expect(ds?.aboutUsImageStorageId).toBe(imageStorageId);
+      expect(ds?.aboutUsImageUrl).toBeDefined();
+    });
+
+    test("28. Validates URL format and rejects invalid protocols or malformed URLs", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Validation Store",
+        ownerClerkId: "admin_ds_5",
+      });
+
+      const asAdmin = t.withIdentity({ subject: "admin_ds_5" });
+
+      // Rejects ftp protocol
+      await expect(
+        asAdmin.mutation(api.organizations.updateDigitalStore, {
+          id: orgId,
+          facebookAccountLink: "ftp://facebook.com/mybrand",
+        })
+      ).rejects.toThrow("Invalid URL protocol. Must start with http:// or https://");
+
+      // Rejects malformed string
+      await expect(
+        asAdmin.mutation(api.organizations.updateDigitalStore, {
+          id: orgId,
+          policyLink: "not-a-valid-url",
+        })
+      ).rejects.toThrow("Invalid URL format");
+
+      // Empty string clears URL safely
+      const cleared = await asAdmin.mutation(api.organizations.updateDigitalStore, {
+        id: orgId,
+        facebookAccountLink: "   ",
+      });
+      expect(cleared.facebookAccountLink).toBe("");
+    });
+
+    test("29. Organization isolation: User from Store B cannot read or update Store A digital store", async () => {
+      const t = convexTest(schema, modules);
+
+      const org1Id = await createTestOrg(t, {
+        name: "Store One",
+        ownerClerkId: "user_owner_1",
+      });
+
+      const org2Id = await createTestOrg(t, {
+        name: "Store Two",
+        ownerClerkId: "user_owner_2",
+      });
+
+      const asAdmin2 = t.withIdentity({ subject: "user_owner_2" });
+
+      // Admin 2 cannot read Store 1 digital store
+      await expect(
+        asAdmin2.query(api.organizations.getDigitalStore, { id: org1Id })
+      ).rejects.toThrow("Forbidden");
+
+      // Admin 2 cannot update Store 1 digital store
+      await expect(
+        asAdmin2.mutation(api.organizations.updateDigitalStore, {
+          id: org1Id,
+          aboutUsContent: "Hacked content",
+        })
+      ).rejects.toThrow("Forbidden");
+    });
+
+    test("30. Unauthenticated caller cannot read or update digital store", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Auth Test Store",
+        ownerClerkId: "user_owner_auth",
+      });
+
+      await expect(
+        t.query(api.organizations.getDigitalStore, { id: orgId })
+      ).rejects.toThrow("Unauthenticated");
+
+      await expect(
+        t.mutation(api.organizations.updateDigitalStore, {
+          id: orgId,
+          digitalStoreStatus: true,
+        })
+      ).rejects.toThrow("Unauthenticated");
+    });
+
+    test("31. Non-admin role cannot update digital store", async () => {
+      const t = convexTest(schema, modules);
+
+      const orgId = await createTestOrg(t, {
+        name: "Role Test Store",
+        ownerClerkId: "admin_user_main",
+      });
+
+      // Add a waiter member
+      await t.withIdentity({ subject: "admin_user_main" }).mutation(
+        api.organizationUsers.create,
+        {
+          userId: "waiter_user_1",
+          firstName: "Walter",
+          lastName: "Waiter",
+          userType: ["waiter"],
+        }
+      );
+
+      const asWaiter = t.withIdentity({ subject: "waiter_user_1" });
+
+      // Waiter can read digital store (as member)
+      const ds = await asWaiter.query(api.organizations.getDigitalStore, { id: orgId });
+      expect(ds).toBeDefined();
+
+      // Waiter CANNOT update digital store
+      await expect(
+        asWaiter.mutation(api.organizations.updateDigitalStore, {
+          id: orgId,
+          aboutUsContent: "Waiter attempting change",
+        })
+      ).rejects.toThrow("Forbidden. Admin access required.");
+    });
   });
 });

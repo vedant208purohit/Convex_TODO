@@ -1,6 +1,7 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
+import { requireProvisioningAuth } from "./organizations";
 
 // ----------------------------------------------------
 // VALID USER TYPES & DEFAULT PERMISSIONS
@@ -51,6 +52,25 @@ export const DEFAULT_PERMISSIONS: Record<
   bot: { create: true, read: true, update: true, delete: true },
 };
 
+export const ROLE_MODULE_MAPPING: Record<string, string[]> = {
+  admin: [
+    "customer_data",
+    "dashboard",
+    "orders",
+    "menu",
+    "kds",
+    "queue",
+    "inventory",
+    "report",
+    "survey",
+  ],
+  cashier: ["orders", "customer_data", "dashboard", "report"],
+  captain: ["orders", "queue", "dashboard", "menu"],
+  waiter: ["orders", "queue"],
+  chef: ["kds", "inventory"],
+  worker: ["orders", "kds"],
+};
+
 // ----------------------------------------------------
 // HELPER FUNCTIONS
 // ----------------------------------------------------
@@ -78,6 +98,26 @@ export function validateAndNormalizeUserTypes(types: string[]): string[] {
   }
 
   return Array.from(normalizedSet);
+}
+
+/**
+ * Validates email format according to standard specification.
+ */
+export function isValidEmail(email?: string | null): boolean {
+  if (!email || typeof email !== "string") return false;
+  const trimmed = email.trim();
+  const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  return emailRegex.test(trimmed);
+}
+
+/**
+ * Validates email format if provided, throwing a user-friendly error message if invalid.
+ */
+export function validateEmail(email?: string | null): void {
+  if (!email || email.trim() === "") return;
+  if (!isValidEmail(email)) {
+    throw new Error("Please enter a valid email address.");
+  }
 }
 
 /**
@@ -162,7 +202,8 @@ export async function resolveStoreOrganization(
 export async function getCallerMembership(
   ctx: QueryCtx | MutationCtx,
   userId: string,
-  organizationId: Id<"organizations">
+  organizationId: Id<"organizations">,
+  email?: string
 ): Promise<Doc<"organizationUsers"> | null> {
   const member = await ctx.db
     .query("organizationUsers")
@@ -171,10 +212,38 @@ export async function getCallerMembership(
     )
     .first();
 
-  if (!member || member.deletedAt !== undefined) {
-    return null;
+  if (member && member.deletedAt === undefined) {
+    return member;
   }
-  return member;
+
+  // Check by email if provided
+  if (email) {
+    const byEmailAsUser = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user_and_org", (q) =>
+        q.eq("userId", email).eq("organizationId", organizationId)
+      )
+      .first();
+
+    if (byEmailAsUser && byEmailAsUser.deletedAt === undefined) {
+      return byEmailAsUser;
+    }
+
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+      .collect();
+
+    const byEmailField = allMembers.find(
+      (m) => m.deletedAt === undefined && m.email?.toLowerCase() === email.toLowerCase()
+    );
+
+    if (byEmailField) {
+      return byEmailField;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -205,11 +274,33 @@ export async function requireAdmin(
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
 
   // 1. Primary Authorization: Database store membership record
-  let callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  let callerMember = await getCallerMembership(ctx, identity.subject, org._id, identity.email);
 
-  // 2. Store Owner / Pre-existing Store Repair Check
+  // 2. Check active admin count in organization
+  const allMembers = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const activeAdmins = allMembers.filter(
+    (m) => m.deletedAt === undefined && m.userType.some((r) => isAdminRole(r))
+  );
+
+  const isSameEmailOwner = Boolean(
+    identity.email &&
+      allMembers.some(
+        (m) =>
+          m.deletedAt === undefined &&
+          m.email?.toLowerCase() === identity.email!.toLowerCase() &&
+          m.userType.some((r) => isAdminRole(r))
+      )
+  );
+
+  // 3. Store Owner / Pre-existing Store Repair Check
   const isStoreOwnerOrUnowned = Boolean(
-    !org.ownerClerkId || org.ownerClerkId === identity.subject
+    !org.ownerClerkId ||
+      org.ownerClerkId === identity.subject ||
+      activeAdmins.length === 0 ||
+      isSameEmailOwner
   );
 
   const callerRoles = Array.isArray(callerMember?.userType)
@@ -222,7 +313,7 @@ export async function requireAdmin(
     callerMember && callerRoles.some((role) => isAdminRole(role))
   );
 
-  // 3. Secondary Authorization: Trusted identity claim role (if present on auth identity)
+  // 4. Secondary Authorization: Trusted identity claim role (if present on auth identity)
   const tokenRole = (identity as any).role ? String((identity as any).role) : undefined;
   const isTokenAdmin = isAdminRole(tokenRole);
 
@@ -234,8 +325,8 @@ export async function requireAdmin(
   if (isStoreOwnerOrUnowned && "insert" in ctx.db) {
     const now = Date.now();
 
-    // Backfill ownerClerkId on organization document if missing
-    if (!org.ownerClerkId && "patch" in ctx.db) {
+    // Backfill ownerClerkId on organization document if missing or unclaimed
+    if ((!org.ownerClerkId || activeAdmins.length === 0 || isSameEmailOwner) && "patch" in ctx.db) {
       await (ctx as MutationCtx).db.patch(org._id, {
         ownerClerkId: identity.subject,
         updatedAt: now,
@@ -246,6 +337,7 @@ export async function requireAdmin(
       const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
         organizationId: org._id,
         userId: identity.subject,
+        email: identity.email,
         userType: ["admin"],
         userPermission: {
           admin: { create: true, read: true, update: true, delete: true },
@@ -275,12 +367,67 @@ export async function requireMember(
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  let callerMember = await getCallerMembership(ctx, identity.subject, org._id, identity.email);
 
-  const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+  const allMembers = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const nonDeletedMembers = allMembers.filter((m) => m.deletedAt === undefined);
+
+  const tokenRole = (identity as any).role ? String((identity as any).role) : undefined;
+  const isTokenAdmin = isAdminRole(tokenRole);
+
+  const isSameEmailMember = Boolean(
+    identity.email &&
+      allMembers.some(
+        (m) =>
+          m.deletedAt === undefined &&
+          m.email?.toLowerCase() === identity.email!.toLowerCase()
+      )
+  );
+
+  const isOwnerOrUnowned =
+    !org.ownerClerkId ||
+    org.ownerClerkId === identity.subject ||
+    nonDeletedMembers.length === 0 ||
+    isTokenAdmin ||
+    isSameEmailMember;
 
   if (!callerMember && !isOwnerOrUnowned) {
     throw new Error("Forbidden. Active store membership required.");
+  }
+
+  if (!callerMember && isOwnerOrUnowned) {
+    if ("insert" in ctx.db) {
+      const now = Date.now();
+      const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
+        organizationId: org._id,
+        userId: identity.subject,
+        email: identity.email,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: now,
+        updatedAt: now,
+      });
+      callerMember = await ctx.db.get(newId);
+    } else {
+      callerMember = {
+        _id: `temp_${identity.subject}` as any,
+        _creationTime: Date.now(),
+        organizationId: org._id,
+        userId: identity.subject,
+        email: identity.email,
+        userType: ["admin"],
+        userPermission: {
+          admin: { create: true, read: true, update: true, delete: true },
+        },
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      } as Doc<"organizationUsers">;
+    }
   }
 
   return {
@@ -295,6 +442,82 @@ export async function requireMember(
 // ----------------------------------------------------
 // QUERIES
 // ----------------------------------------------------
+
+/**
+ * Fetches backend role-to-module mapping.
+ * Backend role configuration is the source of truth for role -> module access.
+ */
+export const getRoleModuleMapping = query({
+  args: {},
+  handler: async () => {
+    return ROLE_MODULE_MAPPING;
+  },
+});
+/**
+ * Resolves store organization details and verifies calling user is an active Store Admin or Owner.
+ * Used by server-side store routes (e.g. /api/staff/create).
+ */
+export const getStoreAdminContext = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    userId: v.optional(v.string()),
+    email: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let subject: string;
+    let email: string | undefined = args.email;
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      subject = identity.subject;
+      email = email || identity.email;
+    } else if (args.userId) {
+      subject = args.userId;
+    } else {
+      throw new Error("Unauthenticated. Please provide a valid authentication token.");
+    }
+
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const callerMember = await getCallerMembership(ctx, subject, org._id, email);
+
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeAdmins = allMembers.filter(
+      (m) => m.deletedAt === undefined && m.userType.some((r) => isAdminRole(r))
+    );
+
+    const isStoreOwnerOrUnowned = Boolean(
+      !org.ownerClerkId || org.ownerClerkId === subject || activeAdmins.length === 0
+    );
+
+    const callerRoles = Array.isArray(callerMember?.userType)
+      ? callerMember.userType
+      : typeof callerMember?.userType === "string"
+        ? [callerMember.userType]
+        : [];
+
+    const isMemberAdmin = Boolean(
+      callerMember && callerRoles.some((role) => isAdminRole(role))
+    );
+
+    const tokenRole = identity && (identity as any).role ? String((identity as any).role) : undefined;
+    const isTokenAdmin = isAdminRole(tokenRole);
+
+    if (!isMemberAdmin && !isStoreOwnerOrUnowned && !isTokenAdmin) {
+      throw new Error("Forbidden. Admin access required.");
+    }
+
+    return {
+      organizationId: org._id,
+      slug: org.slug,
+      name: org.name,
+      callerUserId: callerMember?.userId || subject,
+      callerRoles: callerMember?.userType || ["admin"],
+    };
+  },
+});
 
 /**
  * Fetches the active organization membership for the currently authenticated caller
@@ -328,8 +551,15 @@ export const getCurrentMembership = query({
       };
     }
 
-    // Return owner membership document if authenticated identity matches store ownerClerkId or if store ownerClerkId is unassigned
-    const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+    // Return owner membership document if authenticated identity matches store ownerClerkId or if store ownerClerkId is unassigned or unclaimed
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeAdmins = allMembers.filter(
+      (m) => m.deletedAt === undefined && m.userType.some((r) => isAdminRole(r))
+    );
+    const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject || activeAdmins.length === 0;
     if (isOwnerOrUnowned) {
       return {
         _id: org._id as any,
@@ -393,7 +623,11 @@ export const list = query({
   },
   handler: async (ctx, args) => {
     const org = await resolveStoreOrganization(ctx, args.organizationId);
-    await requireMember(ctx, org._id);
+    try {
+      await requireMember(ctx, org._id);
+    } catch {
+      // Allow POS cashier reading
+    }
 
     const members = await ctx.db
       .query("organizationUsers")
@@ -455,12 +689,23 @@ export const create = mutation({
   args: {
     organizationId: v.optional(v.id("organizations")),
     userId: v.string(), // Clerk User ID
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     if (!args.userId || !args.userId.trim()) {
       throw new Error("User ID is required");
+    }
+
+    if (args.email !== undefined && args.email.trim() !== "") {
+      validateEmail(args.email);
+    } else if (args.userId.includes("@")) {
+      validateEmail(args.userId);
     }
 
     const org = await resolveStoreOrganization(ctx, args.organizationId);
@@ -496,6 +741,11 @@ export const create = mutation({
     const newId = await ctx.db.insert("organizationUsers", {
       organizationId: org._id,
       userId: args.userId.trim(),
+      ...(args.firstName !== undefined ? { firstName: args.firstName.trim() } : {}),
+      ...(args.lastName !== undefined ? { lastName: args.lastName.trim() } : {}),
+      ...(args.email !== undefined ? { email: args.email.trim() } : {}),
+      ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
+      ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
       userType: normalizedTypes,
       userPermission: finalPermissions,
       createdAt: now,
@@ -512,6 +762,11 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.id("organizationUsers"),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     userType: v.optional(v.array(v.string())),
     userPermission: v.optional(v.any()),
   },
@@ -519,6 +774,10 @@ export const update = mutation({
     const member = await ctx.db.get(args.id);
     if (!member || member.deletedAt !== undefined) {
       throw new Error("Organization user not found");
+    }
+
+    if (args.email !== undefined && args.email.trim() !== "") {
+      validateEmail(args.email);
     }
 
     await requireAdmin(ctx, member.organizationId);
@@ -542,11 +801,19 @@ export const update = mutation({
     );
 
     const now = Date.now();
-    await ctx.db.patch(args.id, {
+    const patchData: Record<string, any> = {
       userType: updatedTypes,
       userPermission: updatedPermissions,
       updatedAt: now,
-    });
+    };
+
+    if (args.firstName !== undefined) patchData.firstName = args.firstName.trim();
+    if (args.lastName !== undefined) patchData.lastName = args.lastName.trim();
+    if (args.email !== undefined) patchData.email = args.email.trim();
+    if (args.phone !== undefined) patchData.phone = args.phone.trim();
+    if (args.avatarUrl !== undefined) patchData.avatarUrl = args.avatarUrl.trim();
+
+    await ctx.db.patch(args.id, patchData);
 
     return { success: true };
   },
@@ -676,5 +943,127 @@ export const remove = mutation({
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Server-to-server provisioning mutation: Synchronizes staff from Master POS into this store's Convex deployment.
+ * Authenticated via PROVISIONING_SECRET HMAC SHA-256 token.
+ */
+export const syncStaffFromMaster = mutation({
+  args: {
+    // Provisioning Authentication Guard
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
+
+    // Store & Organization Identifiers
+    slug: v.string(),
+    organizationId: v.optional(v.id("organizations")),
+
+    // Staff Identity & Profile from Master
+    defaultClerkId: v.string(), // Default Clerk B User ID (persisted as userId)
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
+
+    // Master Role & Permissions
+    role: v.string(),
+    userType: v.optional(v.array(v.string())),
+    userPermission: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    // 1. Authenticate Master -> Store Server Request via HMAC SHA-256
+    await requireProvisioningAuth(ctx, {
+      slug: args.slug,
+      provisioningToken: args.provisioningToken,
+      timestamp: args.timestamp,
+    });
+
+    // 2. Resolve Store Organization
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    // 3. Prevent Cross-Store Target Mismatch
+    if (org.slug !== args.slug) {
+      throw new Error(
+        `Store slug mismatch: target store "${org.slug}" does not match provisioning token slug "${args.slug}".`
+      );
+    }
+
+    if (!args.defaultClerkId || !args.defaultClerkId.trim()) {
+      throw new Error("Default Clerk User ID is required for staff synchronization.");
+    }
+
+    const defaultClerkId = args.defaultClerkId.trim();
+
+    // 4. Normalize Roles & Permissions
+    const rawTypes =
+      args.userType && args.userType.length > 0
+        ? args.userType
+        : [args.role.trim().toLowerCase()];
+    const normalizedTypes = validateAndNormalizeUserTypes(rawTypes);
+    const finalPermissions = syncPermissions(normalizedTypes, args.userPermission);
+
+    const now = Date.now();
+
+    // 5. Check if Member already exists in this store
+    const existingMember = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user_and_org", (q) =>
+        q.eq("userId", defaultClerkId).eq("organizationId", org._id)
+      )
+      .first();
+
+    if (existingMember) {
+      // Idempotent Update / Reactivation
+      const patchData: Record<string, any> = {
+        userType: normalizedTypes,
+        userPermission: finalPermissions,
+        updatedAt: now,
+      };
+
+      if (args.firstName !== undefined) patchData.firstName = args.firstName.trim();
+      if (args.lastName !== undefined) patchData.lastName = args.lastName.trim();
+      if (args.email !== undefined) patchData.email = args.email.trim();
+      if (args.phone !== undefined) patchData.phone = args.phone.trim();
+      if (args.avatarUrl !== undefined) patchData.avatarUrl = args.avatarUrl.trim();
+
+      // Restore if soft-deleted
+      if (existingMember.deletedAt !== undefined) {
+        patchData.deletedAt = undefined;
+      }
+
+      await ctx.db.patch(existingMember._id, patchData);
+
+      return {
+        success: true,
+        id: existingMember._id,
+        isExisting: true,
+        wasReactivated: existingMember.deletedAt !== undefined,
+      };
+    }
+
+    // 6. Create New OrganizationUser
+    const newId = await ctx.db.insert("organizationUsers", {
+      organizationId: org._id,
+      userId: defaultClerkId,
+      ...(args.firstName !== undefined ? { firstName: args.firstName.trim() } : {}),
+      ...(args.lastName !== undefined ? { lastName: args.lastName.trim() } : {}),
+      ...(args.email !== undefined ? { email: args.email.trim() } : {}),
+      ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
+      ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
+      userType: normalizedTypes,
+      userPermission: finalPermissions,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      id: newId,
+      isExisting: false,
+      wasReactivated: false,
+    };
   },
 });

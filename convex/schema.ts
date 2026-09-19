@@ -59,11 +59,17 @@ export default defineSchema({
     inclusiveGst: v.boolean(),
     separateGst: v.boolean(),
     gstNumber: v.optional(v.string()),
+    gstDocumentStorageId: v.optional(v.id("_storage")),
+    gstDocumentAssetId: v.optional(v.id("organization_assets")),
+    gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Food Safety Compliance Configuration
     isFssai: v.boolean(),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
+    fssaiDocumentStorageId: v.optional(v.id("_storage")),
+    fssaiDocumentAssetId: v.optional(v.id("organization_assets")),
+    fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone Configuration
     defaultCurrency: v.optional(v.string()),
@@ -79,6 +85,9 @@ export default defineSchema({
     primaryColor: v.optional(v.string()),
     secondaryColor: v.optional(v.string()),
     theme: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+    logoStorageId: v.optional(v.id("_storage")),
+    logoAssetId: v.optional(v.id("organization_assets")),
 
     // POS Feature & Module Configuration
     isDineIn: v.boolean(),
@@ -100,6 +109,16 @@ export default defineSchema({
     isReport: v.boolean(),
     isVeg: v.boolean(),
     digitalStoreStatus: v.boolean(),
+
+    // Digital Store Configuration
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
 
     // Payment Configuration
     deliveryCashOnDelivery: v.boolean(),
@@ -155,11 +174,16 @@ export default defineSchema({
   }).index("by_org", ["organizationId"]),
 
   paymentModes: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     name: v.string(),
     active: v.boolean(),
     createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_active", ["organizationId", "active"])
+    .index("by_legacy_id", ["legacyId"]),
 
   inventoryCategories: defineTable({
     organizationId: v.id("organizations"),
@@ -171,6 +195,11 @@ export default defineSchema({
   organizationUsers: defineTable({
     organizationId: v.id("organizations"),
     userId: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    avatarUrl: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
     createdAt: v.optional(v.number()),
@@ -181,10 +210,91 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_user_and_org", ["userId", "organizationId"]),
 
-  // Organization Feature Flags
+  // Customer Domain Table (Migrated from legacy Rails users where user_type includes 'customer')
+  customers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Identity & Contact Details
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    email: v.optional(v.string()),
+
+    // Payment Gateway Identifier (e.g. Razorpay Customer ID from legacy user.razorpay_customer_id)
+    razorpayCustomerId: v.optional(v.string()),
+
+    // Optional Avatar Asset / Storage reference
+    avatarStorageId: v.optional(v.id("_storage")),
+    avatarAssetId: v.optional(v.id("organization_assets")),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_email", ["email"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Customer Addresses Domain Table (Migrated from legacy Rails user_addresses)
+  userAddresses: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Customer Relationship
+    customerId: v.id("customers"),
+
+    // Address Details
+    addressLine1: v.string(),
+    addressLine2: v.optional(v.string()),
+    landmark: v.optional(v.string()),
+    city: v.string(),
+    zipCode: v.string(),
+    otherLocationDetail: v.optional(v.string()),
+    addressType: v.string(), // "Home", "Work", "Other", etc.
+
+    // Geocoordinates (Decimal in Rails)
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+
+    // Formatted & Delivery Notes
+    completeAddress: v.optional(v.string()),
+    deliveryInstructions: v.optional(v.string()),
+
+    // Default Address Flag
+    isDefault: v.optional(v.boolean()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_customer", ["customerId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Master Global Features Catalog (Super Admin & Base Features)
+  features: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    displayDescription: v.optional(v.string()),
+    createdAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_name", ["name"]),
+
+  // Organization Feature Flags (Per-store runtime active toggles)
   organizationFeatures: defineTable({
     organizationId: v.optional(v.id("organizations")),
+    featureId: v.optional(v.id("features")),
     featureKey: v.string(),
+    name: v.optional(v.string()),
+    description: v.optional(v.string()),
+    displayName: v.optional(v.string()),
+    displayDescription: v.optional(v.string()),
     active: v.boolean(),
     createdAt: v.optional(v.number()),
     updatedAt: v.number(),
@@ -204,6 +314,7 @@ export default defineSchema({
     position: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_org", ["organizationId"])
     .index("by_org_default", ["organizationId", "isDefault"]),
@@ -218,6 +329,7 @@ export default defineSchema({
     name_gu: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   })
     .index("by_menu", ["menuId"])
     .index("by_org", ["organizationId"]),
@@ -235,6 +347,9 @@ export default defineSchema({
     showQuantity: v.boolean(),
     quantity: v.optional(v.number()),
     quantityUnit: v.optional(v.string()),
+    showItemType: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     skuNumber: v.optional(v.string()),
     markAsBestseller: v.boolean(),
     favouriteItem: v.optional(v.boolean()),
@@ -245,13 +360,46 @@ export default defineSchema({
     servingSize: v.optional(v.string()),
     serving: v.optional(v.number()),
     caloriesPerServing: v.optional(v.string()),
+    protein: v.optional(v.string()),
+    carbs: v.optional(v.string()),
+    fat: v.optional(v.string()),
+    fiber: v.optional(v.string()),
+    sugar: v.optional(v.string()),
+    sodium: v.optional(v.string()),
+    showAllergenContents: v.optional(v.boolean()),
+    allergens: v.optional(v.array(v.string())),
+    nutrients: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          name: v.string(),
+          quantity: v.optional(v.string()),
+          dailyValue: v.optional(v.string()),
+          children: v.optional(
+            v.array(
+              v.object({
+                id: v.string(),
+                name: v.string(),
+                quantity: v.optional(v.string()),
+                dailyValue: v.optional(v.string()),
+              })
+            )
+          ),
+        })
+      )
+    ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     threeDModelStorageId: v.optional(v.id("_storage")),
+    threeDModelAssetId: v.optional(v.id("organization_assets")),
     threeDModelIosStorageId: v.optional(v.id("_storage")),
+    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
     videoStorageId: v.optional(v.id("_storage")),
+    videoAssetId: v.optional(v.id("organization_assets")),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_org", ["organizationId"]),
 
   categoryItems: defineTable({
@@ -261,6 +409,7 @@ export default defineSchema({
     position: v.number(),
     published: v.boolean(),
     createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_category", ["categoryId"]),
 
   itemTypes: defineTable({
@@ -268,6 +417,7 @@ export default defineSchema({
     name: v.string(),
     icon: v.optional(v.string()),
     createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_org", ["organizationId"]),
 
   customizations: defineTable({
@@ -283,7 +433,10 @@ export default defineSchema({
     position: v.number(),
     published: v.boolean(),
     createdAt: v.number(),
-  }).index("by_item", ["itemId"]),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_item", ["itemId"])
+    .index("by_org", ["organizationId"]),
 
   customizationItems: defineTable({
     organizationId: v.id("organizations"),
@@ -291,6 +444,10 @@ export default defineSchema({
     name: v.string(),
     price: v.number(),
     isGst: v.optional(v.boolean()),
+    taxGroupId: v.optional(v.id("taxGroups")),
+    taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
+    isVeg: v.optional(v.boolean()),
+    dietaryType: v.optional(v.string()),
     showQuantity: v.optional(v.boolean()),
     quantity: v.optional(v.number()),
     quantityUnit: v.optional(v.string()),
@@ -303,7 +460,9 @@ export default defineSchema({
     position: v.number(),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
     imageStorageId: v.optional(v.id("_storage")),
+    imageAssetId: v.optional(v.id("organization_assets")),
     createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_customization", ["customizationId"]),
 
   // Organization Languages Domain Table
@@ -357,6 +516,7 @@ export default defineSchema({
   organizationOrderProcesses: defineTable({
     legacyId: v.optional(v.string()),
     name: v.string(),
+    description: v.optional(v.string()),
     position: v.number(),
     published: v.boolean(),
     isSequence: v.boolean(),
@@ -421,6 +581,129 @@ export default defineSchema({
   })
     .index("by_layout", ["layoutId"])
     .index("by_table_number", ["tableNumber"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Digital Storefront Images Domain Table (Migrated from legacy ssr_images)
+digitalStoreImages: defineTable({
+  legacyId: v.optional(v.string()),
+
+  assetId: v.optional(v.id("organization_assets")),
+  storageId: v.optional(v.id("_storage")),
+
+  imageType: v.union(
+    v.literal("carousel_image"),
+    v.literal("about_us_image")
+  ),
+
+  position: v.number(),
+
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_type_and_position", ["imageType", "position"])
+  .index("by_image_type", ["imageType"])
+  .index("by_asset", ["assetId"])
+  .index("by_legacy_id", ["legacyId"]),
+
+// Postpaid Order Requests Domain Table
+postpaidOrderRequests: defineTable({
+  tableId: v.id("organizationTables"),
+  userId: v.string(),
+  orderId: v.optional(v.id("orders")),
+
+  status: v.union(
+    v.literal("requested"),
+    v.literal("approved"),
+    v.literal("declined"),
+    v.literal("completed")
+  ),
+
+  statusActionById: v.optional(v.string()),
+
+  otpHash: v.optional(v.string()),
+  otpExpiresAt: v.optional(v.number()),
+  otpVerifiedAt: v.optional(v.number()),
+  otpAttempts: v.optional(v.number()),
+
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deletedAt: v.optional(v.number()),
+})
+  .index("by_table", ["tableId"])
+  .index("by_table_and_status", ["tableId", "status"])
+  .index("by_user", ["userId"])
+  .index("by_order", ["orderId"])
+  .index("by_status", ["status"]),
+
+  // Order Delivery / 3PL Logistics Domain Table (Migrated from legacy order_delivers)
+  orderDelivers: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Relationship to Store Order
+    orderId: v.id("orders"),
+
+    // Delivery Provider & Status Classification
+    provider: v.union(
+      v.literal("porter"),
+      v.literal("internal"),
+      v.literal("custom")
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("open"),
+      v.literal("accepted"),
+      v.literal("live"),
+      v.literal("ended"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+
+    // External Provider Identifiers & Tracking
+    providerOrderId: v.optional(v.string()),
+    trackingUrl: v.optional(v.string()),
+
+    // Financials (Delivery Fee in Minor Units / Paise / Cents) - Optional for historical migration compatibility
+    fare: v.optional(v.number()),
+
+    // Assigned Delivery Partner / Driver Details
+    partnerInfo: v.optional(
+      v.object({
+        name: v.optional(v.string()),
+        vehicleNumber: v.optional(v.string()),
+        vehicleType: v.optional(v.string()),
+        phone: v.optional(v.string()),
+        secondaryPhone: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
+      })
+    ),
+
+    // Timing Estimates & Actual Milestones
+    estimatedPickupTime: v.optional(v.number()),
+    orderTimings: v.optional(
+      v.object({
+        orderAcceptedTime: v.optional(v.number()),
+        pickupTime: v.optional(v.number()),
+        orderStartedTime: v.optional(v.number()),
+        orderEndedTime: v.optional(v.number()),
+      })
+    ),
+
+    // Outbound Request & Response Audit Snapshots
+    apiRequestSnapshot: v.optional(v.any()),
+    apiResponseSnapshot: v.optional(v.any()),
+    failureReason: v.optional(v.string()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_provider_order_id", ["providerOrderId"])
+    .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
 
   // Organization QR Codes Domain Table
@@ -558,6 +841,7 @@ export default defineSchema({
     position: v.number(),
 
     storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
     imageUrl: v.optional(v.string()),
     fileName: v.optional(v.string()),
 
@@ -611,7 +895,8 @@ export default defineSchema({
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
 
-    // Customer Information (from Frontend POS / Online)
+    // Customer Relationship & Information (from Frontend POS / Online)
+    customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
     customerPhone: v.optional(v.string()),
     customerEmail: v.optional(v.string()),
@@ -624,6 +909,7 @@ export default defineSchema({
     totalAmount: v.number(),
 
     // Delivery Address Details
+    userAddressId: v.optional(v.id("userAddresses")),
     deliveryAddress: v.optional(
       v.object({
         addressLine1: v.string(),
@@ -647,7 +933,9 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_org_status", ["organizationId", "orderStatusId"])
     .index("by_org_table", ["organizationId", "tableId"])
-    .index("by_created_at", ["organizationId", "createdAt"]),
+    .index("by_created_at", ["organizationId", "createdAt"])
+    .index("by_customer", ["customerId"])
+    .index("by_user_address", ["userAddressId"]),
 
   orderItems: defineTable({
     organizationId: v.id("organizations"),
@@ -689,7 +977,10 @@ export default defineSchema({
     orderId: v.id("orders"),
     paymentModeId: v.optional(v.id("paymentModes")),
     paymentModeName: v.string(),
+    paymentType: v.optional(v.union(v.literal("Credit"), v.literal("Debit"))),
     amount: v.number(),
+    payAmount: v.optional(v.number()),
+    refundAmount: v.optional(v.number()),
     transactionReference: v.optional(v.string()),
     createdAt: v.number(),
   }).index("by_order", ["orderId"]),
@@ -793,4 +1084,114 @@ export default defineSchema({
     .index("by_org", ["organizationId"])
     .index("by_po", ["purchaseOrderId"])
     .index("by_order", ["orderId"]),
+
+  // Organization Schedule Pickups Domain Table
+  organizationSchedulePickups: defineTable({
+    legacyId: v.optional(v.string()),
+
+    advanceOrderTimeLimit: v.optional(v.string()),
+    advancePickupLimit: v.optional(v.number()),
+    advancePickupLimitType: v.optional(v.string()),
+    pickupTimings: v.optional(weeklyScheduleValidator),
+    pickupTimeSlotSize: v.optional(v.string()),
+
+    pickupAddressLine1: v.optional(v.string()),
+    pickupAddressLine2: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    country: v.optional(v.string()),
+    zipcode: v.optional(v.string()),
+
+    advanceScheduleDeliveryOrderTimeLimit: v.optional(v.string()),
+    advanceDeliveryLimit: v.optional(v.number()),
+    advanceDeliveryLimitType: v.optional(v.string()),
+    deliveryTimings: v.optional(weeklyScheduleValidator),
+    deliveryTimeSlotSize: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Bot Tokens Domain Table
+  organizationBotTokens: defineTable({
+    legacyId: v.optional(v.string()),
+
+    token: v.string(),
+    env: v.optional(v.string()),
+    userId: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Organization Assets Domain Table (Cloudflare R2 Metadata & References)
+  organization_assets: defineTable({
+    legacyId: v.optional(v.string()),
+
+    organizationId: v.id("organizations"),
+    storageKey: v.string(),
+    fileName: v.string(),
+    contentType: v.string(),
+    fileSize: v.number(),
+    assetType: v.string(),
+
+    status: v.union(
+      v.literal("pending"),
+      v.literal("uploaded"),
+      v.literal("failed"),
+      v.literal("deleted")
+    ),
+
+    createdBy: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_organization", ["organizationId"])
+    .index("by_organization_asset_type", ["organizationId", "assetType"])
+    .index("by_storage_key", ["storageKey"])
+    .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Process Notifications Domain Table
+  processNotifications: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationOrderProcessId: v.id("organizationOrderProcesses"),
+
+    notificationType: v.union(
+      v.literal("At"),
+      v.literal("Before"),
+      v.literal("After")
+    ),
+
+    notificationVia: v.union(
+      v.literal("sms"),
+      v.literal("whatsapp"),
+      v.literal("push"),
+      v.literal("email")
+    ),
+
+    notificationText: v.string(),
+
+    customerType: v.optional(
+      v.union(
+        v.literal("all"),
+        v.literal("dine_in"),
+        v.literal("takeaway"),
+        v.literal("delivery")
+      )
+    ),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_process", ["organizationOrderProcessId"])
+    .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

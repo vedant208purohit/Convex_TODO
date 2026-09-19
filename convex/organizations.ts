@@ -247,9 +247,11 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireAuth } from "./organizationUsers";
+import { requireAuth, requireMember, requireAdmin } from "./organizationUsers";
 import { initializeDefaultsHelper } from "./organizationFeatures";
 import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
+import { seedDefaultProcessNotifications } from "./processNotifications";
 
 
 
@@ -348,6 +350,26 @@ function stripSecrets(org: Doc<"organizations"> | null) {
   return safeOrg;
 }
 
+// Helper: URL Validation & Normalization
+export function validateOptionalUrl(url?: string): string | undefined {
+  if (url === undefined) return undefined;
+  const trimmed = url.trim();
+  if (!trimmed) return "";
+
+  try {
+    const parsed = new URL(trimmed);
+    if (!["http:", "https:"].includes(parsed.protocol)) {
+      throw new Error("Invalid URL protocol. Must start with http:// or https://");
+    }
+    return trimmed;
+  } catch (err: any) {
+    if (err.message && err.message.includes("Invalid URL protocol")) {
+      throw err;
+    }
+    throw new Error(`Invalid URL format: ${url}`);
+  }
+}
+
 // Helper: Country-Specific Phone Validation & Normalization
 function validatePhoneWithCountryCode(phone?: string, country?: string): string | undefined {
   if (!phone || !phone.trim()) return undefined;
@@ -361,37 +383,51 @@ function validatePhoneWithCountryCode(phone?: string, country?: string): string 
 
   const digitsOnly = raw.replace(/\D/g, "");
 
-  const isUae =
-    country === "United Arab Emirates" ||
-    country === "UAE" ||
-    country === "+971" ||
-    raw.startsWith("+971");
-
-  if (isUae) {
+  if (raw.startsWith("+971") || country === "United Arab Emirates" || country === "UAE") {
     let uaeDigits = digitsOnly;
     if (uaeDigits.startsWith("971")) {
       uaeDigits = uaeDigits.slice(3);
     }
-
     if (uaeDigits.length !== 9) {
       throw new Error("Phone must be 9 digits long for UAE");
     }
-
     return `+971${uaeDigits}`;
+  } else if (raw.startsWith("+33") || country === "France") {
+    let frDigits = digitsOnly;
+    if (frDigits.startsWith("33")) {
+      frDigits = frDigits.slice(2);
+    }
+    if (frDigits.length !== 9) {
+      throw new Error("Phone must be 9 digits long for France");
+    }
+    return `+33${frDigits}`;
+  } else if (raw.startsWith("+44") || country === "United Kingdom") {
+    let ukDigits = digitsOnly;
+    if (ukDigits.startsWith("44")) {
+      ukDigits = ukDigits.slice(2);
+    }
+    if (ukDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for UK");
+    }
+    return `+44${ukDigits}`;
+  } else if (raw.startsWith("+1") || country === "United States" || country === "Canada") {
+    let usDigits = digitsOnly;
+    if (usDigits.startsWith("1") && usDigits.length === 11) {
+      usDigits = usDigits.slice(1);
+    }
+    if (usDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for US/Canada");
+    }
+    return `+1${usDigits}`;
   } else {
-    let otherDigits = digitsOnly;
-    if (otherDigits.startsWith("91") && otherDigits.length === 12) {
-      otherDigits = otherDigits.slice(2);
+    let inDigits = digitsOnly;
+    if (inDigits.startsWith("91") && inDigits.length === 12) {
+      inDigits = inDigits.slice(2);
     }
-
-    if (otherDigits.length !== 10) {
-      throw new Error("Phone must be 10 digits long for other countries");
+    if (inDigits.length !== 10) {
+      throw new Error("Phone must be 10 digits long for India");
     }
-
-    if (raw.startsWith("+")) {
-      return raw;
-    }
-    return `+91${otherDigits}`;
+    return `+91${inDigits}`;
   }
 }
 
@@ -420,8 +456,40 @@ function normalizeAllDayHours(operationTiming: any): any {
   return updatedTiming;
 }
 
+// Helper: Robust Time Parser (Minutes of Day: 0 to 1439)
+function parseTimeToDayMinutes(timeStr: string): number {
+  if (!timeStr || typeof timeStr !== "string") return 0;
+  const clean = timeStr.trim();
+
+  // 1. Try 12-hour AM/PM format (e.g., "11:00 AM", "4:30 PM")
+  const match12 = clean.match(/^(\d{1,2}):(\d{2})\s*(AM|PM|am|pm)$/i);
+  if (match12) {
+    let h = parseInt(match12[1], 10);
+    const m = parseInt(match12[2], 10);
+    const isPM = match12[3].toUpperCase() === "PM";
+    if (isPM && h < 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // 2. Try 24-hour format (e.g., "11:00", "16:30")
+  const match24 = clean.match(/^(\d{1,2}):(\d{2})$/);
+  if (match24) {
+    return parseInt(match24[1], 10) * 60 + parseInt(match24[2], 10);
+  }
+
+  // 3. Try Date ISO / GMT string parsing
+  const parsed = Date.parse(clean);
+  if (!isNaN(parsed)) {
+    const d = new Date(parsed);
+    return d.getHours() * 60 + d.getMinutes();
+  }
+
+  return 0;
+}
+
 // Helper: Operating Hours Overlap Validation
-function validateOperatingHoursOverlap(operationTiming: any): void {
+export function validateOperatingHoursOverlap(operationTiming: any): void {
   if (!operationTiming || typeof operationTiming !== "object") return;
 
   for (const dayKey of Object.keys(operationTiming)) {
@@ -436,26 +504,8 @@ function validateOperatingHoursOverlap(operationTiming: any): void {
     for (const hourObj of hours) {
       if (!hourObj.start_time || !hourObj.end_time) continue;
 
-      let startMs: number;
-      let endMs: number;
-
-      if (
-        hourObj.start_time.includes("T") ||
-        hourObj.start_time.includes("GMT") ||
-        hourObj.start_time.includes(" ")
-      ) {
-        startMs = new Date(hourObj.start_time).getTime();
-        endMs = new Date(hourObj.end_time).getTime();
-      } else {
-        const [sh, sm] = hourObj.start_time.split(":").map(Number);
-        const [eh, em] = hourObj.end_time.split(":").map(Number);
-        startMs = sh * 60 + sm;
-        endMs = eh * 60 + em;
-      }
-
-      if (isNaN(startMs) || isNaN(endMs)) {
-        throw new Error("invalid time format detected");
-      }
+      const startMs = parseTimeToDayMinutes(hourObj.start_time);
+      const endMs = parseTimeToDayMinutes(hourObj.end_time);
 
       parsedSlots.push({ start: startMs, end: endMs });
     }
@@ -500,6 +550,30 @@ function resolveCurrencyAndSymbol(
     if (c === "united states" || c === "us" || c === "usa" || c === "+1") {
       return {
         defaultCurrency: explicitCurrency || "USD",
+        defaultCurrencySymbol: explicitSymbol || "$",
+      };
+    }
+    if (c === "france" || c === "fr" || c === "+33") {
+      return {
+        defaultCurrency: explicitCurrency || "EUR",
+        defaultCurrencySymbol: explicitSymbol || "€",
+      };
+    }
+    if (c === "united kingdom" || c === "uk" || c === "gb" || c === "+44") {
+      return {
+        defaultCurrency: explicitCurrency || "GBP",
+        defaultCurrencySymbol: explicitSymbol || "£",
+      };
+    }
+    if (c === "canada" || c === "ca") {
+      return {
+        defaultCurrency: explicitCurrency || "CAD",
+        defaultCurrencySymbol: explicitSymbol || "$",
+      };
+    }
+    if (c === "australia" || c === "au" || c === "+61") {
+      return {
+        defaultCurrency: explicitCurrency || "AUD",
         defaultCurrencySymbol: explicitSymbol || "$",
       };
     }
@@ -630,9 +704,30 @@ export const getBySlug = query({
 export const list = query({
   handler: async (ctx) => {
     const orgs = await ctx.db.query("organizations").collect();
-    return orgs
-      .filter((org) => org.deletedAt === undefined)
-      .map((org) => stripSecrets(org));
+    return Promise.all(
+      orgs
+        .filter((org) => org.deletedAt === undefined)
+        .map(async (org) => {
+          let resolvedAboutUsImageUrl = org.aboutUsImageUrl ?? null;
+          if (org.aboutUsImageStorageId) {
+            try {
+              const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
+              if (storageUrl) {
+                resolvedAboutUsImageUrl = storageUrl;
+              }
+            } catch {
+              // Storage fallback
+            }
+          }
+          const safeOrg = stripSecrets(org);
+          return safeOrg
+            ? {
+                ...safeOrg,
+                aboutUsImageUrl: resolvedAboutUsImageUrl,
+              }
+            : null;
+        })
+    ).then((res) => res.filter(Boolean));
   },
 });
 
@@ -645,6 +740,56 @@ export const getWithSecrets = query({
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
     return await ctx.db.get(normalizedId);
+  },
+});
+
+/**
+ * Fetches the Digital Store / Online Storefront configuration for an organization.
+ * - Authenticates the caller.
+ * - Verifies caller's active organization membership.
+ * - Resolves aboutUsImageUrl from Convex storage if aboutUsImageStorageId is set.
+ * - Safe response: Never exposes sensitive payment secrets, bot tokens, or credentials.
+ */
+export const getDigitalStore = query({
+  args: {
+    id: v.optional(v.union(v.id("organizations"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    let orgId: Id<"organizations"> | undefined;
+    if (args.id && args.id.trim() !== "") {
+      const normalizedId = ctx.db.normalizeId("organizations", args.id);
+      if (!normalizedId) return null;
+      orgId = normalizedId;
+    }
+
+    const { org } = await requireMember(ctx, orgId);
+    if (!org || org.deletedAt !== undefined) {
+      return null;
+    }
+
+    let resolvedImageUrl: string | null = org.aboutUsImageUrl ?? null;
+    if (org.aboutUsImageStorageId) {
+      try {
+        const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
+        if (storageUrl) {
+          resolvedImageUrl = storageUrl;
+        }
+      } catch {
+        // Storage fallback
+      }
+    }
+
+    return {
+      digitalStoreStatus: org.digitalStoreStatus ?? false,
+      aboutUsContent: org.aboutUsContent ?? null,
+      facebookAccountLink: org.facebookAccountLink ?? null,
+      instagramAccountLink: org.instagramAccountLink ?? null,
+      policyLink: org.policyLink ?? null,
+      refundLink: org.refundLink ?? null,
+      termAndConditionLink: org.termAndConditionLink ?? null,
+      aboutUsImageStorageId: org.aboutUsImageStorageId ?? null,
+      aboutUsImageUrl: resolvedImageUrl,
+    };
   },
 });
 
@@ -686,11 +831,17 @@ export const create = mutation({
     inclusiveGst: v.optional(v.boolean()),
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
+    gstDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    gstDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
+    gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
     isFssai: v.optional(v.boolean()),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
+    fssaiDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    fssaiDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
+    fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
     defaultCurrency: v.optional(v.string()),
@@ -911,11 +1062,17 @@ export const create = mutation({
       inclusiveGst,
       separateGst,
       gstNumber: args.gstNumber,
+      gstDocumentStorageId: args.gstDocumentStorageId ? (args.gstDocumentStorageId as any) : undefined,
+      gstDocumentAssetId: args.gstDocumentAssetId ? (ctx.db.normalizeId("organization_assets", args.gstDocumentAssetId) ?? (args.gstDocumentAssetId as any)) : undefined,
+      gstDocumentUrl: args.gstDocumentUrl,
 
       // FSSAI Compliance
       isFssai,
       fssaiRegistrationNumber: args.fssaiRegistrationNumber,
       expiryDate: args.expiryDate,
+      fssaiDocumentStorageId: args.fssaiDocumentStorageId ? (args.fssaiDocumentStorageId as any) : undefined,
+      fssaiDocumentAssetId: args.fssaiDocumentAssetId ? (ctx.db.normalizeId("organization_assets", args.fssaiDocumentAssetId) ?? (args.fssaiDocumentAssetId as any)) : undefined,
+      fssaiDocumentUrl: args.fssaiDocumentUrl,
 
       // Currency & Regional Timezone
       defaultCurrency,
@@ -1100,13 +1257,21 @@ export const repairStoreOwnerAdmin = mutation({
 
     const now = Date.now();
 
-    // 1. Safe Backfill: Set ownerClerkId if unassigned
-    if (!org.ownerClerkId) {
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeAdmins = allMembers.filter(
+      (m) => m.deletedAt === undefined && m.userType.some((r) => r === "admin")
+    );
+
+    // 1. Safe Backfill: Set ownerClerkId if unassigned or unclaimed
+    if (!org.ownerClerkId || activeAdmins.length === 0) {
       await ctx.db.patch(org._id, {
         ownerClerkId: identity.subject,
         updatedAt: now,
       });
-    } else if (org.ownerClerkId !== identity.subject) {
+    } else if (org.ownerClerkId !== identity.subject && activeAdmins.length > 0) {
       return { success: false, reason: "Forbidden. Organization owner is assigned to another user." };
     }
 
@@ -1155,6 +1320,7 @@ export const update = mutation({
   args: {
     id: v.id("organizations"),
     name: v.optional(v.string()),
+    slug: v.optional(v.string()),
     legalEntityName: v.optional(v.string()),
     published: v.optional(v.boolean()),
     isTest: v.optional(v.boolean()),
@@ -1181,11 +1347,17 @@ export const update = mutation({
     inclusiveGst: v.optional(v.boolean()),
     separateGst: v.optional(v.boolean()),
     gstNumber: v.optional(v.string()),
+    gstDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    gstDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
+    gstDocumentUrl: v.optional(v.string()),
 
     // FSSAI Compliance
     isFssai: v.optional(v.boolean()),
     fssaiRegistrationNumber: v.optional(v.string()),
     expiryDate: v.optional(v.number()),
+    fssaiDocumentStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    fssaiDocumentAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
+    fssaiDocumentUrl: v.optional(v.string()),
 
     // Currency & Regional Timezone
     defaultCurrency: v.optional(v.string()),
@@ -1201,6 +1373,9 @@ export const update = mutation({
     primaryColor: v.optional(v.string()),
     secondaryColor: v.optional(v.string()),
     theme: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+    logoStorageId: v.optional(v.union(v.id("_storage"), v.string())),
+    logoAssetId: v.optional(v.union(v.id("organization_assets"), v.string())),
 
     // Module & Feature Flags
     isDineIn: v.optional(v.boolean()),
@@ -1222,6 +1397,16 @@ export const update = mutation({
     isReport: v.optional(v.boolean()),
     isVeg: v.optional(v.boolean()),
     digitalStoreStatus: v.optional(v.boolean()),
+
+    // Digital Store Configuration
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
 
     // Payment Flags
     deliveryCashOnDelivery: v.optional(v.boolean()),
@@ -1291,10 +1476,33 @@ export const update = mutation({
       updates.phone = validatePhoneWithCountryCode(updates.phone, targetCountry);
     }
 
-    // 4. Operating Hours Normalization & Overlap Validation if updated
-    if (updates.operationTiming !== undefined) {
-      updates.operationTiming = normalizeAllDayHours(updates.operationTiming);
-      validateOperatingHoursOverlap(updates.operationTiming);
+    // 3b. Digital Store Social & Legal URL Validations if updated
+    if (updates.facebookAccountLink !== undefined) {
+      updates.facebookAccountLink = validateOptionalUrl(updates.facebookAccountLink);
+    }
+    if (updates.instagramAccountLink !== undefined) {
+      updates.instagramAccountLink = validateOptionalUrl(updates.instagramAccountLink);
+    }
+    if (updates.policyLink !== undefined) {
+      updates.policyLink = validateOptionalUrl(updates.policyLink);
+    }
+    if (updates.refundLink !== undefined) {
+      updates.refundLink = validateOptionalUrl(updates.refundLink);
+    }
+    if (updates.termAndConditionLink !== undefined) {
+      updates.termAndConditionLink = validateOptionalUrl(updates.termAndConditionLink);
+    }
+
+    // 3c. Resolve About Us Image Storage URL if updated
+    if (updates.aboutUsImageStorageId) {
+      try {
+        const storageUrl = await ctx.storage.getUrl(updates.aboutUsImageStorageId);
+        if (storageUrl) {
+          updates.aboutUsImageUrl = storageUrl;
+        }
+      } catch {
+        // Storage lookup fallback
+      }
     }
 
     // 5. Payment Defaults Auto-Activation when Service Types are turned ON
@@ -1372,18 +1580,168 @@ export const update = mutation({
 
     validateOrganizationState(finalState);
 
-    await ctx.db.patch(id, {
-      ...updates,
-      dineinPrepaid,
-      dineinPospaid,
-      takeAwayOnlinePayment,
-      takeAwayCashPayment,
-      deliveryOnlinePayment,
-      deliveryCashOnDelivery,
-      scheduledPickupOnlinePayment,
-      scheduledDeliveryOnlinePayment,
-      updatedAt: Date.now(),
-    });
+    const isLogoRemoved =
+      updates.logoUrl === "" ||
+      updates.logoAssetId === ("" as any) ||
+      updates.logoStorageId === ("" as any);
+
+    const isFssaiRemoved =
+      updates.fssaiDocumentUrl === "" ||
+      updates.fssaiDocumentAssetId === ("" as any) ||
+      updates.fssaiDocumentStorageId === ("" as any);
+
+    const isGstRemoved =
+      updates.gstDocumentUrl === "" ||
+      updates.gstDocumentAssetId === ("" as any) ||
+      updates.gstDocumentStorageId === ("" as any);
+
+    const needsReplace = isLogoRemoved || isFssaiRemoved || isGstRemoved;
+
+    if (needsReplace) {
+      const docToReplace = { ...existing, ...finalState, updatedAt: Date.now() };
+
+      if (isLogoRemoved) {
+        delete (docToReplace as any).logoUrl;
+        delete (docToReplace as any).logoStorageId;
+        delete (docToReplace as any).logoAssetId;
+      }
+      if (isFssaiRemoved) {
+        delete (docToReplace as any).fssaiDocumentUrl;
+        delete (docToReplace as any).fssaiDocumentStorageId;
+        delete (docToReplace as any).fssaiDocumentAssetId;
+      }
+      if (isGstRemoved) {
+        delete (docToReplace as any).gstDocumentUrl;
+        delete (docToReplace as any).gstDocumentStorageId;
+        delete (docToReplace as any).gstDocumentAssetId;
+      }
+      await ctx.db.replace(id, docToReplace as any);
+    } else {
+      await ctx.db.patch(id, {
+        ...updates,
+        dineinPrepaid,
+        dineinPospaid,
+        takeAwayOnlinePayment,
+        takeAwayCashPayment,
+        deliveryOnlinePayment,
+        deliveryCashOnDelivery,
+        scheduledPickupOnlinePayment,
+        scheduledDeliveryOnlinePayment,
+        updatedAt: Date.now(),
+      } as any);
+    }
+  },
+});
+
+/**
+ * Updates the Digital Store / Online Storefront configuration for an organization.
+ * - Requires Store Admin or Owner role.
+ * - Validates URL formats for social/legal links.
+ * - Preserves unsupplied fields (partial update semantics).
+ * - Resolves updated storage URL for response.
+ */
+export const updateDigitalStore = mutation({
+  args: {
+    id: v.optional(v.union(v.id("organizations"), v.string())),
+    digitalStoreStatus: v.optional(v.boolean()),
+    aboutUsContent: v.optional(v.string()),
+    facebookAccountLink: v.optional(v.string()),
+    instagramAccountLink: v.optional(v.string()),
+    policyLink: v.optional(v.string()),
+    refundLink: v.optional(v.string()),
+    termAndConditionLink: v.optional(v.string()),
+    aboutUsImageStorageId: v.optional(v.id("_storage")),
+    aboutUsImageUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let orgId: Id<"organizations"> | undefined;
+    if (args.id && args.id.trim() !== "") {
+      const normalizedId = ctx.db.normalizeId("organizations", args.id);
+      if (!normalizedId) {
+        throw new Error("Organization not found");
+      }
+      orgId = normalizedId;
+    }
+
+    const { org } = await requireAdmin(ctx, orgId);
+
+    const updates: Record<string, any> = {};
+
+    if (args.digitalStoreStatus !== undefined) {
+      updates.digitalStoreStatus = args.digitalStoreStatus;
+    }
+
+    if (args.aboutUsContent !== undefined) {
+      updates.aboutUsContent = args.aboutUsContent;
+    }
+
+    if (args.facebookAccountLink !== undefined) {
+      updates.facebookAccountLink = validateOptionalUrl(args.facebookAccountLink);
+    }
+
+    if (args.instagramAccountLink !== undefined) {
+      updates.instagramAccountLink = validateOptionalUrl(args.instagramAccountLink);
+    }
+
+    if (args.policyLink !== undefined) {
+      updates.policyLink = validateOptionalUrl(args.policyLink);
+    }
+
+    if (args.refundLink !== undefined) {
+      updates.refundLink = validateOptionalUrl(args.refundLink);
+    }
+
+    if (args.termAndConditionLink !== undefined) {
+      updates.termAndConditionLink = validateOptionalUrl(args.termAndConditionLink);
+    }
+
+    if (args.aboutUsImageStorageId !== undefined) {
+      updates.aboutUsImageStorageId = args.aboutUsImageStorageId;
+    }
+
+    if (args.aboutUsImageUrl !== undefined) {
+      updates.aboutUsImageUrl = args.aboutUsImageUrl;
+    }
+
+    if (Object.keys(updates).length > 0) {
+      updates.updatedAt = Date.now();
+      await ctx.db.patch(org._id, updates);
+    }
+
+    const updatedOrg = await ctx.db.get(org._id);
+    let resolvedImageUrl: string | null = updatedOrg?.aboutUsImageUrl ?? null;
+    if (updatedOrg?.aboutUsImageStorageId) {
+      try {
+        const storageUrl = await ctx.storage.getUrl(updatedOrg.aboutUsImageStorageId);
+        if (storageUrl) {
+          resolvedImageUrl = storageUrl;
+        }
+      } catch {
+        // Storage fallback
+      }
+    }
+
+    return {
+      digitalStoreStatus: updatedOrg?.digitalStoreStatus ?? false,
+      aboutUsContent: updatedOrg?.aboutUsContent ?? null,
+      facebookAccountLink: updatedOrg?.facebookAccountLink ?? null,
+      instagramAccountLink: updatedOrg?.instagramAccountLink ?? null,
+      policyLink: updatedOrg?.policyLink ?? null,
+      refundLink: updatedOrg?.refundLink ?? null,
+      termAndConditionLink: updatedOrg?.termAndConditionLink ?? null,
+      aboutUsImageStorageId: updatedOrg?.aboutUsImageStorageId ?? null,
+      aboutUsImageUrl: resolvedImageUrl,
+    };
+  },
+});
+
+/**
+ * Generates a storage upload URL for organization assets (logos, about us image, etc).
+ */
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -1405,6 +1763,36 @@ export const liveOrganization = mutation({
       published: true,
       updatedAt: Date.now(),
     });
+  },
+});
+
+// Store Profile Update via Server Provisioning HMAC
+export const updateStoreProfileFromProvisioning = mutation({
+  args: {
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
+    name: v.string(),
+    slug: v.string(),
+    ownerClerkId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const firstOrg = await ctx.db.query("organizations").first();
+    if (!firstOrg) {
+      throw new Error("Store organization not found");
+    }
+    await requireProvisioningAuth(ctx, {
+      slug: firstOrg.slug,
+      provisioningToken: args.provisioningToken,
+      timestamp: args.timestamp,
+    });
+    const now = Date.now();
+    await ctx.db.patch(firstOrg._id, {
+      name: args.name,
+      slug: args.slug,
+      ownerClerkId: args.ownerClerkId || firstOrg.ownerClerkId,
+      updatedAt: now,
+    });
+    return { success: true, organizationId: firstOrg._id };
   },
 });
 
@@ -1575,7 +1963,10 @@ export const initializeStore = mutation({
       }
     }
 
-    // 10. Default Organization Queue Configurations Seeding (Idempotent)
+    // 10. Default Process Notifications Seeding (Idempotent)
+    await seedDefaultProcessNotifications(ctx);
+
+    // 11. Default Organization Queue Configurations Seeding (Idempotent)
     if (org.isQueue) {
       const allConfigs = await ctx.db.query("organizationQueueConfigurations").collect();
       const activeConfig = allConfigs.find((c) => c.deletedAt === undefined);
@@ -1669,6 +2060,22 @@ export const seedDefault = mutation({
       porterLagTime: 0,
       whatsappIntegration: false,
       prestWhatsappIntegration: false,
+    });
+  },
+});
+
+
+export const getStorageUrl = query({
+  args: {
+    storageId: v.optional(v.id("_storage")),
+    assetId: v.optional(v.id("organization_assets")),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    return await resolveAssetOrStorageUrl(ctx, {
+      assetId: args.assetId,
+      storageId: args.storageId,
+      organizationId: args.organizationId,
     });
   },
 });

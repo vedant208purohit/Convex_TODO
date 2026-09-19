@@ -19,15 +19,26 @@ export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
   explicitOrgId?: Id<"organizations">
 ) {
-  const identity = await requireAuth(ctx);
-  const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  const { identity, org, callerMember } = await requireMember(ctx, explicitOrgId);
 
-  if (
-    !callerMember ||
-    (!callerMember.userType.includes("admin") &&
-      !callerMember.userType.includes("cashier"))
-  ) {
+  const isOwnerOrUnowned = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+  if (isOwnerOrUnowned) {
+    return { identity, org, callerMember };
+  }
+
+  const roles = Array.isArray(callerMember?.userType)
+    ? callerMember!.userType
+    : typeof callerMember?.userType === "string"
+      ? [callerMember!.userType]
+      : [];
+
+  const hasAuthorizedRole = roles.some((role) =>
+    ["admin", "store_admin", "org_admin", "super_admin", "cashier"].includes(
+      (role || "").trim().toLowerCase()
+    )
+  );
+
+  if (!hasAuthorizedRole) {
     throw new Error("Forbidden. Admin or Cashier access required.");
   }
 
@@ -130,8 +141,6 @@ export const list = query({
     isSequence: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    await requireMember(ctx);
-
     let active: Doc<"organizationOrderProcesses">[];
 
     if (args.isSequence !== undefined) {
@@ -194,6 +203,7 @@ export const get = query({
 export const create = mutation({
   args: {
     name: v.string(),
+    description: v.optional(v.string()),
     position: v.optional(v.number()),
     published: v.optional(v.boolean()),
     isSequence: v.optional(v.boolean()),
@@ -236,6 +246,7 @@ export const create = mutation({
     const processId = await ctx.db.insert("organizationOrderProcesses", {
       legacyId: args.legacyId,
       name: trimmedName,
+      description: args.description ? args.description.trim() : undefined,
       position: finalPosition,
       published: effectivePublished,
       isSequence: effectiveIsSequence,
@@ -255,6 +266,7 @@ export const update = mutation({
   args: {
     id: v.id("organizationOrderProcesses"),
     name: v.optional(v.string()),
+    description: v.optional(v.string()),
     position: v.optional(v.number()),
     published: v.optional(v.boolean()),
     isSequence: v.optional(v.boolean()),
@@ -277,24 +289,28 @@ export const update = mutation({
       await validateUniqueName(ctx, trimmedName, args.id);
     }
 
-    const effectiveIsSequence = args.isSequence ?? existing.isSequence;
+    const existingIsSequence = existing.isSequence ?? true;
+    const effectiveIsSequence = args.isSequence !== undefined ? args.isSequence : existingIsSequence;
     const effectiveProcessColor =
       args.processColor !== undefined ? args.processColor : existing.processColor;
 
     // Validate process color when isSequence is true
     validateProcessColor(effectiveProcessColor, effectiveIsSequence);
 
+    const isSequenceChanged =
+      args.isSequence !== undefined && args.isSequence !== existingIsSequence;
+
     let effectivePosition = existing.position;
     if (
       args.position !== undefined &&
-      (args.position !== existing.position || args.isSequence !== existing.isSequence)
+      (args.position !== existing.position || isSequenceChanged)
     ) {
       if (args.position < 1) {
         throw new Error("Position must be a positive number");
       }
       await validateUniquePosition(ctx, effectiveIsSequence, args.position, args.id);
       effectivePosition = args.position;
-    } else if (args.isSequence !== undefined && args.isSequence !== existing.isSequence) {
+    } else if (isSequenceChanged) {
       // Switched isSequence scope without position argument -> generate position in new scope
       effectivePosition = await generatePosition(ctx, effectiveIsSequence);
     }
@@ -303,6 +319,7 @@ export const update = mutation({
 
     await ctx.db.patch(args.id, {
       name: trimmedName ?? existing.name,
+      description: args.description !== undefined ? (args.description ? args.description.trim() : undefined) : existing.description,
       position: effectivePosition,
       published: args.published ?? existing.published,
       isSequence: effectiveIsSequence,
@@ -315,7 +332,7 @@ export const update = mutation({
 });
 
 /**
- * Reorders an organization order process to a new contiguous position within its sequence scope
+ * Reorders an organization order process to a new contiguous position
  */
 export const reorder = mutation({
   args: {
@@ -334,15 +351,24 @@ export const reorder = mutation({
       throw new Error("Position must be a positive number");
     }
 
-    // Get all active processes for the target's isSequence scope in position order
-    const activeSameScope = await ctx.db
+    // Get all active processes in the store
+    const activeProcesses = await ctx.db
       .query("organizationOrderProcesses")
-      .withIndex("by_position", (q) => q.eq("isSequence", target.isSequence))
       .filter((q) => q.eq(q.field("deletedAt"), undefined))
       .collect();
 
+    // Sort by isSequence (true first) then position (ascending)
+    activeProcesses.sort((a, b) => {
+      const aSeq = a.isSequence ?? true;
+      const bSeq = b.isSequence ?? true;
+      if (aSeq !== bSeq) {
+        return aSeq ? -1 : 1;
+      }
+      return a.position - b.position;
+    });
+
     // Remove target from current list
-    const currentList = activeSameScope.filter((proc) => proc._id !== target._id);
+    const currentList = activeProcesses.filter((proc) => proc._id !== target._id);
 
     // Clamp new index between 0 and currentList.length
     const newIndex = Math.max(0, Math.min(args.position - 1, currentList.length));
@@ -352,16 +378,19 @@ export const reorder = mutation({
 
     const now = Date.now();
 
-    // Re-index contiguously 1..N
+    // Re-index contiguously 1..N and ensure isSequence is true so all items participate in order flow
     for (let index = 0; index < currentList.length; index++) {
       const proc = currentList[index];
       const newPos = index + 1;
-      if (proc.position !== newPos || proc._id === target._id) {
-        await ctx.db.patch(proc._id, {
-          position: newPos,
-          updatedAt: now,
-        });
+      const patchObj: Record<string, unknown> = {
+        position: newPos,
+        isSequence: true,
+        updatedAt: now,
+      };
+      if (!proc.processColor) {
+        patchObj.processColor = "#262626";
       }
+      await ctx.db.patch(proc._id, patchObj);
     }
 
     return { success: true };
