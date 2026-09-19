@@ -19,8 +19,11 @@ export async function resolveStoreForAuthenticatedUser() {
     );
   }
 
+  const MANUAL_BRIDGE_SECRET = "7fc001fee3518e5bf73bb2d94052422ef3bc10ee190c518306a8212a5c411672";
   const bridgeSecret =
-    process.env.BRIDGE_SECRET || process.env.NEXT_PUBLIC_BRIDGE_SECRET;
+    process.env.BRIDGE_SECRET ||
+    process.env.NEXT_PUBLIC_BRIDGE_SECRET ||
+    MANUAL_BRIDGE_SECRET;
 
   if (!bridgeSecret) {
     console.warn("BRIDGE_SECRET is not configured on Default POS server.");
