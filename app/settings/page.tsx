@@ -11,7 +11,6 @@ import { OrganizationWaiters } from "../components/OrganizationWaiters";
 import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes";
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
-import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
@@ -291,7 +290,11 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     label: "Queue & Waitlist",
     icon: <QueueIcon className="w-4 h-4" />,
   },
-  { id: "printers", label: "Printers", icon: <PrinterIcon className="w-4 h-4" /> },
+  {
+    id: "printers",
+    label: "Printers",
+    icon: <PrinterIcon className="w-4 h-4" />,
+  },
   {
     id: "features",
     label: "Features",
@@ -391,10 +394,11 @@ function SettingsContent() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${isSelected
-                      ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
-                      : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
-                      }`}
+                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${
+                      isSelected
+                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
+                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
+                    }`}
                   >
                     <span className="w-5 flex items-center justify-center text-[#5e5e5e]">
                       {tab.icon}
