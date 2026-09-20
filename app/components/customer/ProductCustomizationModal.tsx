@@ -205,18 +205,18 @@ export function ProductCustomizationModal({
 
   const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex flex-col justify-end items-center bg-black/65 backdrop-blur-xs p-0 sm:p-4 overflow-hidden transition-opacity animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/65 backdrop-blur-xs p-3 sm:p-4 transition-opacity animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] h-[88%] sm:h-auto sm:max-h-[85vh] sm:max-h-[720px] flex flex-col rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200"
+        className="bg-white w-full max-w-[440px] h-[82vh] h-[82dvh] max-h-[580px] rounded-3xl shadow-2xl flex flex-col min-h-0 overflow-hidden relative animate-in zoom-in-95 duration-200"
         style={{
-          maxHeight: "88vh",
+          maxHeight: "min(580px, 82vh)",
         }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* 1. Fixed Sheet Header */}
-        <div className="pt-3 pb-2.5 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0 z-20">
+        {/* Grabber Handle & Sheet Header */}
+        <div className="pt-3 pb-2 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0">
           <div className="w-10 h-1 bg-stone-300 rounded-full mb-2" />
           <div className="w-full flex items-center justify-between">
             <span className="text-[11px] font-extrabold tracking-widest text-[#464554] uppercase">
@@ -233,12 +233,12 @@ export function ProductCustomizationModal({
           </div>
         </div>
 
-        {/* 2. Scrollable Modal Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-8 space-y-4 scrollbar-thin">
-          {/* Product Summary Card */}
+        {/* Scrollable Modal Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-4 scrollbar-thin">
+          {/* 1. Product Summary Card */}
           <div className="flex items-start gap-3 p-3 bg-[#f8f9ff] rounded-2xl border border-stone-200/60 min-w-0">
             {/* Product Image */}
-            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 border border-stone-200/70 shadow-2xs flex items-center justify-center">
+            <div className="w-20 h-20 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 border border-stone-200/70 shadow-2xs flex items-center justify-center">
               {itemImg && !imageError ? (
                 <img
                   src={itemImg}
@@ -247,7 +247,7 @@ export function ProductCustomizationModal({
                   onError={() => setImageError(true)}
                 />
               ) : (
-                <div className="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-xs font-bold">
+                <div className="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-base font-bold">
                   <span>🍽️</span>
                 </div>
               )}
@@ -277,7 +277,7 @@ export function ProductCustomizationModal({
             </div>
           </div>
 
-          {/* Option Groups */}
+          {/* 2. Customization Option Groups */}
           {optionGroups.length === 0 && prepGroups.length === 0 ? (
             <div className="p-6 text-center bg-stone-50 rounded-2xl border border-stone-100">
               <p className="text-xs font-semibold text-stone-600">
@@ -398,7 +398,7 @@ export function ProductCustomizationModal({
             })
           )}
 
-          {/* Chef Preparation Preferences */}
+          {/* 3. Chef Preparation Preferences */}
           <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
               <div>
@@ -438,16 +438,16 @@ export function ProductCustomizationModal({
           </div>
         </div>
 
-        {/* 3. Fixed Bottom Action Area */}
-        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-2.5 flex-shrink-0 z-20 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[max(0.875rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))]">
+        {/* Sticky Bottom Action Area */}
+        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-3 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)]">
           {/* Quantity Stepper */}
-          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-xs h-11 flex-shrink-0">
+          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1.5 shadow-xs h-11 flex-shrink-0">
             <button
               type="button"
               aria-label="Decrease quantity"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               disabled={quantity <= 1}
-              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-40 transition cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
             >
               <MinusIcon className="w-3.5 h-3.5" />
             </button>
@@ -459,7 +459,7 @@ export function ProductCustomizationModal({
               aria-label="Increase quantity"
               onClick={() => setQuantity((q) => Math.min(10, q + 1))}
               disabled={quantity >= 10}
-              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-40 transition cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
             >
               <PlusIcon className="w-3.5 h-3.5" />
             </button>
@@ -470,7 +470,7 @@ export function ProductCustomizationModal({
             type="button"
             disabled={!isComplete}
             onClick={handleConfirm}
-            className="flex-1 bg-[#4338ca] hover:bg-[#372abf] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white h-11 px-3.5 sm:px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-between shadow-md cursor-pointer min-w-0"
+            className="flex-1 bg-[#4338ca] hover:bg-[#372abf] active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white h-11 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-between shadow-md cursor-pointer min-w-0"
           >
             <span className="truncate mr-1">{isComplete ? "Add to Cart" : "Select required"}</span>
             <span className="flex items-center gap-1 font-extrabold text-xs sm:text-sm flex-shrink-0">
