@@ -34,6 +34,7 @@ export function ProductCustomizationModal({
   currencySymbol = "₹",
 }: ProductCustomizationModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [imageError, setImageError] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -68,6 +69,7 @@ export function ProductCustomizationModal({
   useEffect(() => {
     if (!isOpen) return;
 
+    setImageError(false);
     const initialOptions: Record<string, string[]> = {};
 
     customizations.forEach((group) => {
@@ -196,17 +198,25 @@ export function ProductCustomizationModal({
       ? prepGroups.flatMap((g) => g.customization_items.map((i) => i.name))
       : DEFAULT_PREFERENCES;
 
+  const itemImg =
+    item.item_image_url ||
+    (item as any).imageUrl ||
+    (typeof (item as any).image === "string" ? (item as any).image : undefined);
+
   const modalContent = (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 transition-opacity animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex flex-col justify-end items-center bg-black/65 backdrop-blur-xs p-0 sm:p-4 overflow-hidden transition-opacity animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-[480px] max-h-[88dvh] sm:max-h-[82dvh] h-auto flex flex-col rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200"
+        className="bg-white w-full max-w-[480px] h-[88%] sm:h-auto sm:max-h-[85vh] sm:max-h-[720px] flex flex-col rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden relative animate-in slide-in-from-bottom-5 sm:zoom-in-95 duration-200"
+        style={{
+          maxHeight: "88vh",
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Grabber Handle & Sheet Header */}
-        <div className="pt-3 pb-2 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0">
+        {/* 1. Fixed Sheet Header */}
+        <div className="pt-3 pb-2.5 px-4 border-b border-stone-100 flex flex-col items-center bg-[#faf8ff] flex-shrink-0 z-20">
           <div className="w-10 h-1 bg-stone-300 rounded-full mb-2" />
           <div className="w-full flex items-center justify-between">
             <span className="text-[11px] font-extrabold tracking-widest text-[#464554] uppercase">
@@ -223,24 +233,22 @@ export function ProductCustomizationModal({
           </div>
         </div>
 
-        {/* Scrollable Modal Body with safe padding */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-8 space-y-5 scrollbar-thin">
-          {/* 1. Product Summary Card */}
+        {/* 2. Scrollable Modal Body */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 pb-8 space-y-4 scrollbar-thin">
+          {/* Product Summary Card */}
           <div className="flex items-start gap-3 p-3 bg-[#f8f9ff] rounded-2xl border border-stone-200/60 min-w-0">
             {/* Product Image */}
-            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 border border-stone-200/70 shadow-2xs">
-              {item.item_image_url ? (
+            <div className="w-18 h-18 sm:w-20 sm:h-20 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 border border-stone-200/70 shadow-2xs flex items-center justify-center">
+              {itemImg && !imageError ? (
                 <img
-                  src={item.item_image_url}
+                  src={itemImg}
                   alt={item.name}
                   className="w-full h-full object-cover"
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = "none";
-                  }}
+                  onError={() => setImageError(true)}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-stone-400 text-xs">
-                  Dish
+                <div className="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-xs font-bold">
+                  <span>🍽️</span>
                 </div>
               )}
             </div>
@@ -269,7 +277,7 @@ export function ProductCustomizationModal({
             </div>
           </div>
 
-          {/* 2. Customization Option Groups */}
+          {/* Option Groups */}
           {optionGroups.length === 0 && prepGroups.length === 0 ? (
             <div className="p-6 text-center bg-stone-50 rounded-2xl border border-stone-100">
               <p className="text-xs font-semibold text-stone-600">
@@ -282,7 +290,7 @@ export function ProductCustomizationModal({
               const isSingleSelect = group.max_selected === 1;
 
               return (
-                <div key={group.id} className="space-y-2.5">
+                <div key={group.id} className="space-y-2">
                   {/* Group Header */}
                   <div className="flex items-center justify-between">
                     <div>
@@ -390,8 +398,8 @@ export function ProductCustomizationModal({
             })
           )}
 
-          {/* 3. Chef Preparation Preferences */}
-          <div className="space-y-2.5 pt-1">
+          {/* Chef Preparation Preferences */}
+          <div className="space-y-2 pt-1">
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-xs font-bold text-[#131b2e] tracking-tight uppercase">
@@ -407,7 +415,7 @@ export function ProductCustomizationModal({
             </div>
 
             {/* Flowing Pills */}
-            <div className="flex flex-wrap gap-2 pt-0.5">
+            <div className="flex flex-wrap gap-2 pt-0.5 pb-2">
               {availablePreferences.map((pref) => {
                 const isSelected = selectedPreferences.includes(pref);
                 return (
@@ -430,15 +438,16 @@ export function ProductCustomizationModal({
           </div>
         </div>
 
-        {/* Sticky Bottom Action Area */}
-        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-2.5 flex-shrink-0 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[calc(0.875rem+env(safe-area-inset-bottom,0px))]">
+        {/* 3. Fixed Bottom Action Area */}
+        <div className="p-3.5 sm:p-4 border-t border-stone-200/70 bg-[#faf8ff] flex items-center gap-2.5 flex-shrink-0 z-20 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] pb-[max(0.875rem,calc(env(safe-area-inset-bottom,0px)+0.5rem))]">
           {/* Quantity Stepper */}
-          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1.5 shadow-xs h-11 flex-shrink-0">
+          <div className="flex items-center bg-white border border-stone-200 rounded-xl px-2 py-1 shadow-xs h-11 flex-shrink-0">
             <button
               type="button"
+              aria-label="Decrease quantity"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               disabled={quantity <= 1}
-              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-40 transition cursor-pointer"
             >
               <MinusIcon className="w-3.5 h-3.5" />
             </button>
@@ -447,9 +456,10 @@ export function ProductCustomizationModal({
             </span>
             <button
               type="button"
+              aria-label="Increase quantity"
               onClick={() => setQuantity((q) => Math.min(10, q + 1))}
               disabled={quantity >= 10}
-              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-30 disabled:hover:bg-transparent transition cursor-pointer"
+              className="w-7 h-7 flex items-center justify-center text-[#4338ca] hover:bg-stone-100 rounded-lg disabled:opacity-40 transition cursor-pointer"
             >
               <PlusIcon className="w-3.5 h-3.5" />
             </button>

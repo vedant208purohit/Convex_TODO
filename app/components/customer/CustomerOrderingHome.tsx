@@ -402,32 +402,42 @@ function CustomerOrderingHomeView({
           position: item.category.position,
           published: item.category.published ?? true,
           imageUrl: item.category.imageUrl || null,
-          items: (item.category.items || []).map((ci: any) => ({
-            category_item_id: ci.category_item_id,
-            customizations: ci.customizations || [],
-            item_image_url: ci.item_image_url,
-            item: {
-              id: ci.item.id,
-              name: ci.item.name,
-              price: ci.item.price,
-              display_price: ci.item.display_price,
-              description: ci.item.description,
-              published: ci.item.published ?? true,
-              is_available: ci.item.is_available ?? true,
-              is_veg: ci.item.is_veg ?? true,
-              is_spicy: ci.item.is_spicy,
-              serving_size: ci.item.serving_size,
-              serving: ci.item.serving,
-              mark_as_bestseller: ci.item.mark_as_bestseller,
-              badge: ci.item.mark_as_bestseller
-                ? "Bestseller"
-                : ci.item.favourite_item
-                  ? "Chef Recommended"
-                  : undefined,
-              customizations: ci.customizations || [],
-              item_image_url: ci.item_image_url,
-            },
-          })),
+          items: (item.category.items || []).map((ci: any) => {
+            const resolvedImg =
+              ci.item_image_url ||
+              ci.item?.item_image_url ||
+              ci.item?.imageUrl ||
+              ci.imageUrl ||
+              (typeof ci.item?.image === "string" ? ci.item.image : undefined) ||
+              (typeof ci.image === "string" ? ci.image : undefined);
+
+            return {
+              category_item_id: ci.category_item_id || ci._id || `ci_${ci.item?.id || ci.item?._id}`,
+              customizations: ci.customizations || ci.item?.customizations || [],
+              item_image_url: resolvedImg,
+              item: {
+                id: ci.item.id || ci.item._id,
+                name: ci.item.name,
+                price: ci.item.price,
+                display_price: ci.item.display_price || (ci.item.price / 100).toFixed(2),
+                description: ci.item.description,
+                published: ci.item.published ?? true,
+                is_available: ci.item.is_available ?? true,
+                is_veg: ci.item.is_veg ?? true,
+                is_spicy: ci.item.is_spicy,
+                serving_size: ci.item.serving_size,
+                serving: ci.item.serving,
+                mark_as_bestseller: ci.item.mark_as_bestseller,
+                badge: ci.item.mark_as_bestseller
+                  ? "Bestseller"
+                  : ci.item.favourite_item
+                    ? "Chef Recommended"
+                    : undefined,
+                customizations: ci.customizations || ci.item?.customizations || [],
+                item_image_url: resolvedImg,
+              },
+            };
+          }),
         },
       }));
     }
