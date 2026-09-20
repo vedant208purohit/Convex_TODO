@@ -1068,6 +1068,8 @@ export const getOrganizationMenu = query({
             calories_per_serving: item.caloriesPerServing,
             items_item_types: resolvedItemTypes,
             tax_info: taxInfo,
+            item_image_url: imageUrl,
+            imageUrl: imageUrl,
           },
           customizations: serializedCustomizations,
           item_image_url: imageUrl,

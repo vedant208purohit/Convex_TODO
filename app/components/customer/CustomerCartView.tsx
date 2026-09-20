@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   CustomerOrganization,
   CustomerTable,
@@ -65,25 +65,38 @@ export function CustomerCartView({
   const storeName = organization?.name || "Skyz Bistro & Banquet";
   const tableNum = table?.tableNumber || "T12";
 
-  // Helper to find full product details (including all customization groups) from raw menu
+  // Helper to find full product details (including all customization groups and resolved image URL) from raw menu
   const getProductDetails = (cartItem: CartItem): CustomerMenuItem => {
     if (rawMenu && rawMenu.length > 0) {
       for (const catObj of rawMenu) {
         const found = (catObj.category?.items || []).find(
-          (ci: any) => ci.item?.id === cartItem.itemId
+          (ci: any) =>
+            ci.item?.id === cartItem.itemId ||
+            ci.item?._id === cartItem.itemId ||
+            ci.category_item_id === cartItem.itemId ||
+            ci.id === cartItem.itemId ||
+            ci._id === cartItem.itemId
         );
         if (found) {
+          const resolvedImg =
+            found.item_image_url ||
+            found.item?.item_image_url ||
+            found.item?.imageUrl ||
+            found.imageUrl ||
+            (typeof found.item?.image === "string" ? found.item.image : undefined) ||
+            cartItem.imageUrl;
+
           return {
-            id: found.item.id,
+            id: found.item.id || found.item._id,
             name: found.item.name,
             price: found.item.price,
-            display_price: found.item.display_price,
+            display_price: found.item.display_price || (found.item.price / 100).toFixed(2),
             description: found.item.description,
             published: found.item.published ?? true,
             is_available: found.item.is_available ?? true,
             is_veg: found.item.is_veg ?? true,
-            customizations: found.customizations || [],
-            item_image_url: found.item_image_url || cartItem.imageUrl,
+            customizations: found.customizations || found.item?.customizations || [],
+            item_image_url: resolvedImg,
           };
         }
       }
@@ -247,6 +260,12 @@ export function CustomerCartView({
 
           {/* Item Cards */}
           {items.map((cartItem) => {
+            const productDetails = getProductDetails(cartItem);
+            const resolvedItemImg =
+              productDetails.item_image_url ||
+              cartItem.imageUrl ||
+              (productDetails as any).imageUrl;
+
             const summaryText = formatCustomizationSummary(cartItem);
             const formattedItemPrice = `${currencySymbol}${((cartItem.totalUnitPrice * cartItem.quantity) / 100).toFixed(2)}`;
             const hasCustomizations =
@@ -290,19 +309,23 @@ export function CustomerCartView({
                   </div>
 
                   {/* Thumbnail Image */}
-                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-[#eaedff] border border-stone-200/50 shadow-2xs">
-                    {cartItem.imageUrl ? (
+                  <div className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-[#eaedff] border border-stone-200/50 shadow-2xs flex items-center justify-center">
+                    {resolvedItemImg ? (
                       <img
-                        src={cartItem.imageUrl}
+                        src={resolvedItemImg}
                         alt={cartItem.name}
                         className="w-full h-full object-cover"
                         onError={(e) => {
-                          (e.target as HTMLElement).style.display = "none";
+                          const target = e.target as HTMLElement;
+                          target.style.display = "none";
+                          if (target.parentElement) {
+                            target.parentElement.innerHTML = `<div class="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-xs font-bold"><span>🍽️</span></div>`;
+                          }
                         }}
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-stone-400 text-[10px] font-medium">
-                        Dish
+                      <div className="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-xs font-bold">
+                        <span>🍽️</span>
                       </div>
                     )}
                   </div>
@@ -377,7 +400,8 @@ export function CustomerCartView({
                 onChange={(e) => setCustomerPhone(e.target.value)}
                 placeholder="98765 43210"
                 maxLength={10}
-                className="bg-transparent text-xs font-medium text-[#131b2e] w-full outline-none placeholder-[#777586]"
+                style={{ backgroundColor: "#eaedff", color: "#131b2e" }}
+                className="bg-[#eaedff] text-xs font-medium text-[#131b2e] w-full outline-none placeholder-[#777586] [box-shadow:0_0_0_1000px_#eaedff_inset] [-webkit-box-shadow:0_0_0_1000px_#eaedff_inset] [-webkit-text-fill-color:#131b2e]"
               />
             </div>
             <span className="text-[11px] font-semibold text-[#005e3f] bg-white px-2 py-0.5 rounded-full flex items-center gap-0.5 shadow-2xs flex-shrink-0">
@@ -398,7 +422,8 @@ export function CustomerCartView({
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
               placeholder="Enter name"
-              className="bg-transparent text-xs font-medium text-[#131b2e] w-full outline-none placeholder-[#777586]"
+              style={{ backgroundColor: "#eaedff", color: "#131b2e" }}
+              className="bg-[#eaedff] text-xs font-medium text-[#131b2e] w-full outline-none placeholder-[#777586] [box-shadow:0_0_0_1000px_#eaedff_inset] [-webkit-box-shadow:0_0_0_1000px_#eaedff_inset] [-webkit-text-fill-color:#131b2e]"
             />
           </div>
         </div>
@@ -426,7 +451,8 @@ export function CustomerCartView({
             value={kitchenInstructions}
             onChange={(e) => setKitchenInstructions(e.target.value)}
             placeholder="Add specific cooking or serving request"
-            className="bg-transparent text-xs text-[#131b2e] font-normal w-full outline-none placeholder-[#777586]"
+            style={{ backgroundColor: "#eaedff", color: "#131b2e" }}
+            className="bg-[#eaedff] text-xs text-[#131b2e] font-normal w-full outline-none placeholder-[#777586] [box-shadow:0_0_0_1000px_#eaedff_inset] [-webkit-box-shadow:0_0_0_1000px_#eaedff_inset] [-webkit-text-fill-color:#131b2e]"
           />
         </div>
       </div>
@@ -488,8 +514,8 @@ export function CustomerCartView({
         </div>
       </div>
 
-      {/* 8. Sticky Dine-In Payment & KOT Trigger Floating Container */}
-      <div className="sticky bottom-2 inset-x-0 z-40 pt-1">
+      {/* 8. Sticky Dine-In Payment Floating Container positioned above bottom nav */}
+      <div className="sticky bottom-[72px] sm:bottom-[76px] inset-x-0 z-40 pt-1">
         <div className="bg-white p-2.5 rounded-2xl shadow-xl flex flex-col gap-1.5 border border-[#eaedff]">
           <button
             type="button"
@@ -519,8 +545,8 @@ export function CustomerCartView({
         </div>
       </div>
 
-      {/* Extra Bottom Clearance so full bill summary & Grand Total can scroll way past sticky elements */}
-      <div className="h-28 w-full flex-shrink-0" aria-hidden="true" />
+      {/* Extra Bottom Clearance */}
+      <div className="h-20 w-full flex-shrink-0" aria-hidden="true" />
 
       {/* 9. Edit Options Modal for existing Cart Item */}
       {editingCartItem && (

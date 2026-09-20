@@ -101,19 +101,23 @@ export function ProductCard({ item, currencySymbol = "₹" }: ProductCardProps) 
         {/* Right Column: Image & Interactive CTA */}
         <div className="flex flex-col items-center gap-2 flex-shrink-0">
           {/* Image Container */}
-          <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 shadow-2xs">
+          <div className="w-24 h-24 rounded-xl overflow-hidden bg-[#eaedff] relative flex-shrink-0 shadow-2xs flex items-center justify-center">
             {item.item_image_url ? (
               <img
                 src={item.item_image_url}
                 alt={item.name}
                 className="w-full h-full object-cover transition-transform duration-300 hover:scale-105"
                 onError={(e) => {
-                  (e.target as HTMLElement).style.display = "none";
+                  const target = e.target as HTMLElement;
+                  target.style.display = "none";
+                  if (target.parentElement) {
+                    target.parentElement.innerHTML = `<div class="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-base font-bold"><span>🍽️</span></div>`;
+                  }
                 }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-stone-300 bg-stone-100">
-                <span className="text-xs text-stone-400">Fresh Dish</span>
+              <div className="w-full h-full flex flex-col items-center justify-center text-[#4338ca] bg-[#eaedff] text-base font-bold">
+                <span>🍽️</span>
               </div>
             )}
 

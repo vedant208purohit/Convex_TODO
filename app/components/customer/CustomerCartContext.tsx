@@ -163,7 +163,10 @@ export function CustomerCartProvider({
               price: item.price,
               totalUnitPrice,
               quantity,
-              imageUrl: item.item_image_url,
+              imageUrl:
+                item.item_image_url ||
+                (item as any).imageUrl ||
+                (typeof (item as any).image === "string" ? (item as any).image : undefined),
               isVeg: item.is_veg,
               customizations: customizations.length > 0 ? customizations : undefined,
               preferences: preferences.length > 0 ? preferences : undefined,
@@ -237,7 +240,10 @@ export function CustomerCartProvider({
               price: item.price,
               totalUnitPrice,
               quantity,
-              imageUrl: item.item_image_url,
+              imageUrl:
+                item.item_image_url ||
+                (item as any).imageUrl ||
+                (typeof (item as any).image === "string" ? (item as any).image : undefined),
               isVeg: item.is_veg,
               customizations: customizations.length > 0 ? customizations : undefined,
               preferences: preferences.length > 0 ? preferences : undefined,
