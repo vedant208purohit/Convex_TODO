@@ -1041,54 +1041,93 @@ export function SelectDeliveryLocationView({
               <button
                 type="button"
                 onClick={() => setAddressType("Home")}
-                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
+                style={{
+                  backgroundColor: addressType === "Home" ? "#4338ca" : undefined,
+                  color: addressType === "Home" ? "#ffffff" : undefined,
+                }}
+                className={`group flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
                   addressType === "Home"
-                    ? "border-2 border-[#4338ca] bg-[#4338ca] text-white shadow-sm"
-                    : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    ? "border-2 border-[#4338ca] bg-[#4338ca] text-white shadow-sm hover:bg-[#3730a3]"
+                    : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-[#4338ca] hover:text-white hover:border-[#4338ca]"
                 }`}
               >
                 <HomeAddressIcon
-                  className={`w-4 h-4 ${
-                    addressType === "Home" ? "text-white" : "text-slate-500"
+                  className={`w-4 h-4 transition-colors ${
+                    addressType === "Home"
+                      ? "text-white fill-white"
+                      : "text-slate-500 group-hover:text-white group-hover:fill-white"
                   }`}
                 />
-                <span>Home</span>
+                <span
+                  style={{ color: addressType === "Home" ? "#ffffff" : undefined }}
+                  className={`transition-colors font-semibold ${
+                    addressType === "Home" ? "text-white" : "text-slate-700 group-hover:text-white"
+                  }`}
+                >
+                  Home
+                </span>
               </button>
 
               {/* Office Option */}
               <button
                 type="button"
                 onClick={() => setAddressType("Office")}
-                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
+                style={{
+                  backgroundColor: addressType === "Office" ? "#4338ca" : undefined,
+                  color: addressType === "Office" ? "#ffffff" : undefined,
+                }}
+                className={`group flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
                   addressType === "Office"
-                    ? "border-2 border-[#4338ca] bg-[#4338ca] text-white shadow-sm"
-                    : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    ? "border-2 border-[#4338ca] bg-[#4338ca] text-white shadow-sm hover:bg-[#3730a3]"
+                    : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-[#4338ca] hover:text-white hover:border-[#4338ca]"
                 }`}
               >
                 <OfficeAddressIcon
-                  className={`w-4 h-4 ${
-                    addressType === "Office" ? "text-white" : "text-slate-500"
+                  className={`w-4 h-4 transition-colors ${
+                    addressType === "Office"
+                      ? "text-white fill-white"
+                      : "text-slate-500 group-hover:text-white group-hover:fill-white"
                   }`}
                 />
-                <span>Office</span>
+                <span
+                  style={{ color: addressType === "Office" ? "#ffffff" : undefined }}
+                  className={`transition-colors font-semibold ${
+                    addressType === "Office" ? "text-white" : "text-slate-700 group-hover:text-white"
+                  }`}
+                >
+                  Office
+                </span>
               </button>
 
               {/* Other Option */}
               <button
                 type="button"
                 onClick={() => setAddressType("Other")}
-                className={`flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
+                style={{
+                  backgroundColor: addressType === "Other" ? "#4338ca" : undefined,
+                  color: addressType === "Other" ? "#ffffff" : undefined,
+                }}
+                className={`group flex items-center justify-center space-x-1.5 py-2.5 px-3 rounded-lg font-semibold text-xs transition-all cursor-pointer ${
                   addressType === "Other"
-                    ? "border-2 border-[#4338ca] bg-[#4338ca] text-white shadow-sm"
-                    : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    ? "border-2 border-[#4338ca] bg-[#4338ca] text-white shadow-sm hover:bg-[#3730a3]"
+                    : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-[#4338ca] hover:text-white hover:border-[#4338ca]"
                 }`}
               >
                 <OtherAddressIcon
-                  className={`w-4 h-4 ${
-                    addressType === "Other" ? "text-white" : "text-slate-500"
+                  className={`w-4 h-4 transition-colors ${
+                    addressType === "Other"
+                      ? "text-white fill-white"
+                      : "text-slate-500 group-hover:text-white group-hover:fill-white"
                   }`}
                 />
-                <span>Other</span>
+                <span
+                  style={{ color: addressType === "Other" ? "#ffffff" : undefined }}
+                  className={`transition-colors font-semibold ${
+                    addressType === "Other" ? "text-white" : "text-slate-700 group-hover:text-white"
+                  }`}
+                >
+                  Other
+                </span>
               </button>
             </div>
           </div>
