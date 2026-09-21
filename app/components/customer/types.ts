@@ -126,6 +126,24 @@ export interface BillSummary {
 
 export type CustomerServiceMode = "dine_in" | "takeaway" | "delivery";
 
+export type AddressType = "Home" | "Office" | "Other";
+
+export interface DeliveryAddress {
+  id?: string;
+  houseFlatBlock: string;
+  apartmentRoadArea: string;
+  deliveryInstructions?: string;
+  landmark?: string;
+  addressType: AddressType;
+  city?: string;
+  zipCode?: string;
+  formattedAddress: string;
+  latitude?: number;
+  longitude?: number;
+  accuracyStatus?: "High Accuracy" | "Approximate" | "Manual";
+  isDefault?: boolean;
+}
+
 export interface CartItem {
   cartItemId: string; // composite key
   itemId: string;
@@ -138,3 +156,4 @@ export interface CartItem {
   customizations?: SelectedCustomization[];
   preferences?: string[];
 }
+

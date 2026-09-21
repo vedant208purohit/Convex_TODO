@@ -17,6 +17,7 @@ import { StickyCartBar } from "./StickyCartBar";
 import { CustomerBottomNav, CustomerNavTab } from "./CustomerBottomNav";
 import { CustomerLoadingSkeleton } from "./CustomerLoadingSkeleton";
 import { CustomerErrorView } from "./CustomerErrorView";
+import { SelectDeliveryLocationView } from "./SelectDeliveryLocationView";
 import {
   CustomerCategory,
   CustomerMenuItem,
@@ -483,12 +484,28 @@ function CustomerOrderingHomeView({
   }, [categories, selectedCategoryId, searchQuery]);
 
   const { totalItemCount } = useCustomerCart();
+  const [isDeliveryLocationOpen, setIsDeliveryLocationOpen] = useState(false);
 
   const activeCategoryTitle = selectedCategoryId
     ? categories.find((c) => c.category.id === selectedCategoryId)?.category.name
     : undefined;
 
-  // Render SCREEN 3: Your Cart / Table Order when on the "orders" tab
+  // Render SCREEN 2B: Select Delivery Location & Address (Screen 2B)
+  if (isDeliveryLocationOpen) {
+    return (
+      <SelectDeliveryLocationView
+        organization={organization}
+        table={table}
+        onBack={() => setIsDeliveryLocationOpen(false)}
+        onConfirmLocation={() => {
+          setIsDeliveryLocationOpen(false);
+          onSelectTab("orders");
+        }}
+      />
+    );
+  }
+
+  // Render SCREEN 3 / 3A: Your Cart / Table Order when on the "orders" tab
   if (activeTab === "orders") {
     return (
       <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
@@ -508,6 +525,7 @@ function CustomerOrderingHomeView({
             table={table}
             rawMenu={rawMenu}
             onBackToMenu={() => onSelectTab("home")}
+            onOpenDeliveryLocation={() => setIsDeliveryLocationOpen(true)}
           />
         </main>
 
@@ -538,7 +556,11 @@ function CustomerOrderingHomeView({
         <TableContextCard table={table} qr={qr} />
 
         {/* Service Mode Switcher */}
-        <ServiceModeSwitcher table={table} organization={organization} />
+        <ServiceModeSwitcher
+          table={table}
+          organization={organization}
+          onOpenDeliveryLocation={() => setIsDeliveryLocationOpen(true)}
+        />
 
         {/* Promotional / Hero Card */}
         <PromotionHeroCard

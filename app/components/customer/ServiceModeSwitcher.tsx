@@ -9,14 +9,16 @@ interface ServiceModeSwitcherProps {
   table?: CustomerTable;
   organization?: CustomerOrganization;
   showContextLine?: boolean;
+  onOpenDeliveryLocation?: () => void;
 }
 
 export function ServiceModeSwitcher({
   table,
   organization,
   showContextLine = true,
+  onOpenDeliveryLocation,
 }: ServiceModeSwitcherProps) {
-  const { serviceMode, setServiceMode } = useCustomerCart();
+  const { serviceMode, setServiceMode, deliveryAddress } = useCustomerCart();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const tableNum = table?.tableNumber || "T12";
@@ -24,8 +26,12 @@ export function ServiceModeSwitcher({
   const handleSelectMode = (mode: CustomerServiceMode) => {
     setServiceMode(mode);
     if (mode === "delivery") {
-      setToastMessage("Table QR session active — order will be routed for Table " + tableNum);
-      setTimeout(() => setToastMessage(null), 3000);
+      if (onOpenDeliveryLocation) {
+        onOpenDeliveryLocation();
+      } else {
+        setToastMessage("Delivery mode selected — please confirm delivery address");
+        setTimeout(() => setToastMessage(null), 3000);
+      }
     } else if (mode === "takeaway") {
       setToastMessage("Table QR session active — kitchen will package order for takeaway");
       setTimeout(() => setToastMessage(null), 3000);
@@ -35,6 +41,10 @@ export function ServiceModeSwitcher({
   const isDelivery = serviceMode === "delivery";
   const isDineIn = serviceMode === "dine_in";
   const isTakeaway = serviceMode === "takeaway";
+
+  const displayAddress = deliveryAddress
+    ? `${deliveryAddress.houseFlatBlock ? deliveryAddress.houseFlatBlock + ", " : ""}${deliveryAddress.apartmentRoadArea}`
+    : "Select delivery address";
 
   return (
     <section className="flex flex-col gap-1.5 w-full">
@@ -89,13 +99,38 @@ export function ServiceModeSwitcher({
         </button>
       </div>
 
+      {/* Delivery Address Bar (When delivery mode is active) */}
+      {isDelivery && (
+        <div className="bg-[#eef2ff] border border-[#c7d2fe] rounded-xl px-3 py-2 flex items-center justify-between transition-all">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 flex-shrink-0 animate-pulse" />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase font-bold text-[#4338ca] tracking-wider">
+                Delivering To ({deliveryAddress?.addressType || "Home"})
+              </div>
+              <p className="text-xs font-semibold text-slate-800 truncate">
+                {displayAddress}
+              </p>
+            </div>
+          </div>
+          {onOpenDeliveryLocation && (
+            <button
+              type="button"
+              onClick={onOpenDeliveryLocation}
+              className="text-xs font-bold text-[#4338ca] hover:text-[#3730a3] underline ml-2 flex-shrink-0 cursor-pointer"
+            >
+              {deliveryAddress ? "Change" : "Select"}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Contextual Status Line */}
-      {showContextLine && (
+      {showContextLine && !isDelivery && (
         <div className="flex items-center justify-center gap-1.5 text-[#464554] pt-0.5">
           <VerifiedCheckIcon className="w-3.5 h-3.5 text-[#005e3f]" />
           <span className="text-[11px] font-medium">
             {isDineIn && `Dine In: Table ${tableNum} • Direct Kitchen Dispatch`}
-            {isDelivery && `Delivery Mode: Table ${tableNum} Order Dispatch`}
             {isTakeaway && `Take Away: Packed for Table ${tableNum}`}
           </span>
         </div>

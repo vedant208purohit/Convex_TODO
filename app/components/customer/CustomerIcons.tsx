@@ -396,3 +396,66 @@ export function CategoryIcon({ name, className = "w-6 h-6" }: { name: string; cl
     </svg>
   );
 }
+
+export function LocationPinIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+export function DeliveryTargetPinIcon({ className = "w-8 h-8 text-[#4338ca]" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="currentColor">
+      <path
+        fillRule="evenodd"
+        d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+export function GpsCrosshairIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="7" />
+      <path d="M12 2v3m0 14v3M2 12h3m14 0h3" />
+    </svg>
+  );
+}
+
+export function ClearCircleIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
+export function HomeAddressIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+    </svg>
+  );
+}
+
+export function OfficeAddressIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+    </svg>
+  );
+}
+
+export function OtherAddressIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+      <path d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+    </svg>
+  );
+}
+

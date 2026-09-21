@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode, useMemo } from "react";
-import { CartItem, CustomerMenuItem, SelectedCustomization, BillSummary, CustomerServiceMode } from "./types";
+import { CartItem, CustomerMenuItem, SelectedCustomization, BillSummary, CustomerServiceMode, DeliveryAddress } from "./types";
 
 interface CustomerCartContextType {
   items: CartItem[];
@@ -16,6 +16,8 @@ interface CustomerCartContextType {
   setCustomerName: (name: string) => void;
   kitchenInstructions: string;
   setKitchenInstructions: (instructions: string) => void;
+  deliveryAddress: DeliveryAddress | null;
+  setDeliveryAddress: (address: DeliveryAddress | null) => void;
   addItem: (
     item: CustomerMenuItem,
     customizations?: SelectedCustomization[],
@@ -75,6 +77,7 @@ export function CustomerCartProvider({
   const [customerPhone, setCustomerPhone] = useState<string>("9876543210");
   const [customerName, setCustomerName] = useState<string>("Rahul");
   const [kitchenInstructions, setKitchenInstructions] = useState<string>("Please serve beverages first");
+  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load from localStorage on mount or table change
@@ -97,6 +100,7 @@ export function CustomerCartProvider({
         if (parsedMeta.customerPhone) setCustomerPhone(parsedMeta.customerPhone);
         if (parsedMeta.customerName) setCustomerName(parsedMeta.customerName);
         if (parsedMeta.kitchenInstructions) setKitchenInstructions(parsedMeta.kitchenInstructions);
+        if (parsedMeta.deliveryAddress) setDeliveryAddress(parsedMeta.deliveryAddress);
       }
     } catch {
       setItems([]);
@@ -126,12 +130,14 @@ export function CustomerCartProvider({
           customerPhone,
           customerName,
           kitchenInstructions,
+          deliveryAddress,
         })
       );
     } catch {
       // Quota handling
     }
-  }, [serviceMode, customerPhone, customerName, kitchenInstructions, metadataStorageKey, isInitialized]);
+  }, [serviceMode, customerPhone, customerName, kitchenInstructions, deliveryAddress, metadataStorageKey, isInitialized]);
+
 
   const addItem = useCallback(
     (
@@ -334,6 +340,8 @@ export function CustomerCartProvider({
         setCustomerName,
         kitchenInstructions,
         setKitchenInstructions,
+        deliveryAddress,
+        setDeliveryAddress,
         addItem,
         updateQuantity,
         setItemQuantity,
