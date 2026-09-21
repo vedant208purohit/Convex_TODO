@@ -28,6 +28,7 @@ import {
 } from "./CustomerIcons";
 import { ServiceModeSwitcher } from "./ServiceModeSwitcher";
 import { ProductCustomizationModal } from "./ProductCustomizationModal";
+import { CustomerDeliveryCartView } from "./CustomerDeliveryCartView";
 
 interface CustomerCartViewProps {
   organization: CustomerOrganization;
@@ -62,6 +63,20 @@ export function CustomerCartView({
     billSummary,
     currencySymbol,
   } = useCustomerCart();
+
+  // Screen 3A: Render dedicated CustomerDeliveryCartView when in delivery mode
+  if (serviceMode === "delivery") {
+    return (
+      <CustomerDeliveryCartView
+        organization={organization}
+        table={table}
+        rawMenu={rawMenu}
+        onBackToMenu={onBackToMenu}
+        onProceedToPayment={onProceedToPayment}
+        onOpenDeliveryLocation={onOpenDeliveryLocation}
+      />
+    );
+  }
 
   // State for editing customizations on an existing cart item
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
@@ -207,73 +222,26 @@ export function CustomerCartView({
         onOpenDeliveryLocation={onOpenDeliveryLocation}
       />
 
-      {/* 3. Session / Address Notice Card */}
-      {serviceMode === "delivery" ? (
-        <div className="bg-[#eef2ff] rounded-xl p-3.5 flex items-start gap-3 shadow-sm border border-[#c7d2fe]">
-          <div className="w-8 h-8 rounded-lg bg-[#e0e7ff] flex items-center justify-center text-[#4338ca] flex-shrink-0 mt-0.5">
-            <svg className="w-4.5 h-4.5 text-[#4338ca]" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" clipRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" />
-            </svg>
-          </div>
-          <div className="flex flex-col gap-1 min-w-0 flex-1">
-            <div className="flex items-center justify-between gap-1 flex-wrap">
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs font-bold text-[#4338ca]">
-                  Doorstep Delivery
-                </span>
-                <span className="text-[10px] font-semibold bg-[#4338ca] text-white px-1.5 py-0.2 rounded">
-                  {deliveryAddress?.addressType || "Home"}
-                </span>
-              </div>
-              {onOpenDeliveryLocation && (
-                <button
-                  type="button"
-                  onClick={onOpenDeliveryLocation}
-                  className="text-xs font-bold text-[#4338ca] hover:text-[#3730a3] underline cursor-pointer"
-                >
-                  {deliveryAddress ? "Change" : "Select Address"}
-                </button>
-              )}
-            </div>
-            {deliveryAddress ? (
-              <div className="text-[11px] text-slate-700 leading-snug">
-                <p className="font-semibold text-slate-900">
-                  {deliveryAddress.houseFlatBlock}, {deliveryAddress.apartmentRoadArea}
-                </p>
-                {deliveryAddress.deliveryInstructions && (
-                  <p className="text-slate-500 text-[10px] mt-0.5">
-                    Note: {deliveryAddress.deliveryInstructions}
-                  </p>
-                )}
-              </div>
-            ) : (
-              <p className="text-[11px] text-slate-500">
-                Please select your delivery address to confirm doorstep delivery.
-              </p>
-            )}
-          </div>
+      {/* 3. Session / Dine-In Notice Card */}
+      <div className="bg-[#f2f3ff] rounded-xl p-3 flex items-start gap-3 shadow-sm border border-[#e2e7ff]/80">
+        <div className="w-8 h-8 rounded-lg bg-[#e2e7ff] flex items-center justify-center text-[#4338ca] flex-shrink-0">
+          <KitchenIcon className="w-4.5 h-4.5 text-[#4338ca]" />
         </div>
-      ) : (
-        <div className="bg-[#f2f3ff] rounded-xl p-3 flex items-start gap-3 shadow-sm border border-[#e2e7ff]/80">
-          <div className="w-8 h-8 rounded-lg bg-[#e2e7ff] flex items-center justify-center text-[#4338ca] flex-shrink-0">
-            <KitchenIcon className="w-4.5 h-4.5 text-[#4338ca]" />
+        <div className="flex flex-col gap-0.5 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-semibold text-[#131b2e]">
+              Serving to Table {tableNum}
+            </span>
+            <span className="w-1.5 h-1.5 rounded-full bg-[#005e3f]" />
+            <span className="text-[11px] text-[#005e3f] font-semibold">
+              Instant KDS Push
+            </span>
           </div>
-          <div className="flex flex-col gap-0.5 min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-xs font-semibold text-[#131b2e]">
-                Serving to Table {tableNum}
-              </span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#005e3f]" />
-              <span className="text-[11px] text-[#005e3f] font-semibold">
-                Instant KDS Push
-              </span>
-            </div>
-            <p className="text-[11px] text-[#464554] leading-relaxed">
-              Zero delivery or packaging charges. Dishes are routed immediately to kitchen display screens.
-            </p>
-          </div>
+          <p className="text-[11px] text-[#464554] leading-relaxed">
+            Zero delivery or packaging charges. Dishes are routed immediately to kitchen display screens.
+          </p>
         </div>
-      )}
+      </div>
 
       {/* 4. Cart Items Section */}
       {items.length === 0 ? (
