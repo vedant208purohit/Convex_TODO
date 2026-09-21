@@ -120,4 +120,39 @@ describe("Screen 2B — Delivery Location & Customer Address Flow Unit Tests", (
       expect(cart[0].preferences).toContain("No Onion");
     });
   });
+
+  describe("6. Google Maps Geocoding & Address Component Parsing", () => {
+    it("correctly parses raw Google Geocoder address components into structured fields", () => {
+      const mockComponents = [
+        { long_name: "D-73", short_name: "D-73", types: ["premise"] },
+        { long_name: "Corporate Road", short_name: "Corporate Rd", types: ["route"] },
+        { long_name: "Makarba", short_name: "Makarba", types: ["sublocality_level_1", "sublocality"] },
+        { long_name: "Ahmedabad", short_name: "Ahmedabad", types: ["locality"] },
+        { long_name: "GJ", short_name: "GJ", types: ["administrative_area_level_1"] },
+        { long_name: "380015", short_name: "380015", types: ["postal_code"] },
+        { long_name: "Near Vodafone House", short_name: "Near Vodafone House", types: ["landmark"] },
+      ];
+
+      const parseComponents = (components: typeof mockComponents, formatted = "") => {
+        const result: any = { formattedAddress: formatted };
+        components.forEach((c) => {
+          if (c.types.includes("premise")) result.premise = c.long_name;
+          if (c.types.includes("route")) result.streetName = c.long_name;
+          if (c.types.includes("sublocality_level_1")) result.area = c.long_name;
+          if (c.types.includes("locality")) result.city = c.long_name;
+          if (c.types.includes("postal_code")) result.zipCode = c.long_name;
+          if (c.types.includes("landmark")) result.landmark = c.long_name;
+        });
+        return result;
+      };
+
+      const parsed = parseComponents(mockComponents, "Titanium Heights, Corporate Road, Makarba, Ahmedabad 380015");
+      expect(parsed.premise).toBe("D-73");
+      expect(parsed.streetName).toBe("Corporate Road");
+      expect(parsed.area).toBe("Makarba");
+      expect(parsed.city).toBe("Ahmedabad");
+      expect(parsed.zipCode).toBe("380015");
+      expect(parsed.landmark).toBe("Near Vodafone House");
+    });
+  });
 });

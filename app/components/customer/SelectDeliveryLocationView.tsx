@@ -1,6 +1,13 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  GoogleMap,
+  Marker,
+  Autocomplete,
+  useJsApiLoader,
+  Libraries,
+} from "@react-google-maps/api";
 import {
   CustomerOrganization,
   CustomerTable,
@@ -29,64 +36,18 @@ interface SelectDeliveryLocationViewProps {
   onConfirmLocation: (address: DeliveryAddress) => void;
 }
 
-// Pre-defined known area suggestions for fast, realistic search & selection
-interface LocationSuggestion {
-  title: string;
-  subtitle: string;
-  area: string;
-  city: string;
-  zipCode: string;
-  latitude: number;
-  longitude: number;
-}
+const GOOGLE_MAPS_LIBRARIES: Libraries = ["places"];
 
-const SAMPLE_LOCATION_SUGGESTIONS: LocationSuggestion[] = [
-  {
-    title: "Titanium Heights",
-    subtitle: "Corporate Road, Opposite Vodafone House, Makarba",
-    area: "Titanium Heights, Corporate Road, Makarba",
-    city: "Ahmedabad",
-    zipCode: "380015",
-    latitude: 22.9988,
-    longitude: 72.5074,
-  },
-  {
-    title: "Prahlad Nagar Trade Center",
-    subtitle: "Prahlad Nagar Road, Near Anandnagar",
-    area: "Prahlad Nagar Trade Center, Anandnagar",
-    city: "Ahmedabad",
-    zipCode: "380015",
-    latitude: 23.0125,
-    longitude: 72.5118,
-  },
-  {
-    title: "Sarkhej Roza Heritage Precinct",
-    subtitle: "Makarba Gam, Sarkhej",
-    area: "Makarba Gam, Sarkhej",
-    city: "Ahmedabad",
-    zipCode: "380055",
-    latitude: 22.9818,
-    longitude: 72.5015,
-  },
-  {
-    title: "TRP Mall & Commercial Hub",
-    subtitle: "Bopal-Ambli Road, Near Iscon Cross Roads",
-    area: "Bopal-Ambli Road",
-    city: "Ahmedabad",
-    zipCode: "380058",
-    latitude: 23.0335,
-    longitude: 72.4842,
-  },
-  {
-    title: "Sundarvan Ecology Park & Nature Center",
-    subtitle: "Jodhpur Tekra, Satellite",
-    area: "Jodhpur Tekra, Satellite",
-    city: "Ahmedabad",
-    zipCode: "380015",
-    latitude: 23.0242,
-    longitude: 72.5276,
-  },
-];
+const mapContainerStyle: React.CSSProperties = {
+  width: "100%",
+  height: "100%",
+};
+
+// Default fallback coordinates (default city center if no GPS/address is provided yet)
+const DEFAULT_CENTER = {
+  lat: 22.9988,
+  lng: 72.5074,
+};
 
 const QUICK_DELIVERY_CHIPS = [
   { id: "gate", label: "🚪 Leave at gate", text: "Leave at gate" },
@@ -94,6 +55,68 @@ const QUICK_DELIVERY_CHIPS = [
   { id: "guard", label: "🛡️ With guard", text: "Leave with security guard" },
   { id: "bell", label: "🔔 Ring bell", text: "Ring bell twice" },
 ];
+
+interface ParsedAddressComponents {
+  formattedAddress: string;
+  premise?: string;
+  streetNumber?: string;
+  streetName?: string;
+  area?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  landmark?: string;
+}
+
+function parseGoogleAddressComponents(
+  components: google.maps.GeocoderAddressComponent[] = [],
+  formatted_address = ""
+): ParsedAddressComponents {
+  const result: ParsedAddressComponents = {
+    formattedAddress: formatted_address,
+  };
+
+  components.forEach((component) => {
+    const types = component.types || [];
+
+    if (types.includes("premise") || types.includes("subpremise")) {
+      result.premise = component.long_name;
+    }
+    if (types.includes("street_number")) {
+      result.streetNumber = component.long_name;
+    }
+    if (types.includes("route")) {
+      result.streetName = component.long_name;
+    }
+    if (
+      types.includes("sublocality_level_1") ||
+      types.includes("sublocality") ||
+      types.includes("neighborhood")
+    ) {
+      result.area = component.long_name;
+    }
+    if (types.includes("locality")) {
+      result.city = component.long_name;
+    } else if (!result.city && types.includes("administrative_area_level_2")) {
+      result.city = component.long_name;
+    }
+    if (types.includes("administrative_area_level_1")) {
+      result.state = component.short_name;
+    }
+    if (types.includes("country")) {
+      result.country = component.long_name;
+    }
+    if (types.includes("postal_code")) {
+      result.zipCode = component.long_name;
+    }
+    if (types.includes("landmark") || types.includes("point_of_interest")) {
+      result.landmark = component.long_name;
+    }
+  });
+
+  return result;
+}
 
 export function SelectDeliveryLocationView({
   organization,
@@ -108,14 +131,29 @@ export function SelectDeliveryLocationView({
     setServiceMode,
   } = useCustomerCart();
 
-  // Search and Map View States
-  const [searchQuery, setSearchQuery] = useState(
-    deliveryAddress?.apartmentRoadArea
-      ? `${deliveryAddress.apartmentRoadArea}`
-      : "Titanium Heights, Corporate Road, Makarba"
-  );
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const googleApiKey =
+    process.env.NEXT_PUBLIC_GOOGLE_MAP_API_KEY || "";
+
+  // Load Google Maps JavaScript API with places library
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: googleApiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
+  });
+
+  // Coordinates and Position
+  const [position, setPosition] = useState<{ lat: number; lng: number }>({
+    lat: deliveryAddress?.latitude || DEFAULT_CENTER.lat,
+    lng: deliveryAddress?.longitude || DEFAULT_CENTER.lng,
+  });
+  const [mapZoom, setMapZoom] = useState(16);
   const [mapMode, setMapMode] = useState<"map" | "satellite">("map");
+
+  // Search and Geocoding States
+  const [searchQuery, setSearchQuery] = useState(
+    deliveryAddress?.apartmentRoadArea || deliveryAddress?.formattedAddress || ""
+  );
+  const [isGeocodingLoading, setIsGeocodingLoading] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [accuracyStatus, setAccuracyStatus] = useState<"High Accuracy" | "Approximate" | "Manual">(
@@ -124,27 +162,25 @@ export function SelectDeliveryLocationView({
 
   // Form Field States
   const [houseFlatBlock, setHouseFlatBlock] = useState(
-    deliveryAddress?.houseFlatBlock || "D-73"
+    deliveryAddress?.houseFlatBlock || ""
   );
   const [apartmentRoadArea, setApartmentRoadArea] = useState(
-    deliveryAddress?.apartmentRoadArea || "Titanium Heights, Corporate Road, Makarba"
+    deliveryAddress?.apartmentRoadArea || ""
   );
   const [deliveryInstructions, setDeliveryInstructions] = useState(
-    deliveryAddress?.deliveryInstructions || "Call before ringing bell"
+    deliveryAddress?.deliveryInstructions || ""
   );
   const [landmark, setLandmark] = useState(
-    deliveryAddress?.landmark || "Near Vodafone House, opposite courtyard"
+    deliveryAddress?.landmark || ""
   );
   const [addressType, setAddressType] = useState<AddressType>(
     deliveryAddress?.addressType || "Home"
   );
   const [formattedAddress, setFormattedAddress] = useState(
-    deliveryAddress?.formattedAddress || "Makarba, Ahmedabad, Gujarat 380015"
+    deliveryAddress?.formattedAddress || ""
   );
-  const [coordinates, setCoordinates] = useState<{ lat?: number; lng?: number }>({
-    lat: deliveryAddress?.latitude || 22.9988,
-    lng: deliveryAddress?.longitude || 72.5074,
-  });
+  const [city, setCity] = useState(deliveryAddress?.city || "");
+  const [zipCode, setZipCode] = useState(deliveryAddress?.zipCode || "");
 
   // Validation Error States
   const [errors, setErrors] = useState<{
@@ -153,17 +189,62 @@ export function SelectDeliveryLocationView({
   }>({});
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
 
-  // Filter location suggestions based on user input
-  const filteredSuggestions = SAMPLE_LOCATION_SUGGESTIONS.filter((s) => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      s.title.toLowerCase().includes(q) ||
-      s.subtitle.toLowerCase().includes(q) ||
-      s.area.toLowerCase().includes(q)
-    );
-  });
+  // Callback to store map instance
+  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
+    mapRef.current = mapInstance;
+  }, []);
+
+  const onMapUnmount = useCallback(() => {
+    mapRef.current = null;
+  }, []);
+
+  // Server-side / Client reverse geocode helper
+  const reverseGeocode = useCallback(async (lat: number, lng: number, fallbackAccuracy?: "High Accuracy" | "Approximate" | "Manual") => {
+    setIsGeocodingLoading(true);
+    try {
+      const response = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`);
+      const data = await response.json();
+
+      if (data.status === "OK" && data.results && data.results.length > 0) {
+        const topResult = data.results[0];
+        const parsed = parseGoogleAddressComponents(
+          topResult.address_components,
+          topResult.formatted_address
+        );
+
+        setFormattedAddress(topResult.formatted_address);
+
+        // Build composite apartment / road / area if not explicitly edited
+        const areaRoad = [parsed.premise, parsed.streetNumber, parsed.streetName, parsed.area]
+          .filter(Boolean)
+          .join(", ");
+
+        const resolvedArea = areaRoad || parsed.area || parsed.city || topResult.formatted_address;
+        setApartmentRoadArea((prev) => (prev.trim() ? prev : resolvedArea));
+        setSearchQuery(resolvedArea);
+
+        if (parsed.city) setCity(parsed.city);
+        if (parsed.zipCode) setZipCode(parsed.zipCode);
+        if (parsed.landmark && !landmark) setLandmark(parsed.landmark);
+
+        if (fallbackAccuracy) {
+          setAccuracyStatus(fallbackAccuracy);
+        }
+      } else {
+        // Fallback when API returns zero results
+        const fallbackFormatted = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+        setFormattedAddress((prev) => prev || fallbackFormatted);
+        setApartmentRoadArea((prev) => prev || `Location (${fallbackFormatted})`);
+      }
+    } catch (err) {
+      console.error("Reverse geocoding error:", err);
+    } finally {
+      setIsGeocodingLoading(false);
+    }
+  }, [landmark]);
 
   // Handle GPS Current Location fetch
   const handleUseCurrentLocation = () => {
@@ -177,18 +258,21 @@ export function SelectDeliveryLocationView({
     }
 
     navigator.geolocation.getCurrentPosition(
-      (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        setCoordinates({ lat: latitude, lng: longitude });
-        setAccuracyStatus(accuracy && accuracy < 50 ? "High Accuracy" : "Approximate");
+      (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords;
+        const newPos = { lat: latitude, lng: longitude };
+        setPosition(newPos);
+        setMapZoom(16);
 
-        // Set realistic resolved location values
-        const resolvedArea = "Corporate Road, Makarba";
-        const resolvedFormatted = `Makarba, Ahmedabad, Gujarat 380015`;
+        if (mapRef.current) {
+          mapRef.current.panTo(newPos);
+        }
 
-        setApartmentRoadArea((prev) => (prev ? prev : resolvedArea));
-        setFormattedAddress(resolvedFormatted);
-        setSearchQuery(resolvedArea);
+        const calculatedAccuracy = accuracy && accuracy < 50 ? "High Accuracy" : "Approximate";
+        setAccuracyStatus(calculatedAccuracy);
+
+        // Trigger reverse geocoding
+        reverseGeocode(latitude, longitude, calculatedAccuracy);
         setGpsLoading(false);
       },
       (error) => {
@@ -198,7 +282,7 @@ export function SelectDeliveryLocationView({
         } else if (error.code === error.TIMEOUT) {
           setGpsError("Location request timed out. Please try again or search manually.");
         } else {
-          setGpsError("Unable to retrieve your current location. Please search manually.");
+          setGpsError("Unable to retrieve your location. Please search manually.");
         }
       },
       {
@@ -209,17 +293,76 @@ export function SelectDeliveryLocationView({
     );
   };
 
-  // Select a suggestion from search dropdown
-  const handleSelectSuggestion = (suggestion: LocationSuggestion) => {
-    setApartmentRoadArea(suggestion.area);
-    setFormattedAddress(`${suggestion.area}, ${suggestion.city} ${suggestion.zipCode}`);
-    setSearchQuery(suggestion.area);
-    setCoordinates({ lat: suggestion.latitude, lng: suggestion.longitude });
-    setAccuracyStatus("High Accuracy");
-    setIsSearchFocused(false);
-    if (errors.apartmentRoadArea) {
-      setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
+  // Initial geocoding or GPS resolution on first open
+  useEffect(() => {
+    if (!deliveryAddress) {
+      // Auto-trigger GPS location if no address saved yet
+      handleUseCurrentLocation();
+    } else if (deliveryAddress.latitude && deliveryAddress.longitude) {
+      setPosition({ lat: deliveryAddress.latitude, lng: deliveryAddress.longitude });
     }
+  }, []);
+
+  // Handle Google Places Autocomplete selection
+  const onPlaceSelected = () => {
+    if (!autocompleteRef.current) return;
+    const place = autocompleteRef.current.getPlace();
+
+    if (place && place.geometry && place.geometry.location) {
+      const lat = place.geometry.location.lat();
+      const lng = place.geometry.location.lng();
+      const newPos = { lat, lng };
+
+      setPosition(newPos);
+      setMapZoom(16);
+
+      if (mapRef.current) {
+        mapRef.current.panTo(newPos);
+      }
+
+      const formatted = place.formatted_address || place.name || "";
+      setFormattedAddress(formatted);
+
+      const parsed = parseGoogleAddressComponents(
+        place.address_components as google.maps.GeocoderAddressComponent[],
+        formatted
+      );
+
+      const resolvedArea = place.name || [parsed.streetNumber, parsed.streetName, parsed.area].filter(Boolean).join(", ") || formatted;
+      setApartmentRoadArea(resolvedArea);
+      setSearchQuery(resolvedArea);
+
+      if (parsed.city) setCity(parsed.city);
+      if (parsed.zipCode) setZipCode(parsed.zipCode);
+      if (parsed.landmark) setLandmark(parsed.landmark);
+
+      setAccuracyStatus("High Accuracy");
+      if (errors.apartmentRoadArea) {
+        setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
+      }
+    }
+  };
+
+  // Handle map click
+  const handleMapClick = (e: google.maps.MapMouseEvent) => {
+    if (!e.latLng) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    const newPos = { lat, lng };
+
+    setPosition(newPos);
+    reverseGeocode(lat, lng, "Manual");
+  };
+
+  // Handle marker drag end
+  const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
+    if (!e.latLng) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    const newPos = { lat, lng };
+
+    setPosition(newPos);
+    reverseGeocode(lat, lng, "Manual");
   };
 
   // Quick delivery chip toggle/append
@@ -227,7 +370,11 @@ export function SelectDeliveryLocationView({
     setDeliveryInstructions((prev) => {
       if (!prev.trim()) return chipText;
       if (prev.includes(chipText)) {
-        return prev.replace(chipText, "").replace(/,\s*,/g, ",").replace(/^,\s*|,\s*$/g, "").trim();
+        return prev
+          .replace(chipText, "")
+          .replace(/,\s*,/g, ",")
+          .replace(/^,\s*|,\s*$/g, "")
+          .trim();
       }
       return `${prev.trim()}, ${chipText}`;
     });
@@ -236,7 +383,6 @@ export function SelectDeliveryLocationView({
   // Adjust location button action
   const handleAdjustLocation = () => {
     searchInputRef.current?.focus();
-    setIsSearchFocused(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -253,7 +399,6 @@ export function SelectDeliveryLocationView({
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
-      // Scroll to the first error input
       const firstErrorEl = document.getElementById(
         newErrors.houseFlatBlock ? "flat-block-input" : "apartment-road-input"
       );
@@ -269,12 +414,12 @@ export function SelectDeliveryLocationView({
       deliveryInstructions: deliveryInstructions.trim() || undefined,
       landmark: landmark.trim() || undefined,
       addressType,
-      city: "Ahmedabad",
-      zipCode: "380015",
+      city: city || "Ahmedabad",
+      zipCode: zipCode || undefined,
       formattedAddress:
-        formattedAddress || `${apartmentRoadArea.trim()}, Ahmedabad 380015`,
-      latitude: coordinates.lat,
-      longitude: coordinates.lng,
+        formattedAddress || `${apartmentRoadArea.trim()}, ${city || "Ahmedabad"}`,
+      latitude: position.lat,
+      longitude: position.lng,
       accuracyStatus,
       isDefault: true,
     };
@@ -287,7 +432,10 @@ export function SelectDeliveryLocationView({
     onConfirmLocation(compiledAddress);
   };
 
-  const currentAreaTag = formattedAddress.split(",").slice(0, 2).join(",").trim() || "Makarba, Ahmedabad";
+  const currentAreaTag =
+    formattedAddress.split(",").slice(0, 2).join(",").trim() ||
+    apartmentRoadArea.split(",").slice(0, 2).join(",").trim() ||
+    "Delivery Location";
 
   return (
     <div className="w-full max-w-md mx-auto min-h-screen bg-slate-50 flex flex-col shadow-2xl relative overflow-x-hidden border-x border-slate-200 antialiased font-sans">
@@ -316,21 +464,41 @@ export function SelectDeliveryLocationView({
           </span>
         </div>
 
-        {/* Search Input Box */}
+        {/* Search Input Box with Google Places Autocomplete */}
         <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 z-10">
             <SearchIcon className="w-4 h-4 text-slate-400" />
           </div>
-          <input
-            ref={searchInputRef}
-            id="location-search-input"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            onFocus={() => setIsSearchFocused(true)}
-            placeholder="Search area, street, building or landmark..."
-            className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate"
-          />
+
+          {isLoaded && googleApiKey ? (
+            <Autocomplete
+              onLoad={(autocomplete) => {
+                autocompleteRef.current = autocomplete;
+              }}
+              onPlaceChanged={onPlaceSelected}
+            >
+              <input
+                ref={searchInputRef}
+                id="location-search-input"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search area, street, building or landmark..."
+                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate relative z-0"
+              />
+            </Autocomplete>
+          ) : (
+            <input
+              ref={searchInputRef}
+              id="location-search-input"
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search area, street, building or landmark..."
+              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate"
+            />
+          )}
+
           {searchQuery && (
             <button
               aria-label="Clear search input"
@@ -339,48 +507,12 @@ export function SelectDeliveryLocationView({
                 searchInputRef.current?.focus();
               }}
               type="button"
-              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
+              className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer z-10"
             >
               <ClearCircleIcon className="w-4 h-4" />
             </button>
           )}
         </div>
-
-        {/* Search Suggestions Autocomplete Dropdown */}
-        {isSearchFocused && filteredSuggestions.length > 0 && (
-          <div className="absolute left-4 right-4 top-[108px] bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden max-h-60 overflow-y-auto no-scrollbar animate-fade-in">
-            <div className="p-2 border-b border-slate-100 flex items-center justify-between text-[11px] font-semibold text-slate-500">
-              <span>Suggested Locations</span>
-              <button
-                type="button"
-                onClick={() => setIsSearchFocused(false)}
-                className="text-[#4338ca] hover:underline cursor-pointer"
-              >
-                Close
-              </button>
-            </div>
-            {filteredSuggestions.map((s, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSelectSuggestion(s)}
-                className="w-full text-left px-3 py-2.5 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-start gap-2.5 transition-colors cursor-pointer"
-              >
-                <div className="p-1 rounded-full bg-indigo-50 text-[#4338ca] mt-0.5 flex-shrink-0">
-                  <LocationPinIcon className="w-3.5 h-3.5" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-semibold text-slate-900 truncate">
-                    {s.title}
-                  </div>
-                  <div className="text-[11px] text-slate-500 truncate">
-                    {s.subtitle}
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
 
         {/* Quick GPS Fetch Action Button */}
         <button
@@ -391,19 +523,35 @@ export function SelectDeliveryLocationView({
         >
           <div className="flex items-center space-x-2.5 text-left">
             <div className="w-6 h-6 rounded-full bg-[#4f46e5] flex items-center justify-center flex-shrink-0">
-              <GpsCrosshairIcon className={`w-4 h-4 text-emerald-300 ${gpsLoading ? "animate-spin" : ""}`} />
+              <GpsCrosshairIcon
+                className={`w-4 h-4 text-emerald-300 ${
+                  gpsLoading ? "animate-spin" : ""
+                }`}
+              />
             </div>
             <div>
               <div className="text-xs font-semibold text-white tracking-wide flex items-center gap-1.5">
-                <span>{gpsLoading ? "Locating you..." : "Use my current location"}</span>
+                <span>
+                  {gpsLoading ? "Locating you..." : "Use my current location"}
+                </span>
               </div>
               <div className="text-[10px] text-[#e0e7ff]">
                 Using GPS for doorstep accuracy
               </div>
             </div>
           </div>
-          <svg className="w-4 h-4 text-[#e0e7ff]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          <svg
+            className="w-4 h-4 text-[#e0e7ff]"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M9 5l7 7-7 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+            />
           </svg>
         </button>
 
@@ -413,7 +561,7 @@ export function SelectDeliveryLocationView({
             <button
               type="button"
               onClick={() => setGpsError(null)}
-              className="text-white hover:underline text-[10px] ml-2"
+              className="text-white hover:underline text-[10px] ml-2 cursor-pointer"
             >
               Dismiss
             </button>
@@ -422,159 +570,98 @@ export function SelectDeliveryLocationView({
       </header>
 
       {/* ========================================================================= */}
-      {/* 2. MAP INTERACTIVE CANVAS SECTION                                          */}
+      {/* 2. REAL GOOGLE MAPS / FALLBACK CANVAS SECTION                             */}
       {/* ========================================================================= */}
       <div
-        className={`relative w-full h-80 overflow-hidden select-none border-b border-slate-300 ${
-          mapMode === "satellite" ? "map-satellite-bg" : "map-grid-bg"
-        }`}
+        className="relative w-full h-80 overflow-hidden select-none border-b border-slate-300 bg-slate-200"
         data-purpose="map-viewport"
       >
-        {/* SVG Vector Map Rendering */}
-        <svg
-          className="w-full h-full object-cover"
-          fill="none"
-          viewBox="0 0 400 320"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <rect fill={mapMode === "satellite" ? "#1e293b" : "#E8ECE9"} width="400" height="320" />
-
-          {/* Water Body hint */}
-          <path
-            d="M260 320 C 270 290, 295 270, 310 250 C 330 220, 350 200, 400 190 L 400 320 Z"
-            fill={mapMode === "satellite" ? "#0369a1" : "#BAE6FD"}
-            opacity={mapMode === "satellite" ? "0.4" : "0.6"}
-          />
-
-          {/* Parks & Green areas */}
-          <rect
-            x="290"
-            y="110"
-            width="70"
-            height="40"
-            rx="6"
-            fill={mapMode === "satellite" ? "#14532d" : "#DCFCE7"}
-            opacity={mapMode === "satellite" ? "0.6" : "1"}
-          />
-          <text
-            x="325"
-            y="134"
-            fill={mapMode === "satellite" ? "#86efac" : "#166534"}
-            fontSize="7"
-            fontWeight="600"
-            textAnchor="middle"
+        {isLoaded && googleApiKey && !loadError ? (
+          <GoogleMap
+            mapContainerStyle={mapContainerStyle}
+            center={position}
+            zoom={mapZoom}
+            onLoad={onMapLoad}
+            onUnmount={onMapUnmount}
+            onClick={handleMapClick}
+            mapTypeId={mapMode === "satellite" ? "satellite" : "roadmap"}
+            options={{
+              disableDefaultUI: true,
+              zoomControl: false,
+              mapTypeControl: false,
+              streetViewControl: false,
+              fullscreenControl: false,
+              gestureHandling: "greedy",
+            }}
           >
-            Sundarvan
-          </text>
-          <path
-            d="M 10 70 Q 30 60 50 80 T 90 90 L 80 140 L 20 130 Z"
-            fill={mapMode === "satellite" ? "#14532d" : "#DCFCE7"}
-            opacity={mapMode === "satellite" ? "0.4" : "0.75"}
-          />
-
-          {/* Major Highway (S.G. Highway / NH 147) */}
-          <path d="M -10 240 L 420 175" stroke="#FDE047" strokeWidth="9" strokeLinecap="round" />
-          <path d="M -10 240 L 420 175" stroke="#EAB308" strokeWidth="2" strokeDasharray="6 4" />
-          <text
-            x="210"
-            y="198"
-            fill="#854d0e"
-            fontSize="8"
-            fontWeight="bold"
-            transform="rotate(-9, 210, 198)"
+            {/* Draggable Marker */}
+            <Marker
+              position={position}
+              draggable={true}
+              onDragEnd={handleMarkerDragEnd}
+            />
+          </GoogleMap>
+        ) : (
+          /* Fallback Canvas Preview when Maps key is not set or loading */
+          <div
+            className={`w-full h-full flex flex-col items-center justify-center relative ${
+              mapMode === "satellite" ? "map-satellite-bg" : "map-grid-bg"
+            }`}
           >
-            S.G. HIGHWAY (NH 147)
-          </text>
+            {/* Vector Map Graphics */}
+            <svg
+              className="w-full h-full object-cover absolute inset-0"
+              fill="none"
+              viewBox="0 0 400 320"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect
+                fill={mapMode === "satellite" ? "#1e293b" : "#E8ECE9"}
+                width="400"
+                height="320"
+              />
+              <path
+                d="M -10 240 L 420 175"
+                stroke="#FDE047"
+                strokeWidth="9"
+                strokeLinecap="round"
+              />
+              <path
+                d="M -10 240 L 420 175"
+                stroke="#EAB308"
+                strokeWidth="2"
+                strokeDasharray="6 4"
+              />
+              <path
+                d="M 120 -10 L 195 330"
+                stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"}
+                strokeWidth="7"
+              />
+              <path
+                d="M -20 100 L 420 70"
+                stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"}
+                strokeWidth="6"
+              />
+              <path
+                d="M 60 270 L 380 90"
+                stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"}
+                strokeWidth="5"
+              />
+            </svg>
 
-          {/* Secondary Arterials (Corporate Road, Makarba Road) */}
-          <path d="M 120 -10 L 195 330" stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"} strokeWidth="7" />
-          <path d="M 120 -10 L 195 330" stroke={mapMode === "satellite" ? "#64748b" : "#CBD5E1"} strokeWidth="1.5" />
-          <path d="M -20 100 L 420 70" stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"} strokeWidth="6" />
-          <path d="M 60 270 L 380 90" stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"} strokeWidth="5" />
-          <path d="M 40 180 Q 200 160 380 250" stroke={mapMode === "satellite" ? "#475569" : "#FFFFFF"} strokeWidth="4.5" />
+            {/* Pulsing Floor Target Marker */}
+            <div className="relative flex flex-col items-center justify-center z-10">
+              <div className="w-8 h-8 rounded-full bg-[#4f46e5]/30 pin-pulse absolute"></div>
+              <DeliveryTargetPinIcon className="w-9 h-9 text-[#4338ca] drop-shadow-lg z-10 -mt-1" />
+            </div>
 
-          {/* Local Streets */}
-          <path d="M 180 80 L 240 160 L 330 180" stroke={mapMode === "satellite" ? "#334155" : "#E2E8F0"} strokeWidth="3" />
-          <path d="M 80 40 L 170 120" stroke={mapMode === "satellite" ? "#334155" : "#E2E8F0"} strokeWidth="2.5" />
-          <path d="M 130 190 L 230 250" stroke={mapMode === "satellite" ? "#334155" : "#E2E8F0"} strokeWidth="2.5" />
-
-          {/* Road Labels */}
-          <text
-            x="175"
-            y="240"
-            fill={mapMode === "satellite" ? "#cbd5e1" : "#64748B"}
-            fontSize="6.5"
-            fontWeight="600"
-            transform="rotate(75, 175, 240)"
-          >
-            Corporate Road
-          </text>
-          <text
-            x="50"
-            y="95"
-            fill={mapMode === "satellite" ? "#cbd5e1" : "#64748B"}
-            fontSize="6.5"
-            fontWeight="600"
-          >
-            Prahlad Nagar Ext.
-          </text>
-          <text
-            x="230"
-            y="270"
-            fill={mapMode === "satellite" ? "#cbd5e1" : "#475569"}
-            fontSize="7"
-            fontWeight="600"
-          >
-            Makarba Gam
-          </text>
-
-          {/* Landmarks & Points of Interest */}
-          <g transform="translate(60, 115)">
-            <circle cx="8" cy="8" r="8" fill="#38BDF8" />
-            <text x="8" y="11" fill="#ffffff" fontSize="7" textAnchor="middle">
-              🛍️
-            </text>
-            <text x="20" y="11" fill={mapMode === "satellite" ? "#7dd3fc" : "#0369a1"} fontSize="6.5" fontWeight="bold">
-              TRP Mall
-            </text>
-          </g>
-          <g transform="translate(210, 100)">
-            <circle cx="8" cy="8" r="8" fill="#FB923C" />
-            <text x="8" y="11" fill="#ffffff" fontSize="7" textAnchor="middle">
-              🍲
-            </text>
-            <text x="20" y="10" fill={mapMode === "satellite" ? "#fdba74" : "#9a3412"} fontSize="6" fontWeight="bold">
-              Gordhan Thal
-            </text>
-          </g>
-          <g transform="translate(190, 205)">
-            <circle cx="8" cy="8" r="8" fill="#818CF8" />
-            <text x="8" y="11" fill="#ffffff" fontSize="7" textAnchor="middle">
-              🕌
-            </text>
-            <text x="20" y="11" fill={mapMode === "satellite" ? "#c7d2fe" : "#3730A3"} fontSize="6" fontWeight="bold">
-              Sarkhej Roza
-            </text>
-          </g>
-
-          {/* Highlighted Building Footprint */}
-          <rect
-            x="182"
-            y="132"
-            width="34"
-            height="24"
-            rx="2"
-            fill={mapMode === "satellite" ? "#312e81" : "#C7D2FE"}
-            stroke="#6366F1"
-            strokeWidth="1.5"
-          />
-          <text x="199" y="146" fill={mapMode === "satellite" ? "#e0e7ff" : "#3730A3"} fontSize="5" fontWeight="bold" textAnchor="middle">
-            TITANIUM
-          </text>
-          <text x="199" y="152" fill={mapMode === "satellite" ? "#a5b4fc" : "#4338CA"} fontSize="4.5" textAnchor="middle">
-            HEIGHTS
-          </text>
-        </svg>
+            {!googleApiKey && (
+              <div className="absolute top-12 bg-white/90 backdrop-blur-xs text-slate-700 text-[10px] font-semibold px-2.5 py-1 rounded-md shadow-xs border border-slate-200 z-10">
+                Maps preview mode (Set NEXT_PUBLIC_GOOGLE_MAP_API_KEY for live satellite/roads)
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Map Mode Controls (Map / Satellite Toggle) */}
         <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-sm rounded-lg shadow-md border border-slate-200 p-0.5 flex text-xs font-semibold z-10">
@@ -610,14 +697,17 @@ export function SelectDeliveryLocationView({
             aria-label="Find me on map"
             className="flex items-center space-x-1.5 bg-white/95 backdrop-blur-sm hover:bg-white text-slate-800 text-xs font-semibold px-3 py-2 rounded-xl shadow-lg border border-slate-200 active:scale-95 transition-all cursor-pointer"
           >
-            <GpsCrosshairIcon className="w-4 h-4 text-[#4338ca]" />
+            <GpsCrosshairIcon
+              className={`w-4 h-4 text-[#4338ca] ${
+                gpsLoading ? "animate-spin" : ""
+              }`}
+            />
             <span>Find Me</span>
           </button>
         </div>
 
-        {/* Centered Interactive Delivery Pin & Tooltip Callout */}
-        <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center -translate-y-4 z-20">
-          {/* Callout Bubble */}
+        {/* Dynamic Delivery Pin Callout Bubble overlay */}
+        <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center -translate-y-8 z-20">
           <div className="bg-slate-900/90 text-white px-3 py-1.5 rounded-lg shadow-xl text-center flex flex-col items-center animate-bounce duration-700 mb-1 border border-slate-700 backdrop-blur-sm">
             <div className="flex items-center space-x-1">
               <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
@@ -625,16 +715,10 @@ export function SelectDeliveryLocationView({
                 Order delivered here
               </span>
             </div>
-            <span className="text-[10px] text-slate-300 font-medium truncate max-w-[190px]">
-              {apartmentRoadArea || "Titanium Heights, Makarba"}
+            <span className="text-[10px] text-slate-300 font-medium truncate max-w-[200px]">
+              {apartmentRoadArea || formattedAddress || "Drag pin to exact doorstep"}
             </span>
             <div className="w-2 h-2 bg-slate-900/90 rotate-45 -mb-2.5 mt-0.5"></div>
-          </div>
-
-          {/* Delivery Pin Graphic & Pulsing Ring */}
-          <div className="relative flex items-center justify-center">
-            <div className="w-7 h-7 rounded-full bg-[#4f46e5]/30 pin-pulse absolute"></div>
-            <DeliveryTargetPinIcon className="w-9 h-9 text-[#4338ca] drop-shadow-lg z-10 -mt-1" />
           </div>
         </div>
       </div>
@@ -663,9 +747,14 @@ export function SelectDeliveryLocationView({
                 <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800">
                   ✓ {accuracyStatus}
                 </span>
+                {isGeocodingLoading && (
+                  <span className="text-[10px] text-indigo-500 animate-pulse">
+                    Resolving address...
+                  </span>
+                )}
               </div>
               <p className="text-xs font-semibold text-slate-800 mt-0.5 break-words">
-                {formattedAddress}
+                {formattedAddress || (apartmentRoadArea ? `${apartmentRoadArea}, ${city || "Ahmedabad"}` : "Select a location on map or search above")}
               </p>
             </div>
           </div>
@@ -721,7 +810,9 @@ export function SelectDeliveryLocationView({
               }}
               placeholder="e.g. 402, 4th Floor, Block B"
               className={`w-full text-xs font-medium text-slate-800 bg-white border rounded-lg px-3 py-2.5 focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] ${
-                errors.houseFlatBlock ? "border-rose-500 ring-1 ring-rose-500" : "border-slate-300"
+                errors.houseFlatBlock
+                  ? "border-rose-500 ring-1 ring-rose-500"
+                  : "border-slate-300"
               }`}
             />
             {errors.houseFlatBlock && (
@@ -752,7 +843,9 @@ export function SelectDeliveryLocationView({
               }}
               placeholder="e.g. Titanium Heights, Corporate Rd"
               className={`w-full text-xs font-medium text-slate-800 bg-white border rounded-lg px-3 py-2.5 focus:border-[#4338ca] focus:ring-1 focus:ring-[#4338ca] ${
-                errors.apartmentRoadArea ? "border-rose-500 ring-1 ring-rose-500" : "border-slate-300"
+                errors.apartmentRoadArea
+                  ? "border-rose-500 ring-1 ring-rose-500"
+                  : "border-slate-300"
               }`}
             />
             {errors.apartmentRoadArea && (
@@ -765,10 +858,16 @@ export function SelectDeliveryLocationView({
           {/* Field 3: Delivery Instructions & Quick Action Chips */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label htmlFor="delivery-notes" className="block font-semibold text-slate-700">
-                Delivery instructions <span className="text-slate-400 font-normal">(Optional)</span>
+              <label
+                htmlFor="delivery-notes"
+                className="block font-semibold text-slate-700"
+              >
+                Delivery instructions{" "}
+                <span className="text-slate-400 font-normal">(Optional)</span>
               </label>
-              <span className="text-[10px] text-[#4f46e5] font-medium">For rider safety</span>
+              <span className="text-[10px] text-[#4f46e5] font-medium">
+                For rider safety
+              </span>
             </div>
 
             {/* Horizontally Scrollable Pills */}
@@ -804,7 +903,10 @@ export function SelectDeliveryLocationView({
 
           {/* Field 4: Landmark / Extra details (Optional) */}
           <div>
-            <label htmlFor="extra-details" className="block font-semibold text-slate-700 mb-1">
+            <label
+              htmlFor="extra-details"
+              className="block font-semibold text-slate-700 mb-1"
+            >
               Landmark / Extra notes
             </label>
             <input
@@ -833,7 +935,11 @@ export function SelectDeliveryLocationView({
                     : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                <HomeAddressIcon className={`w-4 h-4 ${addressType === "Home" ? "text-white" : "text-slate-500"}`} />
+                <HomeAddressIcon
+                  className={`w-4 h-4 ${
+                    addressType === "Home" ? "text-white" : "text-slate-500"
+                  }`}
+                />
                 <span>Home</span>
               </button>
 
@@ -847,7 +953,11 @@ export function SelectDeliveryLocationView({
                     : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                <OfficeAddressIcon className={`w-4 h-4 ${addressType === "Office" ? "text-white" : "text-slate-500"}`} />
+                <OfficeAddressIcon
+                  className={`w-4 h-4 ${
+                    addressType === "Office" ? "text-white" : "text-slate-500"
+                  }`}
+                />
                 <span>Office</span>
               </button>
 
@@ -861,7 +971,11 @@ export function SelectDeliveryLocationView({
                     : "border border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                 }`}
               >
-                <OtherAddressIcon className={`w-4 h-4 ${addressType === "Other" ? "text-white" : "text-slate-500"}`} />
+                <OtherAddressIcon
+                  className={`w-4 h-4 ${
+                    addressType === "Other" ? "text-white" : "text-slate-500"
+                  }`}
+                />
                 <span>Other</span>
               </button>
             </div>
