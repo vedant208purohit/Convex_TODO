@@ -220,6 +220,72 @@ export const resolvePublic = query({
   },
 });
 
+/**
+ * Public query for resolving customer QR session and table info.
+ */
+export const resolveCustomerSession = query({
+  args: {
+    identifier: v.optional(v.string()),
+    qrId: v.optional(v.string()),
+    tableId: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const rawId = args.identifier || args.qrId || args.tableId;
+    if (!rawId) return null;
+
+    let qr: Doc<"organizationQrCodes"> | null = null;
+
+    // 1. Try lookup by legacyId
+    const legacyMatches = await ctx.db
+      .query("organizationQrCodes")
+      .withIndex("by_legacy_id", (q) => q.eq("legacyId", rawId))
+      .collect();
+
+    qr = legacyMatches.find((q) => q.deletedAt === undefined) ?? null;
+
+    // 2. Try direct Convex ID lookup if valid ID string
+    if (!qr) {
+      try {
+        const doc = (await ctx.db.get(rawId as Id<"organizationQrCodes">)) as any;
+        if (doc && doc.qrType !== undefined && doc.deletedAt === undefined) {
+          qr = doc as Doc<"organizationQrCodes">;
+        }
+      } catch {
+        // Invalid ID format ignored
+      }
+    }
+
+    // 3. Try lookup by tableId
+    if (!qr) {
+      try {
+        const tableQrs = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_table", (q) => q.eq("tableId", rawId))
+          .collect();
+        qr = tableQrs.find((q) => q.deletedAt === undefined) ?? null;
+      } catch {
+        // Invalid table ID format ignored
+      }
+    }
+
+    if (!qr || qr.deletedAt !== undefined) {
+      return null;
+    }
+
+    return {
+      _id: qr._id,
+      legacyId: qr.legacyId,
+      name: qr.name,
+      qrType: qr.qrType,
+      qrUrl: qr.qrUrl,
+      counter: qr.counter,
+      tableNumber: qr.tableNumber,
+      tableId: qr.tableId,
+    };
+  },
+});
+
 // ----------------------------------------------------
 // MUTATIONS
 // ----------------------------------------------------
