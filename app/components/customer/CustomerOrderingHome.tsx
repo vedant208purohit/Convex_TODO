@@ -6,6 +6,8 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { CustomerCartProvider, useCustomerCart } from "./CustomerCartContext";
 import { CustomerCartView } from "./CustomerCartView";
+import { CustomerDeliveryCartView } from "./CustomerDeliveryCartView";
+import { CustomerOrderTrackingView } from "./CustomerOrderTrackingView";
 import { CustomerHeader } from "./CustomerHeader";
 import { TableContextCard } from "./TableContextCard";
 import { ServiceModeSwitcher } from "./ServiceModeSwitcher";
@@ -497,7 +499,13 @@ function CustomerOrderingHomeView({
     return allItems;
   }, [categories, selectedCategoryId, searchQuery]);
 
-  const { totalItemCount } = useCustomerCart();
+  const {
+    totalItemCount,
+    items,
+    serviceMode,
+    activeOrderId,
+    activeOrderNumber,
+  } = useCustomerCart();
   const [isDeliveryLocationOpen, setIsDeliveryLocationOpen] = useState(false);
 
   const activeCategoryTitle = selectedCategoryId
@@ -519,8 +527,68 @@ function CustomerOrderingHomeView({
     );
   }
 
-  // Render SCREEN 3 / 3A: Your Cart / Table Order when on the "orders" tab
+  // Render SCREEN 3 / 3A / 4: Cart / Delivery Cart / Live Order Tracking on "orders" tab
   if (activeTab === "orders") {
+    // 1. Delivery Flow (Screen 3A)
+    if (serviceMode === "delivery") {
+      return (
+        <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
+          <CustomerHeader
+            organization={organization}
+            isSearchOpen={isSearchOpen}
+            onToggleSearch={onToggleSearch}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+          />
+          <main className="flex-1 w-full max-w-[480px] mx-auto pt-20 pb-44 px-4 flex flex-col gap-3 min-h-screen">
+            <CustomerDeliveryCartView
+              organization={organization}
+              table={table}
+              rawMenu={rawMenu}
+              onBackToMenu={() => onSelectTab("home")}
+              onOpenDeliveryLocation={() => setIsDeliveryLocationOpen(true)}
+            />
+          </main>
+          <CustomerBottomNav
+            activeTab={activeTab}
+            onSelectTab={onSelectTab}
+            orderCount={totalItemCount}
+          />
+        </div>
+      );
+    }
+
+    // 2. Dine-In Live Order Tracking (Screen 4) - active when order is placed and cart is clear
+    const hasActiveLiveOrder = Boolean(activeOrderId || activeOrderNumber);
+    if (serviceMode === "dine_in" && hasActiveLiveOrder && items.length === 0) {
+      return (
+        <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
+          <CustomerHeader
+            organization={organization}
+            isSearchOpen={isSearchOpen}
+            onToggleSearch={onToggleSearch}
+            searchQuery={searchQuery}
+            onSearchChange={onSearchChange}
+          />
+          <main className="flex-1 w-full max-w-[480px] mx-auto pt-20 pb-44 px-4 flex flex-col gap-3 min-h-screen">
+            <CustomerOrderTrackingView
+              organization={organization}
+              table={table}
+              rawMenu={rawMenu}
+              onBackToMenu={() => onSelectTab("home")}
+              onOrderMoreFood={() => onSelectTab("home")}
+            />
+          </main>
+          <CustomerBottomNav
+            activeTab={activeTab}
+            onSelectTab={onSelectTab}
+            orderCount={totalItemCount}
+          />
+        </div>
+      );
+    }
+
+    // 3. Default Dine-In Cart / Take Away Cart (Screen 3)
     return (
       <div className="bg-[#faf8ff] font-sans antialiased text-[#131b2e] min-h-screen flex flex-col selection:bg-[#e3dfff] selection:text-[#2a14b4]">
         {/* 1. Fixed Header */}

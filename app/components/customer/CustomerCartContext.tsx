@@ -18,6 +18,11 @@ interface CustomerCartContextType {
   setKitchenInstructions: (instructions: string) => void;
   deliveryAddress: DeliveryAddress | null;
   setDeliveryAddress: (address: DeliveryAddress | null) => void;
+  activeOrderId: string | null;
+  setActiveOrderId: (id: string | null) => void;
+  activeOrderNumber: string | null;
+  setActiveOrderNumber: (num: string | null) => void;
+  clearActiveOrder: () => void;
   addItem: (
     item: CustomerMenuItem,
     customizations?: SelectedCustomization[],
@@ -78,6 +83,8 @@ export function CustomerCartProvider({
   const [customerName, setCustomerName] = useState<string>("Rahul");
   const [kitchenInstructions, setKitchenInstructions] = useState<string>("Please serve beverages first");
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
+  const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
+  const [activeOrderNumber, setActiveOrderNumber] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
   // Load from localStorage on mount or table change
@@ -101,6 +108,8 @@ export function CustomerCartProvider({
         if (parsedMeta.customerName) setCustomerName(parsedMeta.customerName);
         if (parsedMeta.kitchenInstructions) setKitchenInstructions(parsedMeta.kitchenInstructions);
         if (parsedMeta.deliveryAddress) setDeliveryAddress(parsedMeta.deliveryAddress);
+        if (parsedMeta.activeOrderId) setActiveOrderId(parsedMeta.activeOrderId);
+        if (parsedMeta.activeOrderNumber) setActiveOrderNumber(parsedMeta.activeOrderNumber);
       }
     } catch {
       setItems([]);
@@ -131,12 +140,19 @@ export function CustomerCartProvider({
           customerName,
           kitchenInstructions,
           deliveryAddress,
+          activeOrderId,
+          activeOrderNumber,
         })
       );
     } catch {
       // Quota handling
     }
-  }, [serviceMode, customerPhone, customerName, kitchenInstructions, deliveryAddress, metadataStorageKey, isInitialized]);
+  }, [serviceMode, customerPhone, customerName, kitchenInstructions, deliveryAddress, activeOrderId, activeOrderNumber, metadataStorageKey, isInitialized]);
+
+  const clearActiveOrder = useCallback(() => {
+    setActiveOrderId(null);
+    setActiveOrderNumber(null);
+  }, []);
 
 
   const addItem = useCallback(
@@ -342,6 +358,11 @@ export function CustomerCartProvider({
         setKitchenInstructions,
         deliveryAddress,
         setDeliveryAddress,
+        activeOrderId,
+        setActiveOrderId,
+        activeOrderNumber,
+        setActiveOrderNumber,
+        clearActiveOrder,
         addItem,
         updateQuantity,
         setItemQuantity,

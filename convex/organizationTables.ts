@@ -486,3 +486,44 @@ export const assignUnassignedTablesToLayout = mutation({
   },
 });
 
+/**
+ * Screen 4 Table Utility Assistance: Call Server or Request Water
+ */
+export const requestTableAssistance = mutation({
+  args: {
+    tableId: v.optional(v.id("organizationTables")),
+    tableNumber: v.string(),
+    requestType: v.union(v.literal("call_server"), v.literal("request_water")),
+  },
+  handler: async (ctx, args) => {
+    let resolvedTableId = args.tableId;
+
+    if (!resolvedTableId && args.tableNumber) {
+      const allTables = await ctx.db
+        .query("organizationTables")
+        .withIndex("by_table_number", (q) => q.eq("tableNumber", args.tableNumber))
+        .collect();
+      const found = allTables.find((t) => t.deletedAt === undefined);
+      if (found) {
+        resolvedTableId = found._id;
+      }
+    }
+
+    if (resolvedTableId) {
+      await ctx.db.patch(resolvedTableId, {
+        isRequested: true,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return {
+      success: true,
+      message:
+        args.requestType === "call_server"
+          ? `🛎️ Server paged for Table ${args.tableNumber}. Arriving shortly!`
+          : `💧 Water refill requested for Table ${args.tableNumber}.`,
+    };
+  },
+});
+
+

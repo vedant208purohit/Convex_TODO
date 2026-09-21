@@ -459,3 +459,63 @@ export function OtherAddressIcon({ className = "w-4 h-4" }: { className?: string
   );
 }
 
+export function SoupKitchenIcon({ className = "w-6 h-6 text-[#2a14b4]" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 11V9a7 7 0 0 0-14 0v2" />
+      <path d="M3 11h18v2a6 6 0 0 1-6 6H9a6 6 0 0 1-6-6v-2Z" />
+      <path d="M12 2v2" />
+      <path d="M8 3v2" />
+      <path d="M16 3v2" />
+    </svg>
+  );
+}
+
+export function RoomServiceIcon({ className = "w-4.5 h-4.5 text-[#5654a8]" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3a1 1 0 0 1 1 1v1.07A9 9 0 0 1 21 14v1H3v-1a9 9 0 0 1 8-8.93V4a1 1 0 0 1 1-1Z" />
+      <path d="M2 19h20v2H2z" />
+    </svg>
+  );
+}
+
+export function WaterDropIcon({ className = "w-4.5 h-4.5 text-[#5148d7]" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
+    </svg>
+  );
+}
+
+export function AddShoppingCartIcon({ className = "w-5 h-5 text-white" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="9" cy="21" r="1" />
+      <circle cx="20" cy="21" r="1" />
+      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+      <path d="M16 10h-6" />
+      <path d="M13 7v6" />
+    </svg>
+  );
+}
+
+export function DinnerDiningIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 18h18" />
+      <path d="M4 14a8 8 0 0 1 16 0" />
+      <circle cx="12" cy="7" r="1" />
+    </svg>
+  );
+}
+
+export function CheckSmallIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  );
+}
+
+

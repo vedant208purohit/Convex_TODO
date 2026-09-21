@@ -1,4 +1,5 @@
 import { mutation, query } from "./_generated/server";
+import { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
 
@@ -1679,6 +1680,335 @@ export const seedSampleOrders = mutation({
     };
   },
 });
+
+// ==========================================
+// 12. SCREEN 4: GET ACTIVE TABLE ORDER QUERY
+// ==========================================
+
+export const getActiveTableOrder = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.id("organizationTables")),
+    tableNumber: v.optional(v.string()),
+    orderId: v.optional(v.union(v.id("orders"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    let order: Doc<"orders"> | null = null;
+
+    // 1. If explicit orderId provided, try direct lookup
+    if (args.orderId) {
+      const normalizedId = ctx.db.normalizeId("orders", args.orderId);
+      if (normalizedId) {
+        order = await ctx.db.get(normalizedId);
+      }
+      if (!order) {
+        order = await ctx.db
+          .query("orders")
+          .filter((q) => q.eq(q.field("orderNumber"), args.orderId))
+          .first();
+      }
+    }
+
+    // 2. Lookup active order by tableId if not found yet
+    if (!order && args.organizationId && args.tableId) {
+      const tableOrders = await ctx.db
+        .query("orders")
+        .withIndex("by_org_table", (q) =>
+          q.eq("organizationId", args.organizationId!).eq("tableId", args.tableId!)
+        )
+        .collect();
+
+      order =
+        tableOrders
+          .filter((o) => !o.isCompleted && !o.isRejected)
+          .sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+    }
+
+    // 3. Fallback: lookup by tableNumber
+    if (!order && args.organizationId && args.tableNumber) {
+      const orgTables = await ctx.db
+        .query("organizationTables")
+        .withIndex("by_table_number", (q) => q.eq("tableNumber", args.tableNumber!))
+        .collect();
+
+      const matchingTable = orgTables.find((t) => t.deletedAt === undefined);
+      if (matchingTable) {
+        const tableOrders = await ctx.db
+          .query("orders")
+          .withIndex("by_org_table", (q) =>
+            q.eq("organizationId", args.organizationId!).eq("tableId", matchingTable._id)
+          )
+          .collect();
+
+        order =
+          tableOrders
+            .filter((o) => !o.isCompleted && !o.isRejected)
+            .sort((a, b) => b.createdAt - a.createdAt)[0] || null;
+      }
+    }
+
+    if (!order) return null;
+
+    // Fetch items
+    const items = await ctx.db
+      .query("orderItems")
+      .withIndex("by_order", (q) => q.eq("orderId", order!._id))
+      .collect();
+
+    // Fetch activities
+    const activities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order!._id))
+      .collect();
+
+    // Fetch order processes
+    const rawProcesses = await ctx.db.query("organizationOrderProcesses").collect();
+    const processes = rawProcesses
+      .filter((p) => p.deletedAt === undefined && p.published !== false)
+      .sort((a, b) => a.position - b.position);
+
+    // Fetch table details
+    let tableInfo: Doc<"organizationTables"> | null = null;
+    if (order.tableId) {
+      tableInfo = await ctx.db.get(order.tableId);
+    }
+
+    return {
+      _id: order._id,
+      orderNumber: order.orderNumber,
+      tokenNumber: order.tokenNumber,
+      orderType: order.orderType,
+      orderSource: order.orderSource,
+      orderStatusId: order.orderStatusId,
+      orderStatusName: order.orderStatusName,
+      isCompleted: order.isCompleted,
+      isRejected: order.isRejected,
+      paymentStatus: order.paymentStatus,
+      paymentMode: order.paymentMode,
+      subTotal: order.subTotal,
+      taxTotal: order.taxTotal,
+      discountAmount: order.discountAmount || 0,
+      totalAmount: order.totalAmount,
+      formattedSubTotal: `₹${(order.subTotal / 100).toFixed(2)}`,
+      formattedTaxTotal: `₹${(order.taxTotal / 100).toFixed(2)}`,
+      formattedTotalAmount: `₹${(order.totalAmount / 100).toFixed(2)}`,
+      createdAt: order.createdAt,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      tableNumber: tableInfo?.tableNumber || args.tableNumber || "T12",
+      tablePlacement: tableInfo?.placement || "Ground Terrace",
+      items: items.map((it) => ({
+        _id: it._id,
+        itemId: it.itemId,
+        itemName: it.itemName,
+        itemPrice: it.itemPrice,
+        quantity: it.quantity,
+        totalPrice: it.totalPrice,
+        formattedItemPrice: `₹${(it.itemPrice / 100).toFixed(2)}`,
+        formattedTotalPrice: `₹${(it.totalPrice / 100).toFixed(2)}`,
+        customizations: it.customizations || [],
+        notes: (it as any).notes,
+      })),
+      activities: activities.sort((a, b) => a.position - b.position),
+      processes: processes.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        position: p.position,
+        processColor: p.processColor,
+        description: p.description,
+      })),
+    };
+  },
+});
+
+// ==========================================
+// 13. SCREEN 4: PLACE CUSTOMER QR ORDER
+// ==========================================
+
+export const placeCustomerOrder = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    tableId: v.optional(v.id("organizationTables")),
+    tableNumber: v.optional(v.string()),
+    orderType: v.optional(
+      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Delivery"))
+    ),
+    customerName: v.optional(v.string()),
+    customerPhone: v.optional(v.string()),
+    specialNotes: v.optional(v.string()),
+    items: v.array(
+      v.object({
+        itemId: v.string(),
+        name: v.string(),
+        price: v.number(), // minor units (paise)
+        quantity: v.number(),
+        totalUnitPrice: v.number(),
+        imageUrl: v.optional(v.string()),
+        isVeg: v.optional(v.boolean()),
+        customizations: v.optional(
+          v.array(
+            v.object({
+              customizationId: v.string(),
+              customizationName: v.string(),
+              optionId: v.string(),
+              optionName: v.string(),
+              price: v.number(),
+            })
+          )
+        ),
+        preferences: v.optional(v.array(v.string())),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const todayStart = new Date(now).setHours(0, 0, 0, 0);
+
+    // 1. Resolve Table
+    let tableDoc: Doc<"organizationTables"> | null = null;
+    if (args.tableId) {
+      tableDoc = await ctx.db.get(args.tableId);
+    }
+    if (!tableDoc && args.tableNumber) {
+      const orgTables = await ctx.db
+        .query("organizationTables")
+        .withIndex("by_table_number", (q) => q.eq("tableNumber", args.tableNumber!))
+        .collect();
+      tableDoc = orgTables.find((t) => t.deletedAt === undefined) ?? null;
+    }
+
+    // 2. Generate Token & Order Number
+    const todayOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_created_at", (q) =>
+        q.eq("organizationId", args.organizationId).gte("createdAt", todayStart)
+      )
+      .collect();
+
+    const tokenCount = todayOrders.length + 1;
+    const tokenNumber = "#" + tokenCount.toString().padStart(2, "0");
+    const dateStr = new Date(now).toISOString().slice(0, 10).replace(/-/g, "");
+    const orderNumber = "ORD-" + dateStr + "-" + tokenCount.toString().padStart(3, "0");
+
+    // 3. Resolve initial order status process
+    const processes = await ctx.db.query("organizationOrderProcesses").collect();
+    const activeProcesses = processes
+      .filter((p) => p.deletedAt === undefined && p.published !== false)
+      .sort((a, b) => a.position - b.position);
+
+    const initialProcess = activeProcesses[0] || null;
+    const initialStatusName = initialProcess?.name || "Order Placed";
+
+    // 4. Calculate Subtotal, Tax, Total
+    let subTotal = 0;
+    for (const item of args.items) {
+      subTotal += item.totalUnitPrice * item.quantity;
+    }
+    const gstPaise = Math.round(subTotal * 0.05); // 5% GST
+    const serviceTaxPaise = Math.round(subTotal * 0.06); // 6% Service Tax
+    const taxTotal = gstPaise + serviceTaxPaise;
+    const totalAmount = subTotal + taxTotal;
+
+    // 5. Insert Order
+    const orderId = await ctx.db.insert("orders", {
+      organizationId: args.organizationId,
+      orderNumber,
+      tokenNumber,
+      orderType: args.orderType || "DineIn",
+      orderSource: "PREST-QR",
+      orderStatusId: initialProcess?._id,
+      orderStatusName: initialStatusName,
+      isCompleted: false,
+      isRejected: false,
+      isModify: false,
+      tableId: tableDoc?._id,
+      customerName: args.customerName || "Guest",
+      customerPhone: args.customerPhone || "",
+      subTotal,
+      taxTotal,
+      discountAmount: 0,
+      totalAmount,
+      paymentMode: "UPI / QR",
+      paymentStatus: "Paid",
+      specialNotes: args.specialNotes,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    // 6. Insert Order Items
+    for (const item of args.items) {
+      // Look for real menu item id if valid
+      let menuItemId: Id<"items"> | null = ctx.db.normalizeId("items", item.itemId);
+      if (!menuItemId) {
+        const foundItem = await ctx.db
+          .query("items")
+          .filter((q) => q.eq(q.field("name"), item.name))
+          .first();
+        if (foundItem) {
+          menuItemId = foundItem._id;
+        }
+      }
+
+      if (!menuItemId) {
+        const anyItem = await ctx.db.query("items").first();
+        if (anyItem) {
+          menuItemId = anyItem._id;
+        }
+      }
+
+      const customArray = (item.customizations || []).map((c) => ({
+        customizationId: c.customizationId as any,
+        customizationName: c.customizationName,
+        optionId: c.optionId as any,
+        optionName: c.optionName,
+        price: c.price,
+      }));
+
+      if (menuItemId) {
+        await ctx.db.insert("orderItems", {
+          organizationId: args.organizationId,
+          orderId,
+          itemId: menuItemId,
+          itemName: item.name,
+          itemPrice: item.totalUnitPrice,
+          quantity: item.quantity,
+          totalPrice: item.totalUnitPrice * item.quantity,
+          customizations: customArray.length > 0 ? customArray : undefined,
+          isReady: false,
+          createdAt: now,
+        });
+      }
+    }
+
+    // 7. Insert Activity
+    await ctx.db.insert("orderActivities", {
+      organizationId: args.organizationId,
+      orderId,
+      processId: initialProcess?._id,
+      processName: initialStatusName,
+      position: 1,
+      createdAt: now,
+    });
+
+    // 8. Update Table Current Order Id
+    if (tableDoc) {
+      await ctx.db.patch(tableDoc._id, {
+        currentOrderId: orderId,
+        updatedAt: now,
+      });
+    }
+
+    return {
+      orderId,
+      orderNumber,
+      tokenNumber,
+      totalAmount,
+      formattedTotal: `₹${(totalAmount / 100).toFixed(2)}`,
+      orderStatusName: initialStatusName,
+    };
+  },
+});
+
 
 
 

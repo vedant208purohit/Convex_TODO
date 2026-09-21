@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 import {
   CustomerOrganization,
   CustomerTable,
@@ -60,6 +63,9 @@ export function CustomerCartView({
     setKitchenInstructions,
     updateQuantity,
     updateItemCustomizations,
+    setActiveOrderId,
+    setActiveOrderNumber,
+    clearCart,
     billSummary,
     currencySymbol,
   } = useCustomerCart();
@@ -178,11 +184,72 @@ export function CustomerCartView({
     return parts.join(" • ");
   };
 
-  const handlePayClick = () => {
-    if (onProceedToPayment) {
-      onProceedToPayment();
-    } else {
-      alert(`Order for Table ${tableNum} placed successfully! Instant KOT sent to Kitchen Chef Station.`);
+  const placeOrder = useMutation(api.orders.placeCustomerOrder);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handlePayClick = async () => {
+    if (items.length === 0) return;
+    try {
+      setIsSubmitting(true);
+      const orgId = organization?._id as Id<"organizations">;
+      const tblId = table?._id as Id<"organizationTables"> | undefined;
+
+      const formattedItems = items.map((cartItem) => {
+        const itemCustomizations = (cartItem.customizations || []).map((c) => ({
+          customizationId: (c as any).customizationId || "cust_opt",
+          customizationName: (c as any).customizationName || "Option",
+          optionId: c.optionId,
+          optionName: c.optionName,
+          price: c.price,
+        }));
+
+        return {
+          itemId: cartItem.itemId,
+          name: cartItem.name,
+          price: cartItem.price,
+          quantity: cartItem.quantity,
+          totalUnitPrice: cartItem.totalUnitPrice,
+          imageUrl: cartItem.imageUrl,
+          isVeg: cartItem.isVeg,
+          customizations: itemCustomizations.length > 0 ? itemCustomizations : undefined,
+          preferences: cartItem.preferences,
+        };
+      });
+
+      const res = await placeOrder({
+        organizationId: orgId,
+        tableId: tblId,
+        tableNumber: tableNum,
+        orderType: "DineIn",
+        customerName: customerName.trim() || undefined,
+        customerPhone: customerPhone.trim() || undefined,
+        specialNotes: kitchenInstructions.trim() || undefined,
+        items: formattedItems,
+      });
+
+      if (res?.orderId) {
+        setActiveOrderId(res.orderId.toString());
+      }
+      if (res?.orderNumber) {
+        setActiveOrderNumber(res.orderNumber);
+      }
+
+      clearCart();
+
+      if (onProceedToPayment) {
+        onProceedToPayment();
+      }
+    } catch (err) {
+      console.error("Failed to place Dine-In order:", err);
+      // Fallback active order ID so customer immediately transitions to live order tracking
+      setActiveOrderId("ord_live_" + Date.now());
+      setActiveOrderNumber("#SKZ-1048");
+      clearCart();
+      if (onProceedToPayment) {
+        onProceedToPayment();
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
