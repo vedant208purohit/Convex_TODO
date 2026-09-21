@@ -227,6 +227,7 @@ export const resolvePublic = query({
  */
 export const resolveCustomerSession = query({
   args: {
+    organizationId: v.optional(v.id("organizations")),
     qrId: v.optional(v.string()),
     tableId: v.optional(v.string()),
     tableNumber: v.optional(v.string()),

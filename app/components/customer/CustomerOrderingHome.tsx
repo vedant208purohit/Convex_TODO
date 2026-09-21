@@ -287,12 +287,26 @@ export function CustomerOrderingHome({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
 
   // 1. Resolve Session from Convex (Public Query)
-  const sessionResult = useQuery(api.organizationQrCodes.resolveCustomerSession, {
-    qrId: qrId || undefined,
-    tableId: tableId || undefined,
-    tableNumber: tableNumber || (!qrId && !tableId && !identifier ? "T12" : undefined),
-    identifier: identifier || undefined,
-  }) as CustomerSessionResult | undefined;
+  const sessionQueryArgs = useMemo(() => {
+    const args: any = {};
+    if (qrId) args.qrId = qrId;
+    if (tableId) args.tableId = tableId;
+    if (tableNumber) args.tableNumber = tableNumber;
+    if (identifier) {
+      args.identifier = identifier;
+    } else if (!qrId && !tableId && tableNumber) {
+      args.identifier = tableNumber;
+    } else if (!qrId && !tableId) {
+      args.tableNumber = "T12";
+      args.identifier = "T12";
+    }
+    return args;
+  }, [qrId, tableId, tableNumber, identifier]);
+
+  const sessionResult = useQuery(
+    api.organizationQrCodes.resolveCustomerSession,
+    sessionQueryArgs
+  ) as CustomerSessionResult | undefined;
 
   // 2. Fetch Menu for resolved organization (Public Query)
   const orgId = sessionResult?.valid ? (sessionResult.organization?._id as Id<"organizations">) : undefined;
@@ -313,12 +327,12 @@ export function CustomerOrderingHome({
   }
 
   // Error / Inactive Table State
-  if (!sessionResult.valid) {
+  if (!sessionResult || !sessionResult.valid) {
     return (
       <CustomerErrorView
-        title={sessionResult.errorCode === "TABLE_BLOCKED" ? "Table Unavailable" : "Table QR Not Active"}
-        message={sessionResult.error}
-        organization={sessionResult.organization}
+        title={sessionResult?.errorCode === "TABLE_BLOCKED" ? "Table Unavailable" : "Table QR Not Active"}
+        message={sessionResult?.error || "Unable to resolve table ordering session."}
+        organization={sessionResult?.organization}
         onRetry={() => window.location.reload()}
       />
     );
