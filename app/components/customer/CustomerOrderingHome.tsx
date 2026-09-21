@@ -574,6 +574,7 @@ function CustomerOrderingHomeView({
           table={table}
           organization={organization}
           onOpenDeliveryLocation={() => setIsDeliveryLocationOpen(true)}
+          onNavigateToCart={() => onSelectTab("orders")}
         />
 
         {/* Promotional / Hero Card */}

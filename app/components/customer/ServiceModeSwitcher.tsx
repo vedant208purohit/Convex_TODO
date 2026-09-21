@@ -10,6 +10,7 @@ interface ServiceModeSwitcherProps {
   organization?: CustomerOrganization;
   showContextLine?: boolean;
   onOpenDeliveryLocation?: () => void;
+  onNavigateToCart?: () => void;
 }
 
 export function ServiceModeSwitcher({
@@ -17,6 +18,7 @@ export function ServiceModeSwitcher({
   organization,
   showContextLine = true,
   onOpenDeliveryLocation,
+  onNavigateToCart,
 }: ServiceModeSwitcherProps) {
   const { serviceMode, setServiceMode, deliveryAddress } = useCustomerCart();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -26,10 +28,10 @@ export function ServiceModeSwitcher({
   const handleSelectMode = (mode: CustomerServiceMode) => {
     setServiceMode(mode);
     if (mode === "delivery") {
-      if (onOpenDeliveryLocation) {
-        onOpenDeliveryLocation();
+      if (onNavigateToCart) {
+        onNavigateToCart();
       } else {
-        setToastMessage("Delivery mode selected — please confirm delivery address");
+        setToastMessage("Delivery mode selected");
         setTimeout(() => setToastMessage(null), 3000);
       }
     } else if (mode === "takeaway") {
