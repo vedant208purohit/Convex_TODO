@@ -64,7 +64,7 @@ function useGoogleMapsLoader(apiKey: string) {
 
         const script = document.createElement("script");
         script.id = "google-maps-sdk-script";
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&loading=async`;
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
         script.async = true;
         script.defer = true;
         script.onload = () => {
@@ -436,84 +436,144 @@ export function SelectDeliveryLocationView({
     }
   }, [position]);
 
+  const autocompleteInstanceRef = useRef<google.maps.places.Autocomplete | null>(null);
+
   // Initialize Native Google Places Autocomplete on Search Input
-  useEffect(() => {
-    if (
-      !isLoaded ||
-      !searchInputRef.current ||
-      typeof window === "undefined" ||
-      !window.google?.maps?.places?.Autocomplete
-    )
-      return;
+  const initAutocomplete = useCallback(
+    (inputNode: HTMLInputElement | null) => {
+      if (!inputNode) return;
+      if (
+        typeof window === "undefined" ||
+        !window.google?.maps?.places?.Autocomplete
+      )
+        return;
+      if (autocompleteInstanceRef.current) return;
 
-    let autocomplete: google.maps.places.Autocomplete | null = null;
-    let listener: google.maps.MapsEventListener | null = null;
-
-    try {
-      autocomplete = new window.google.maps.places.Autocomplete(
-        searchInputRef.current,
-        {
-          fields: ["geometry", "formatted_address", "name", "address_components"],
-        }
-      );
-
-      listener = autocomplete.addListener("place_changed", () => {
-        if (!autocomplete) return;
-        const place = autocomplete.getPlace();
-        if (place && place.geometry && place.geometry.location) {
-          const lat = place.geometry.location.lat();
-          const lng = place.geometry.location.lng();
-          const newPos = { lat, lng };
-
-          setPosition(newPos);
-          if (mapRef.current) {
-            mapRef.current.setZoom(16);
-            mapRef.current.panTo(newPos);
-          }
-          if (markerRef.current) {
-            markerRef.current.setPosition(newPos);
-          }
-
-          const formatted = place.formatted_address || place.name || "";
-          setFormattedAddress(formatted);
-
-          const parsed = parseGoogleAddressComponents(
-            place.address_components as google.maps.GeocoderAddressComponent[],
-            formatted
-          );
-
-          const resolvedArea =
-            place.name ||
-            [parsed.streetNumber, parsed.streetName, parsed.area]
-              .filter(Boolean)
-              .join(", ") ||
-            formatted;
-
-          setApartmentRoadArea(resolvedArea);
-          setSearchQuery(resolvedArea);
-
-          if (parsed.city) setCity(parsed.city);
-          if (parsed.zipCode) setZipCode(parsed.zipCode);
-          if (parsed.landmark) setLandmark(parsed.landmark);
-
-          setAccuracyStatus("High Accuracy");
-          setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
-        }
-      });
-    } catch (err) {
-      console.error("Google Places Autocomplete error:", err);
-    }
-
-    return () => {
       try {
-        if (listener && window.google?.maps?.event) {
-          google.maps.event.removeListener(listener);
-        }
-      } catch {
-        // Safe cleanup
+        const autocomplete = new window.google.maps.places.Autocomplete(
+          inputNode,
+          {
+            fields: [
+              "geometry",
+              "formatted_address",
+              "name",
+              "address_components",
+            ],
+          }
+        );
+
+        autocomplete.addListener("place_changed", () => {
+          const place = autocomplete.getPlace();
+          if (place && place.geometry && place.geometry.location) {
+            const lat = place.geometry.location.lat();
+            const lng = place.geometry.location.lng();
+            const newPos = { lat, lng };
+
+            setPosition(newPos);
+            if (mapRef.current) {
+              mapRef.current.setZoom(16);
+              mapRef.current.panTo(newPos);
+            }
+            if (markerRef.current) {
+              markerRef.current.setPosition(newPos);
+            }
+
+            const formatted = place.formatted_address || place.name || "";
+            setFormattedAddress(formatted);
+
+            const parsed = parseGoogleAddressComponents(
+              place.address_components as google.maps.GeocoderAddressComponent[],
+              formatted
+            );
+
+            const resolvedArea =
+              place.name ||
+              [parsed.streetNumber, parsed.streetName, parsed.area]
+                .filter(Boolean)
+                .join(", ") ||
+              formatted;
+
+            setApartmentRoadArea(resolvedArea);
+            setSearchQuery(resolvedArea);
+
+            if (parsed.city) setCity(parsed.city);
+            if (parsed.zipCode) setZipCode(parsed.zipCode);
+            if (parsed.landmark) setLandmark(parsed.landmark);
+
+            setAccuracyStatus("High Accuracy");
+            setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
+          }
+        });
+
+        autocompleteInstanceRef.current = autocomplete;
+      } catch (err) {
+        console.error("Google Places Autocomplete error:", err);
       }
-    };
-  }, [isLoaded]);
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (isLoaded && searchInputRef.current && !autocompleteInstanceRef.current) {
+      initAutocomplete(searchInputRef.current);
+    }
+  }, [isLoaded, initAutocomplete]);
+
+  // Manual Geocode search handler for Enter key or search button
+  const handleManualSearch = useCallback(
+    async (queryToSearch?: string) => {
+      const q = (queryToSearch || searchQuery).trim();
+      if (!q) return;
+
+      setIsGeocodingLoading(true);
+      try {
+        if (typeof window !== "undefined" && window.google?.maps?.Geocoder) {
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ address: q }, (results, status) => {
+            if (
+              status === "OK" &&
+              results &&
+              results[0] &&
+              results[0].geometry
+            ) {
+              const loc = results[0].geometry.location;
+              const newPos = { lat: loc.lat(), lng: loc.lng() };
+              setPosition(newPos);
+              if (mapRef.current) {
+                mapRef.current.setZoom(16);
+                mapRef.current.panTo(newPos);
+              }
+              if (markerRef.current) {
+                markerRef.current.setPosition(newPos);
+              }
+
+              const formatted = results[0].formatted_address;
+              setFormattedAddress(formatted);
+              const parsed = parseGoogleAddressComponents(
+                results[0].address_components,
+                formatted
+              );
+              const resolvedArea =
+                [parsed.streetNumber, parsed.streetName, parsed.area]
+                  .filter(Boolean)
+                  .join(", ") || formatted;
+
+              setApartmentRoadArea(resolvedArea);
+              if (parsed.city) setCity(parsed.city);
+              if (parsed.zipCode) setZipCode(parsed.zipCode);
+              setAccuracyStatus("High Accuracy");
+              setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Manual search error:", err);
+      } finally {
+        setIsGeocodingLoading(false);
+      }
+    },
+    [searchQuery]
+  );
 
   // Quick delivery chip toggle/append
   const handleToggleChip = (chipText: string) => {
@@ -615,17 +675,33 @@ export function SelectDeliveryLocationView({
         </div>
 
         {/* Search Input Box with Google Places Autocomplete */}
-        <div className="relative">
-          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 z-10">
-            <SearchIcon className="w-4 h-4 text-slate-400" />
-          </div>
+        <div className="relative flex items-center">
+          <button
+            type="button"
+            onClick={() => handleManualSearch()}
+            aria-label="Search location"
+            className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 hover:text-indigo-600 z-10 cursor-pointer"
+          >
+            <SearchIcon className="w-4 h-4" />
+          </button>
 
           <input
-            ref={searchInputRef}
+            ref={(node) => {
+              searchInputRef.current = node;
+              if (node && isLoaded) {
+                initAutocomplete(node);
+              }
+            }}
             id="location-search-input"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleManualSearch();
+              }
+            }}
             placeholder="Search area, street, building or landmark..."
             className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate relative z-0"
           />
