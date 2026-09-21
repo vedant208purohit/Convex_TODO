@@ -1,7 +1,12 @@
 import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
-import { requireAuth, resolveStoreOrganization, getCallerMembership, requireMember } from "./organizationUsers";
+import {
+  requireAuth,
+  resolveStoreOrganization,
+  getCallerMembership,
+  requireMember,
+} from "./organizationUsers";
 
 // ----------------------------------------------------
 // AUTHORIZATION HELPERS
@@ -12,11 +17,15 @@ import { requireAuth, resolveStoreOrganization, getCallerMembership, requireMemb
  */
 export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
-  explicitOrgId?: Id<"organizations">
+  explicitOrgId?: Id<"organizations">,
 ) {
   const identity = await requireAuth(ctx);
   const org = await resolveStoreOrganization(ctx, explicitOrgId);
-  const callerMember = await getCallerMembership(ctx, identity.subject, org._id);
+  const callerMember = await getCallerMembership(
+    ctx,
+    identity.subject,
+    org._id,
+  );
 
   if (
     !callerMember ||
@@ -40,7 +49,7 @@ export function buildQrUrl(
   qrId: string,
   qrType: "DineIn" | "TakeAway" | "Queue",
   name: string,
-  tableId?: string
+  tableId?: string,
 ): string {
   const baseUrl = process.env.FRONT_END_URL || "https://pos.app";
   const encodedName = encodeURIComponent(name.trim());
@@ -69,7 +78,7 @@ function normalizeQrName(name: string): string {
 async function validateUniqueQrName(
   ctx: QueryCtx | MutationCtx,
   name: string,
-  excludeId?: Id<"organizationQrCodes">
+  excludeId?: Id<"organizationQrCodes">,
 ): Promise<void> {
   const existing = await ctx.db
     .query("organizationQrCodes")
@@ -77,7 +86,9 @@ async function validateUniqueQrName(
     .collect();
 
   const activeDuplicates = existing.filter(
-    (q) => q.deletedAt === undefined && (excludeId === undefined || q._id !== excludeId)
+    (q) =>
+      q.deletedAt === undefined &&
+      (excludeId === undefined || q._id !== excludeId),
   );
 
   if (activeDuplicates.length > 0) {
@@ -102,11 +113,7 @@ function validateDineInTable(tableId?: string): string {
 export const list = query({
   args: {
     qrType: v.optional(
-      v.union(
-        v.literal("DineIn"),
-        v.literal("TakeAway"),
-        v.literal("Queue")
-      )
+      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Queue")),
     ),
   },
   handler: async (ctx, args) => {
@@ -181,7 +188,9 @@ export const resolvePublic = query({
     // 2. Try direct Convex ID lookup if valid ID string
     if (!qr) {
       try {
-        const doc = (await ctx.db.get(args.identifier as Id<"organizationQrCodes">)) as any;
+        const doc = (await ctx.db.get(
+          args.identifier as Id<"organizationQrCodes">,
+        )) as any;
         if (doc && doc.qrType !== undefined && doc.deletedAt === undefined) {
           qr = doc as Doc<"organizationQrCodes">;
         }
@@ -228,10 +237,11 @@ export const resolveCustomerSession = query({
     identifier: v.optional(v.string()),
     qrId: v.optional(v.string()),
     tableId: v.optional(v.string()),
+    tableNumber: v.optional(v.string()),
     organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
-    const rawId = args.identifier || args.qrId || args.tableId;
+    const rawId = args.identifier || args.qrId || args.tableId || args.tableNumber;
     if (!rawId) return null;
 
     let qr: Doc<"organizationQrCodes"> | null = null;
@@ -247,7 +257,9 @@ export const resolveCustomerSession = query({
     // 2. Try direct Convex ID lookup if valid ID string
     if (!qr) {
       try {
-        const doc = (await ctx.db.get(rawId as Id<"organizationQrCodes">)) as any;
+        const doc = (await ctx.db.get(
+          rawId as Id<"organizationQrCodes">,
+        )) as any;
         if (doc && doc.qrType !== undefined && doc.deletedAt === undefined) {
           qr = doc as Doc<"organizationQrCodes">;
         }
@@ -300,7 +312,7 @@ export const create = mutation({
     qrType: v.union(
       v.literal("DineIn"),
       v.literal("TakeAway"),
-      v.literal("Queue")
+      v.literal("Queue"),
     ),
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),
@@ -350,11 +362,7 @@ export const update = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     qrType: v.optional(
-      v.union(
-        v.literal("DineIn"),
-        v.literal("TakeAway"),
-        v.literal("Queue")
-      )
+      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Queue")),
     ),
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),
@@ -375,9 +383,12 @@ export const update = mutation({
     }
 
     const effectiveType = args.qrType ?? existing.qrType;
-    let effectiveTableId = args.tableId !== undefined ? args.tableId : existing.tableId;
+    let effectiveTableId =
+      args.tableId !== undefined ? args.tableId : existing.tableId;
     let effectiveTableNumber =
-      args.tableNumber !== undefined ? args.tableNumber.trim() || undefined : existing.tableNumber;
+      args.tableNumber !== undefined
+        ? args.tableNumber.trim() || undefined
+        : existing.tableNumber;
 
     if (effectiveType === "DineIn") {
       effectiveTableId = validateDineInTable(effectiveTableId);
@@ -387,7 +398,12 @@ export const update = mutation({
     }
 
     const now = Date.now();
-    const newUrl = buildQrUrl(existing._id, effectiveType, effectiveName, effectiveTableId);
+    const newUrl = buildQrUrl(
+      existing._id,
+      effectiveType,
+      effectiveName,
+      effectiveTableId,
+    );
 
     await ctx.db.patch(args.id, {
       name: effectiveName,
