@@ -341,61 +341,77 @@ export function SelectDeliveryLocationView({
     }
   }, []);
 
-  // Initialize Native Google Map
-  useEffect(() => {
-    if (!isLoaded || !mapContainerRef.current || typeof window === "undefined" || !window.google?.maps?.Map || !window.google?.maps?.Marker) return;
+  // Callback ref to mount Google Map as soon as DOM element is attached
+  const initMapCallback = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (!node) return;
+      if (
+        typeof window === "undefined" ||
+        !window.google?.maps?.Map ||
+        !window.google?.maps?.Marker
+      )
+        return;
 
-    try {
       if (!mapRef.current) {
-        const map = new window.google.maps.Map(mapContainerRef.current, {
-          center: position,
-          zoom: 16,
-          mapTypeId: mapMode === "satellite" ? "satellite" : "roadmap",
-          disableDefaultUI: true,
-          zoomControl: false,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: false,
-          gestureHandling: "greedy",
-        });
+        try {
+          const map = new window.google.maps.Map(node, {
+            center: position,
+            zoom: 16,
+            mapTypeId: mapMode === "satellite" ? "satellite" : "roadmap",
+            disableDefaultUI: true,
+            zoomControl: false,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            gestureHandling: "greedy",
+          });
 
-        const marker = new window.google.maps.Marker({
-          position: position,
-          map: map,
-          draggable: true,
-        });
+          const marker = new window.google.maps.Marker({
+            position: position,
+            map: map,
+            draggable: true,
+          });
 
-        map.addListener("click", (e: google.maps.MapMouseEvent) => {
-          if (!e.latLng) return;
-          const lat = e.latLng.lat();
-          const lng = e.latLng.lng();
-          const newPos = { lat, lng };
+          map.addListener("click", (e: google.maps.MapMouseEvent) => {
+            if (!e.latLng) return;
+            const lat = e.latLng.lat();
+            const lng = e.latLng.lng();
+            const newPos = { lat, lng };
 
-          setPosition(newPos);
-          marker.setPosition(newPos);
-          reverseGeocode(lat, lng, "Manual");
-        });
+            setPosition(newPos);
+            marker.setPosition(newPos);
+            reverseGeocode(lat, lng, "Manual");
+          });
 
-        marker.addListener("dragend", (e: google.maps.MapMouseEvent) => {
-          if (!e.latLng) return;
-          const lat = e.latLng.lat();
-          const lng = e.latLng.lng();
-          const newPos = { lat, lng };
+          marker.addListener("dragend", (e: google.maps.MapMouseEvent) => {
+            if (!e.latLng) return;
+            const lat = e.latLng.lat();
+            const lng = e.latLng.lng();
+            const newPos = { lat, lng };
 
-          setPosition(newPos);
-          reverseGeocode(lat, lng, "Manual");
-        });
+            setPosition(newPos);
+            reverseGeocode(lat, lng, "Manual");
+          });
 
-        mapRef.current = map;
-        markerRef.current = marker;
+          mapRef.current = map;
+          markerRef.current = marker;
+
+          setTimeout(() => {
+            if (mapRef.current && window.google?.maps?.event) {
+              window.google.maps.event.trigger(mapRef.current, "resize");
+              mapRef.current.setCenter(position);
+            }
+          }, 100);
+        } catch (err) {
+          console.error("Google Map initialization error:", err);
+        }
       } else {
         mapRef.current.setCenter(position);
         markerRef.current?.setPosition(position);
       }
-    } catch (err) {
-      console.error("Google Map initialization error:", err);
-    }
-  }, [isLoaded]);
+    },
+    [isLoaded, position]
+  );
 
   // Sync Map type (Map / Satellite)
   useEffect(() => {
@@ -692,7 +708,11 @@ export function SelectDeliveryLocationView({
         data-purpose="map-viewport"
       >
         {isLoaded && googleApiKey && !loadError ? (
-          <div ref={mapContainerRef} className="w-full h-full" />
+          <div
+            ref={initMapCallback}
+            className="absolute inset-0 w-full h-full"
+            style={{ width: "100%", height: "100%", minHeight: "320px", display: "block" }}
+          />
         ) : (
           /* Fallback Canvas Preview when Maps key is not set or loading */
           <div
