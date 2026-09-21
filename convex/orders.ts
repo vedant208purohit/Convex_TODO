@@ -1680,5 +1680,273 @@ export const seedSampleOrders = mutation({
   },
 });
 
+// ==========================================
+// 11. CAPTAIN ORDER MANAGEMENT MUTATIONS
+// ==========================================
+
+/**
+ * Appends new items (KOT #2, KOT #3...) to an ongoing Dine-In order
+ */
+export const addItemsToExistingOrder = mutation({
+  args: {
+    orderId: v.id("orders"),
+    items: v.array(
+      v.object({
+        itemId: v.id("items"),
+        quantity: v.number(),
+        isToGo: v.optional(v.boolean()),
+        customizations: v.optional(
+          v.array(
+            v.object({
+              customizationId: v.id("customizations"),
+              optionId: v.id("customizationItems"),
+            })
+          )
+        ),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.isCompleted || order.isRejected) {
+      throw new Error("Cannot add items to a completed or cancelled order");
+    }
+
+    const now = Date.now();
+    let additionalSubTotal = 0;
+    const lineItemConfigs: Array<any> = [];
+
+    for (const inputItem of args.items) {
+      const dbItem = await ctx.db.get(inputItem.itemId);
+      if (!dbItem) throw new Error("Item not found");
+
+      let itemUnitPrice = dbItem.price;
+      const resolvedCustomizations: Array<any> = [];
+
+      if (inputItem.customizations) {
+        for (const custInput of inputItem.customizations) {
+          const custGroup = await ctx.db.get(custInput.customizationId);
+          const custOption = await ctx.db.get(custInput.optionId);
+          if (custGroup && custOption && custOption.deletedAt === undefined) {
+            itemUnitPrice += custOption.price;
+            resolvedCustomizations.push({
+              customizationId: custGroup._id,
+              customizationName: custGroup.name,
+              optionId: custOption._id,
+              optionName: custOption.name,
+              price: custOption.price,
+            });
+          }
+        }
+      }
+
+      const itemLineTotal = itemUnitPrice * inputItem.quantity;
+      additionalSubTotal += itemLineTotal;
+
+      lineItemConfigs.push({
+        itemId: dbItem._id,
+        itemName: dbItem.name,
+        itemPrice: itemUnitPrice,
+        quantity: inputItem.quantity,
+        totalPrice: itemLineTotal,
+        customizations: resolvedCustomizations,
+        isToGo: inputItem.isToGo ?? false,
+      });
+    }
+
+    // 1. Insert new order items
+    for (const line of lineItemConfigs) {
+      await ctx.db.insert("orderItems", {
+        organizationId: order.organizationId,
+        orderId: order._id,
+        itemId: line.itemId,
+        itemName: line.itemName,
+        itemPrice: line.itemPrice,
+        quantity: line.quantity,
+        totalPrice: line.totalPrice,
+        customizations: line.customizations,
+        isReady: false,
+        createdAt: now,
+      });
+    }
+
+    // 2. Fetch all order items and recalculate
+    const allItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+
+    let newSubTotal = 0;
+    for (const it of allItems) {
+      newSubTotal += it.totalPrice;
+    }
+
+    const taxRatio = order.subTotal > 0 ? order.taxTotal / order.subTotal : 0.05;
+    const newTaxTotal = Math.round(newSubTotal * taxRatio);
+    const discount = order.discountAmount ?? 0;
+    const delivery = order.deliveryCharge ?? 0;
+    const newTotalAmount = Math.max(0, newSubTotal + newTaxTotal - discount + delivery);
+
+    await ctx.db.patch(order._id, {
+      subTotal: newSubTotal,
+      taxTotal: newTaxTotal,
+      totalAmount: newTotalAmount,
+      isModify: true,
+      updatedAt: now,
+    });
+
+    // 3. Log modification activity
+    const existingActivities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+
+    await ctx.db.insert("orderActivities", {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      processName: `Added ${args.items.length} item(s) to table order`,
+      position: existingActivities.length + 1,
+      createdAt: now,
+    });
+
+    return {
+      success: true,
+      orderId: order._id,
+      newTotalAmount: (newTotalAmount / 100).toFixed(2),
+      itemCount: allItems.length,
+    };
+  },
+});
+
+/**
+ * Updates item quantity on an open table order
+ */
+export const updateOrderItemQuantity = mutation({
+  args: {
+    orderItemId: v.id("orderItems"),
+    quantity: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const orderItem = await ctx.db.get(args.orderItemId);
+    if (!orderItem) throw new Error("Order item not found");
+
+    const order = await ctx.db.get(orderItem.orderId);
+    if (!order) throw new Error("Associated order not found");
+    if (order.isCompleted || order.isRejected) {
+      throw new Error("Cannot modify a completed or cancelled order");
+    }
+
+    const now = Date.now();
+
+    if (args.quantity <= 0) {
+      await ctx.db.delete(args.orderItemId);
+    } else {
+      await ctx.db.patch(args.orderItemId, {
+        quantity: args.quantity,
+        totalPrice: orderItem.itemPrice * args.quantity,
+      });
+    }
+
+    // Recalculate
+    const remainingItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+
+    let newSubTotal = 0;
+    for (const it of remainingItems) {
+      newSubTotal += it.totalPrice;
+    }
+
+    const taxRatio = order.subTotal > 0 ? order.taxTotal / order.subTotal : 0.05;
+    const newTaxTotal = Math.round(newSubTotal * taxRatio);
+    const discount = order.discountAmount ?? 0;
+    const delivery = order.deliveryCharge ?? 0;
+    const newTotalAmount = Math.max(0, newSubTotal + newTaxTotal - discount + delivery);
+
+    await ctx.db.patch(order._id, {
+      subTotal: newSubTotal,
+      taxTotal: newTaxTotal,
+      totalAmount: newTotalAmount,
+      isModify: true,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      newTotalAmount: (newTotalAmount / 100).toFixed(2),
+      remainingItemCount: remainingItems.length,
+    };
+  },
+});
+
+/**
+ * Transfers an active Dine-In order to another table
+ */
+export const moveOrderTable = mutation({
+  args: {
+    orderId: v.id("orders"),
+    newTableId: v.id("organizationTables"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+
+    const newTable = await ctx.db.get(args.newTableId);
+    if (!newTable || newTable.deletedAt !== undefined) {
+      throw new Error("Destination table not found");
+    }
+
+    if (
+      newTable.currentOrderId &&
+      newTable.currentOrderId !== order._id.toString()
+    ) {
+      throw new Error(`Table ${newTable.tableNumber} is already occupied by another order`);
+    }
+
+    const now = Date.now();
+
+    // 1. Release old table if any
+    if (order.tableId && order.tableId !== args.newTableId) {
+      const oldTable = await ctx.db.get(order.tableId);
+      if (oldTable && oldTable.currentOrderId === order._id.toString()) {
+        await ctx.db.patch(order.tableId, {
+          currentOrderId: undefined,
+          isRequested: false,
+          updatedAt: now,
+        });
+      }
+    }
+
+    // 2. Bind new table
+    await ctx.db.patch(args.newTableId, {
+      currentOrderId: order._id.toString(),
+      isRequested: false,
+      updatedAt: now,
+    });
+
+    // 3. Update order tableId
+    await ctx.db.patch(order._id, {
+      tableId: args.newTableId,
+      updatedAt: now,
+    });
+
+    // 4. Log activity
+    await ctx.db.insert("orderActivities", {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      processName: `Moved order to Table #${newTable.tableNumber}`,
+      position: 60,
+      createdAt: now,
+    });
+
+    return {
+      success: true,
+      newTableNumber: newTable.tableNumber,
+    };
+  },
+});
+
 
 
