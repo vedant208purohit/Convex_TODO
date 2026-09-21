@@ -9,6 +9,7 @@ import {
   DeliveryAddress,
 } from "./types";
 import { useCustomerCart } from "./CustomerCartContext";
+import { useRazorpayPayment } from "./useRazorpayPayment";
 import {
   ArrowBackIcon,
   ShoppingBagIcon,
@@ -57,9 +58,14 @@ export function CustomerDeliveryCartView({
     setCustomerName,
     updateQuantity,
     updateItemCustomizations,
+    setActiveOrderId,
+    setActiveOrderNumber,
+    clearCart,
     billSummary,
     currencySymbol,
   } = useCustomerCart();
+
+  const { isProcessing, paymentFeedback, clearFeedback, initiatePayment } = useRazorpayPayment();
 
   // State for editing customizations on an existing cart item
   const [editingCartItem, setEditingCartItem] = useState<CartItem | null>(null);
@@ -166,12 +172,31 @@ export function CustomerDeliveryCartView({
       return;
     }
 
-    if (onProceedToPayment) {
-      onProceedToPayment();
-    } else {
-      // Future checkout transition ready
-      alert("Address confirmed! Proceeding to digital payment & order dispatch.");
-    }
+    if (items.length === 0 || isProcessing) return;
+
+    initiatePayment({
+      organization,
+      table,
+      serviceMode: "delivery",
+      items,
+      customerName,
+      customerPhone,
+      deliveryAddress,
+      onSuccess: ({ orderId, orderNumber }) => {
+        setActiveOrderId(orderId);
+        setActiveOrderNumber(orderNumber);
+        clearCart();
+        if (onProceedToPayment) {
+          onProceedToPayment();
+        }
+      },
+      onFailure: (err) => {
+        console.warn("Delivery payment failure:", err);
+      },
+      onDismiss: () => {
+        console.log("Customer dismissed delivery payment");
+      },
+    });
   };
 
   const renderAddressTypeIcon = (type?: string) => {
@@ -690,17 +715,42 @@ export function CustomerDeliveryCartView({
       {/* 7. STICKY BOTTOM FOOTER CTA                                               */}
       {/* ========================================================================= */}
       <div className="sticky bottom-[72px] sm:bottom-[76px] inset-x-0 z-40 pt-1">
+        {paymentFeedback && (
+          <div
+            className={`mb-2 p-3 rounded-xl text-xs font-medium flex items-center justify-between shadow-sm transition-all ${
+              paymentFeedback.type === "success"
+                ? "bg-[#005e3f] text-[#6ffbbe]"
+                : paymentFeedback.type === "info"
+                ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
+                : "bg-red-50 text-red-700 border border-red-200"
+            }`}
+          >
+            <span>{paymentFeedback.message}</span>
+            <button
+              type="button"
+              onClick={clearFeedback}
+              className="text-xs font-bold px-1.5 py-0.5 opacity-80 hover:opacity-100 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="bg-white p-3 rounded-2xl shadow-xl flex flex-col gap-1.5 border border-slate-200">
           <button
             type="button"
-            disabled={items.length === 0}
+            disabled={items.length === 0 || isProcessing}
             onClick={handlePrimaryCtaClick}
             className="w-full py-3 px-4 bg-[#4338ca] hover:bg-[#3730a3] text-white font-bold rounded-xl shadow-md shadow-indigo-100 flex items-center justify-center gap-2 active:scale-[0.99] transition text-sm disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
           >
             {deliveryAddress ? (
               <>
                 <span>🛵</span>
-                <span>Proceed to Pay • {billSummary.formattedGrandTotal}</span>
+                <span>
+                  {isProcessing
+                    ? "Opening Razorpay..."
+                    : `Proceed to Pay • ${billSummary.formattedGrandTotal}`}
+                </span>
                 <span className="font-bold">→</span>
               </>
             ) : (

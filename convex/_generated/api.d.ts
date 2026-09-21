@@ -40,6 +40,7 @@ import type * as organizationUsers from "../organizationUsers.js";
 import type * as organizationWaiters from "../organizationWaiters.js";
 import type * as organizations from "../organizations.js";
 import type * as paymentModes from "../paymentModes.js";
+import type * as payments from "../payments.js";
 import type * as postpaidOrderRequests from "../postpaidOrderRequests.js";
 import type * as processNotifications from "../processNotifications.js";
 import type * as r2 from "../r2.js";
@@ -86,6 +87,7 @@ declare const fullApi: ApiFromModules<{
   organizationWaiters: typeof organizationWaiters;
   organizations: typeof organizations;
   paymentModes: typeof paymentModes;
+  payments: typeof payments;
   postpaidOrderRequests: typeof postpaidOrderRequests;
   processNotifications: typeof processNotifications;
   r2: typeof r2;

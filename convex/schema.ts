@@ -926,6 +926,9 @@ postpaidOrderRequests: defineTable({
 
     paymentMode: v.string(),
     paymentStatus: v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed")),
+    razorpayOrderId: v.optional(v.string()),
+    razorpayPaymentId: v.optional(v.string()),
+    razorpaySignature: v.optional(v.string()),
 
     specialNotes: v.optional(v.string()),
     taxInfoSnapshot: v.optional(v.any()),
@@ -985,6 +988,11 @@ postpaidOrderRequests: defineTable({
     payAmount: v.optional(v.number()),
     refundAmount: v.optional(v.number()),
     transactionReference: v.optional(v.string()),
+    razorpayOrderId: v.optional(v.string()),
+    razorpayPaymentId: v.optional(v.string()),
+    razorpaySignature: v.optional(v.string()),
+    status: v.optional(v.string()),
+    gatewayResponse: v.optional(v.any()),
     createdAt: v.number(),
   }).index("by_order", ["orderId"]),
 

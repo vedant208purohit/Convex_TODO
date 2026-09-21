@@ -11,6 +11,7 @@ import {
   CartItem,
 } from "./types";
 import { useCustomerCart } from "./CustomerCartContext";
+import { useRazorpayPayment } from "./useRazorpayPayment";
 import {
   ArrowBackIcon,
   TableBarIcon,
@@ -184,73 +185,35 @@ export function CustomerCartView({
     return parts.join(" • ");
   };
 
-  const placeOrder = useMutation(api.orders.placeCustomerOrder);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { isProcessing, paymentFeedback, clearFeedback, initiatePayment } = useRazorpayPayment();
 
-  const handlePayClick = async () => {
-    if (items.length === 0) return;
-    try {
-      setIsSubmitting(true);
-      const orgId = organization?._id as Id<"organizations">;
-      const tblId = table?._id as Id<"organizationTables"> | undefined;
+  const handlePayClick = () => {
+    if (items.length === 0 || isProcessing) return;
 
-      const formattedItems = items.map((cartItem) => {
-        const itemCustomizations = (cartItem.customizations || []).map((c) => ({
-          customizationId: (c as any).customizationId || "cust_opt",
-          customizationName: (c as any).customizationName || "Option",
-          optionId: c.optionId,
-          optionName: c.optionName,
-          price: c.price,
-        }));
-
-        return {
-          itemId: cartItem.itemId,
-          name: cartItem.name,
-          price: cartItem.price,
-          quantity: cartItem.quantity,
-          totalUnitPrice: cartItem.totalUnitPrice,
-          imageUrl: cartItem.imageUrl,
-          isVeg: cartItem.isVeg,
-          customizations: itemCustomizations.length > 0 ? itemCustomizations : undefined,
-          preferences: cartItem.preferences,
-        };
-      });
-
-      const res = await placeOrder({
-        organizationId: orgId,
-        tableId: tblId,
-        tableNumber: tableNum,
-        orderType: "DineIn",
-        customerName: customerName.trim() || undefined,
-        customerPhone: customerPhone.trim() || undefined,
-        specialNotes: kitchenInstructions.trim() || undefined,
-        items: formattedItems,
-      });
-
-      if (res?.orderId) {
-        setActiveOrderId(res.orderId.toString());
-      }
-      if (res?.orderNumber) {
-        setActiveOrderNumber(res.orderNumber);
-      }
-
-      clearCart();
-
-      if (onProceedToPayment) {
-        onProceedToPayment();
-      }
-    } catch (err) {
-      console.error("Failed to place Dine-In order:", err);
-      // Fallback active order ID so customer immediately transitions to live order tracking
-      setActiveOrderId("ord_live_" + Date.now());
-      setActiveOrderNumber("#SKZ-1048");
-      clearCart();
-      if (onProceedToPayment) {
-        onProceedToPayment();
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+    initiatePayment({
+      organization,
+      table,
+      serviceMode: serviceMode || "dine_in",
+      items,
+      customerName,
+      customerPhone,
+      kitchenInstructions,
+      deliveryAddress,
+      onSuccess: ({ orderId, orderNumber }) => {
+        setActiveOrderId(orderId);
+        setActiveOrderNumber(orderNumber);
+        clearCart();
+        if (onProceedToPayment) {
+          onProceedToPayment();
+        }
+      },
+      onFailure: (err) => {
+        console.warn("Razorpay payment failure:", err);
+      },
+      onDismiss: () => {
+        console.log("Customer cancelled payment");
+      },
+    });
   };
 
   return (
@@ -606,10 +569,31 @@ export function CustomerCartView({
 
       {/* 8. Sticky Dine-In Payment Floating Container positioned above bottom nav */}
       <div className="sticky bottom-[72px] sm:bottom-[76px] inset-x-0 z-40 pt-1">
+        {paymentFeedback && (
+          <div
+            className={`mb-2 p-3 rounded-xl text-xs font-medium flex items-center justify-between shadow-sm transition-all ${
+              paymentFeedback.type === "success"
+                ? "bg-[#005e3f] text-[#6ffbbe]"
+                : paymentFeedback.type === "info"
+                ? "bg-[#eaedff] text-[#2a14b4] border border-[#dae2fd]"
+                : "bg-red-50 text-red-700 border border-red-200"
+            }`}
+          >
+            <span>{paymentFeedback.message}</span>
+            <button
+              type="button"
+              onClick={clearFeedback}
+              className="text-xs font-bold px-1.5 py-0.5 opacity-80 hover:opacity-100 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
         <div className="bg-white p-2.5 rounded-2xl shadow-xl flex flex-col gap-1.5 border border-[#eaedff]">
           <button
             type="button"
-            disabled={items.length === 0}
+            disabled={items.length === 0 || isProcessing}
             onClick={handlePayClick}
             className="w-full py-3.5 px-4 rounded-xl bg-[#4338ca] hover:opacity-95 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-white text-sm font-semibold flex items-center justify-between shadow-md transition-all cursor-pointer"
           >
@@ -617,7 +601,7 @@ export function CustomerCartView({
               <span className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
                 <TouchAppIcon className="w-4 h-4 text-white" />
               </span>
-              <span>Pay for Dine In</span>
+              <span>{isProcessing ? "Opening Razorpay..." : serviceMode === "dine_in" ? "Pay for Dine In" : "Pay & Place Order"}</span>
             </div>
 
             <div className="flex items-center gap-1.5 font-bold">
