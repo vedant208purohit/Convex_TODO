@@ -2,13 +2,6 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  GoogleMap,
-  Marker,
-  Autocomplete,
-  useJsApiLoader,
-  Libraries,
-} from "@react-google-maps/api";
-import {
   CustomerOrganization,
   CustomerTable,
   DeliveryAddress,
@@ -36,12 +29,68 @@ interface SelectDeliveryLocationViewProps {
   onConfirmLocation: (address: DeliveryAddress) => void;
 }
 
-const GOOGLE_MAPS_LIBRARIES: Libraries = ["places"];
+let googleMapsScriptPromise: Promise<boolean> | null = null;
 
-const mapContainerStyle: React.CSSProperties = {
-  width: "100%",
-  height: "100%",
-};
+function useGoogleMapsLoader(apiKey: string) {
+  const [isLoaded, setIsLoaded] = useState<boolean>(() => {
+    return typeof window !== "undefined" && !!window.google?.maps;
+  });
+  const [loadError, setLoadError] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    if (window.google?.maps) {
+      setIsLoaded(true);
+      return;
+    }
+
+    if (!apiKey) {
+      return;
+    }
+
+    if (!googleMapsScriptPromise) {
+      googleMapsScriptPromise = new Promise<boolean>((resolve, reject) => {
+        const existingScript = document.getElementById("google-maps-sdk-script") as HTMLScriptElement | null;
+        if (existingScript) {
+          if (window.google?.maps) {
+            resolve(true);
+          } else {
+            existingScript.addEventListener("load", () => resolve(true));
+            existingScript.addEventListener("error", (e) => reject(e));
+          }
+          return;
+        }
+
+        const script = document.createElement("script");
+        script.id = "google-maps-sdk-script";
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places&loading=async`;
+        script.async = true;
+        script.defer = true;
+        script.onload = () => {
+          resolve(true);
+        };
+        script.onerror = (e) => {
+          reject(e);
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    googleMapsScriptPromise
+      .then(() => {
+        setIsLoaded(true);
+        setLoadError(false);
+      })
+      .catch((err) => {
+        console.error("Google Maps script load error:", err);
+        setLoadError(true);
+        setIsLoaded(false);
+      });
+  }, [apiKey]);
+
+  return { isLoaded, loadError };
+}
 
 // Default fallback coordinates (default city center if no GPS/address is provided yet)
 const DEFAULT_CENTER = {
@@ -134,19 +183,14 @@ export function SelectDeliveryLocationView({
   const googleApiKey =
     process.env.NEXT_PUBLIC_GOOGLE_MAP_API_KEY || "";
 
-  // Load Google Maps JavaScript API with places library
-  const { isLoaded, loadError } = useJsApiLoader({
-    id: "google-map-script",
-    googleMapsApiKey: googleApiKey,
-    libraries: GOOGLE_MAPS_LIBRARIES,
-  });
+  // Singleton Google Maps JavaScript API loader
+  const { isLoaded, loadError } = useGoogleMapsLoader(googleApiKey);
 
   // Coordinates and Position
   const [position, setPosition] = useState<{ lat: number; lng: number }>({
     lat: deliveryAddress?.latitude || DEFAULT_CENTER.lat,
     lng: deliveryAddress?.longitude || DEFAULT_CENTER.lng,
   });
-  const [mapZoom, setMapZoom] = useState(16);
   const [mapMode, setMapMode] = useState<"map" | "satellite">("map");
 
   // Search and Geocoding States
@@ -189,17 +233,9 @@ export function SelectDeliveryLocationView({
   }>({});
 
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const autocompleteRef = useRef<google.maps.places.Autocomplete | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
-
-  // Callback to store map instance
-  const onMapLoad = useCallback((mapInstance: google.maps.Map) => {
-    mapRef.current = mapInstance;
-  }, []);
-
-  const onMapUnmount = useCallback(() => {
-    mapRef.current = null;
-  }, []);
+  const markerRef = useRef<google.maps.Marker | null>(null);
 
   // Server-side / Client reverse geocode helper
   const reverseGeocode = useCallback(async (lat: number, lng: number, fallbackAccuracy?: "High Accuracy" | "Approximate" | "Manual") => {
@@ -262,10 +298,13 @@ export function SelectDeliveryLocationView({
         const { latitude, longitude, accuracy } = pos.coords;
         const newPos = { lat: latitude, lng: longitude };
         setPosition(newPos);
-        setMapZoom(16);
 
         if (mapRef.current) {
           mapRef.current.panTo(newPos);
+          mapRef.current.setZoom(16);
+        }
+        if (markerRef.current) {
+          markerRef.current.setPosition(newPos);
         }
 
         const calculatedAccuracy = accuracy && accuracy < 50 ? "High Accuracy" : "Approximate";
@@ -296,74 +335,169 @@ export function SelectDeliveryLocationView({
   // Initial geocoding or GPS resolution on first open
   useEffect(() => {
     if (!deliveryAddress) {
-      // Auto-trigger GPS location if no address saved yet
       handleUseCurrentLocation();
     } else if (deliveryAddress.latitude && deliveryAddress.longitude) {
       setPosition({ lat: deliveryAddress.latitude, lng: deliveryAddress.longitude });
     }
   }, []);
 
-  // Handle Google Places Autocomplete selection
-  const onPlaceSelected = () => {
-    if (!autocompleteRef.current) return;
-    const place = autocompleteRef.current.getPlace();
+  // Initialize Native Google Map
+  useEffect(() => {
+    if (!isLoaded || !mapContainerRef.current || typeof window === "undefined" || !window.google?.maps?.Map || !window.google?.maps?.Marker) return;
 
-    if (place && place.geometry && place.geometry.location) {
-      const lat = place.geometry.location.lat();
-      const lng = place.geometry.location.lng();
-      const newPos = { lat, lng };
+    try {
+      if (!mapRef.current) {
+        const map = new window.google.maps.Map(mapContainerRef.current, {
+          center: position,
+          zoom: 16,
+          mapTypeId: mapMode === "satellite" ? "satellite" : "roadmap",
+          disableDefaultUI: true,
+          zoomControl: false,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+          gestureHandling: "greedy",
+        });
 
-      setPosition(newPos);
-      setMapZoom(16);
+        const marker = new window.google.maps.Marker({
+          position: position,
+          map: map,
+          draggable: true,
+        });
 
-      if (mapRef.current) {
-        mapRef.current.panTo(newPos);
+        map.addListener("click", (e: google.maps.MapMouseEvent) => {
+          if (!e.latLng) return;
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          const newPos = { lat, lng };
+
+          setPosition(newPos);
+          marker.setPosition(newPos);
+          reverseGeocode(lat, lng, "Manual");
+        });
+
+        marker.addListener("dragend", (e: google.maps.MapMouseEvent) => {
+          if (!e.latLng) return;
+          const lat = e.latLng.lat();
+          const lng = e.latLng.lng();
+          const newPos = { lat, lng };
+
+          setPosition(newPos);
+          reverseGeocode(lat, lng, "Manual");
+        });
+
+        mapRef.current = map;
+        markerRef.current = marker;
+      } else {
+        mapRef.current.setCenter(position);
+        markerRef.current?.setPosition(position);
       }
+    } catch (err) {
+      console.error("Google Map initialization error:", err);
+    }
+  }, [isLoaded]);
 
-      const formatted = place.formatted_address || place.name || "";
-      setFormattedAddress(formatted);
-
-      const parsed = parseGoogleAddressComponents(
-        place.address_components as google.maps.GeocoderAddressComponent[],
-        formatted
-      );
-
-      const resolvedArea = place.name || [parsed.streetNumber, parsed.streetName, parsed.area].filter(Boolean).join(", ") || formatted;
-      setApartmentRoadArea(resolvedArea);
-      setSearchQuery(resolvedArea);
-
-      if (parsed.city) setCity(parsed.city);
-      if (parsed.zipCode) setZipCode(parsed.zipCode);
-      if (parsed.landmark) setLandmark(parsed.landmark);
-
-      setAccuracyStatus("High Accuracy");
-      if (errors.apartmentRoadArea) {
-        setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
+  // Sync Map type (Map / Satellite)
+  useEffect(() => {
+    if (mapRef.current) {
+      try {
+        mapRef.current.setMapTypeId(mapMode === "satellite" ? "satellite" : "roadmap");
+      } catch (err) {
+        console.error("Google Map setMapTypeId error:", err);
       }
     }
-  };
+  }, [mapMode]);
 
-  // Handle map click
-  const handleMapClick = (e: google.maps.MapMouseEvent) => {
-    if (!e.latLng) return;
-    const lat = e.latLng.lat();
-    const lng = e.latLng.lng();
-    const newPos = { lat, lng };
+  // Sync position updates
+  useEffect(() => {
+    if (mapRef.current && markerRef.current) {
+      try {
+        mapRef.current.panTo(position);
+        markerRef.current.setPosition(position);
+      } catch (err) {
+        console.error("Google Map panTo/setPosition error:", err);
+      }
+    }
+  }, [position]);
 
-    setPosition(newPos);
-    reverseGeocode(lat, lng, "Manual");
-  };
+  // Initialize Native Google Places Autocomplete on Search Input
+  useEffect(() => {
+    if (
+      !isLoaded ||
+      !searchInputRef.current ||
+      typeof window === "undefined" ||
+      !window.google?.maps?.places?.Autocomplete
+    )
+      return;
 
-  // Handle marker drag end
-  const handleMarkerDragEnd = (e: google.maps.MapMouseEvent) => {
-    if (!e.latLng) return;
-    const lat = e.latLng.lat();
-    const lng = e.latLng.lng();
-    const newPos = { lat, lng };
+    let autocomplete: google.maps.places.Autocomplete | null = null;
+    let listener: google.maps.MapsEventListener | null = null;
 
-    setPosition(newPos);
-    reverseGeocode(lat, lng, "Manual");
-  };
+    try {
+      autocomplete = new window.google.maps.places.Autocomplete(
+        searchInputRef.current,
+        {
+          fields: ["geometry", "formatted_address", "name", "address_components"],
+        }
+      );
+
+      listener = autocomplete.addListener("place_changed", () => {
+        if (!autocomplete) return;
+        const place = autocomplete.getPlace();
+        if (place && place.geometry && place.geometry.location) {
+          const lat = place.geometry.location.lat();
+          const lng = place.geometry.location.lng();
+          const newPos = { lat, lng };
+
+          setPosition(newPos);
+          if (mapRef.current) {
+            mapRef.current.setZoom(16);
+            mapRef.current.panTo(newPos);
+          }
+          if (markerRef.current) {
+            markerRef.current.setPosition(newPos);
+          }
+
+          const formatted = place.formatted_address || place.name || "";
+          setFormattedAddress(formatted);
+
+          const parsed = parseGoogleAddressComponents(
+            place.address_components as google.maps.GeocoderAddressComponent[],
+            formatted
+          );
+
+          const resolvedArea =
+            place.name ||
+            [parsed.streetNumber, parsed.streetName, parsed.area]
+              .filter(Boolean)
+              .join(", ") ||
+            formatted;
+
+          setApartmentRoadArea(resolvedArea);
+          setSearchQuery(resolvedArea);
+
+          if (parsed.city) setCity(parsed.city);
+          if (parsed.zipCode) setZipCode(parsed.zipCode);
+          if (parsed.landmark) setLandmark(parsed.landmark);
+
+          setAccuracyStatus("High Accuracy");
+          setErrors((prev) => ({ ...prev, apartmentRoadArea: undefined }));
+        }
+      });
+    } catch (err) {
+      console.error("Google Places Autocomplete error:", err);
+    }
+
+    return () => {
+      try {
+        if (listener && window.google?.maps?.event) {
+          google.maps.event.removeListener(listener);
+        }
+      } catch {
+        // Safe cleanup
+      }
+    };
+  }, [isLoaded]);
 
   // Quick delivery chip toggle/append
   const handleToggleChip = (chipText: string) => {
@@ -470,34 +604,15 @@ export function SelectDeliveryLocationView({
             <SearchIcon className="w-4 h-4 text-slate-400" />
           </div>
 
-          {isLoaded && googleApiKey ? (
-            <Autocomplete
-              onLoad={(autocomplete) => {
-                autocompleteRef.current = autocomplete;
-              }}
-              onPlaceChanged={onPlaceSelected}
-            >
-              <input
-                ref={searchInputRef}
-                id="location-search-input"
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search area, street, building or landmark..."
-                className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate relative z-0"
-              />
-            </Autocomplete>
-          ) : (
-            <input
-              ref={searchInputRef}
-              id="location-search-input"
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search area, street, building or landmark..."
-              className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate"
-            />
-          )}
+          <input
+            ref={searchInputRef}
+            id="location-search-input"
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search area, street, building or landmark..."
+            className="w-full bg-white text-slate-900 placeholder-slate-400 text-xs sm:text-sm rounded-lg pl-9 pr-8 py-2.5 shadow-sm border-0 focus:ring-2 focus:ring-indigo-400 font-medium truncate relative z-0"
+          />
 
           {searchQuery && (
             <button
@@ -577,30 +692,7 @@ export function SelectDeliveryLocationView({
         data-purpose="map-viewport"
       >
         {isLoaded && googleApiKey && !loadError ? (
-          <GoogleMap
-            mapContainerStyle={mapContainerStyle}
-            center={position}
-            zoom={mapZoom}
-            onLoad={onMapLoad}
-            onUnmount={onMapUnmount}
-            onClick={handleMapClick}
-            mapTypeId={mapMode === "satellite" ? "satellite" : "roadmap"}
-            options={{
-              disableDefaultUI: true,
-              zoomControl: false,
-              mapTypeControl: false,
-              streetViewControl: false,
-              fullscreenControl: false,
-              gestureHandling: "greedy",
-            }}
-          >
-            {/* Draggable Marker */}
-            <Marker
-              position={position}
-              draggable={true}
-              onDragEnd={handleMarkerDragEnd}
-            />
-          </GoogleMap>
+          <div ref={mapContainerRef} className="w-full h-full" />
         ) : (
           /* Fallback Canvas Preview when Maps key is not set or loading */
           <div
