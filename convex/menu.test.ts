@@ -445,6 +445,95 @@ describe("Multi-Menu Architecture Tests", () => {
     const choice = await t.run(async (ctx) => await ctx.db.get(choiceId));
     expect(choice?.imageAssetId).toBe(menuImageAssetId);
   });
+
+  test("6. Multi-Menu allMenus: true & menuId Queries", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Grand Palace Hotel",
+    });
+
+    // 1. Create 2 Menus: Breakfast & Bar
+    const breakfastMenuId = await t.mutation(api.menu.createMenu, {
+      organizationId: orgId,
+      name: "Breakfast Menu",
+      isDefault: true,
+    });
+
+    const barMenuId = await t.mutation(api.menu.createMenu, {
+      organizationId: orgId,
+      name: "Bar Menu",
+      isDefault: false,
+    });
+
+    // 2. Add Category to Breakfast
+    const bfastCatId = await t.mutation(api.menu.createCategory, {
+      organizationId: orgId,
+      menuId: breakfastMenuId,
+      name: "Pancakes",
+    });
+    const bfastItemId = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Blueberry Pancake",
+      price: 18000,
+    });
+    await t.mutation(api.menu.addCategoryItem, {
+      organizationId: orgId,
+      categoryId: bfastCatId,
+      itemId: bfastItemId,
+    });
+
+    // 3. Add Category to Bar
+    const barCatId = await t.mutation(api.menu.createCategory, {
+      organizationId: orgId,
+      menuId: barMenuId,
+      name: "Cocktails",
+    });
+    const barItemId = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Mojito",
+      price: 25000,
+    });
+    await t.mutation(api.menu.addCategoryItem, {
+      organizationId: orgId,
+      categoryId: barCatId,
+      itemId: barItemId,
+    });
+
+    // 4. Default query (no menuId, no allMenus) -> Returns ONLY default menu (Breakfast)
+    const defaultMenuResult = await t.query(api.menu.getOrganizationMenu, {
+      organizationId: orgId,
+    });
+    expect(defaultMenuResult.length).toBe(1);
+    expect(defaultMenuResult[0].category.name).toBe("Pancakes");
+
+    // 5. Query specific menu (Bar Menu) -> Returns Bar Menu items
+    const barMenuResult = await t.query(api.menu.getOrganizationMenu, {
+      organizationId: orgId,
+      menuId: barMenuId,
+    });
+    expect(barMenuResult.length).toBe(1);
+    expect(barMenuResult[0].category.name).toBe("Cocktails");
+
+    // 6. Query with allMenus: true -> Returns ALL categories across all menus
+    const allMenusResult = await t.query(api.menu.getOrganizationMenu, {
+      organizationId: orgId,
+      allMenus: true,
+    });
+    expect(allMenusResult.length).toBe(2);
+    const catNames = allMenusResult.map((c) => c.category.name);
+    // 7. Query an empty menu (Dinner Menu with 0 categories) -> Must return [] (not fallback to all items)
+    const dinnerMenuId = await t.mutation(api.menu.createMenu, {
+      organizationId: orgId,
+      name: "Dinner Menu",
+      isDefault: false,
+    });
+    const dinnerMenuResult = await t.query(api.menu.getOrganizationMenu, {
+      organizationId: orgId,
+      menuId: dinnerMenuId,
+    });
+    expect(dinnerMenuResult.length).toBe(0);
+  });
 });
 
 

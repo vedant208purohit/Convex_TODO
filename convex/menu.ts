@@ -622,55 +622,92 @@ export const getOrganizationMenu = query({
   args: {
     organizationId: v.id("organizations"),
     menuId: v.optional(v.id("menus")),
+    allMenus: v.optional(v.boolean()),
     search: v.optional(v.string()),
     isVeg: v.optional(v.boolean()),
     isSpicy: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    // 1. Resolve Target Menu
+    // 1. Resolve Target Menu / Menus
     let targetMenuId = args.menuId;
-
-    if (!targetMenuId) {
-      const defaultMenus = await ctx.db
-        .query("menus")
-        .withIndex("by_org_default", (q) =>
-          q.eq("organizationId", args.organizationId).eq("isDefault", true)
-        )
-        .filter((q) => q.eq(q.field("deletedAt"), undefined))
-        .collect();
-
-      const activeDefault = defaultMenus.find((m) => m.isActive) || defaultMenus[0];
-      if (activeDefault) {
-        targetMenuId = activeDefault._id;
-      } else {
-        const orgMenus = await ctx.db
-          .query("menus")
-          .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-          .filter((q) => q.eq(q.field("deletedAt"), undefined))
-          .collect();
-        const firstActive = orgMenus.find((m) => m.isActive) || orgMenus[0];
-        if (firstActive) {
-          targetMenuId = firstActive._id;
-        }
-      }
-    }
-
-    // 2. Query Categories for the resolved menu or organization
+    const menuMap = new Map<string, any>();
     let categories: Array<any> = [];
-    if (targetMenuId) {
-      categories = await ctx.db
-        .query("categories")
-        .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
-        .filter((q) => q.eq(q.field("deletedAt"), undefined))
-        .collect();
-    }
 
-    if (categories.length === 0) {
-      categories = await ctx.db
-        .query("categories")
+    if (args.allMenus) {
+      const orgMenus = await ctx.db
+        .query("menus")
         .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
         .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
+
+      const activeMenus = orgMenus
+        .filter((m) => m.isActive !== false)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+      for (const menu of activeMenus) {
+        menuMap.set(menu._id, menu);
+        const menuCats = await ctx.db
+          .query("categories")
+          .withIndex("by_menu", (q) => q.eq("menuId", menu._id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+        categories.push(...menuCats);
+      }
+
+      // Only fallback to by_org if there are NO menus created in the store at all (legacy flat schema)
+      if (categories.length === 0 && orgMenus.length === 0) {
+        categories = await ctx.db
+          .query("categories")
+          .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+      }
+    } else {
+      if (!targetMenuId) {
+        const defaultMenus = await ctx.db
+          .query("menus")
+          .withIndex("by_org_default", (q) =>
+            q.eq("organizationId", args.organizationId).eq("isDefault", true)
+          )
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+
+        const activeDefault = defaultMenus.find((m) => m.isActive) || defaultMenus[0];
+        if (activeDefault) {
+          targetMenuId = activeDefault._id;
+          menuMap.set(activeDefault._id, activeDefault);
+        } else {
+          const orgMenus = await ctx.db
+            .query("menus")
+            .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+            .filter((q) => q.eq(q.field("deletedAt"), undefined))
+            .collect();
+          const firstActive = orgMenus.find((m) => m.isActive) || orgMenus[0];
+          if (firstActive) {
+            targetMenuId = firstActive._id;
+            menuMap.set(firstActive._id, firstActive);
+          }
+        }
+      } else {
+        const m = await ctx.db.get(targetMenuId);
+        if (m) menuMap.set(m._id, m);
+      }
+
+      // 2. Query Categories for the resolved menu or organization
+      if (targetMenuId) {
+        categories = await ctx.db
+          .query("categories")
+          .withIndex("by_menu", (q) => q.eq("menuId", targetMenuId!))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+      } else {
+        // Only query by_org if no menu exists in the system at all
+        categories = await ctx.db
+          .query("categories")
+          .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+      }
     }
 
     const activeCategories = categories
@@ -1034,10 +1071,16 @@ export const getOrganizationMenu = query({
         });
       }
 
+      const catMenu = category.menuId ? menuMap.get(category.menuId) : null;
       if (serializedItems.length > 0 || !searchQuery) {
         resultMenu.push({
           category: {
             id: category._id,
+            _id: category._id,
+            menuId: category.menuId,
+            menu_id: category.menuId,
+            menuName: catMenu?.name,
+            menu_name: catMenu?.name,
             name: category.name,
             name_hi: category.name_hi,
             name_gu: category.name_gu,
@@ -1049,13 +1092,20 @@ export const getOrganizationMenu = query({
       }
     }
 
-    // Fallback: If no category-linked items were found, query all items for the organization directly
-    if (resultMenu.length === 0) {
-      const allOrgItems = await ctx.db
-        .query("items")
+    // Fallback: If no category-linked items were found AND no menus exist in the store, query all items for the organization directly (legacy flat schema)
+    if (resultMenu.length === 0 && !targetMenuId && !args.allMenus) {
+      const existingOrgMenus = await ctx.db
+        .query("menus")
         .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
         .filter((q) => q.eq(q.field("deletedAt"), undefined))
         .collect();
+
+      if (existingOrgMenus.length === 0) {
+        const allOrgItems = await ctx.db
+          .query("items")
+          .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
 
       const directSerializedItems: Array<any> = [];
 
@@ -1120,6 +1170,7 @@ export const getOrganizationMenu = query({
             items: directSerializedItems,
           },
         });
+      }
       }
     }
 

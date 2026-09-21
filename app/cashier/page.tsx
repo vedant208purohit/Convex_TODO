@@ -197,10 +197,21 @@ function CashierPosContent() {
     return "+91";
   }, [activeOrg?.country]);
 
-  // 2. Query Menu Data & Categories
+  // 2. Query Multi-Menu Data & Categories
+  const [selectedMenuId, setSelectedMenuId] = useState<string>("all");
+  const menusList = useQuery(
+    api.menu.listMenus,
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
+  );
   const menuCategories = useQuery(
     api.menu.getOrganizationMenu,
-    activeOrg ? { organizationId: activeOrg._id } : "skip",
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          allMenus: selectedMenuId === "all",
+          menuId: selectedMenuId !== "all" ? (selectedMenuId as Id<"menus">) : undefined,
+        }
+      : "skip",
   );
 
   // 3. Query Taxation Engine (Store Settings, Tax Groups & Split Components)
@@ -410,6 +421,8 @@ function CashierPosContent() {
     const itemsList: Array<{
       categoryName: string;
       categoryId: string;
+      menuName?: string;
+      menuId?: string;
       item: any;
       itemImageUrl?: string;
       customizations?: any[];
@@ -419,6 +432,8 @@ function CashierPosContent() {
       const catObj = catEntry?.category || catEntry;
       const categoryName = catObj?.name || "General";
       const categoryId = catObj?.id || catObj?._id || "";
+      const menuName = catObj?.menuName || catObj?.menu_name;
+      const menuId = catObj?.menuId || catObj?.menu_id;
       const rawItems = catObj?.items || [];
 
       if (Array.isArray(rawItems)) {
@@ -444,6 +459,8 @@ function CashierPosContent() {
             itemsList.push({
               categoryName,
               categoryId,
+              menuName,
+              menuId,
               item: actualItem,
               itemImageUrl,
               customizations,
@@ -2234,15 +2251,62 @@ function CashierPosContent() {
             className="flex-1 flex flex-col bg-white rounded-2xl border border-[#e7e5e4] shadow-xs overflow-hidden relative"
             data-purpose="catalog-search-area"
           >
-            {/* Top Search Area */}
-            <div className="p-3.5 border-b border-[#e7e5e4] bg-white flex flex-col gap-2 relative z-20">
-              <span className="text-xs font-bold text-[#141010]">Search menu</span>
+            {/* Top Menu Switcher & Search Area */}
+            <div className="p-3.5 border-b border-[#e7e5e4] bg-white flex flex-col gap-2.5 relative z-20">
+              {menusList && menusList.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1 bg-[#f5f5f4] p-0.5 rounded-lg border border-[#e7e5e4]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMenuId("all");
+                        setSelectedCategory("All Items");
+                      }}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                        selectedMenuId === "all"
+                          ? "bg-white text-[#141010] shadow-2xs font-semibold"
+                          : "text-[#78716c] hover:text-[#141010]"
+                      }`}
+                    >
+                      All Menus
+                    </button>
+                    {menusList.map((m) => (
+                      <button
+                        key={m._id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMenuId(m._id);
+                          setSelectedCategory("All Items");
+                        }}
+                        className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                          selectedMenuId === m._id
+                            ? "bg-white text-[#141010] shadow-2xs font-semibold"
+                            : "text-[#78716c] hover:text-[#141010]"
+                        }`}
+                      >
+                        {m.name}
+                        {m.isDefault && (
+                          <span className="ml-1 text-[10px] text-[#a8a29e] font-normal">
+                            (Default)
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 {/* Search Input with Clear Button and Dropdown Icon */}
                 <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8a7e75]">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="11" cy="11" r="7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
                   <input
                     ref={searchInputRef}
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-[#141010] rounded-lg focus:ring-1 focus:ring-[#141010] focus:border-[#141010] font-medium text-[#141010] placeholder-[#a8a29e] bg-white shadow-2xs focus:outline-none"
+                    className="w-full pl-8 pr-8 py-2 text-xs border border-[#141010] rounded-lg focus:ring-1 focus:ring-[#141010] focus:border-[#141010] font-medium text-[#141010] placeholder-[#a8a29e] bg-white shadow-2xs focus:outline-none"
                     placeholder="Search via item name/number (Shortcut: F1)"
                     type="text"
                     value={searchQuery}
@@ -2287,8 +2351,8 @@ function CashierPosContent() {
                       }
                     }}
                   />
-                  {/* Dropdown / Clear Icon */}
-                  {searchQuery ? (
+                  {/* Clear Button */}
+                  {searchQuery && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2311,12 +2375,6 @@ function CashierPosContent() {
                         />
                       </svg>
                     </button>
-                  ) : (
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-[#8a7e75]">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                    </div>
                   )}
                 </div>
 
@@ -2403,6 +2461,11 @@ function CashierPosContent() {
                             >
                               {entry.item.name}
                             </span>
+                            {entry.menuName && selectedMenuId === "all" && menusList && menusList.length > 1 && (
+                              <span className="text-[10px] bg-stone-100 text-stone-600 border border-[#e7e5e4] px-1.5 py-0.5 rounded font-normal">
+                                {entry.menuName}
+                              </span>
+                            )}
                             <span className="text-[10px] bg-white border border-[#e7e5e4] px-1.5 py-0.5 rounded text-[#5e5e5e]">
                               {entry.categoryName}
                             </span>
@@ -2459,7 +2522,9 @@ function CashierPosContent() {
 
               {filteredCatalogItems.length === 0 ? (
                 <div className="py-16 text-center text-xs text-[#8a7e75]">
-                  No menu items found in {selectedCategory}.
+                  {selectedCategory === "All Items"
+                    ? "No menu items found in this menu."
+                    : `No menu items found in ${selectedCategory}.`}
                 </div>
               ) : (
                 filteredCatalogItems.map((entry) => {
@@ -2515,6 +2580,11 @@ function CashierPosContent() {
                         <span className="text-xs font-medium text-[#141010]">
                           {it.name}
                         </span>
+                        {entry.menuName && selectedMenuId === "all" && menusList && menusList.length > 1 && (
+                          <span className="text-[10px] text-stone-500 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded font-normal">
+                            {entry.menuName}
+                          </span>
+                        )}
                         {it.quantityUnit && (
                           <span className="text-[11px] text-[#8a7e75]">
                             ({it.quantityUnit})
