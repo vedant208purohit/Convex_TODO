@@ -374,10 +374,10 @@ export const resolveCustomerSession = query({
           },
           qr: qrDoc
             ? {
-                _id: qrDoc._id,
-                name: qrDoc.name,
-                qrType: qrDoc.qrType,
-              }
+              _id: qrDoc._id,
+              name: qrDoc.name,
+              qrType: qrDoc.qrType,
+            }
             : null,
           organization: orgProfile,
         };
@@ -430,10 +430,10 @@ export const resolveCustomerSession = query({
       },
       qr: qrDoc
         ? {
-            _id: qrDoc._id,
-            name: qrDoc.name,
-            qrType: qrDoc.qrType,
-          }
+          _id: qrDoc._id,
+          name: qrDoc.name,
+          qrType: qrDoc.qrType,
+        }
         : null,
       organization: orgProfile,
     };
