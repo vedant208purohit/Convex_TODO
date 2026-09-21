@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 // ==========================================
 // PIXEL-PERFECT SIDEBAR SVG ICONS
@@ -144,6 +146,15 @@ const navItems: NavItem[] = [
   },
 ];
 
+const inventorySubItems = [
+  { label: "Purchase order", tab: "purchaseOrders" },
+  { label: "Supplier", tab: "suppliers" },
+  { label: "Item library", tab: "itemLibrary" },
+  { label: "Dead stock", tab: "deadStock" },
+  { label: "Item recipes", tab: "itemRecipes" },
+  { label: "Stock ledger", tab: "stockLedger" },
+];
+
 function NavLink({ href, label, icon }: NavItem) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -166,9 +177,6 @@ function NavLink({ href, label, icon }: NavItem) {
   );
 }
 
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
-
 export function PosShell({
   title,
   subtitle,
@@ -178,6 +186,19 @@ export function PosShell({
   subtitle?: string;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isInventoryPage = pathname === "/inventory";
+  const currentTab = searchParams.get("tab") || "purchaseOrders";
+
+  const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
+
+  useEffect(() => {
+    if (isInventoryPage) {
+      setIsInventoryExpanded(true);
+    }
+  }, [isInventoryPage]);
+
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
   const branchName = activeOrg?.name || "Flagship Main Store";
@@ -201,9 +222,66 @@ export function PosShell({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1">
-          {navItems.map((item) => (
-            <NavLink key={item.href} {...item} />
-          ))}
+          {navItems.map((item) => {
+            if (item.href === "/inventory") {
+              return (
+                <div key={item.href} className="flex flex-col px-3 my-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsInventoryExpanded((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
+                      isInventoryPage
+                        ? "bg-[#f1edec] text-[#141010] font-bold"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 flex items-center justify-center">{item.icon}</span>
+                      <span className="font-medium text-[15px]">{item.label}</span>
+                    </div>
+                    <svg
+                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${
+                        isInventoryExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isInventoryExpanded && (
+                    <div className="ml-5 pl-3 my-1.5 border-l border-[#e7e5e4] flex flex-col gap-1">
+                      {inventorySubItems.map((sub) => {
+                        const isSubActive =
+                          isInventoryPage &&
+                          (currentTab === sub.tab || (sub.tab === "purchaseOrders" && !searchParams.get("tab")));
+                        return (
+                          <Link
+                            key={sub.tab}
+                            href={`/inventory?tab=${sub.tab}`}
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${
+                              isSubActive
+                                ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
+                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
+                            }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return <NavLink key={item.href} {...item} />;
+          })}
         </nav>
       </aside>
 
