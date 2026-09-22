@@ -154,7 +154,7 @@ export const createOrder = mutation({
               optionId: custOption._id,
               optionName: custOption.name,
               price: custOption.price,
-              isGst: custOption.isGst,
+              isGst: custOption.isGst !== undefined ? custOption.isGst : dbItem.isGst,
               taxGroupId: custOption.taxGroupId,
               taxMode: custOption.taxMode,
             });
@@ -231,7 +231,8 @@ export const createOrder = mutation({
       // 2. Customization items tax calculation
       for (const cust of resolvedCustomizations) {
         const custLineTotal = (cust.price || 0) * inputItem.quantity;
-        if (cust.isGst && custLineTotal > 0) {
+        const custIsGstActive = cust.isGst !== undefined ? cust.isGst : dbItem.isGst;
+        if (custIsGstActive && custLineTotal > 0) {
           let custTg = null;
           const tgId = cust.taxGroupId || fallbackTaxGroup?._id;
           if (tgId) {
@@ -792,6 +793,7 @@ export const completeOrder = mutation({
   args: {
     orderId: v.id("orders"),
     paymentModeId: v.optional(v.id("paymentModes")),
+    paymentMode: v.optional(v.string()),
     transactionReference: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -800,19 +802,20 @@ export const completeOrder = mutation({
 
     const now = Date.now();
 
-    // 1. Mark Order Completed & Paid
-    await ctx.db.patch(order._id, {
-      isCompleted: true,
-      paymentStatus: "Paid",
-      updatedAt: now,
-    });
-
     // 2. Record Payment Log
-    let payModeName = order.paymentMode;
+    let payModeName = args.paymentMode || order.paymentMode;
     if (args.paymentModeId) {
       const pm = await ctx.db.get(args.paymentModeId);
       if (pm) payModeName = pm.name;
     }
+
+    // 1. Mark Order Completed & Paid
+    await ctx.db.patch(order._id, {
+      isCompleted: true,
+      paymentStatus: "Paid",
+      ...(payModeName ? { paymentMode: payModeName } : {}),
+      updatedAt: now,
+    });
 
     await ctx.db.insert("orderPayments", {
       organizationId: order.organizationId,
@@ -966,7 +969,15 @@ export const listOrders = query({
         v.literal("ScheduledDelivery")
       )
     ),
-    paymentStatus: v.optional(v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed"))),
+    paymentStatus: v.optional(
+      v.union(
+        v.literal("Pending"),
+        v.literal("Paid"),
+        v.literal("Failed"),
+        v.literal("Refunded"),
+        v.literal("Partially Refunded")
+      )
+    ),
     minPrice: v.optional(v.number()),
     maxPrice: v.optional(v.number()),
     page: v.optional(v.number()),
@@ -1131,10 +1142,32 @@ export const addOrderPayment = mutation({
     }
 
     const netPaid = totalCredit - totalDebit;
-    const isPaid = netPaid >= order.totalAmount;
+    let nextPaymentStatus: "Paid" | "Pending" | "Failed" | "Refunded" | "Partially Refunded" = "Pending";
+    let nextOrderStatusName = order.orderStatusName;
+    let isCompleted = order.isCompleted;
+    let isRejected = order.isRejected;
+
+    if (totalDebit > 0) {
+      if (totalDebit >= totalCredit || totalDebit >= order.totalAmount) {
+        nextPaymentStatus = "Refunded";
+        nextOrderStatusName = "Cancelled / Refunded";
+        isCompleted = false;
+        isRejected = true;
+      } else {
+        nextPaymentStatus = "Partially Refunded";
+      }
+    } else if (netPaid >= order.totalAmount) {
+      nextPaymentStatus = "Paid";
+      isCompleted = true;
+    } else {
+      nextPaymentStatus = "Pending";
+    }
 
     await ctx.db.patch(order._id, {
-      paymentStatus: isPaid ? "Paid" : "Pending",
+      paymentStatus: nextPaymentStatus,
+      orderStatusName: nextOrderStatusName,
+      isCompleted,
+      isRejected,
       paymentMode: args.paymentModeName,
       updatedAt: now,
     });
@@ -1142,7 +1175,7 @@ export const addOrderPayment = mutation({
     return {
       success: true,
       netPaid: (netPaid / 100).toFixed(2),
-      paymentStatus: isPaid ? "Paid" : "Pending",
+      paymentStatus: nextPaymentStatus,
     };
   },
 });

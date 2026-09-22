@@ -2195,9 +2195,7 @@ export default function OrdersPage() {
                             className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#e7e5e4] rounded-lg focus:border-black focus:ring-black focus:outline-none bg-white"
                             type="number"
                             step="any"
-                            value={
-                              tenderCashGiven || order.display_total_amount
-                            }
+                            value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
                           />
                         </div>
@@ -2468,11 +2466,7 @@ export default function OrdersPage() {
                         className="w-full px-3.5 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#141010] rounded-md focus:border-black focus:ring-black focus:outline-none bg-white"
                         type="number"
                         step="any"
-                        value={
-                          refundAmountInput ||
-                          order.display_total_amount ||
-                          "0.00"
-                        }
+                        value={refundAmountInput}
                         onChange={(e) => setRefundAmountInput(e.target.value)}
                       />
                     </div>
@@ -2481,24 +2475,35 @@ export default function OrdersPage() {
               </div>
 
               {/* Drawer Action Footers */}
-              {drawerTab === "pay" && (
-                <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleSettlePayment}
-                    className="w-full py-3 bg-[#0c0a09] hover:bg-black text-white text-sm font-semibold rounded-lg shadow-xs transition-colors text-center cursor-pointer"
-                  >
-                    Payment Received
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDrawerTab(null)}
-                    className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+              {drawerTab === "pay" && (() => {
+                const givenNum = parseFloat(tenderCashGiven);
+                const isValidPay = !isNaN(givenNum) && givenNum > 0;
+                const settleAmt = isValidPay ? givenNum : 0;
+
+                return (
+                  <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleSettlePayment}
+                      disabled={!isValidPay}
+                      className={`w-full py-3 bg-[#0c0a09] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
+                        !isValidPay
+                          ? "opacity-40 cursor-not-allowed pointer-events-none"
+                          : "hover:bg-black cursor-pointer"
+                      }`}
+                    >
+                      Record Payment (₹{settleAmt.toFixed(2)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTab(null)}
+                      className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              })()}
 
               {drawerTab === "timeline" && (
                 <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] shrink-0">
@@ -2512,24 +2517,35 @@ export default function OrdersPage() {
                 </div>
               )}
 
-              {drawerTab === "refund" && (
-                <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleIssueRefund}
-                    className="w-full py-3 bg-[#1f7d43] hover:bg-[#186636] text-white text-sm font-semibold rounded-lg shadow-xs transition-colors text-center cursor-pointer"
-                  >
-                    Confirm Refund
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDrawerTab(null)}
-                    className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+              {drawerTab === "refund" && (() => {
+                const refundVal = parseFloat(refundAmountInput);
+                const isRefundValid = !isNaN(refundVal) && refundVal > 0;
+                const displayAmt = isRefundValid ? refundVal.toFixed(2) : "0.00";
+
+                return (
+                  <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleIssueRefund}
+                      disabled={!isRefundValid}
+                      className={`w-full py-3 bg-[#1f7d43] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
+                        !isRefundValid
+                          ? "opacity-40 cursor-not-allowed pointer-events-none"
+                          : "hover:bg-[#186636] cursor-pointer"
+                      }`}
+                    >
+                      Confirm Refund (₹{displayAmt})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTab(null)}
+                      className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -2968,10 +2984,17 @@ export default function OrdersPage() {
                 {displayedOrders.length > 0 ? (
                   displayedOrders.map((order) => {
                     const isPaid = order.paymentStatus === "Paid";
+                    const isRefunded =
+                      order.paymentStatus === "Refunded" ||
+                      order.orderStatusName === "Refunded" ||
+                      order.orderStatusName === "Cancelled / Refunded";
+                    const isPartiallyRefunded =
+                      order.paymentStatus === "Partially Refunded";
                     const isCod =
-                      (order.paymentMode || "")
-                        .toLowerCase()
-                        .includes("cash") && !isPaid;
+                      (order.paymentMode || "").toLowerCase().includes("cash") &&
+                      !isPaid &&
+                      !isRefunded &&
+                      !isPartiallyRefunded;
                     const orderDateStr = new Date(
                       order.createdAt,
                     ).toLocaleString("en-IN", {
@@ -3027,6 +3050,7 @@ export default function OrdersPage() {
                             const dotColor =
                               matchedStage?.color ||
                               (order.orderStatusName === "Cancelled" ||
+                              order.orderStatusName === "Cancelled / Refunded" ||
                               order.isRejected
                                 ? "#e11d48"
                                 : order.orderStatusName === "Completed" ||
@@ -3090,7 +3114,17 @@ export default function OrdersPage() {
 
                         {/* 6. Payment Status */}
                         <td className="py-4 px-5">
-                          {isPaid ? (
+                          {isRefunded ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                              ₹{order.display_total_amount} Refunded
+                            </span>
+                          ) : isPartiallyRefunded ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              Partially Refunded
+                            </span>
+                          ) : isPaid ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                               <CheckmarkIcon className="w-3 h-3" />₹
                               {order.display_total_amount} Paid
