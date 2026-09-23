@@ -48,11 +48,11 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
     mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_123" });
 
     let capturedUrl = "";
-    let capturedOptions: RequestInit | undefined = undefined;
+    let capturedOptions: any = {};
 
     vi.mocked(global.fetch).mockImplementationOnce(async (input: RequestInfo | URL, init?: RequestInit) => {
       capturedUrl = String(input);
-      capturedOptions = init;
+      capturedOptions = init || {};
       return {
         ok: true,
         status: 200,
