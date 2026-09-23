@@ -178,11 +178,10 @@ function NavLink({ href, label, icon }: NavItem) {
   return (
     <Link
       href={targetHref}
-      className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${
-        active
+      className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${active
           ? "text-[#141010] font-bold border-r-2 border-[#141010] bg-[#f1edec] opacity-100"
           : "text-[#5e5e5e] hover:bg-[#f1edec]"
-      }`}
+        }`}
     >
       <span className="w-5 text-center flex items-center justify-center">{icon}</span>
       <span className="font-medium text-[15px]">{label}</span>
@@ -242,20 +241,18 @@ export function PosShell({
                   <button
                     type="button"
                     onClick={() => setIsInventoryExpanded((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
-                      isInventoryPage
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isInventoryPage
                         ? "bg-[#f1edec] text-[#141010] font-bold"
                         : "text-[#5e5e5e] hover:bg-[#f1edec]"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <span className="w-5 flex items-center justify-center">{item.icon}</span>
                       <span className="font-medium text-[15px]">{item.label}</span>
                     </div>
                     <svg
-                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${
-                        isInventoryExpanded ? "rotate-180" : ""
-                      }`}
+                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${isInventoryExpanded ? "rotate-180" : ""
+                        }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -274,11 +271,10 @@ export function PosShell({
                           <Link
                             key={sub.tab}
                             href={`/inventory?tab=${sub.tab}`}
-                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${
-                              isSubActive
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
                                 ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
                                 : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
-                            }`}
+                              }`}
                           >
                             <span>{sub.label}</span>
                             {isSubActive && (
