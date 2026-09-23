@@ -2961,7 +2961,7 @@ function CashierPosContent() {
                       </label>
                       <input
                         id="first-name"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                         type="text"
                         placeholder="Enter first name..."
                         value={activeCart.customerFirstName || ""}
@@ -2989,7 +2989,7 @@ function CashierPosContent() {
                       </label>
                       <input
                         id="last-name"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                         type="text"
                         placeholder="Enter last name..."
                         value={activeCart.customerLastName || ""}
@@ -3044,7 +3044,7 @@ function CashierPosContent() {
                         </div>
                         <input
                           id="phone-number"
-                          className="flex-1 min-w-0 block w-full px-3.5 py-2.5 text-sm text-stone-900 font-medium focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                          className="flex-1 min-w-0 block w-full px-3.5 py-2.5 text-sm text-stone-900 font-medium focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                           type="tel"
                           placeholder="Enter 10-digit mobile number..."
                           value={activeCart.customerPhone || ""}
@@ -3060,7 +3060,7 @@ function CashierPosContent() {
                       </label>
                       <input
                         id="email-address"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                         type="email"
                         placeholder="Enter email address..."
                         value={activeCart.customerEmail || ""}
@@ -4186,7 +4186,7 @@ function CashierPosContent() {
                             placeholder="0.00"
                             value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
-                            className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                           />
                         </div>
                       </div>
@@ -4373,7 +4373,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={tenderCardGiven}
                               onChange={(e) => setTenderCardGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4517,7 +4517,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={tenderUpiGiven}
                               onChange={(e) => setTenderUpiGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4836,7 +4836,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={customTenderGiven}
                               onChange={(e) => setCustomTenderGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                             />
                           </div>
                         </div>
