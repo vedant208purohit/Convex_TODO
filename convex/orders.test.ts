@@ -328,4 +328,121 @@ describe("Orders, Order Items and KDS Integration Suite", () => {
     );
     expect(itemRemovalActivity).toBeDefined();
   });
+
+  test("6. Captain Flow: Appending new items to existing Dine-In order (addItemsToExistingOrder)", async () => {
+    const t = convexTest(schema, modules);
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Captain Test Bistro",
+    });
+
+    const item1 = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Veg bao bun",
+      price: 59900,
+    });
+
+    const item2 = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Mozzarella cheese stick",
+      price: 49900,
+    });
+
+    // Place initial KOT #1
+    const orderResult = await t.mutation(api.orders.createOrder, {
+      organizationId: orgId,
+      orderType: "DineIn",
+      orderSource: "Prest-Captain",
+      items: [{ itemId: item1, quantity: 1 }],
+    });
+
+    // Append KOT #2
+    const appendRes = await t.mutation(api.orders.addItemsToExistingOrder, {
+      orderId: orderResult.orderId,
+      items: [{ itemId: item2, quantity: 2, isToGo: true }],
+    });
+
+    expect(appendRes.success).toBe(true);
+    expect(appendRes.itemCount).toBe(2);
+
+    const updated = await t.query(api.orders.getOrderDetails, {
+      id: orderResult.orderId,
+    });
+    expect(updated?.items).toHaveLength(2);
+    expect(updated?.subTotal).toBe(59900 + 49900 * 2);
+    expect(updated?.isModify).toBe(true);
+  });
+
+  test("7. Captain Flow: Update item quantity and Move order table (updateOrderItemQuantity & moveOrderTable)", async () => {
+    const t = convexTest(schema, modules);
+    const adminT = t.withIdentity({ subject: "admin_user_2" });
+
+    const orgId = await t.mutation(api.organizations.create, {
+      name: "Table Transfer Bistro",
+      ownerClerkId: "admin_user_2",
+    });
+
+    const layoutId = await adminT.mutation(api.organizationLayouts.create, {
+      name: "Indoor",
+    });
+
+    const table1 = await adminT.mutation(api.organizationTables.create, {
+      tableNumber: "T-10",
+      seatingCapacity: 4,
+      layoutId,
+    });
+
+    const table2 = await adminT.mutation(api.organizationTables.create, {
+      tableNumber: "T-20",
+      seatingCapacity: 6,
+      layoutId,
+    });
+
+    const item1 = await t.mutation(api.menu.createItem, {
+      organizationId: orgId,
+      name: "Special Burger",
+      price: 20000,
+    });
+
+    // Create order at Table 1
+    const orderResult = await t.mutation(api.orders.createOrder, {
+      organizationId: orgId,
+      orderType: "DineIn",
+      orderSource: "Prest-Captain",
+      tableId: table1,
+      items: [{ itemId: item1, quantity: 1 }],
+    });
+
+    const initialOrder = await t.query(api.orders.getOrderDetails, {
+      id: orderResult.orderId,
+    });
+    const lineItemId = initialOrder?.items[0]._id;
+    expect(lineItemId).toBeDefined();
+    if (!lineItemId) throw new Error("lineItemId not found");
+
+    // Update quantity to 3
+    const qtyRes = await t.mutation(api.orders.updateOrderItemQuantity, {
+      orderItemId: lineItemId,
+      quantity: 3,
+    });
+    expect(qtyRes.success).toBe(true);
+
+    const afterQty = await t.query(api.orders.getOrderDetails, {
+      id: orderResult.orderId,
+    });
+    expect(afterQty?.subTotal).toBe(60000);
+
+    // Move table from Table 1 to Table 2
+    const moveRes = await t.mutation(api.orders.moveOrderTable, {
+      orderId: orderResult.orderId,
+      newTableId: table2,
+    });
+    expect(moveRes.success).toBe(true);
+    expect(moveRes.newTableNumber).toBe("T-20");
+
+    const t1Doc = await adminT.query(api.organizationTables.get, { id: table1 });
+    const t2Doc = await adminT.query(api.organizationTables.get, { id: table2 });
+    expect(t1Doc?.currentOrderId).toBeUndefined();
+    expect(t2Doc?.currentOrderId).toBe(orderResult.orderId.toString());
+  });
 });

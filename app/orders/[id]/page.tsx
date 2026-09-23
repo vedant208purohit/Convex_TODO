@@ -1045,18 +1045,33 @@ export default function OrderDetailsDynamicPage() {
                       <CreditCardIcon className="w-4 h-4 text-[#7a716b]" />
                       Payment Information
                     </h2>
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${
-                        isPaid
-                          ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
-                          : "text-amber-800 bg-amber-50 border border-amber-200"
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${isPaid ? "bg-emerald-600" : "bg-amber-600"}`}
-                      />
-                      {isPaid ? "Fully Settled" : "Payment Due"}
-                    </span>
+                    {(() => {
+                      const status = (order?.paymentStatus || "Pending").toLowerCase();
+                      let label = "Payment Due";
+                      let classes = "text-amber-800 bg-amber-50 border border-amber-200";
+                      let dotClass = "bg-amber-600";
+
+                      if (status === "paid") {
+                        label = "Fully Settled";
+                        classes = "text-emerald-700 bg-emerald-50 border border-emerald-200";
+                        dotClass = "bg-emerald-600";
+                      } else if (status === "refunded") {
+                        label = "Refunded";
+                        classes = "text-rose-700 bg-rose-50 border border-rose-200";
+                        dotClass = "bg-rose-600";
+                      } else if (status === "partially refunded" || status === "partially_refunded") {
+                        label = "Partially Refunded";
+                        classes = "text-purple-700 bg-purple-50 border border-purple-200";
+                        dotClass = "bg-purple-600";
+                      }
+
+                      return (
+                        <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${classes}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </div>
 
                   <div className="overflow-x-auto">
@@ -1115,19 +1130,8 @@ export default function OrderDetailsDynamicPage() {
                           })
                         ) : (
                           <tr>
-                            <td className="py-2.5 text-[#0c0a09] font-medium font-sans">
-                              {formattedOrderDate} {formattedOrderTime}
-                            </td>
-                            <td className="py-2.5">
-                              <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
-                                {order.paymentMode || "Cash"}
-                              </span>
-                            </td>
-                            <td className="py-2.5 text-emerald-700 font-semibold">
-                              Credit
-                            </td>
-                            <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                              ₹{order.display_total_amount || "0.00"}
+                            <td colSpan={4} className="py-6 text-center text-stone-500 font-medium italic">
+                              No payments recorded yet (Payment Pending)
                             </td>
                           </tr>
                         )}
@@ -1563,13 +1567,7 @@ export default function OrderDetailsDynamicPage() {
                             className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#e7e5e4] rounded-lg focus:border-black focus:ring-black focus:outline-none bg-white"
                             type="number"
                             step="any"
-                            value={
-                              tenderCashGiven !== ""
-                                ? tenderCashGiven
-                                : (order.display_remaining_due && parseFloat(order.display_remaining_due) > 0
-                                    ? order.display_remaining_due
-                                    : order.display_total_amount)
-                            }
+                            value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
                           />
                         </div>
@@ -1848,9 +1846,7 @@ export default function OrderDetailsDynamicPage() {
                           className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#d6d3d1] rounded-md focus:border-[#141010] focus:ring-1 focus:ring-[#141010] focus:outline-none bg-white"
                           type="number"
                           step="any"
-                          value={
-                            refundAmountInput || order.display_total_amount
-                          }
+                          value={refundAmountInput}
                           onChange={(e) => setRefundAmountInput(e.target.value)}
                         />
                       </div>
@@ -1867,22 +1863,21 @@ export default function OrderDetailsDynamicPage() {
                       ? order.display_remaining_due
                       : order.display_total_amount || "0",
                   );
-                  const givenNum = parseFloat(
-                    tenderCashGiven !== ""
-                      ? tenderCashGiven
-                      : remainingDue.toString(),
-                  );
-                  const settleAmt =
-                    paymentTenderMode === "Cash" && remainingDue > 0 && givenNum >= remainingDue
-                      ? remainingDue
-                      : (isNaN(givenNum) ? 0 : givenNum);
-                  const change = paymentTenderMode === "Cash" ? Math.max(0, givenNum - remainingDue) : 0;
+                  const givenNum = parseFloat(tenderCashGiven);
+                  const isValidPay = !isNaN(givenNum) && givenNum > 0;
+                  const settleAmt = isValidPay ? (paymentTenderMode === "Cash" && remainingDue > 0 && givenNum >= remainingDue ? remainingDue : givenNum) : 0;
+                  const change = paymentTenderMode === "Cash" && isValidPay ? Math.max(0, givenNum - remainingDue) : 0;
 
                   return (
                     <button
                       type="button"
                       onClick={handleSettlePayment}
-                      className="w-full py-3.5 bg-[#0c0a09] hover:bg-neutral-800 text-white font-sans font-bold text-sm rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+                      disabled={!isValidPay}
+                      className={`w-full py-3.5 bg-[#0c0a09] text-white font-sans font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 ${
+                        !isValidPay
+                          ? "opacity-40 cursor-not-allowed pointer-events-none"
+                          : "hover:bg-neutral-800 cursor-pointer"
+                      }`}
                     >
                       <span>
                         Record Payment (₹{settleAmt.toFixed(2)})
@@ -1902,20 +1897,30 @@ export default function OrderDetailsDynamicPage() {
                   </button>
                 )}
 
-                {drawerTab === "refund" && (
-                  <button
-                    type="button"
-                    onClick={handleIssueRefund}
-                    style={{ backgroundColor: "#1f7d43", color: "#ffffff" }}
-                    className="w-full py-3.5 bg-[#1f7d43] hover:bg-[#186636] !text-white text-white font-sans font-bold text-sm rounded-xl transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 hover:opacity-95"
-                  >
-                    <RefundIcon className="w-4 h-4 !text-white text-white" />
-                    <span className="!text-white text-white font-bold text-sm">
-                      Submit Refund (₹
-                      {refundAmountInput || order.display_total_amount})
-                    </span>
-                  </button>
-                )}
+                {drawerTab === "refund" && (() => {
+                  const refundVal = parseFloat(refundAmountInput);
+                  const isRefundValid = !isNaN(refundVal) && refundVal > 0;
+                  const displayAmt = isRefundValid ? refundVal.toFixed(2) : "0.00";
+
+                  return (
+                    <button
+                      type="button"
+                      onClick={handleIssueRefund}
+                      disabled={!isRefundValid}
+                      style={{ backgroundColor: isRefundValid ? "#1f7d43" : "#1f7d43" }}
+                      className={`w-full py-3.5 bg-[#1f7d43] !text-white text-white font-sans font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-2 ${
+                        !isRefundValid
+                          ? "opacity-40 cursor-not-allowed pointer-events-none"
+                          : "hover:bg-[#186636] cursor-pointer"
+                      }`}
+                    >
+                      <RefundIcon className="w-4 h-4 !text-white text-white" />
+                      <span className="!text-white text-white font-bold text-sm">
+                        Submit Refund (₹{displayAmt})
+                      </span>
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>
