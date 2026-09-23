@@ -963,6 +963,7 @@ postpaidOrderRequests: defineTable({
       )
     ),
     isReady: v.boolean(),
+    isToGo: v.optional(v.boolean()),
     stationId: v.optional(v.id("stations")),
     createdAt: v.number(),
   })

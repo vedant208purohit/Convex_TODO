@@ -291,6 +291,21 @@ export default function CaptainPage() {
     name: "",
   });
 
+  const fullCustomerPhone = customerPhone
+    ? formatPhoneNumberWithCountryCode(customerPhone, customerCountryCode)
+    : "";
+  const hasCustomerPhone = Boolean(customerPhone && customerPhone.trim().length >= 10);
+
+  const customerStats = useQuery(
+    api.orders.getCustomerStats,
+    activeOrg && hasCustomerPhone
+      ? {
+          organizationId: activeOrg._id,
+          phone: fullCustomerPhone,
+        }
+      : "skip"
+  );
+
   // Sync initial country code from store organization
   useEffect(() => {
     if (defaultOrgCountryCode) {
@@ -1110,6 +1125,7 @@ export default function CaptainPage() {
         return {
           itemId: i.itemId,
           quantity: i.quantity,
+          isToGo: Boolean(i.isToGo),
           ...(custPayload.length > 0 ? { customizations: custPayload } : {}),
         };
       });
@@ -1225,7 +1241,7 @@ export default function CaptainPage() {
                 </svg>
               </Link>
               <div className="flex items-center space-x-2 whitespace-nowrap">
-                <h1 className="font-garamond text-2xl sm:text-[26px] md:text-[28px] text-[#0c0a09] font-normal leading-none whitespace-nowrap">
+                <h1 className="font-sans font-bold text-2xl sm:text-[26px] md:text-[28px] text-[#0c0a09] leading-none whitespace-nowrap">
                   Captain POS
                 </h1>
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse shadow-sm shrink-0" title="Live Synced" />
@@ -1399,7 +1415,7 @@ export default function CaptainPage() {
 
                       {/* Table Body */}
                       <div className="p-3.5 sm:p-4 text-center flex flex-col items-center justify-center min-h-[84px] sm:min-h-[92px] bg-stone-900 text-white">
-                        <span className="font-garamond text-base sm:text-lg font-bold tracking-wide leading-tight">
+                        <span className="font-sans text-base sm:text-lg font-bold tracking-wide leading-tight">
                           {getDisplayTableTitle(table.tableNumber)}
                         </span>
                         {isOccupied && (
@@ -1462,7 +1478,7 @@ export default function CaptainPage() {
             {/* Drawer Header */}
             <div className="h-14 sm:h-16 px-5 sm:px-6 border-b border-[#e7e5e4] flex items-center justify-between shrink-0 bg-white">
               <div className="flex items-center space-x-3">
-                <h2 className="font-garamond text-xl sm:text-2xl md:text-[26px] text-[#0c0a09] font-normal leading-tight">
+                <h2 className="font-sans font-bold text-xl sm:text-2xl md:text-[26px] text-[#0c0a09] leading-tight">
                   {getDisplayTableTitle(selectedTable?.tableNumber || "")}
                 </h2>
                 {selectedTable?.isBlock && (
@@ -1532,7 +1548,7 @@ export default function CaptainPage() {
                   </svg>
                 </div>
                 <div className="space-y-1">
-                  <h3 className="font-garamond text-2xl font-normal text-[#0c0a09]">Table is Blocked</h3>
+                  <h3 className="font-sans font-bold text-2xl text-[#0c0a09]">Table is Blocked</h3>
                   <p className="text-xs text-[#5e5e5e] max-w-xs mx-auto leading-relaxed">
                     This table is currently reserved / blocked. Unblock the table from the top menu or button below to start taking orders.
                   </p>
@@ -1630,7 +1646,7 @@ export default function CaptainPage() {
               {drawerSubTab === "user" && (
                 <div className="space-y-6 font-sans">
                   <div>
-                    <h3 className="font-garamond text-xl font-normal text-[#0c0a09]">Customer Details</h3>
+                    <h3 className="font-sans font-bold text-xl text-[#0c0a09]">Customer Details</h3>
                     <p className="text-xs text-[#5e5e5e] mt-0.5">Enter dining guest contact and assign table server</p>
                   </div>
 
@@ -1719,6 +1735,66 @@ export default function CaptainPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* Customer Previous Order History & Insights */}
+                  {hasCustomerPhone && customerStats && (
+                    <div className="space-y-3 pt-3 border-t border-[#e7e5e4]">
+                      <h4 className="text-xs font-bold text-[#0c0a09] uppercase tracking-wide">
+                        Customer Insights & Past History
+                      </h4>
+
+                      {/* Stats Pills */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
+                          <span className="block text-[10px] text-stone-500 font-medium uppercase">Dine-in</span>
+                          <span className="text-xs font-bold text-stone-900 font-mono">
+                            {customerStats.dineInCount ?? 0} visits
+                          </span>
+                        </div>
+                        <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
+                          <span className="block text-[10px] text-stone-500 font-medium uppercase">Takeaway</span>
+                          <span className="text-xs font-bold text-stone-900 font-mono">
+                            {customerStats.takeawayCount ?? 0} visits
+                          </span>
+                        </div>
+                        <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
+                          <span className="block text-[10px] text-stone-500 font-medium uppercase">Total Spend</span>
+                          <span className="text-xs font-bold text-emerald-700 font-mono">
+                            {currencySymbol}{((customerStats.totalSpends || 0) / 100).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Recent Past Orders */}
+                      {customerStats.recentOrders && customerStats.recentOrders.length > 0 ? (
+                        <div className="space-y-2">
+                          <span className="text-[11px] font-semibold text-stone-600 block">Recent Orders</span>
+                          <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
+                            {customerStats.recentOrders.slice(0, 3).map((ord: any, idx: number) => (
+                              <div key={ord._id || idx} className="bg-white border border-stone-200 rounded-lg p-2 text-xs space-y-1">
+                                <div className="flex items-center justify-between text-[11px]">
+                                  <span className="font-mono font-semibold text-stone-900">{ord.orderNumber}</span>
+                                  <span className="text-stone-500 text-[10px]">
+                                    {new Date(ord.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
+                                  </span>
+                                </div>
+                                <div className="flex items-center justify-between text-[11px] text-stone-600">
+                                  <span className="truncate max-w-[180px]">
+                                    {ord.items?.map((i: any) => i.itemName).join(", ") || "Dine-in Items"}
+                                  </span>
+                                  <span className="font-mono font-semibold text-stone-900 shrink-0 ml-1">
+                                    {currencySymbol}{((ord.totalAmount || 0) / 100).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-stone-500 italic">First time guest at this restaurant!</p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Actions */}
                   <div className="grid grid-cols-2 gap-3 pt-4 border-t border-[#e7e5e4]">
@@ -1821,6 +1897,12 @@ export default function CaptainPage() {
                     {/* Table Column Headers */}
                     <div className="flex items-center justify-between py-2 text-xs font-semibold text-[#8a7e75]">
                       <div className="w-24">Quantity</div>
+                      <div
+                        className="w-14 text-center cursor-help underline decoration-dotted"
+                        title="Togo is used when you want the food for to go while dining"
+                      >
+                        To go
+                      </div>
                       <div className="flex-1 px-3">Item</div>
                       <div className="w-20 text-right">Price</div>
                     </div>
@@ -1871,6 +1953,36 @@ export default function CaptainPage() {
                                   +
                                 </button>
                               </div>
+                            </div>
+
+                            {/* To go Checkbox Column */}
+                            <div className="w-14 flex items-center justify-center">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(inCartItem?.isToGo)}
+                                onChange={(e) => {
+                                  const idx = runningCart.findIndex((ci) => ci.itemId === itemId);
+                                  if (idx > -1) {
+                                    const nextCart = [...runningCart];
+                                    nextCart[idx] = { ...nextCart[idx], isToGo: e.target.checked };
+                                    setRunningCart(nextCart);
+                                  } else if (e.target.checked) {
+                                    setRunningCart((prev) => [
+                                      ...prev,
+                                      {
+                                        itemId: itemId as Id<"items">,
+                                        name: it.name,
+                                        price: it.price || 0,
+                                        quantity: 1,
+                                        isVeg: it.isVeg ?? it.is_veg ?? true,
+                                        isToGo: true,
+                                      },
+                                    ]);
+                                  }
+                                }}
+                                title="Togo is used when you want the food for to go while dining"
+                                className="w-4 h-4 accent-[#0c0a09] rounded cursor-pointer"
+                              />
                             </div>
 
                             {/* Menu Item Details */}
@@ -1934,20 +2046,27 @@ export default function CaptainPage() {
               {/* VIEW 3: TAB & RUNNING KOTs */}
               {drawerSubTab === "tab" && (
                 <div className="space-y-5 font-sans">
-                  {/* Running Cart 2 (Unplaced KOT items) */}
+                  {/* Running Cart 2 (Unplaced items) */}
                   {runningCart.length > 0 && (
                     <div className="border border-[#e7e5e4] rounded-xl p-4 bg-[#fdf8f7] shadow-2xs">
                       <div className="flex items-center justify-between text-xs font-bold text-[#0c0a09] pb-2 border-b border-[#e7e5e4]">
-                        <span>Cart 2 (New KOT) <span className="font-normal text-[#5e5e5e]">({runningCart.length} items)</span></span>
+                        <span>Cart 2 <span className="font-normal text-[#5e5e5e]">({runningCart.length} items)</span></span>
                         <span className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200/80 px-2 py-0.5 rounded font-semibold uppercase">
                           Unplaced
                         </span>
                       </div>
                       <div className="space-y-2 pt-3">
                         {runningCart.map((it, idx) => (
-                          <div key={idx} className="flex items-start justify-between text-xs py-1 border-b border-[#f1edec] last:border-none">
-                            <div>
-                              <span className="font-medium text-[#0c0a09]">{it.name}</span>
+                          <div key={idx} className="flex items-start justify-between text-xs py-1.5 border-b border-[#f1edec] last:border-none">
+                            <div className="min-w-0 flex-1 pr-2">
+                              <div className="flex items-center space-x-1.5">
+                                <span className="font-medium text-[#0c0a09]">{it.name}</span>
+                                {it.isToGo && (
+                                  <span className="text-[9px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                                    🛍️ To go
+                                  </span>
+                                )}
+                              </div>
                               {((it.customizationOptions && it.customizationOptions.length > 0) || ((it as any).customizations && (it as any).customizations.length > 0)) && (
                                 <div className="text-[10px] text-stone-500 font-mono space-y-0.5 mt-0.5">
                                   {(it.customizationOptions || (it as any).customizations).map((c: any, cIdx: number) => (
@@ -1958,13 +2077,13 @@ export default function CaptainPage() {
                                 </div>
                               )}
                             </div>
-                            <div className="flex items-center space-x-3 shrink-0 ml-2">
+                            <div className="flex items-center space-x-2 shrink-0 ml-1">
                               <span className="font-mono text-[#5e5e5e]">
                                 {it.quantity}x {currencySymbol}{(it.price / 100).toFixed(2)}
                               </span>
                               <button
                                 onClick={() => handleUpdateRunningItemCount(idx, -it.quantity)}
-                                className="text-[#a8a29e] hover:text-rose-600 cursor-pointer"
+                                className="text-[#a8a29e] hover:text-rose-600 cursor-pointer text-xs"
                                 title="Remove"
                               >
                                 ✕
@@ -1981,9 +2100,9 @@ export default function CaptainPage() {
                           className="w-full py-2.5 bg-[#0c0a09] hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg transition flex items-center justify-center space-x-1.5 shadow-xs cursor-pointer"
                         >
                           {isPlacingCart ? (
-                            <span>Dispatching KOT...</span>
+                            <span>Placing Order...</span>
                           ) : (
-                            <span>Place Order & Send KOT</span>
+                            <span>Place Order</span>
                           )}
                         </button>
                       </div>
@@ -1994,7 +2113,7 @@ export default function CaptainPage() {
                   {activeOrder && activeOrder.items && (
                     <div className="border border-[#e7e5e4] rounded-xl p-4 bg-white shadow-2xs">
                       <div className="flex items-center justify-between text-xs font-bold text-[#0c0a09] pb-2 border-b border-[#e7e5e4]">
-                        <span>Cart 1 (Active KOTs) <span className="font-normal text-[#5e5e5e]">({activeOrder.items.length} items)</span></span>
+                        <span>Cart 1 <span className="font-normal text-[#5e5e5e]">({activeOrder.items.length} items)</span></span>
                         <span className="text-[11px] font-mono text-[#7a716b]">
                           {new Date(activeOrder.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </span>
@@ -2003,7 +2122,14 @@ export default function CaptainPage() {
                         {activeOrder.items.map((it: any) => (
                           <div key={it._id} className="flex items-start justify-between text-xs py-1 border-b border-[#f1edec] last:border-none">
                             <div>
-                              <p className="font-medium text-[#0c0a09]">{it.itemName}</p>
+                              <div className="flex items-center space-x-1.5">
+                                <p className="font-medium text-[#0c0a09]">{it.itemName}</p>
+                                {it.isToGo && (
+                                  <span className="text-[9px] text-amber-800 font-semibold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-block">
+                                    🛍️ To go
+                                  </span>
+                                )}
+                              </div>
                               {it.customizations && it.customizations.length > 0 && (
                                 <div className="text-[10px] text-stone-500 font-mono space-y-0.5 mt-0.5">
                                   {it.customizations.map((c: any, cIdx: number) => (
@@ -2096,7 +2222,7 @@ export default function CaptainPage() {
               {drawerSubTab === "payment" && (
                 <div className="space-y-5 font-sans">
                   <div>
-                    <h3 className="font-garamond text-xl font-normal text-[#0c0a09]">Payment Settlement</h3>
+                    <h3 className="font-sans font-bold text-xl text-[#0c0a09]">Payment Settlement</h3>
                     <p className="text-xs text-[#5e5e5e] mt-0.5">Collect bill & settle table occupancy</p>
                   </div>
 
@@ -2294,7 +2420,7 @@ export default function CaptainPage() {
       {isMoveTableModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-xs font-sans">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full space-y-4 shadow-2xl border border-[#e7e5e4]">
-            <h3 className="font-garamond text-2xl text-[#0c0a09] font-normal leading-tight">Transfer Table Order</h3>
+            <h3 className="font-sans font-bold text-2xl text-[#0c0a09] leading-tight">Transfer Table Order</h3>
             <p className="text-xs text-[#5e5e5e]">
               Select an available vacant table to transfer active order from Table #{selectedTable?.tableNumber}.
             </p>

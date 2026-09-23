@@ -54,6 +54,7 @@ export const createOrder = mutation({
       v.object({
         itemId: v.id("items"),
         quantity: v.number(),
+        isToGo: v.optional(v.boolean()),
         customizations: v.optional(
           v.array(
             v.object({
@@ -301,6 +302,7 @@ export const createOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        isToGo: inputItem.isToGo ?? false,
       });
     }
 
@@ -402,6 +404,7 @@ export const createOrder = mutation({
         totalPrice: line.totalPrice,
         customizations: line.customizations,
         isReady: false,
+        isToGo: line.isToGo ?? false,
         createdAt: now,
       });
     }
@@ -1825,6 +1828,7 @@ export const addItemsToExistingOrder = mutation({
         totalPrice: line.totalPrice,
         customizations: line.customizations,
         isReady: false,
+        isToGo: line.isToGo ?? false,
         createdAt: now,
       });
     }
