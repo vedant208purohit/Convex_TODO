@@ -44,6 +44,11 @@ interface CartItem {
   }>;
 }
 
+import {
+  COUNTRY_DIAL_OPTIONS,
+  formatPhoneNumberWithCountryCode,
+} from "../../lib/constants/countries";
+
 // ==========================================
 // DYNAMIC DIETARY MARK RENDERER
 // ==========================================
@@ -51,82 +56,6 @@ interface CartItem {
 function renderDietaryMark(_it: any) {
   // Veg / Non-Veg labels/marks disabled for items
   return null;
-}
-
-const COUNTRY_DIAL_OPTIONS = [
-  { code: "+91", label: "IN +91", country: "India", iso: "IN" },
-  { code: "+1", label: "US +1", country: "United States", iso: "US" },
-  { code: "+971", label: "AE +971", country: "United Arab Emirates", iso: "AE" },
-  { code: "+44", label: "UK +44", country: "United Kingdom", iso: "GB" },
-  { code: "+33", label: "FR +33", country: "France", iso: "FR" },
-  { code: "+61", label: "AU +61", country: "Australia", iso: "AU" },
-  { code: "+65", label: "SG +65", country: "Singapore", iso: "SG" },
-  { code: "+49", label: "DE +49", country: "Germany", iso: "DE" },
-  { code: "+81", label: "JP +81", country: "Japan", iso: "JP" },
-  { code: "+966", label: "SA +966", country: "Saudi Arabia", iso: "SA" },
-  { code: "+974", label: "QA +974", country: "Qatar", iso: "QA" },
-];
-
-function formatPhoneNumberWithCountryCode(rawPhone: string, defaultCode: string = "+91"): string {
-  if (!rawPhone || !rawPhone.trim()) return "";
-  const trimmed = rawPhone.trim();
-
-  // If already starts with '+', ensure clean spacing between dial code and number
-  if (trimmed.startsWith("+")) {
-    const digitsOnly = trimmed.replace(/\D/g, "");
-    for (const opt of COUNTRY_DIAL_OPTIONS) {
-      const codeDigits = opt.code.replace(/\D/g, "");
-      if (digitsOnly.startsWith(codeDigits)) {
-        const local = digitsOnly.slice(codeDigits.length);
-        return `${opt.code} ${local}`;
-      }
-    }
-    return trimmed;
-  }
-
-  const digits = trimmed.replace(/\D/g, "");
-  if (!digits) return trimmed;
-
-  const currentCode = defaultCode.startsWith("+") ? defaultCode : `+${defaultCode}`;
-
-  if (currentCode === "+91") {
-    // Standard Indian mobile number is 10 digits (can start with 6, 7, 8, 9, or 91...)
-    if (digits.length === 12 && digits.startsWith("91")) {
-      return `+91 ${digits.slice(2)}`;
-    }
-    return `+91 ${digits}`;
-  } else if (currentCode === "+1") {
-    if (digits.length === 11 && digits.startsWith("1")) {
-      return `+1 ${digits.slice(1)}`;
-    }
-    return `+1 ${digits}`;
-  } else if (currentCode === "+971") {
-    if (digits.length === 12 && digits.startsWith("971")) {
-      return `+971 ${digits.slice(3)}`;
-    }
-    return `+971 ${digits}`;
-  } else if (currentCode === "+44") {
-    if (digits.length === 12 && digits.startsWith("44")) {
-      return `+44 ${digits.slice(2)}`;
-    }
-    return `+44 ${digits}`;
-  } else if (currentCode === "+33") {
-    if (digits.length === 11 && digits.startsWith("33")) {
-      return `+33 ${digits.slice(2)}`;
-    }
-    return `+33 ${digits}`;
-  } else if (currentCode === "+61") {
-    if (digits.length === 11 && digits.startsWith("61")) {
-      return `+61 ${digits.slice(2)}`;
-    }
-    return `+61 ${digits}`;
-  }
-
-  const dialDigits = currentCode.replace(/\D/g, "");
-  if (digits.startsWith(dialDigits) && digits.length > dialDigits.length + 8) {
-    return `${currentCode} ${digits.slice(dialDigits.length)}`;
-  }
-  return `${currentCode} ${digits}`;
 }
 
 interface CartTab {

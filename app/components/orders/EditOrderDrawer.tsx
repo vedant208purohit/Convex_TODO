@@ -5,6 +5,8 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
+import { COUNTRY_DIAL_OPTIONS } from "@/lib/constants/countries";
+
 interface EditOrderDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -204,10 +206,11 @@ export default function EditOrderDrawer({
                       onChange={(e) => setCountryCode(e.target.value)}
                       className="bg-transparent border-none text-xs font-semibold text-[#1c1917] focus:outline-none cursor-pointer pr-1"
                     >
-                      <option value="+91">+91</option>
-                      <option value="+1">+1</option>
-                      <option value="+44">+44</option>
-                      <option value="+971">+971</option>
+                      {COUNTRY_DIAL_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.iso} {opt.code}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   {/* Phone Input */}

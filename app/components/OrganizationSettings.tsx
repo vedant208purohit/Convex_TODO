@@ -60,44 +60,41 @@ interface OrgFormData {
   fssaiDocumentAssetId?: string;
 }
 
+import {
+  COUNTRIES_MASTER,
+  getStatesForCountry,
+  getCurrencyForCountry,
+  getTimezoneForCountry,
+  getPhoneCodeForCountry,
+} from "@/lib/constants/countries";
+
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-const COUNTRY_OPTIONS = [
-  "India",
-  "United States",
-  "United Arab Emirates",
-  "France",
-  "United Kingdom",
-  "Canada",
-  "Australia",
-];
+const COUNTRY_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => c.name);
 
 const TIMEZONE_OPTIONS = [
   { label: "Asia/Kolkata (IST)", value: "Asia/Kolkata" },
-  { label: "Europe/Paris (CET)", value: "Europe/Paris" },
-  { label: "America/New_York (EST)", value: "America/New_York" },
   { label: "Asia/Dubai (GST)", value: "Asia/Dubai" },
+  { label: "America/New_York (EST)", value: "America/New_York" },
+  { label: "Europe/London (GMT)", value: "Europe/London" },
+  { label: "Europe/Paris (CET)", value: "Europe/Paris" },
+  { label: "Asia/Singapore (SGT)", value: "Asia/Singapore" },
+  { label: "Australia/Sydney (AEST)", value: "Australia/Sydney" },
+  { label: "Asia/Riyadh (AST)", value: "Asia/Riyadh" },
+  { label: "Asia/Tokyo (JST)", value: "Asia/Tokyo" },
   { label: "UTC", value: "UTC" },
 ];
 
-const CURRENCY_OPTIONS = [
-  { label: "INR (₹)", currency: "INR", symbol: "₹" },
-  { label: "USD ($)", currency: "USD", symbol: "$" },
-  { label: "EUR (€)", currency: "EUR", symbol: "€" },
-  { label: "AED (AED)", currency: "AED", symbol: "AED" },
-  { label: "GBP (£)", currency: "GBP", symbol: "£" },
-  { label: "CAD ($)", currency: "CAD", symbol: "$" },
-  { label: "AUD ($)", currency: "AUD", symbol: "$" },
-];
+const CURRENCY_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
+  label: `${c.currency.code} (${c.currency.symbol})`,
+  currency: c.currency.code,
+  symbol: c.currency.symbol,
+}));
 
-const PHONE_CODE_OPTIONS = [
-  { code: "+91", country: "India" },
-  { code: "+1", country: "United States" },
-  { code: "+971", country: "United Arab Emirates" },
-  { code: "+33", country: "France" },
-  { code: "+44", country: "United Kingdom" },
-  { code: "+61", country: "Australia" },
-];
+const PHONE_CODE_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
+  code: c.phoneCode,
+  country: c.name,
+}));
 
 function parseTimeToDayMinutes(timeStr: string): number {
   if (!timeStr || typeof timeStr !== "string") return 0;

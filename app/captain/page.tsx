@@ -20,43 +20,10 @@ interface CartLineItem {
   customizations?: any[];
 }
 
-const COUNTRY_DIAL_OPTIONS = [
-  { code: "+91", label: "IN +91", country: "India", iso: "IN" },
-  { code: "+1", label: "US/CA +1", country: "United States / Canada", iso: "US" },
-  { code: "+44", label: "UK +44", country: "United Kingdom", iso: "GB" },
-  { code: "+971", label: "UAE +971", country: "United Arab Emirates", iso: "AE" },
-  { code: "+61", label: "AU +61", country: "Australia", iso: "AU" },
-  { code: "+65", label: "SG +65", country: "Singapore", iso: "SG" },
-  { code: "+49", label: "DE +49", country: "Germany", iso: "DE" },
-  { code: "+33", label: "FR +33", country: "France", iso: "FR" },
-  { code: "+81", label: "JP +81", country: "Japan", iso: "JP" },
-  { code: "+966", label: "SA +966", country: "Saudi Arabia", iso: "SA" },
-  { code: "+974", label: "QA +974", country: "Qatar", iso: "QA" },
-];
-
-function formatPhoneNumberWithCountryCode(rawPhone: string, defaultCode: string = "+91"): string {
-  if (!rawPhone || !rawPhone.trim()) return "";
-  const trimmed = rawPhone.trim();
-
-  // If already starts with '+', ensure clean spacing between dial code and number
-  if (trimmed.startsWith("+")) {
-    const digitsOnly = trimmed.replace(/\D/g, "");
-    for (const opt of COUNTRY_DIAL_OPTIONS) {
-      const codeDigits = opt.code.replace(/\D/g, "");
-      if (digitsOnly.startsWith(codeDigits)) {
-        const local = digitsOnly.slice(codeDigits.length);
-        return `${opt.code} ${local}`;
-      }
-    }
-    return trimmed;
-  }
-
-  const digits = trimmed.replace(/\D/g, "");
-  if (!digits) return trimmed;
-
-  const currentCode = defaultCode.startsWith("+") ? defaultCode : `+${defaultCode}`;
-  return `${currentCode} ${digits}`;
-}
+import {
+  COUNTRY_DIAL_OPTIONS,
+  formatPhoneNumberWithCountryCode,
+} from "../../lib/constants/countries";
 
 function getLayoutSignIcon(name?: string, isSelected?: boolean) {
   const n = (name || "").toLowerCase();

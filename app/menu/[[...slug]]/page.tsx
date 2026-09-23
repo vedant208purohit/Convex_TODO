@@ -210,6 +210,59 @@ function ImageIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function BoxIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <path d="m3.3 7 8.7 5 8.7-5" />
+      <path d="M12 22V12" />
+    </svg>
+  );
+}
+
+function VideoIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m22 8-6 4 6 4V8Z" />
+      <rect width="14" height="12" x="2" y="6" rx="2" ry="2" />
+    </svg>
+  );
+}
+
+function UploadIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <polyline points="17 8 12 3 7 8" />
+      <line x1="12" y1="3" x2="12" y2="15" />
+    </svg>
+  );
+}
+
 function ClockIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg
@@ -1503,6 +1556,52 @@ export default function MenuPage() {
   const [itemImageUrl, setItemImageUrl] = useState("");
   const [isUploadingItemImage, setIsUploadingItemImage] = useState(false);
   const itemFileInputRef = useRef<HTMLInputElement>(null);
+
+  // 3D & Video state
+  const [show3dAndroidUpload, setShow3dAndroidUpload] = useState(false);
+  const [item3dAndroidAssetId, setItem3dAndroidAssetId] = useState("");
+  const [item3dAndroidUrl, setItem3dAndroidUrl] = useState("");
+  const [item3dAndroidFileName, setItem3dAndroidFileName] = useState("");
+  const [isUploading3dAndroid, setIsUploading3dAndroid] = useState(false);
+  const item3dAndroidInputRef = useRef<HTMLInputElement>(null);
+
+  const [show3dIosUpload, setShow3dIosUpload] = useState(false);
+  const [item3dIosAssetId, setItem3dIosAssetId] = useState("");
+  const [item3dIosUrl, setItem3dIosUrl] = useState("");
+  const [item3dIosFileName, setItem3dIosFileName] = useState("");
+  const [isUploading3dIos, setIsUploading3dIos] = useState(false);
+  const item3dIosInputRef = useRef<HTMLInputElement>(null);
+
+  const [showVideoUpload, setShowVideoUpload] = useState(false);
+  const [itemVideoAssetId, setItemVideoAssetId] = useState("");
+  const [itemVideoUrl, setItemVideoUrl] = useState("");
+  const [itemVideoFileName, setItemVideoFileName] = useState("");
+  const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const itemVideoInputRef = useRef<HTMLInputElement>(null);
+
+  // Lazy Media Preview Modal State (Zero upfront load overhead)
+  const [mediaPreviewModal, setMediaPreviewModal] = useState<{
+    type: "video" | "3d_android" | "3d_ios" | "image";
+    url: string;
+    title: string;
+  } | null>(null);
+
+  // Dynamically load Google <model-viewer> only on-demand when preview modal opens
+  useEffect(() => {
+    if (
+      mediaPreviewModal?.type === "3d_android" &&
+      typeof window !== "undefined"
+    ) {
+      if (!customElements.get("model-viewer")) {
+        const script = document.createElement("script");
+        script.type = "module";
+        script.src =
+          "https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js";
+        document.head.appendChild(script);
+      }
+    }
+  }, [mediaPreviewModal]);
+
   const [isSavingItem, setIsSavingItem] = useState(false);
   const [itemError, setItemError] = useState<string | null>(null);
 
@@ -2075,6 +2174,21 @@ export default function MenuPage() {
     setItemImageAssetId("");
     setItemImageUrl("");
     if (itemFileInputRef.current) itemFileInputRef.current.value = "";
+    setShow3dAndroidUpload(false);
+    setItem3dAndroidAssetId("");
+    setItem3dAndroidUrl("");
+    setItem3dAndroidFileName("");
+    if (item3dAndroidInputRef.current) item3dAndroidInputRef.current.value = "";
+    setShow3dIosUpload(false);
+    setItem3dIosAssetId("");
+    setItem3dIosUrl("");
+    setItem3dIosFileName("");
+    if (item3dIosInputRef.current) item3dIosInputRef.current.value = "";
+    setShowVideoUpload(false);
+    setItemVideoAssetId("");
+    setItemVideoUrl("");
+    setItemVideoFileName("");
+    if (itemVideoInputRef.current) itemVideoInputRef.current.value = "";
     setItemServingSize("");
     setItemServing("");
     setItemCaloriesPerServing("");
@@ -2126,6 +2240,32 @@ export default function MenuPage() {
     setItemImageAssetId(item.imageAssetId || "");
     setItemImageUrl(item.imageUrl || "");
     if (itemFileInputRef.current) itemFileInputRef.current.value = "";
+
+    const has3dAndroid = Boolean(
+      item.threeDModelAssetId || item.threeDModelUrl,
+    );
+    setShow3dAndroidUpload(has3dAndroid);
+    setItem3dAndroidAssetId(item.threeDModelAssetId || "");
+    setItem3dAndroidUrl(item.threeDModelUrl || "");
+    setItem3dAndroidFileName(item.threeDModelUrl ? "3D Model (Android)" : "");
+    if (item3dAndroidInputRef.current) item3dAndroidInputRef.current.value = "";
+
+    const has3dIos = Boolean(
+      item.threeDModelIosAssetId || item.threeDModelIosUrl,
+    );
+    setShow3dIosUpload(has3dIos);
+    setItem3dIosAssetId(item.threeDModelIosAssetId || "");
+    setItem3dIosUrl(item.threeDModelIosUrl || "");
+    setItem3dIosFileName(item.threeDModelIosUrl ? "3D Model (iOS)" : "");
+    if (item3dIosInputRef.current) item3dIosInputRef.current.value = "";
+
+    const hasVideo = Boolean(item.videoAssetId || item.videoUrl);
+    setShowVideoUpload(hasVideo);
+    setItemVideoAssetId(item.videoAssetId || "");
+    setItemVideoUrl(item.videoUrl || "");
+    setItemVideoFileName(item.videoUrl ? "Video File" : "");
+    if (itemVideoInputRef.current) itemVideoInputRef.current.value = "";
+
     setItemServingSize(item.servingSize || "");
     setItemServing(item.serving ? String(item.serving) : "");
     setItemCaloriesPerServing(item.caloriesPerServing || item.calorie || "");
@@ -2146,6 +2286,75 @@ export default function MenuPage() {
     setIsAddItemOpen(true);
   };
 
+  const compressImageForUpload = async (file: File): Promise<File> => {
+    if (
+      !file.type.startsWith("image/") ||
+      file.type.includes("svg") ||
+      file.size < 150 * 1024
+    ) {
+      return file;
+    }
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX_DIMENSION = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_DIMENSION) {
+              height = Math.round((height * MAX_DIMENSION) / width);
+              width = MAX_DIMENSION;
+            }
+          } else {
+            if (height > MAX_DIMENSION) {
+              width = Math.round((width * MAX_DIMENSION) / height);
+              height = MAX_DIMENSION;
+            }
+          }
+
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            resolve(file);
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const outputFormat =
+            file.type === "image/png" ? "image/png" : "image/jpeg";
+          canvas.toBlob(
+            (blob) => {
+              if (!blob || blob.size >= file.size) {
+                resolve(file);
+                return;
+              }
+              const cleanName =
+                file.name.replace(/\.[^/.]+$/, "") +
+                (outputFormat === "image/jpeg" ? ".jpg" : ".png");
+              const optimizedFile = new File([blob], cleanName, {
+                type: outputFormat,
+                lastModified: Date.now(),
+              });
+              resolve(optimizedFile);
+            },
+            outputFormat,
+            0.85,
+          );
+        };
+        img.onerror = () => resolve(file);
+        img.src = e.target?.result as string;
+      };
+      reader.onerror = () => resolve(file);
+      reader.readAsDataURL(file);
+    });
+  };
+
   const handleItemImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -2162,8 +2371,8 @@ export default function MenuPage() {
       );
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setItemError("File size exceeds 10MB limit.");
+    if (file.size > 25 * 1024 * 1024) {
+      setItemError("File size exceeds 25MB limit.");
       return;
     }
 
@@ -2171,23 +2380,26 @@ export default function MenuPage() {
     setIsUploadingItemImage(true);
 
     try {
+      const processedFile = await compressImageForUpload(file);
+      const effectiveContentType = processedFile.type || "image/jpeg";
+
       const uploadResult = await createAssetUpload({
         assetType: "menu_image",
-        fileName: file.name,
-        contentType: file.type || "image/png",
-        fileSize: file.size,
+        fileName: processedFile.name,
+        contentType: effectiveContentType,
+        fileSize: processedFile.size,
         organizationId: organization._id,
       });
 
       const putResult = await fetch(uploadResult.uploadUrl, {
         method: "PUT",
-        headers: { "Content-Type": file.type || "image/png" },
-        body: file,
+        headers: { "Content-Type": effectiveContentType },
+        body: processedFile,
       });
 
       if (!putResult.ok) {
         throw new Error(
-          `Failed to upload item image to R2 (Status: ${putResult.status})`,
+          `Failed to upload item image (Status: ${putResult.status})`,
         );
       }
 
@@ -2196,13 +2408,191 @@ export default function MenuPage() {
       });
 
       setItemImageAssetId(uploadResult.assetId);
-      setItemImageUrl(URL.createObjectURL(file));
+      setItemImageUrl(URL.createObjectURL(processedFile));
       showToast("Item image uploaded successfully", "success");
     } catch (err: any) {
       setItemError(err?.message || "Failed to upload item image.");
       showToast(err?.message || "Failed to upload item image", "error");
     } finally {
       setIsUploadingItemImage(false);
+    }
+  };
+
+  const handleItem3dAndroidUpload = async (
+    e: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!organization?._id) {
+      setItemError("Organization not found. Please refresh the page.");
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      setItemError("File size exceeds 100MB limit.");
+      return;
+    }
+
+    setItemError(null);
+    setIsUploading3dAndroid(true);
+
+    try {
+      const isGltf = file.name.toLowerCase().endsWith(".gltf");
+      const effectiveContentType = isGltf
+        ? "model/gltf+json"
+        : "model/gltf-binary";
+
+      const uploadResult = await createAssetUpload({
+        assetType: "menu_3d_model",
+        fileName: file.name,
+        contentType: effectiveContentType,
+        fileSize: file.size,
+        organizationId: organization._id,
+      });
+
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": effectiveContentType },
+        body: file,
+      });
+
+      if (!putResult.ok) {
+        throw new Error(
+          `Failed to upload 3D model (Status: ${putResult.status})`,
+        );
+      }
+
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      setItem3dAndroidAssetId(uploadResult.assetId);
+      setItem3dAndroidUrl(URL.createObjectURL(file));
+      setItem3dAndroidFileName(file.name);
+      showToast("3D model (Android) uploaded successfully", "success");
+    } catch (err: any) {
+      setItemError(err?.message || "Failed to upload 3D model (Android).");
+      showToast(err?.message || "Failed to upload 3D model (Android)", "error");
+    } finally {
+      setIsUploading3dAndroid(false);
+    }
+  };
+
+  const handleItem3dIosUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!organization?._id) {
+      setItemError("Organization not found. Please refresh the page.");
+      return;
+    }
+
+    if (file.size > 100 * 1024 * 1024) {
+      setItemError("File size exceeds 100MB limit.");
+      return;
+    }
+
+    setItemError(null);
+    setIsUploading3dIos(true);
+
+    try {
+      const effectiveContentType = "model/vnd.usdz+zip";
+
+      const uploadResult = await createAssetUpload({
+        assetType: "menu_3d_model_ios",
+        fileName: file.name,
+        contentType: effectiveContentType,
+        fileSize: file.size,
+        organizationId: organization._id,
+      });
+
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": effectiveContentType },
+        body: file,
+      });
+
+      if (!putResult.ok) {
+        throw new Error(
+          `Failed to upload 3D model iOS (Status: ${putResult.status})`,
+        );
+      }
+
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      setItem3dIosAssetId(uploadResult.assetId);
+      setItem3dIosUrl(URL.createObjectURL(file));
+      setItem3dIosFileName(file.name);
+      showToast("3D model (iOS) uploaded successfully", "success");
+    } catch (err: any) {
+      setItemError(err?.message || "Failed to upload 3D model (iOS).");
+      showToast(err?.message || "Failed to upload 3D model (iOS)", "error");
+    } finally {
+      setIsUploading3dIos(false);
+    }
+  };
+
+  const handleItemVideoUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!organization?._id) {
+      setItemError("Organization not found. Please refresh the page.");
+      return;
+    }
+
+    if (file.size > 200 * 1024 * 1024) {
+      setItemError("File size exceeds 200MB limit.");
+      return;
+    }
+
+    setItemError(null);
+    setIsUploadingVideo(true);
+
+    try {
+      const lowerName = file.name.toLowerCase();
+      const effectiveContentType = lowerName.endsWith(".mov")
+        ? "video/quicktime"
+        : lowerName.endsWith(".webm")
+          ? "video/webm"
+          : file.type && file.type !== "application/octet-stream"
+            ? file.type
+            : "video/mp4";
+
+      const uploadResult = await createAssetUpload({
+        assetType: "menu_video",
+        fileName: file.name,
+        contentType: effectiveContentType,
+        fileSize: file.size,
+        organizationId: organization._id,
+      });
+
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": effectiveContentType },
+        body: file,
+      });
+
+      if (!putResult.ok) {
+        throw new Error(`Failed to upload video (Status: ${putResult.status})`);
+      }
+
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      setItemVideoAssetId(uploadResult.assetId);
+      setItemVideoUrl(URL.createObjectURL(file));
+      setItemVideoFileName(file.name);
+      showToast("Video uploaded successfully", "success");
+    } catch (err: any) {
+      setItemError(err?.message || "Failed to upload video.");
+      showToast(err?.message || "Failed to upload video", "error");
+    } finally {
+      setIsUploadingVideo(false);
     }
   };
 
@@ -2255,7 +2645,9 @@ export default function MenuPage() {
           ? [matchedTypeObj.id as Id<"itemTypes">]
           : undefined;
 
-      const effectiveTaxGroupId = (itemSelectedTaxGroupId || resolvedTaxGroup?._id || undefined) as Id<"taxGroups"> | undefined;
+      const effectiveTaxGroupId = (itemSelectedTaxGroupId ||
+        resolvedTaxGroup?._id ||
+        undefined) as Id<"taxGroups"> | undefined;
 
       if (editingItem) {
         await updateItemMutation({
@@ -2294,6 +2686,18 @@ export default function MenuPage() {
           imageAssetId: itemImageAssetId
             ? (itemImageAssetId as Id<"organization_assets">)
             : undefined,
+          threeDModelAssetId:
+            show3dAndroidUpload && item3dAndroidAssetId
+              ? (item3dAndroidAssetId as Id<"organization_assets">)
+              : undefined,
+          threeDModelIosAssetId:
+            show3dIosUpload && item3dIosAssetId
+              ? (item3dIosAssetId as Id<"organization_assets">)
+              : undefined,
+          videoAssetId:
+            showVideoUpload && itemVideoAssetId
+              ? (itemVideoAssetId as Id<"organization_assets">)
+              : undefined,
         });
         showToast(`Item "${trimmedItemName}" updated successfully`, "success");
       } else {
@@ -2334,6 +2738,18 @@ export default function MenuPage() {
           imageAssetId: itemImageAssetId
             ? (itemImageAssetId as Id<"organization_assets">)
             : undefined,
+          threeDModelAssetId:
+            show3dAndroidUpload && item3dAndroidAssetId
+              ? (item3dAndroidAssetId as Id<"organization_assets">)
+              : undefined,
+          threeDModelIosAssetId:
+            show3dIosUpload && item3dIosAssetId
+              ? (item3dIosAssetId as Id<"organization_assets">)
+              : undefined,
+          videoAssetId:
+            showVideoUpload && itemVideoAssetId
+              ? (itemVideoAssetId as Id<"organization_assets">)
+              : undefined,
         });
 
         await addCategoryItemMutation({
@@ -3194,7 +3610,7 @@ export default function MenuPage() {
                         Item Details & Pricing
                       </h2>
 
-                      {/* Image Upload Area */}
+                      {/* Image Upload Area (Compact) */}
                       <input
                         type="file"
                         ref={itemFileInputRef}
@@ -3204,26 +3620,33 @@ export default function MenuPage() {
                       />
                       <div
                         onClick={() => itemFileInputRef.current?.click()}
-                        className="border-2 border-dashed border-[#d1c4c1] rounded-xl p-6 lg:p-8 flex flex-col items-center justify-center text-center bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer group relative overflow-hidden"
+                        className="border border-dashed border-[#d1c4c1] rounded-xl p-4 flex flex-col items-center justify-center text-center bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer group relative overflow-hidden"
                       >
                         {isUploadingItemImage ? (
-                          <div className="flex flex-col items-center gap-2 py-4">
-                            <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#141010] border-t-transparent"></div>
-                            <span className="text-sm font-medium text-[#141010]">
-                              Uploading item image to R2...
+                          <div className="flex items-center gap-2 py-2">
+                            <div className="h-5 w-5 animate-spin rounded-full border-2 border-[#141010] border-t-transparent"></div>
+                            <span className="text-xs font-medium text-[#141010]">
+                              Uploading item image...
                             </span>
                           </div>
                         ) : itemImageUrl || itemImageAssetId ? (
-                          <div className="flex flex-col items-center gap-3">
-                            <div className="w-24 h-24 rounded-lg overflow-hidden border border-[#e7e5e4] shadow-xs">
-                              <img
-                                src={itemImageUrl}
-                                alt="Item Preview"
-                                className="w-full h-full object-cover"
-                              />
-                            </div>
+                          <div className="flex items-center justify-between w-full px-2">
                             <div className="flex items-center gap-3">
-                              <span className="text-xs font-medium text-[#141010] hover:underline">
+                              <div className="w-14 h-14 rounded-lg overflow-hidden border border-[#e7e5e4] shadow-xs shrink-0 bg-white">
+                                <img
+                                  src={itemImageUrl}
+                                  alt="Item Preview"
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                  decoding="async"
+                                />
+                              </div>
+                              <span className="text-xs font-medium text-[#141010]">
+                                Item image uploaded
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3 shrink-0">
+                              <span className="text-xs font-medium text-[#141010] hover:underline cursor-pointer">
                                 Change Image
                               </span>
                               <button
@@ -3242,19 +3665,347 @@ export default function MenuPage() {
                             </div>
                           </div>
                         ) : (
-                          <>
-                            <div className="w-16 h-16 rounded-full bg-[#f0efed] flex items-center justify-center mb-3 group-hover:scale-105 transition-transform border border-[#e7e5e4]">
-                              <ImageIcon className="w-7 h-7 text-[#141010]" />
+                          <div className="flex items-center gap-3 py-1">
+                            <div className="w-9 h-9 rounded-lg bg-[#f0efed] flex items-center justify-center border border-[#e7e5e4]">
+                              <ImageIcon className="w-5 h-5 text-[#141010]" />
                             </div>
-                            <h3 className="font-medium text-[15px] text-[#0c0a09] mb-1">
-                              Click to upload item image
-                            </h3>
-                            <p className="text-xs text-[#5e5e5e] mb-4">
-                              or drag and drop. Supports JPG, PNG, WEBP (Max
-                              10MB)
-                            </p>
-                          </>
+                            <div className="text-left">
+                              <p className="font-medium text-xs text-[#0c0a09]">
+                                Click to upload item image
+                              </p>
+                              <p className="text-[11px] text-[#5e5e5e]">
+                                JPG, PNG, WEBP (Max 10MB)
+                              </p>
+                            </div>
+                          </div>
                         )}
+                      </div>
+
+                      {/* Checkboxes & Uploads for 3D Images & Video (Compact & Near) */}
+                      <div className="space-y-2.5 pt-1">
+                        {/* Add 3D images (Android) */}
+                        <div className="space-y-1.5">
+                          <label className="flex items-center gap-2.5 text-xs font-medium text-[#0c0a09] cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={show3dAndroidUpload}
+                              onChange={(e) => {
+                                setShow3dAndroidUpload(e.target.checked);
+                                if (!e.target.checked) {
+                                  setItem3dAndroidAssetId("");
+                                  setItem3dAndroidUrl("");
+                                  setItem3dAndroidFileName("");
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010] cursor-pointer"
+                            />
+                            <span>Add 3d images (Android)</span>
+                          </label>
+
+                          {show3dAndroidUpload && (
+                            <div className="pl-6">
+                              <input
+                                type="file"
+                                ref={item3dAndroidInputRef}
+                                onChange={handleItem3dAndroidUpload}
+                                accept=".glb,model/gltf-binary,application/octet-stream"
+                                className="hidden"
+                              />
+                              <div
+                                onClick={() =>
+                                  item3dAndroidInputRef.current?.click()
+                                }
+                                className="border border-dashed border-[#d1c4c1] rounded-lg px-3 py-2 flex items-center justify-between bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer"
+                              >
+                                {isUploading3dAndroid ? (
+                                  <div className="flex items-center gap-2 py-0.5">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#141010] border-t-transparent"></div>
+                                    <span className="text-xs font-medium text-[#141010]">
+                                      Uploading 3D model (Android)...
+                                    </span>
+                                  </div>
+                                ) : item3dAndroidUrl || item3dAndroidAssetId ? (
+                                  <>
+                                    <div className="flex items-center gap-2 truncate mr-2">
+                                      <BoxIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="text-xs font-medium text-[#141010] truncate">
+                                        {item3dAndroidFileName ||
+                                          "3D Model (Android) Uploaded"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2.5 shrink-0">
+                                      {item3dAndroidUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMediaPreviewModal({
+                                              type: "3d_android",
+                                              url: item3dAndroidUrl,
+                                              title:
+                                                item3dAndroidFileName ||
+                                                "3D Model (Android)",
+                                            });
+                                          }}
+                                          className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                                        >
+                                          Preview 3D
+                                        </button>
+                                      )}
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          item3dAndroidInputRef.current?.click();
+                                        }}
+                                        className="text-xs font-medium text-[#141010] hover:underline cursor-pointer"
+                                      >
+                                        Change
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setItem3dAndroidAssetId("");
+                                          setItem3dAndroidUrl("");
+                                          setItem3dAndroidFileName("");
+                                          if (item3dAndroidInputRef.current)
+                                            item3dAndroidInputRef.current.value =
+                                              "";
+                                        }}
+                                        className="text-xs font-medium text-rose-600 hover:underline cursor-pointer"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-2 text-xs text-[#5e5e5e] py-0.5">
+                                    <UploadIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                                    <span>
+                                      Click to upload 3D Android model (.glb)
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add 3D images (iOS) */}
+                        <div className="space-y-1.5">
+                          <label className="flex items-center gap-2.5 text-xs font-medium text-[#0c0a09] cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={show3dIosUpload}
+                              onChange={(e) => {
+                                setShow3dIosUpload(e.target.checked);
+                                if (!e.target.checked) {
+                                  setItem3dIosAssetId("");
+                                  setItem3dIosUrl("");
+                                  setItem3dIosFileName("");
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010] cursor-pointer"
+                            />
+                            <span>Add 3d images (Ios)</span>
+                          </label>
+
+                          {show3dIosUpload && (
+                            <div className="pl-6">
+                              <input
+                                type="file"
+                                ref={item3dIosInputRef}
+                                onChange={handleItem3dIosUpload}
+                                accept=".usdz,model/vnd.usdz+zip,model/usdz,application/octet-stream"
+                                className="hidden"
+                              />
+                              <div
+                                onClick={() =>
+                                  item3dIosInputRef.current?.click()
+                                }
+                                className="border border-dashed border-[#d1c4c1] rounded-lg px-3 py-2 flex items-center justify-between bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer"
+                              >
+                                {isUploading3dIos ? (
+                                  <div className="flex items-center gap-2 py-0.5">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#141010] border-t-transparent"></div>
+                                    <span className="text-xs font-medium text-[#141010]">
+                                      Uploading 3D model (iOS)...
+                                    </span>
+                                  </div>
+                                ) : item3dIosUrl || item3dIosAssetId ? (
+                                  <>
+                                    <div className="flex items-center gap-2 truncate mr-2">
+                                      <BoxIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="text-xs font-medium text-[#141010] truncate">
+                                        {item3dIosFileName ||
+                                          "3D Model (iOS) Uploaded"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2.5 shrink-0">
+                                      {item3dIosUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMediaPreviewModal({
+                                              type: "3d_ios",
+                                              url: item3dIosUrl,
+                                              title:
+                                                item3dIosFileName ||
+                                                "3D Model (iOS)",
+                                            });
+                                          }}
+                                          className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                                        >
+                                          Preview
+                                        </button>
+                                      )}
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          item3dIosInputRef.current?.click();
+                                        }}
+                                        className="text-xs font-medium text-[#141010] hover:underline cursor-pointer"
+                                      >
+                                        Change
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setItem3dIosAssetId("");
+                                          setItem3dIosUrl("");
+                                          setItem3dIosFileName("");
+                                          if (item3dIosInputRef.current)
+                                            item3dIosInputRef.current.value =
+                                              "";
+                                        }}
+                                        className="text-xs font-medium text-rose-600 hover:underline cursor-pointer"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-2 text-xs text-[#5e5e5e] py-0.5">
+                                    <UploadIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                                    <span>
+                                      Click to upload 3D iOS model (.usdz)
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Add video */}
+                        <div className="space-y-1.5">
+                          <label className="flex items-center gap-2.5 text-xs font-medium text-[#0c0a09] cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={showVideoUpload}
+                              onChange={(e) => {
+                                setShowVideoUpload(e.target.checked);
+                                if (!e.target.checked) {
+                                  setItemVideoAssetId("");
+                                  setItemVideoUrl("");
+                                  setItemVideoFileName("");
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded border-[#d1c4c1] text-[#141010] focus:ring-[#141010] cursor-pointer"
+                            />
+                            <span>Add video</span>
+                          </label>
+
+                          {showVideoUpload && (
+                            <div className="pl-6">
+                              <input
+                                type="file"
+                                ref={itemVideoInputRef}
+                                onChange={handleItemVideoUpload}
+                                accept="video/mp4,video/quicktime,.mp4,.mov"
+                                className="hidden"
+                              />
+                              <div
+                                onClick={() =>
+                                  itemVideoInputRef.current?.click()
+                                }
+                                className="border border-dashed border-[#d1c4c1] rounded-lg px-3 py-2 flex items-center justify-between bg-[#f7f3f2] hover:bg-[#f1edec] transition-colors cursor-pointer"
+                              >
+                                {isUploadingVideo ? (
+                                  <div className="flex items-center gap-2 py-0.5">
+                                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#141010] border-t-transparent"></div>
+                                    <span className="text-xs font-medium text-[#141010]">
+                                      Uploading video...
+                                    </span>
+                                  </div>
+                                ) : itemVideoUrl || itemVideoAssetId ? (
+                                  <>
+                                    <div className="flex items-center gap-2 truncate mr-2">
+                                      <VideoIcon className="w-4 h-4 text-emerald-600 shrink-0" />
+                                      <span className="text-xs font-medium text-[#141010] truncate">
+                                        {itemVideoFileName ||
+                                          "Video File Uploaded"}
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2.5 shrink-0">
+                                      {itemVideoUrl && (
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMediaPreviewModal({
+                                              type: "video",
+                                              url: itemVideoUrl,
+                                              title:
+                                                itemVideoFileName ||
+                                                "Item Video",
+                                            });
+                                          }}
+                                          className="text-xs font-semibold text-blue-600 hover:underline cursor-pointer"
+                                        >
+                                          Preview Video
+                                        </button>
+                                      )}
+                                      <span
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          itemVideoInputRef.current?.click();
+                                        }}
+                                        className="text-xs font-medium text-[#141010] hover:underline cursor-pointer"
+                                      >
+                                        Change
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setItemVideoAssetId("");
+                                          setItemVideoUrl("");
+                                          setItemVideoFileName("");
+                                          if (itemVideoInputRef.current)
+                                            itemVideoInputRef.current.value =
+                                              "";
+                                        }}
+                                        className="text-xs font-medium text-rose-600 hover:underline cursor-pointer"
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-2 text-xs text-[#5e5e5e] py-0.5">
+                                    <UploadIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                                    <span>
+                                      Click to upload item video (.mp4, .mov)
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Category & Search Code / SKU */}
@@ -3560,10 +4311,16 @@ export default function MenuPage() {
                               </label>
                               <div className="relative">
                                 <select
-                                  value={itemSelectedTaxGroupId || resolvedTaxGroup?._id || ""}
+                                  value={
+                                    itemSelectedTaxGroupId ||
+                                    resolvedTaxGroup?._id ||
+                                    ""
+                                  }
                                   onChange={(e) => {
                                     setItemSelectedTaxGroupId(e.target.value);
-                                    const matched = taxGroups?.find((g) => g._id === e.target.value);
+                                    const matched = taxGroups?.find(
+                                      (g) => g._id === e.target.value,
+                                    );
                                     if (matched?.taxMode) {
                                       setItemTaxMode(matched.taxMode);
                                     }
@@ -4133,6 +4890,8 @@ export default function MenuPage() {
                           {itemImageUrl ? (
                             <img
                               src={itemImageUrl}
+                              loading="lazy"
+                              decoding="async"
                               alt={itemName || "Preview"}
                               className="w-full h-full object-cover"
                             />
@@ -5833,6 +6592,8 @@ export default function MenuPage() {
                                             {item.imageUrl ? (
                                               <img
                                                 src={item.imageUrl}
+                                                loading="lazy"
+                                                decoding="async"
                                                 alt={item.name}
                                                 className="w-full h-full object-cover"
                                               />
@@ -7710,6 +8471,89 @@ export default function MenuPage() {
                   className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-sm transition cursor-pointer disabled:opacity-50"
                 >
                   {isDeletingChoice ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ---------------------------------------------------- */}
+        {/* MODAL: ON-DEMAND MEDIA PREVIEW (3D & VIDEO)          */}
+        {/* ---------------------------------------------------- */}
+        {mediaPreviewModal && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => setMediaPreviewModal(null)}
+            />
+            <div className="relative w-full max-w-2xl bg-white rounded-2xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200 flex flex-col max-h-[90vh]">
+              <div className="flex items-center justify-between pb-3 border-b border-gray-100">
+                <h4 className="text-base font-bold text-gray-900 truncate">
+                  {mediaPreviewModal.title}
+                </h4>
+                <button
+                  type="button"
+                  onClick={() => setMediaPreviewModal(null)}
+                  className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition cursor-pointer"
+                >
+                  <CloseIcon className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-hidden flex items-center justify-center min-h-[300px] bg-[#f7f3f2] rounded-xl relative p-4">
+                {mediaPreviewModal.type === "video" && (
+                  <video
+                    src={mediaPreviewModal.url}
+                    controls
+                    autoPlay
+                    className="max-w-full max-h-[60vh] rounded-lg shadow-md"
+                  />
+                )}
+
+                {mediaPreviewModal.type === "3d_android" && (
+                  // @ts-expect-error model-viewer is a web component
+                  <model-viewer
+                    src={mediaPreviewModal.url}
+                    camera-controls
+                    auto-rotate
+                    shadow-intensity="1"
+                    style={{ width: "100%", height: "400px" }}
+                  />
+                )}
+
+                {mediaPreviewModal.type === "3d_ios" && (
+                  <div className="flex flex-col items-center justify-center text-center p-6 space-y-4">
+                    <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <BoxIcon className="w-8 h-8 text-emerald-600" />
+                    </div>
+                    <div>
+                      <h5 className="font-semibold text-gray-900 text-sm">
+                        iOS 3D AR Model (.usdz)
+                      </h5>
+                      <p className="text-xs text-gray-500 mt-1 max-w-sm">
+                        Apple USDZ models render directly in AR Quick Look on
+                        iPhone & iPad Safari.
+                      </p>
+                    </div>
+                    <a
+                      href={mediaPreviewModal.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-4 py-2 bg-[#141010] text-white rounded-lg text-xs font-semibold hover:bg-black transition shadow-xs"
+                    >
+                      Open / Download USDZ Model
+                    </a>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end pt-2">
+                <button
+                  type="button"
+                  onClick={() => setMediaPreviewModal(null)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-xs font-semibold transition cursor-pointer"
+                >
+                  Close
                 </button>
               </div>
             </div>
