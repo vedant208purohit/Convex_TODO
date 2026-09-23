@@ -1668,18 +1668,33 @@ export default function OrdersPage() {
                         <CreditCardIcon className="w-4 h-4 text-[#7a716b]" />
                         Payment Information
                       </h2>
-                      <span
-                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${
-                          isPaid
-                            ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
-                            : "text-amber-800 bg-amber-50 border border-amber-200"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${isPaid ? "bg-emerald-600" : "bg-amber-600"}`}
-                        />
-                        {isPaid ? "Fully Settled" : "Payment Due"}
-                      </span>
+                      {(() => {
+                        const status = (order?.paymentStatus || "Pending").toLowerCase();
+                        let label = "Payment Due";
+                        let classes = "text-amber-800 bg-amber-50 border border-amber-200";
+                        let dotClass = "bg-amber-600";
+
+                        if (status === "paid") {
+                          label = "Fully Settled";
+                          classes = "text-emerald-700 bg-emerald-50 border border-emerald-200";
+                          dotClass = "bg-emerald-600";
+                        } else if (status === "refunded") {
+                          label = "Refunded";
+                          classes = "text-rose-700 bg-rose-50 border border-rose-200";
+                          dotClass = "bg-rose-600";
+                        } else if (status === "partially refunded" || status === "partially_refunded") {
+                          label = "Partially Refunded";
+                          classes = "text-purple-700 bg-purple-50 border border-purple-200";
+                          dotClass = "bg-purple-600";
+                        }
+
+                        return (
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${classes}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     <div className="overflow-x-auto">
@@ -1741,19 +1756,8 @@ export default function OrdersPage() {
                             })
                           ) : (
                             <tr>
-                              <td className="py-2.5 text-[#0c0a09] font-medium font-sans">
-                                {formattedOrderDate} {formattedOrderTime}
-                              </td>
-                              <td className="py-2.5">
-                                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
-                                  {order?.paymentMode || "Cash"}
-                                </span>
-                              </td>
-                              <td className="py-2.5 text-emerald-700 font-semibold">
-                                Credit
-                              </td>
-                              <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                                ₹{order?.display_total_amount || "0.00"}
+                              <td colSpan={4} className="py-6 text-center text-stone-500 font-medium italic">
+                                No payments recorded yet (Payment Pending)
                               </td>
                             </tr>
                           )}

@@ -610,8 +610,29 @@ export const getOrderDetails = query({
     const remainingDue = Math.max(0, order.totalAmount - netPaid);
     const refundableAmount = Math.max(0, totalCredit - totalDebit);
 
+    let effectivePaymentStatus = order.paymentStatus;
+    let effectiveOrderStatusName = order.orderStatusName;
+
+    if (payments.length > 0) {
+      if (netPaid >= order.totalAmount) {
+        effectivePaymentStatus = "Paid";
+        if (effectiveOrderStatusName === "Cancelled / Refunded") {
+          effectiveOrderStatusName = "Accepted";
+        }
+      } else if (netPaid <= 0 && totalCredit > 0 && totalDebit >= totalCredit) {
+        effectivePaymentStatus = "Refunded";
+        effectiveOrderStatusName = "Cancelled / Refunded";
+      } else if (totalDebit > 0 && netPaid > 0 && netPaid < order.totalAmount) {
+        effectivePaymentStatus = "Partially Refunded";
+      } else if (netPaid > 0 && netPaid < order.totalAmount) {
+        effectivePaymentStatus = "Pending";
+      }
+    }
+
     return {
       ...order,
+      paymentStatus: effectivePaymentStatus,
+      orderStatusName: effectiveOrderStatusName,
       totalCredit,
       totalDebit,
       netPaid,
@@ -1147,20 +1168,24 @@ export const addOrderPayment = mutation({
     let isCompleted = order.isCompleted;
     let isRejected = order.isRejected;
 
-    if (totalDebit > 0) {
-      if (totalDebit >= totalCredit || totalDebit >= order.totalAmount) {
-        nextPaymentStatus = "Refunded";
-        nextOrderStatusName = "Cancelled / Refunded";
-        isCompleted = false;
-        isRejected = true;
-      } else {
-        nextPaymentStatus = "Partially Refunded";
-      }
-    } else if (netPaid >= order.totalAmount) {
+    if (netPaid >= order.totalAmount) {
       nextPaymentStatus = "Paid";
       isCompleted = true;
+      isRejected = false;
+      if (nextOrderStatusName === "Cancelled / Refunded") {
+        nextOrderStatusName = "Accepted";
+      }
+    } else if (netPaid <= 0 && totalCredit > 0 && totalDebit >= totalCredit) {
+      nextPaymentStatus = "Refunded";
+      nextOrderStatusName = "Cancelled / Refunded";
+      isCompleted = false;
+      isRejected = true;
+    } else if (totalDebit > 0 && netPaid > 0 && netPaid < order.totalAmount) {
+      nextPaymentStatus = "Partially Refunded";
+      isCompleted = false;
     } else {
       nextPaymentStatus = "Pending";
+      isCompleted = false;
     }
 
     await ctx.db.patch(order._id, {
