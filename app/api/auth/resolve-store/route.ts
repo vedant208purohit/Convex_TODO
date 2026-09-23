@@ -19,30 +19,10 @@ export async function resolveStoreForAuthenticatedUser() {
     );
   }
 
-  const MANUAL_BRIDGE_SECRET = "7fc001fee3518e5bf73bb2d94052422ef3bc10ee190c518306a8212a5c411672";
-  const bridgeSecret =
-    process.env.BRIDGE_SECRET ||
-    process.env.NEXT_PUBLIC_BRIDGE_SECRET ||
-    MANUAL_BRIDGE_SECRET;
+  const bridgeSecret = process.env.BRIDGE_SECRET;
 
   if (!bridgeSecret) {
-    console.warn("BRIDGE_SECRET is not configured on Default POS server.");
-    if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-      return NextResponse.json(
-        {
-          success: true,
-          organization: {
-            id: "default_org",
-            slug: "store",
-            name: "Default Store",
-          },
-          deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-          user: { role: "admin", status: "active" },
-        },
-        { status: 200 }
-      );
-    }
-
+    console.error("BRIDGE_SECRET is not configured on Default POS server.");
     return NextResponse.json(
       {
         success: false,
@@ -81,22 +61,6 @@ export async function resolveStoreForAuthenticatedUser() {
     const data = await res.json().catch(() => ({}));
 
     if (!res.ok || !data.success) {
-      if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-        return NextResponse.json(
-          {
-            success: true,
-            organization: {
-              id: "default_org",
-              slug: "store",
-              name: "Default Store",
-            },
-            deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-            user: { role: "admin", status: "active" },
-          },
-          { status: 200 }
-        );
-      }
-
       return NextResponse.json(
         {
           success: false,
@@ -118,22 +82,6 @@ export async function resolveStoreForAuthenticatedUser() {
     );
   } catch (error: any) {
     console.error("Failed to connect to Master bridge:", error);
-    if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-      return NextResponse.json(
-        {
-          success: true,
-          organization: {
-            id: "default_org",
-            slug: "store",
-            name: "Default Store",
-          },
-          deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-          user: { role: "admin", status: "active" },
-        },
-        { status: 200 }
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,
