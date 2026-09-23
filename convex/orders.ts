@@ -659,6 +659,9 @@ export const getOrderDetails = query({
           : `/attempts/${attempt._id}`;
       }
     }
+    const netPaid = totalCredit - totalDebit;
+    const remainingDue = Math.max(0, order.totalAmount - netPaid);
+    const refundableAmount = Math.max(0, totalCredit - totalDebit);
 
     return {
       ...order,
