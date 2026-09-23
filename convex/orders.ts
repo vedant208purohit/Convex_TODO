@@ -659,9 +659,6 @@ export const getOrderDetails = query({
           : `/attempts/${attempt._id}`;
       }
     }
-    const netPaid = totalCredit - totalDebit;
-    const remainingDue = Math.max(0, order.totalAmount - netPaid);
-    const refundableAmount = Math.max(0, totalCredit - totalDebit);
 
     return {
       ...order,
@@ -734,10 +731,11 @@ export const getCustomerStats = query({
       totalAmount: number;
       orderType: string;
       itemsSummary: string;
+      items: Array<{ itemName: string; quantity: number }>;
     }> = [];
 
-    // Return only the single most recent order (last order)
-    for (const ord of sortedOrders.slice(0, 1)) {
+    // Return recent orders with item details
+    for (const ord of sortedOrders.slice(0, 15)) {
       const items = await ctx.db
         .query("orderItems")
         .withIndex("by_order", (q) => q.eq("orderId", ord._id))
@@ -753,6 +751,7 @@ export const getCustomerStats = query({
         totalAmount: ord.totalAmount,
         orderType: ord.orderType,
         itemsSummary,
+        items: items.map((it) => ({ itemName: it.itemName, quantity: it.quantity })),
       });
     }
 

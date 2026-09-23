@@ -1686,7 +1686,7 @@ export default function CaptainPage() {
                           setIsCustomerVerified(false);
                         }}
                         maxLength={customerCountryCode === "+91" || customerCountryCode === "IN +91" ? 10 : 15}
-                        className="w-full text-sm font-sans px-3.5 py-2.5 border-none focus:outline-none text-[#0c0a09] placeholder:text-[#a8a29e] placeholder:font-normal bg-transparent font-mono"
+                        className="w-full text-sm font-sans px-3.5 py-2.5 border-none focus:outline-none text-[#0c0a09] placeholder:text-[#a8a29e] placeholder:font-normal bg-transparent font-medium"
                         placeholder={customerCountryCode === "+91" || customerCountryCode === "IN +91" ? "Enter 10-digit mobile number..." : "Enter mobile number..."}
                       />
                     </div>
@@ -1747,19 +1747,19 @@ export default function CaptainPage() {
                       <div className="grid grid-cols-3 gap-2">
                         <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
                           <span className="block text-[10px] text-stone-500 font-medium uppercase">Dine-in</span>
-                          <span className="text-xs font-bold text-stone-900 font-mono">
+                          <span className="text-xs font-bold text-stone-900 font-sans">
                             {customerStats.dineInCount ?? 0} visits
                           </span>
                         </div>
                         <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
                           <span className="block text-[10px] text-stone-500 font-medium uppercase">Takeaway</span>
-                          <span className="text-xs font-bold text-stone-900 font-mono">
+                          <span className="text-xs font-bold text-stone-900 font-sans">
                             {customerStats.takeawayCount ?? 0} visits
                           </span>
                         </div>
                         <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
                           <span className="block text-[10px] text-stone-500 font-medium uppercase">Total Spend</span>
-                          <span className="text-xs font-bold text-emerald-700 font-mono">
+                          <span className="text-xs font-bold text-emerald-700 font-sans">
                             {currencySymbol}{((customerStats.totalSpends || 0) / 100).toFixed(2)}
                           </span>
                         </div>
@@ -1768,21 +1768,23 @@ export default function CaptainPage() {
                       {/* Recent Past Orders */}
                       {customerStats.recentOrders && customerStats.recentOrders.length > 0 ? (
                         <div className="space-y-2">
-                          <span className="text-[11px] font-semibold text-stone-600 block">Recent Orders</span>
-                          <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1">
-                            {customerStats.recentOrders.slice(0, 3).map((ord: any, idx: number) => (
-                              <div key={ord._id || idx} className="bg-white border border-stone-200 rounded-lg p-2 text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-semibold text-stone-600 block">Recent Orders ({customerStats.recentOrders.length})</span>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto space-y-1.5 pr-1 text-[#141010]">
+                            {customerStats.recentOrders.map((ord: any, idx: number) => (
+                              <div key={ord._id || idx} className="bg-white border border-stone-200 rounded-lg p-2 text-xs space-y-1 hover:border-stone-400 transition-colors">
                                 <div className="flex items-center justify-between text-[11px]">
-                                  <span className="font-mono font-semibold text-stone-900">{ord.orderNumber}</span>
+                                  <span className="font-sans font-bold text-stone-900">{ord.orderNumber}</span>
                                   <span className="text-stone-500 text-[10px]">
                                     {new Date(ord.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between text-[11px] text-stone-600">
                                   <span className="truncate max-w-[180px]">
-                                    {ord.items?.map((i: any) => i.itemName).join(", ") || "Dine-in Items"}
+                                    {ord.items?.map((i: any) => i.itemName).join(", ") || ord.itemsSummary || "Dine-in Items"}
                                   </span>
-                                  <span className="font-mono font-semibold text-stone-900 shrink-0 ml-1">
+                                  <span className="font-sans font-bold text-stone-900 shrink-0 ml-1">
                                     {currencySymbol}{((ord.totalAmount || 0) / 100).toFixed(2)}
                                   </span>
                                 </div>
