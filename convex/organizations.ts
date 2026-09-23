@@ -1975,9 +1975,113 @@ export const initializeStore = mutation({
       }
     }
 
+    // 11. Default Survey & Questions Seeding (Idempotent)
+    await seedDefaultSurvey(ctx, org.name);
+
     return { success: true };
   },
 });
+
+/**
+ * Idempotently seeds the default active "Customer Feedback Survey" with standard questions.
+ */
+export async function seedDefaultSurvey(
+  ctx: MutationCtx,
+  storeName?: string
+) {
+  const existingActive = await ctx.db
+    .query("surveys")
+    .withIndex("by_active", (q) => q.eq("active", true))
+    .first();
+
+  if (existingActive) {
+    return existingActive._id;
+  }
+
+  const existingSurveyByName = await ctx.db
+    .query("surveys")
+    .filter((q) => q.eq(q.field("name"), "Customer Feedback Survey"))
+    .first();
+
+  if (existingSurveyByName) {
+    return existingSurveyByName._id;
+  }
+
+  const now = Date.now();
+  const nameToUse = storeName ? storeName : "DEFx POS Store";
+
+  const surveyId = await ctx.db.insert("surveys", {
+    name: "Customer Feedback Survey",
+    introduction: "Thank you for dining with us! Please take a moment to share your feedback.",
+    afterSurveyContent: "Thank you for completing our feedback survey! We hope to see you again soon.",
+    active: true,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Question 1: Numeric rating (1-10 NPS)
+  await ctx.db.insert("surveyQuestions", {
+    surveyId,
+    type: "numeric",
+    questionText: `On a scale of 1-10, How likely are you to recommend ${nameToUse} to your friends & family?`,
+    position: 1,
+    validationRules: {
+      presence: true,
+      greaterThanOrEqualTo: 1,
+      lessThanOrEqualTo: 10,
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Question 2: Checkbox (What went well?)
+  await ctx.db.insert("surveyQuestions", {
+    surveyId,
+    type: "checkbox",
+    questionText: "What went well?",
+    position: 2,
+    answerOptions: [
+      "Food / Product",
+      "Service / Delivery Time",
+      "Ambiance / Packaging",
+    ],
+    validationRules: {
+      presence: false,
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Question 3: Checkbox (Price perception)
+  await ctx.db.insert("surveyQuestions", {
+    surveyId,
+    type: "checkbox",
+    questionText: "How do you find the prices?",
+    position: 3,
+    answerOptions: ["Value for money", "Expensive"],
+    validationRules: {
+      presence: false,
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // Question 4: Long text (Review / suggestions)
+  await ctx.db.insert("surveyQuestions", {
+    surveyId,
+    type: "long",
+    questionText: "Please write a review",
+    placeholder: "Feedback / Suggestion",
+    position: 4,
+    validationRules: {
+      presence: false,
+    },
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return surveyId;
+}
 
 // Soft Deletion Mutation (`remove`)
 export const remove = mutation({
