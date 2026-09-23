@@ -84,7 +84,7 @@ describe("Organization Tables Domain Unit & Business Logic Tests", () => {
           tableNumber: "T3",
           seatingCapacity: 4,
         })
-      ).rejects.toThrow("Forbidden. Admin or Cashier access required.");
+      ).rejects.toThrow("Forbidden. Admin, Cashier, or Captain access required.");
     });
 
     test("Unauthenticated user cannot create a table", async () => {
@@ -307,6 +307,52 @@ describe("Organization Tables Domain Unit & Business Logic Tests", () => {
 
       const list = await asAdmin.query(api.organizationTables.list, {});
       expect(list.some((t) => t._id === tableId)).toBe(false);
+    });
+
+    test("toggleTableBlock toggles table block status", async () => {
+      const { asAdmin } = await setupStoreWithAdmin();
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T200",
+        seatingCapacity: 4,
+      });
+
+      const res1 = await asAdmin.mutation(api.organizationTables.toggleTableBlock, {
+        id: tableId,
+      });
+      expect(res1.isBlock).toBe(true);
+
+      const tableDoc = await asAdmin.query(api.organizationTables.get, { id: tableId });
+      expect(tableDoc?.isBlock).toBe(true);
+
+      const res2 = await asAdmin.mutation(api.organizationTables.toggleTableBlock, {
+        id: tableId,
+        isBlock: false,
+      });
+      expect(res2.isBlock).toBe(false);
+    });
+
+    test("listCaptainTables returns enriched table with layout and active order details", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const layoutId = await asAdmin.mutation(api.organizationLayouts.create, {
+        name: "Main Patio",
+      });
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T300",
+        seatingCapacity: 6,
+        layoutId,
+      });
+
+      const tables = await asAdmin.query(api.organizationTables.listCaptainTables, {
+        layoutId,
+      });
+
+      expect(tables.length).toBe(1);
+      expect(tables[0].tableNumber).toBe("T300");
+      expect(tables[0].layoutName).toBe("Main Patio");
+      expect(tables[0].currentOrder).toBeNull();
     });
   });
 });

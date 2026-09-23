@@ -922,7 +922,13 @@ postpaidOrderRequests: defineTable({
     ),
 
     paymentMode: v.string(),
-    paymentStatus: v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed")),
+    paymentStatus: v.union(
+      v.literal("Pending"),
+      v.literal("Paid"),
+      v.literal("Failed"),
+      v.literal("Refunded"),
+      v.literal("Partially Refunded")
+    ),
 
     specialNotes: v.optional(v.string()),
     taxInfoSnapshot: v.optional(v.any()),
@@ -957,6 +963,7 @@ postpaidOrderRequests: defineTable({
       )
     ),
     isReady: v.boolean(),
+    isToGo: v.optional(v.boolean()),
     stationId: v.optional(v.id("stations")),
     createdAt: v.number(),
   })
