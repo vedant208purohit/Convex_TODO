@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
+import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -962,6 +963,9 @@ export const completeOrder = mutation({
         }
       }
     }
+
+    // 5. Automated Provider Payment Transfer Hook (Fail-safe marketplace payout routing)
+    await handleOrderCompletionTransfer(ctx, order._id);
 
     return {
       success: true,
