@@ -5,6 +5,8 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 
+import { COUNTRIES_MASTER, getStatesForCountry } from "@/lib/constants/countries";
+
 export function SuppliersView({ organizationId }: { organizationId: Id<"organizations"> }) {
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
   const createSupplierMutation = useMutation(api.inventory.createSupplier);
@@ -28,6 +30,8 @@ export function SuppliersView({ organizationId }: { organizationId: Id<"organiza
   const [state, setState] = useState("Gujarat");
   const [city, setCity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const availableStates = useMemo(() => getStatesForCountry(country), [country]);
 
   // Active Dropdown menu state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -503,12 +507,22 @@ export function SuppliersView({ organizationId }: { organizationId: Id<"organiza
                 <select
                   className="w-full px-3 py-2 bg-[#fbf9f8] text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09]"
                   value={country}
-                  onChange={(e) => setCountry(e.target.value)}
+                  onChange={(e) => {
+                    const newCountry = e.target.value;
+                    setCountry(newCountry);
+                    const states = getStatesForCountry(newCountry);
+                    if (states.length > 0) {
+                      setState(states[0].name);
+                    } else {
+                      setState("");
+                    }
+                  }}
                 >
-                  <option value="India">India</option>
-                  <option value="United Arab Emirates">United Arab Emirates</option>
-                  <option value="United Kingdom">United Kingdom</option>
-                  <option value="United States">United States</option>
+                  {Object.values(COUNTRIES_MASTER).map((c) => (
+                    <option key={c.isoCode} value={c.name}>
+                      {c.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
@@ -519,11 +533,11 @@ export function SuppliersView({ organizationId }: { organizationId: Id<"organiza
                   value={state}
                   onChange={(e) => setState(e.target.value)}
                 >
-                  <option value="Gujarat">Gujarat</option>
-                  <option value="Maharashtra">Maharashtra</option>
-                  <option value="Karnataka">Karnataka</option>
-                  <option value="Delhi">Delhi</option>
-                  <option value="Rajasthan">Rajasthan</option>
+                  {availableStates.map((s) => (
+                    <option key={s.code} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

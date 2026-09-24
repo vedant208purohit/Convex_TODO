@@ -17,6 +17,8 @@ interface LocalDeadStockRecord {
 }
 
 export function DeadStockView({ organizationId }: { organizationId: Id<"organizations"> }) {
+  const organizations = useQuery(api.organizations.list);
+  const currencySymbol = organizations?.[0]?.defaultCurrencySymbol || "$";
   // Existing backend query for raw inventory items
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
 
@@ -245,7 +247,7 @@ export function DeadStockView({ organizationId }: { organizationId: Id<"organiza
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Estimated Financial Loss</span>
           <p className="font-serif text-2xl font-semibold text-rose-700 mt-1">
-            {totalValueLoss > 0 ? `₹${totalValueLoss.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : "—"}
+            {totalValueLoss > 0 ? `${currencySymbol}${totalValueLoss.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}
           </p>
         </div>
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
@@ -320,7 +322,7 @@ export function DeadStockView({ organizationId }: { organizationId: Id<"organiza
                           </span>
                         </td>
                         <td className="py-4 px-5 text-right font-semibold text-[#0c0a09]">
-                          {totalLoss > 0 ? `₹${totalLoss.toFixed(2)}` : "—"}
+                          {totalLoss > 0 ? `${currencySymbol}${totalLoss.toFixed(2)}` : "—"}
                         </td>
                       </tr>
                     );

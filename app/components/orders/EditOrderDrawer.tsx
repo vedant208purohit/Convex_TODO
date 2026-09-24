@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
@@ -20,6 +20,8 @@ export default function EditOrderDrawer({
   order,
   onSuccess,
 }: EditOrderDrawerProps) {
+  const organizations = useQuery(api.organizations.list);
+  const currencySymbol = organizations?.[0]?.defaultCurrencySymbol || "$";
   const updateOrderCustomer = useMutation(api.orders.updateOrderCustomer);
   const deleteMultipleOrderItems = useMutation(api.orders.deleteMultipleOrderItems);
 
@@ -270,8 +272,8 @@ export default function EditOrderDrawer({
                   {items.map((item: any) => {
                     const isChecked = selectedItemIds.has(item._id);
                     const formattedPrice = item.display_item_price
-                      ? `₹${Math.round(parseFloat(item.display_item_price))}`
-                      : `₹${Math.round(item.itemPrice / 100)}`;
+                      ? `${currencySymbol}${Math.round(parseFloat(item.display_item_price))}`
+                      : `${currencySymbol}${Math.round(item.itemPrice / 100)}`;
 
                     return (
                       <div

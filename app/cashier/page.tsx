@@ -47,6 +47,8 @@ interface CartItem {
 import {
   COUNTRY_DIAL_OPTIONS,
   formatPhoneNumberWithCountryCode,
+  getPhoneCodeForCountry,
+  getCurrencyForCountry,
 } from "../../lib/constants/countries";
 
 // ==========================================
@@ -112,18 +114,7 @@ function CashierPosContent() {
 
   // Dynamic Country Dial Code resolved from Store Organization Country
   const defaultOrgCountryCode = useMemo(() => {
-    const c = (activeOrg?.country || "").toLowerCase().trim();
-    if (c === "india" || c === "in" || c === "+91") return "+91";
-    if (c === "united arab emirates" || c === "uae" || c === "ae" || c === "+971") return "+971";
-    if (c === "united states" || c === "usa" || c === "us" || c === "canada" || c === "ca" || c === "+1") return "+1";
-    if (c === "united kingdom" || c === "uk" || c === "gb" || c === "+44") return "+44";
-    if (c === "france" || c === "fr" || c === "+33") return "+33";
-    if (c === "australia" || c === "au" || c === "+61") return "+61";
-    if (c === "germany" || c === "de" || c === "+49") return "+49";
-    if (c === "singapore" || c === "sg" || c === "+65") return "+65";
-    if (c === "saudi arabia" || c === "ksa" || c === "sa" || c === "+966") return "+966";
-    if (c === "qatar" || c === "qa" || c === "+974") return "+974";
-    return "+91";
+    return getPhoneCodeForCountry(activeOrg?.country || "India");
   }, [activeOrg?.country]);
 
   // 2. Query Multi-Menu Data & Categories
@@ -156,6 +147,12 @@ function CashierPosContent() {
     api.taxation.listTaxComponents,
     activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
+
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : undefined) ||
+    storeTaxSettings?.currencySymbol ||
+    "$";
 
   // 4. Query Tables, Staff (Employees), Customers, Payment Modes, and Printers
   const tables = useQuery(api.organizationTables.list, {});
@@ -467,7 +464,7 @@ function CashierPosContent() {
           isInclusive: boolean;
         }>,
         isTaxExempt: false,
-        currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+        currencySymbol,
       };
     }
 
@@ -688,7 +685,7 @@ function CashierPosContent() {
       totalPayablePaise,
       componentBreakdown: Array.from(compAccumulator.values()),
       isTaxExempt: subtotalPaise > 0 && totalTaxPaise === 0,
-      currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+      currencySymbol,
     };
   }, [activeCart, storeTaxSettings, taxGroups, taxComponents, allCatalogItems]);
 
@@ -3550,7 +3547,7 @@ function CashierPosContent() {
                             Delivery Charge
                           </span>
                           <div className="mt-1 flex items-baseline gap-1.5">
-                            <span className="font-serif text-xl font-bold text-stone-950">₹58.00</span>
+                            <span className="font-serif text-xl font-bold text-stone-950">{currencySymbol}58.00</span>
                           </div>
                           <p className="text-[11px] text-stone-500 mt-0.5">Standard zone (within 4.5 km)</p>
                         </div>
@@ -4100,14 +4097,12 @@ function CashierPosContent() {
                             </span>
                           )}
                         </div>
-                        <div className="relative rounded-xl shadow-xs">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <span className={`font-medium text-lg transition-colors ${
-                              tenderCashGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                            }`}>
-                              {taxCalculation.currencySymbol}
-                            </span>
-                          </div>
+                        <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
+                          <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                            tenderCashGiven.trim() ? "text-[#141010]" : "text-stone-400"
+                          }`}>
+                            {taxCalculation.currencySymbol}
+                          </span>
                           <input
                             id="cash-tendered-input"
                             name="cash-tendered"
@@ -4115,7 +4110,7 @@ function CashierPosContent() {
                             placeholder="0.00"
                             value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
-                            className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                           />
                         </div>
                       </div>
@@ -4287,14 +4282,12 @@ function CashierPosContent() {
                               </span>
                             )}
                           </div>
-                          <div className="relative rounded-xl shadow-xs">
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                              <span className={`font-medium text-lg transition-colors ${
-                                tenderCardGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                              }`}>
-                                {taxCalculation.currencySymbol}
-                              </span>
-                            </div>
+                          <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
+                            <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                              tenderCardGiven.trim() ? "text-[#141010]" : "text-stone-400"
+                            }`}>
+                              {taxCalculation.currencySymbol}
+                            </span>
                             <input
                               id="card-tendered-input"
                               name="card-tendered"
@@ -4302,7 +4295,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={tenderCardGiven}
                               onChange={(e) => setTenderCardGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4431,14 +4424,12 @@ function CashierPosContent() {
                               </span>
                             )}
                           </div>
-                          <div className="relative rounded-xl shadow-xs">
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                              <span className={`font-medium text-lg transition-colors ${
-                                tenderUpiGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                              }`}>
-                                {taxCalculation.currencySymbol}
-                              </span>
-                            </div>
+                          <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
+                            <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                              tenderUpiGiven.trim() ? "text-[#141010]" : "text-stone-400"
+                            }`}>
+                              {taxCalculation.currencySymbol}
+                            </span>
                             <input
                               id="upi-tendered-input"
                               name="upi-tendered"
@@ -4446,7 +4437,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={tenderUpiGiven}
                               onChange={(e) => setTenderUpiGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4599,18 +4590,16 @@ function CashierPosContent() {
                                   ))}
                               </select>
                             </div>
-                            <div className="relative rounded-xl">
-                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                <span className="font-semibold text-base text-stone-900">
-                                  {taxCalculation.currencySymbol}
-                                </span>
-                              </div>
+                            <div className="flex rounded-xl border border-stone-200 bg-stone-50 overflow-hidden focus-within:bg-white focus-within:ring-2 focus-within:ring-stone-900 transition">
+                              <span className="inline-flex items-center px-3 bg-stone-100 border-r border-stone-200 font-semibold text-sm text-stone-900 whitespace-nowrap select-none">
+                                {taxCalculation.currencySymbol}
+                              </span>
                               <input
                                 type="text"
                                 value={splitPart1Amount}
                                 onChange={(e) => setSplitPart1Amount(e.target.value)}
                                 placeholder="0.00"
-                                className="block w-full pl-8 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-lg font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-stone-900 focus:outline-none transition"
+                                className="block w-full px-3 py-2.5 bg-transparent text-lg font-bold text-stone-900 focus:outline-none"
                               />
                             </div>
                           </div>
@@ -4635,18 +4624,16 @@ function CashierPosContent() {
                                   ))}
                               </select>
                             </div>
-                            <div className="relative rounded-xl">
-                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                <span className="font-semibold text-base text-stone-900">
-                                  {taxCalculation.currencySymbol}
-                                </span>
-                              </div>
+                            <div className="flex rounded-xl border border-stone-200 bg-stone-50 overflow-hidden focus-within:bg-white focus-within:ring-2 focus-within:ring-stone-900 transition">
+                              <span className="inline-flex items-center px-3 bg-stone-100 border-r border-stone-200 font-semibold text-sm text-stone-900 whitespace-nowrap select-none">
+                                {taxCalculation.currencySymbol}
+                              </span>
                               <input
                                 type="text"
                                 value={splitPart2Amount}
                                 onChange={(e) => setSplitPart2Amount(e.target.value)}
                                 placeholder="0.00"
-                                className="block w-full pl-8 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-lg font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-stone-900 focus:outline-none transition"
+                                className="block w-full px-3 py-2.5 bg-transparent text-lg font-bold text-stone-900 focus:outline-none"
                               />
                             </div>
                           </div>

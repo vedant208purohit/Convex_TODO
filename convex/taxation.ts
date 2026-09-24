@@ -287,10 +287,33 @@ export const setDefaultTaxGroup = mutation({
 export const getStoreTaxSettings = query({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const settings = await ctx.db
       .query("storeTaxSettings")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
       .first();
+
+    const org = await ctx.db.get(args.organizationId);
+    if (!settings && org) {
+      return {
+        organizationId: org._id,
+        currencyCode: org.defaultCurrency || "USD",
+        currencySymbol: org.defaultCurrencySymbol || "$",
+        defaultTaxMode: (org.inclusiveGst ? "inclusive" : "exclusive") as "inclusive" | "exclusive",
+        roundOffDecimals: 2,
+        isGstEnabled: Boolean(org.isGst),
+        taxNumber: org.isFssai ? "TAX-REG" : undefined,
+      };
+    }
+
+    if (settings && org) {
+      return {
+        ...settings,
+        currencySymbol: org.defaultCurrencySymbol || settings.currencySymbol || "$",
+        currencyCode: org.defaultCurrency || settings.currencyCode || "USD",
+      };
+    }
+
+    return settings;
   },
 });
 

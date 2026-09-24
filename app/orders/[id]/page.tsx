@@ -10,6 +10,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import EditOrderDrawer from "../../components/orders/EditOrderDrawer";
 import { openReceiptPdfInNewTab } from "../../utils/generateReceiptPdf";
 import { generateDefxReceiptPlainString } from "../../utils/defxReceiptFormatter";
+import { getCurrencyForCountry } from "../../../lib/constants/countries";
 
 function formatOrderPhoneDisplay(phone?: string): string {
   if (!phone || !phone.trim()) return "-";
@@ -316,6 +317,13 @@ export default function OrderDetailsDynamicPage() {
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
 
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "$");
+  const currencyCode =
+    activeOrg?.defaultCurrency ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).code : "USD");
+
   // Query Real Store Order Processes from DB
   const dbProcesses = useQuery(api.organizationOrderProcesses.list, {
     published: true,
@@ -498,11 +506,11 @@ export default function OrderDetailsDynamicPage() {
 
       if (changeAmount > 0) {
         showToast(
-          `Payment of ₹${(settleAmountPaise / 100).toFixed(2)} recorded via ${paymentTenderMode}. Return change: ₹${changeAmount.toFixed(2)}.`,
+          `Payment of ${currencySymbol}${(settleAmountPaise / 100).toFixed(2)} recorded via ${paymentTenderMode}. Return change: ${currencySymbol}${changeAmount.toFixed(2)}.`,
         );
       } else {
         showToast(
-          `Payment of ₹${(settleAmountPaise / 100).toFixed(2)} via ${paymentTenderMode} recorded successfully.`,
+          `Payment of ${currencySymbol}${(settleAmountPaise / 100).toFixed(2)} via ${paymentTenderMode} recorded successfully.`,
         );
       }
     } catch (err: any) {
@@ -535,7 +543,7 @@ export default function OrderDetailsDynamicPage() {
       setDrawerTab(null);
       setRefundAmountInput("");
       showToast(
-        `Refund of ₹${amountVal.toFixed(2)} processed successfully via ${refundPaymentMode}.`,
+        `Refund of ${currencySymbol}${amountVal.toFixed(2)} processed successfully via ${refundPaymentMode}.`,
       );
     } catch (err: any) {
       showToast(err.message || "Failed to process refund");
@@ -931,14 +939,14 @@ export default function OrderDetailsDynamicPage() {
                                       {item.customizations
                                         .map(
                                           (c: any) =>
-                                            `${c.optionName} ₹${(c.price / 100).toFixed(2)}`,
+                                            `${c.optionName} ${currencySymbol}${(c.price / 100).toFixed(2)}`,
                                         )
                                         .join(", ")}
                                     </span>
                                   )}
                               </td>
                               <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
-                                ₹{item.display_item_price}
+                                {currencySymbol}{item.display_item_price}
                               </td>
                               <td className="py-3.5 px-4 text-center align-top">
                                 <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
@@ -946,7 +954,7 @@ export default function OrderDetailsDynamicPage() {
                                 </span>
                               </td>
                               <td className="py-3.5 px-6 text-right text-xs font-bold text-[#0c0a09] align-top">
-                                ₹{item.display_total_price}
+                                {currencySymbol}{item.display_total_price}
                               </td>
                             </tr>
                           ))
@@ -971,7 +979,7 @@ export default function OrderDetailsDynamicPage() {
                         <div className="flex justify-between items-center text-[#7a716b]">
                           <span className="font-medium">Sub Total</span>
                           <span className="font-semibold text-[#0c0a09]">
-                            ₹{order.display_sub_total || "0.00"}
+                            {currencySymbol}{order?.display_sub_total || "0.00"}
                           </span>
                         </div>
 
@@ -987,7 +995,7 @@ export default function OrderDetailsDynamicPage() {
                                   {c.name} ({c.rate}%)
                                 </span>
                                 <span className="font-semibold text-[#0c0a09]">
-                                  +₹
+                                  +{currencySymbol}
                                   {(
                                     ((order.subTotal || 0) * c.rate) /
                                     10000
@@ -1000,7 +1008,7 @@ export default function OrderDetailsDynamicPage() {
                           <div className="flex justify-between items-center text-[#7a716b]">
                             <span>GST (Tax Total)</span>
                             <span className="font-semibold text-[#0c0a09]">
-                              ₹{order.display_tax_total || "0.00"}
+                              {currencySymbol}{order?.display_tax_total || "0.00"}
                             </span>
                           </div>
                         )}
@@ -1012,7 +1020,7 @@ export default function OrderDetailsDynamicPage() {
                               Discount Applied
                             </span>
                             <span className="font-semibold">
-                              -₹{order.display_discount_amount}
+                              -{currencySymbol}{order?.display_discount_amount}
                             </span>
                           </div>
                         )}
@@ -1027,7 +1035,7 @@ export default function OrderDetailsDynamicPage() {
                             </span>
                           </div>
                           <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
-                            ₹{order.display_total_amount || "0.00"}
+                            {currencySymbol}{order?.display_total_amount || "0.00"}
                           </span>
                         </div>
                       </div>
@@ -1122,7 +1130,7 @@ export default function OrderDetailsDynamicPage() {
                                   {typeDisplay}
                                 </td>
                                 <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                                  {isCredit ? "" : "-"}₹
+                                  {isCredit ? "" : "-"}{currencySymbol}
                                   {((p.amount || 0) / 100).toFixed(2)}
                                 </td>
                               </tr>
@@ -1152,20 +1160,20 @@ export default function OrderDetailsDynamicPage() {
                   <h2 className="text-[20px] font-semibold text-[#0c0a09] border-b border-[#e7e5e4] pb-3 mb-4 flex items-center justify-between">
                     <span>Billing &amp; Tax Breakdown</span>
                     <span className="text-xs font-semibold text-[#7a716b]">
-                      INR (₹)
+                      {currencyCode} ({currencySymbol})
                     </span>
                   </h2>
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between items-center text-[#7a716b]">
                       <span className="font-medium">Sub Total</span>
                       <span className="font-semibold text-[#0c0a09]">
-                        ₹{order.display_sub_total || "0.00"}
+                        {currencySymbol}{order?.display_sub_total || "0.00"}
                       </span>
                     </div>
                     <div className="flex justify-between items-center text-[#7a716b] text-xs">
                       <span>CGST (2.5%)</span>
-                      <span className="font-semibold text-[#0c0a09]">
-                        ₹
+                        <span className="font-semibold text-[#0c0a09]">
+                          {currencySymbol}
                         {order.subTotal
                           ? ((order.subTotal * 0.025) / 100).toFixed(2)
                           : "0.00"}
@@ -1173,8 +1181,8 @@ export default function OrderDetailsDynamicPage() {
                     </div>
                     <div className="flex justify-between items-center text-[#7a716b] text-xs">
                       <span>SGST (2.5%)</span>
-                      <span className="font-semibold text-[#0c0a09]">
-                        ₹
+                        <span className="font-semibold text-[#0c0a09]">
+                          {currencySymbol}
                         {order.subTotal
                           ? ((order.subTotal * 0.025) / 100).toFixed(2)
                           : "0.00"}
@@ -1184,7 +1192,7 @@ export default function OrderDetailsDynamicPage() {
                       <div className="flex justify-between items-center text-emerald-700 text-xs">
                         <span className="font-medium">Discount</span>
                         <span className="font-semibold">
-                          -₹{order.display_discount_amount}
+                          -{currencySymbol}{order?.display_discount_amount}
                         </span>
                       </div>
                     )}
@@ -1198,7 +1206,7 @@ export default function OrderDetailsDynamicPage() {
                         </span>
                       </div>
                       <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
-                        ₹{order.display_total_amount || "0.00"}
+                        {currencySymbol}{order?.display_total_amount || "0.00"}
                       </span>
                     </div>
                   </div>
@@ -1220,7 +1228,7 @@ export default function OrderDetailsDynamicPage() {
                         Debit Amount
                       </div>
                       <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
-                        ₹{order.display_refundable_amount || (Math.max(0, ((order.totalCredit || 0) - (order.totalDebit || 0)) / 100).toFixed(2))}
+                        {currencySymbol}{order?.display_refundable_amount || (Math.max(0, ((order.totalCredit || 0) - (order.totalDebit || 0)) / 100).toFixed(2))}
                       </div>
                     </div>
 
@@ -1524,7 +1532,7 @@ export default function OrderDetailsDynamicPage() {
                         </span>
                       </div>
                       <span className="font-sans text-2xl font-bold text-[#141010] tracking-tight">
-                        ₹{order.display_remaining_due || order.display_total_amount}
+                        {currencySymbol}{order?.display_remaining_due || order?.display_total_amount}
                       </span>
                     </div>
 
@@ -1559,16 +1567,17 @@ export default function OrderDetailsDynamicPage() {
                         <label className="block text-xs font-semibold uppercase tracking-wider text-[#7a716b] mb-2">
                           Total given amount
                         </label>
-                        <div className="relative">
-                          <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-semibold text-[#7a716b]">
-                            ₹
+                        <div className="flex rounded-lg border border-[#e7e5e4] bg-white overflow-hidden focus-within:border-black focus-within:ring-1 focus-within:ring-black">
+                          <span className="inline-flex items-center px-3.5 bg-stone-50 border-r border-[#e7e5e4] text-sm font-semibold text-[#7a716b] select-none whitespace-nowrap">
+                            {currencySymbol}
                           </span>
                           <input
-                            className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#e7e5e4] rounded-lg focus:border-black focus:ring-black focus:outline-none bg-white"
+                            className="w-full px-3.5 py-2.5 font-sans text-sm font-semibold text-[#141010] bg-transparent focus:outline-none"
                             type="number"
                             step="any"
                             value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
+                            placeholder="0.00"
                           />
                         </div>
                       </div>
@@ -1612,7 +1621,7 @@ export default function OrderDetailsDynamicPage() {
                                 }
                                 className="py-2 text-xs font-medium font-sans bg-[#faf8f5] hover:bg-[#f4eee8] text-[#141010] border border-[#e7e5e4] rounded-md transition-colors text-center cursor-pointer"
                               >
-                                ₹{amt.toLocaleString("en-IN")}
+                                {currencySymbol}{amt.toLocaleString("en-US")}
                               </button>
                             ));
                           })()}
@@ -1638,7 +1647,7 @@ export default function OrderDetailsDynamicPage() {
                               Return amount
                             </span>
                             <span className="font-sans text-base font-bold text-emerald-700">
-                              ₹{change.toFixed(2)}
+                              {currencySymbol}{change.toFixed(2)}
                             </span>
                           </div>
                         );
@@ -1790,7 +1799,7 @@ export default function OrderDetailsDynamicPage() {
                         Total refund amount
                       </div>
                       <div className="bg-[#141010] text-white px-6 py-3 font-bold text-lg font-mono flex items-center justify-center tracking-tight">
-                        ₹{order.display_total_amount || "0"}
+                        {currencySymbol}{order?.display_total_amount || "0"}
                       </div>
                     </div>
 
@@ -1840,7 +1849,7 @@ export default function OrderDetailsDynamicPage() {
                       </label>
                       <div className="relative">
                         <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-semibold text-[#141010]">
-                          ₹
+                          {currencySymbol}
                         </span>
                         <input
                           className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#d6d3d1] rounded-md focus:border-[#141010] focus:ring-1 focus:ring-[#141010] focus:outline-none bg-white"
@@ -1880,8 +1889,8 @@ export default function OrderDetailsDynamicPage() {
                       }`}
                     >
                       <span>
-                        Record Payment (₹{settleAmt.toFixed(2)})
-                        {change > 0 ? ` • Change ₹${change.toFixed(2)}` : ""}
+                        Record Payment ({currencySymbol}{settleAmt.toFixed(2)})
+                        {change > 0 ? ` • Change ${currencySymbol}${change.toFixed(2)}` : ""}
                       </span>
                     </button>
                   );
@@ -1916,7 +1925,7 @@ export default function OrderDetailsDynamicPage() {
                     >
                       <RefundIcon className="w-4 h-4 !text-white text-white" />
                       <span className="!text-white text-white font-bold text-sm">
-                        Submit Refund (₹{displayAmt})
+                        Submit Refund ({currencySymbol}{displayAmt})
                       </span>
                     </button>
                   );

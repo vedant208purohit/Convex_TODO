@@ -6,6 +6,8 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 
 export function ItemLibraryView({ organizationId }: { organizationId: Id<"organizations"> }) {
+  const organizations = useQuery(api.organizations.list);
+  const currencySymbol = organizations?.[0]?.defaultCurrencySymbol || "$";
   const items = useQuery(api.inventory.listInventoryItems, { organizationId }) ?? [];
   const createItemMutation = useMutation(api.inventory.createInventoryItem);
   const updateItemMutation = useMutation(api.inventory.updateInventoryItem);
@@ -261,7 +263,7 @@ export function ItemLibraryView({ organizationId }: { organizationId: Id<"organi
                           {item.minimumStockRefillLevel} {item.servingUnit}
                         </td>
                         <td className="py-4 px-5 font-medium text-[#0c0a09]">
-                          {item.unitCost !== undefined ? `₹${item.unitCost}` : "—"}
+                          {item.unitCost !== undefined ? `${currencySymbol}${item.unitCost}` : "—"}
                         </td>
                         <td className="py-4 px-5">
                           {item.isLowStock ? (
@@ -293,7 +295,7 @@ export function ItemLibraryView({ organizationId }: { organizationId: Id<"organi
             <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/50 flex items-center justify-between text-xs text-[#78716c] shrink-0">
               <span>Showing {filteredItems.length} of {items.length} raw ingredient(s)</span>
               <span>
-                Total Inventory Value: <strong className="text-[#0c0a09]">₹{totalInventoryValue.toLocaleString("en-IN")}</strong>
+                Total Inventory Value: <strong className="text-[#0c0a09]">{currencySymbol}{totalInventoryValue.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
               </span>
             </div>
           </div>
@@ -440,7 +442,7 @@ export function ItemLibraryView({ organizationId }: { organizationId: Id<"organi
             </div>
 
             <div>
-              <label className="block font-medium text-[#1c1917] mb-1">Unit Cost (₹)</label>
+              <label className="block font-medium text-[#1c1917] mb-1">Unit Cost ({currencySymbol})</label>
               <input
                 type="number"
                 step="0.01"

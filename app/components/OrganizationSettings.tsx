@@ -66,35 +66,13 @@ import {
   getCurrencyForCountry,
   getTimezoneForCountry,
   getPhoneCodeForCountry,
+  TIMEZONE_OPTIONS,
+  COUNTRY_OPTIONS,
+  CURRENCY_OPTIONS,
+  PHONE_CODE_OPTIONS,
 } from "@/lib/constants/countries";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-const COUNTRY_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => c.name);
-
-const TIMEZONE_OPTIONS = [
-  { label: "Asia/Kolkata (IST)", value: "Asia/Kolkata" },
-  { label: "Asia/Dubai (GST)", value: "Asia/Dubai" },
-  { label: "America/New_York (EST)", value: "America/New_York" },
-  { label: "Europe/London (GMT)", value: "Europe/London" },
-  { label: "Europe/Paris (CET)", value: "Europe/Paris" },
-  { label: "Asia/Singapore (SGT)", value: "Asia/Singapore" },
-  { label: "Australia/Sydney (AEST)", value: "Australia/Sydney" },
-  { label: "Asia/Riyadh (AST)", value: "Asia/Riyadh" },
-  { label: "Asia/Tokyo (JST)", value: "Asia/Tokyo" },
-  { label: "UTC", value: "UTC" },
-];
-
-const CURRENCY_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
-  label: `${c.currency.code} (${c.currency.symbol})`,
-  currency: c.currency.code,
-  symbol: c.currency.symbol,
-}));
-
-const PHONE_CODE_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
-  code: c.phoneCode,
-  country: c.name,
-}));
 
 function parseTimeToDayMinutes(timeStr: string): number {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -373,8 +351,8 @@ export function OrganizationSettings() {
       state: org.state || "",
       country: org.country || "India",
       organizationTimeZone: org.organizationTimeZone || "Asia/Kolkata",
-      defaultCurrency: org.defaultCurrency || "INR",
-      defaultCurrencySymbol: org.defaultCurrencySymbol || "₹",
+      defaultCurrency: org.defaultCurrency || (org.country ? getCurrencyForCountry(org.country).code : "USD"),
+      defaultCurrencySymbol: org.defaultCurrencySymbol || (org.country ? getCurrencyForCountry(org.country).symbol : "$"),
       email: org.email || "",
       phoneCountryCode: code,
       phoneNumber: num,

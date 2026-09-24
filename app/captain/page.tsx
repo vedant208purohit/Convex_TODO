@@ -23,6 +23,9 @@ interface CartLineItem {
 import {
   COUNTRY_DIAL_OPTIONS,
   formatPhoneNumberWithCountryCode,
+  getPhoneCodeForCountry,
+  getCurrencyForCountry,
+  isIndiaCountry,
 } from "../../lib/constants/countries";
 
 function getLayoutSignIcon(name?: string, isSelected?: boolean) {
@@ -132,16 +135,8 @@ export default function CaptainPage() {
   const orgId = activeOrg?._id;
 
   const defaultOrgCountryCode = useMemo(() => {
-    if (!activeOrg) return "+91";
-    const country = (activeOrg.country || "").toUpperCase();
-    if (country === "US" || country === "USA" || country === "UNITED STATES") return "+1";
-    if (country === "UK" || country === "GB" || country === "UNITED KINGDOM") return "+44";
-    if (country === "AE" || country === "UAE" || country === "UNITED ARAB EMIRATES") return "+971";
-    if (country === "AU" || country === "AUSTRALIA") return "+61";
-    if (country === "SG" || country === "SINGAPORE") return "+65";
-    if (country === "CA" || country === "CANADA") return "+1";
-    return "+91";
-  }, [activeOrg]);
+    return getPhoneCodeForCountry(activeOrg?.country || "India");
+  }, [activeOrg?.country]);
 
   const layouts = useQuery(api.organizationLayouts.list);
   const [selectedLayoutId, setSelectedLayoutId] = useState<Id<"organizationLayouts"> | undefined>(undefined);
@@ -171,7 +166,11 @@ export default function CaptainPage() {
     activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
 
-  const currencySymbol = storeTaxSettings?.currencySymbol || "₹";
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : undefined) ||
+    storeTaxSettings?.currencySymbol ||
+    "$";
 
   // Fetch employees from store organizationUsers
   const employees = useQuery(
@@ -469,7 +468,7 @@ export default function CaptainPage() {
           taxAmountPaise: number;
           isInclusive: boolean;
         }>,
-        currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+        currencySymbol,
       };
     }
 
@@ -685,7 +684,7 @@ export default function CaptainPage() {
       totalTaxPaise,
       totalPayablePaise,
       componentBreakdown: Array.from(compAccumulator.values()),
-      currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+      currencySymbol,
     };
   }, [runningCart, allCatalogItems, storeTaxSettings, taxGroups, taxComponents]);
 
@@ -818,7 +817,7 @@ export default function CaptainPage() {
 
   const handleSaveCustomerInfo = () => {
     const digits = customerPhone.replace(/\D/g, "");
-    const isIndia = customerCountryCode === "+91" || customerCountryCode === "IN +91";
+    const isIndia = isIndiaCountry(customerCountryCode);
 
     if (!digits) {
       showToast("Please enter customer phone number");
@@ -1647,14 +1646,14 @@ export default function CaptainPage() {
                         value={customerPhone}
                         onChange={(e) => {
                           const val = e.target.value.replace(/\D/g, "");
-                          const isIndia = customerCountryCode === "+91" || customerCountryCode === "IN +91";
+                          const isIndia = isIndiaCountry(customerCountryCode);
                           const maxLen = isIndia ? 10 : 15;
                           setCustomerPhone(val.slice(0, maxLen));
                           setIsCustomerVerified(false);
                         }}
-                        maxLength={customerCountryCode === "+91" || customerCountryCode === "IN +91" ? 10 : 15}
+                        maxLength={isIndiaCountry(customerCountryCode) ? 10 : 15}
                         className="w-full text-sm font-sans px-3.5 py-2.5 border-none focus:outline-none text-[#0c0a09] placeholder:text-[#a8a29e] placeholder:font-normal bg-transparent font-medium"
-                        placeholder={customerCountryCode === "+91" || customerCountryCode === "IN +91" ? "Enter 10-digit mobile number..." : "Enter mobile number..."}
+                        placeholder={isIndiaCountry(customerCountryCode) ? "Enter 10-digit mobile number..." : "Enter mobile number..."}
                       />
                     </div>
                   </div>

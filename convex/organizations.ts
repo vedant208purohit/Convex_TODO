@@ -252,6 +252,11 @@ import { initializeDefaultsHelper } from "./organizationFeatures";
 import { getOrInitializeActiveConfig } from "./organizationQueueConfigurations";
 import { resolveAssetOrStorageUrl } from "./assetResolver";
 import { seedDefaultProcessNotifications } from "./processNotifications";
+import {
+  getTimezoneForCountry,
+  getCurrencyForCountry,
+  getPhoneCodeForCountry,
+} from "../lib/constants/countries";
 
 
 
@@ -374,22 +379,24 @@ export function validateOptionalUrl(url?: string): string | undefined {
 function validatePhoneWithCountryCode(phone?: string, country?: string): string | undefined {
   if (!phone || !phone.trim()) return undefined;
 
-  const raw = phone.trim();
+  // Clean common formatting characters (spaces, hyphens, parentheses, dots)
+  const raw = phone.trim().replace(/[\s\-\(\)\.]/g, "");
 
-  // Check for invalid formatting characters (spaces, hyphens, slashes, alphabetic characters)
+  // Check for invalid formatting characters (must only contain digits and optional leading +)
   if (/[^0-9+]/.test(raw) || (raw.includes("+") && !raw.startsWith("+"))) {
-    throw new Error("Phone must contain only digits, with no spaces, hyphens, or slashes");
+    throw new Error("Phone must contain only digits, with no letters or special symbols");
   }
 
   const digitsOnly = raw.replace(/\D/g, "");
+  if (!digitsOnly) return undefined;
+
+  const dialCode = getPhoneCodeForCountry(country || "");
+  const dialDigits = dialCode.replace(/\D/g, "");
 
   if (raw.startsWith("+971") || country === "United Arab Emirates" || country === "UAE") {
     let uaeDigits = digitsOnly;
     if (uaeDigits.startsWith("971")) {
       uaeDigits = uaeDigits.slice(3);
-    }
-    if (uaeDigits.length !== 9) {
-      throw new Error("Phone must be 9 digits long for UAE");
     }
     return `+971${uaeDigits}`;
   } else if (raw.startsWith("+33") || country === "France") {
@@ -397,17 +404,11 @@ function validatePhoneWithCountryCode(phone?: string, country?: string): string 
     if (frDigits.startsWith("33")) {
       frDigits = frDigits.slice(2);
     }
-    if (frDigits.length !== 9) {
-      throw new Error("Phone must be 9 digits long for France");
-    }
     return `+33${frDigits}`;
   } else if (raw.startsWith("+44") || country === "United Kingdom") {
     let ukDigits = digitsOnly;
     if (ukDigits.startsWith("44")) {
       ukDigits = ukDigits.slice(2);
-    }
-    if (ukDigits.length !== 10) {
-      throw new Error("Phone must be 10 digits long for UK");
     }
     return `+44${ukDigits}`;
   } else if (raw.startsWith("+1") || country === "United States" || country === "Canada") {
@@ -415,19 +416,22 @@ function validatePhoneWithCountryCode(phone?: string, country?: string): string 
     if (usDigits.startsWith("1") && usDigits.length === 11) {
       usDigits = usDigits.slice(1);
     }
-    if (usDigits.length !== 10) {
-      throw new Error("Phone must be 10 digits long for US/Canada");
-    }
     return `+1${usDigits}`;
-  } else {
+  } else if (raw.startsWith("+91") || country === "India") {
     let inDigits = digitsOnly;
     if (inDigits.startsWith("91") && inDigits.length === 12) {
       inDigits = inDigits.slice(2);
     }
-    if (inDigits.length !== 10) {
-      throw new Error("Phone must be 10 digits long for India");
-    }
     return `+91${inDigits}`;
+  } else {
+    // Generic dynamic country fallback
+    if (raw.startsWith("+")) {
+      return `+${digitsOnly}`;
+    }
+    if (dialDigits && digitsOnly.startsWith(dialDigits)) {
+      return `+${digitsOnly}`;
+    }
+    return `${dialCode}${digitsOnly}`;
   }
 }
 
@@ -534,54 +538,16 @@ function resolveCurrencyAndSymbol(
   }
 
   if (country) {
-    const c = country.trim().toLowerCase();
-    if (c === "india" || c === "in" || c === "+91") {
-      return {
-        defaultCurrency: explicitCurrency || "INR",
-        defaultCurrencySymbol: explicitSymbol || "₹",
-      };
-    }
-    if (c === "united arab emirates" || c === "uae" || c === "+971") {
-      return {
-        defaultCurrency: explicitCurrency || "AED",
-        defaultCurrencySymbol: explicitSymbol || "AED",
-      };
-    }
-    if (c === "united states" || c === "us" || c === "usa" || c === "+1") {
-      return {
-        defaultCurrency: explicitCurrency || "USD",
-        defaultCurrencySymbol: explicitSymbol || "$",
-      };
-    }
-    if (c === "france" || c === "fr" || c === "+33") {
-      return {
-        defaultCurrency: explicitCurrency || "EUR",
-        defaultCurrencySymbol: explicitSymbol || "€",
-      };
-    }
-    if (c === "united kingdom" || c === "uk" || c === "gb" || c === "+44") {
-      return {
-        defaultCurrency: explicitCurrency || "GBP",
-        defaultCurrencySymbol: explicitSymbol || "£",
-      };
-    }
-    if (c === "canada" || c === "ca") {
-      return {
-        defaultCurrency: explicitCurrency || "CAD",
-        defaultCurrencySymbol: explicitSymbol || "$",
-      };
-    }
-    if (c === "australia" || c === "au" || c === "+61") {
-      return {
-        defaultCurrency: explicitCurrency || "AUD",
-        defaultCurrencySymbol: explicitSymbol || "$",
-      };
-    }
+    const currencyInfo = getCurrencyForCountry(country);
+    return {
+      defaultCurrency: explicitCurrency || currencyInfo.code,
+      defaultCurrencySymbol: explicitSymbol || currencyInfo.symbol,
+    };
   }
 
   return {
-    defaultCurrency: explicitCurrency || "INR",
-    defaultCurrencySymbol: explicitSymbol || "₹",
+    defaultCurrency: explicitCurrency || "USD",
+    defaultCurrencySymbol: explicitSymbol || "$",
   };
 }
 
@@ -991,7 +957,9 @@ export const create = mutation({
     const receiptPrintCount = args.receiptPrintCount ?? 1;
     const menuBasedPrintToken = args.menuBasedPrintToken ?? false;
     const showQrCode = args.showQrCode ?? false;
-    const organizationTimeZone = args.organizationTimeZone ?? "UTC";
+    const organizationTimeZone =
+      args.organizationTimeZone ||
+      (args.country?.trim() ? getTimezoneForCountry(args.country) : "UTC");
 
     // Service Mode Defaults
     const isDineIn = args.isDineIn ?? false;
@@ -1796,11 +1764,47 @@ export const updateStoreProfileFromProvisioning = mutation({
   },
 });
 
+export const syncStoreLocation = mutation({
+  args: {
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
+    city: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    organizationTimeZone: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db.query("organizations").first();
+    if (!org) throw new Error("No organization found");
+    const patchPayload: Record<string, any> = { updatedAt: Date.now() };
+    if (args.country) {
+      patchPayload.country = args.country;
+      const curr = getCurrencyForCountry(args.country);
+      patchPayload.defaultCurrency = curr.code;
+      patchPayload.defaultCurrencySymbol = curr.symbol;
+      if (!args.organizationTimeZone) {
+        patchPayload.organizationTimeZone = getTimezoneForCountry(args.country);
+      }
+    }
+    if (args.state) patchPayload.state = args.state;
+    if (args.city) patchPayload.city = args.city;
+    if (args.phone) patchPayload.phone = args.phone;
+    if (args.organizationTimeZone) patchPayload.organizationTimeZone = args.organizationTimeZone;
+    await ctx.db.patch(org._id, patchPayload);
+    return { success: true, updated: patchPayload };
+  },
+});
+
 // Store Initialization & Seeding Mutation (`initializeStore`)
 export const initializeStore = mutation({
   args: {
     id: v.id("organizations"),
     slug: v.optional(v.string()),
+    name: v.optional(v.string()),
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
+    city: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    organizationTimeZone: v.optional(v.string()),
     provisioningToken: v.optional(v.string()),
     timestamp: v.optional(v.number()),
   },
@@ -1819,6 +1823,28 @@ export const initializeStore = mutation({
     });
 
     const now = Date.now();
+
+    // 0. Update/Sync store metadata from provisioning parameters
+    const patchPayload: Record<string, any> = { updatedAt: now };
+    if (args.name && args.name.trim()) patchPayload.name = args.name.trim();
+    if (args.country && args.country.trim()) {
+      const cleanCountry = args.country.trim();
+      patchPayload.country = cleanCountry;
+      const curr = getCurrencyForCountry(cleanCountry);
+      patchPayload.defaultCurrency = curr.code;
+      patchPayload.defaultCurrencySymbol = curr.symbol;
+    }
+    if (args.state && args.state.trim()) patchPayload.state = args.state.trim();
+    if (args.city && args.city.trim()) patchPayload.city = args.city.trim();
+    if (args.phone && args.phone.trim()) patchPayload.phone = args.phone.trim();
+    if (args.organizationTimeZone && args.organizationTimeZone.trim()) {
+      patchPayload.organizationTimeZone = args.organizationTimeZone.trim();
+    } else if (args.country && args.country.trim() && (!org.organizationTimeZone || org.organizationTimeZone === "UTC")) {
+      patchPayload.organizationTimeZone = getTimezoneForCountry(args.country.trim());
+    }
+    if (Object.keys(patchPayload).length > 1) {
+      await ctx.db.patch(args.id, patchPayload);
+    }
 
     // 1. Prep Stations Seeding (Idempotent)
     const existingStations = await ctx.db

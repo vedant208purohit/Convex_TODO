@@ -8,6 +8,11 @@ export interface StateOption {
   code: string;
 }
 
+export interface TimezoneOption {
+  label: string;
+  value: string;
+}
+
 export interface CountryMaster {
   name: string;
   isoCode: string; // ISO 3166-1 alpha-2
@@ -17,6 +22,7 @@ export interface CountryMaster {
     symbol: string;
   };
   defaultTimezone: string;
+  timezones?: TimezoneOption[];
   states: StateOption[];
 }
 
@@ -27,6 +33,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+91",
     currency: { code: "INR", symbol: "₹" },
     defaultTimezone: "Asia/Kolkata",
+    timezones: [
+      { label: "Asia/Kolkata (IST - UTC+05:30)", value: "Asia/Kolkata" },
+    ],
     states: [
       { name: "Andhra Pradesh", code: "AP" },
       { name: "Arunachal Pradesh", code: "AR" },
@@ -73,6 +82,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+971",
     currency: { code: "AED", symbol: "AED" },
     defaultTimezone: "Asia/Dubai",
+    timezones: [
+      { label: "Asia/Dubai (GST - UTC+04:00)", value: "Asia/Dubai" },
+    ],
     states: [
       { name: "Abu Dhabi", code: "AZ" },
       { name: "Ajman", code: "AJ" },
@@ -89,6 +101,15 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+1",
     currency: { code: "USD", symbol: "$" },
     defaultTimezone: "America/New_York",
+    timezones: [
+      { label: "America/New_York (Eastern - EST/EDT)", value: "America/New_York" },
+      { label: "America/Chicago (Central - CST/CDT)", value: "America/Chicago" },
+      { label: "America/Denver (Mountain - MST/MDT)", value: "America/Denver" },
+      { label: "America/Los_Angeles (Pacific - PST/PDT)", value: "America/Los_Angeles" },
+      { label: "America/Phoenix (Arizona - Mountain Standard)", value: "America/Phoenix" },
+      { label: "America/Anchorage (Alaska - AKST/AKDT)", value: "America/Anchorage" },
+      { label: "Pacific/Honolulu (Hawaii - HST)", value: "Pacific/Honolulu" },
+    ],
     states: [
       { name: "Alabama", code: "AL" },
       { name: "Alaska", code: "AK" },
@@ -149,6 +170,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+44",
     currency: { code: "GBP", symbol: "£" },
     defaultTimezone: "Europe/London",
+    timezones: [
+      { label: "Europe/London (GMT/BST - UTC+00:00)", value: "Europe/London" },
+    ],
     states: [
       { name: "England", code: "ENG" },
       { name: "Scotland", code: "SCT" },
@@ -162,6 +186,14 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+1",
     currency: { code: "CAD", symbol: "CA$" },
     defaultTimezone: "America/Toronto",
+    timezones: [
+      { label: "America/Toronto (Eastern - Toronto / Ottawa)", value: "America/Toronto" },
+      { label: "America/Vancouver (Pacific - Vancouver)", value: "America/Vancouver" },
+      { label: "America/Edmonton (Mountain - Calgary / Edmonton)", value: "America/Edmonton" },
+      { label: "America/Winnipeg (Central - Winnipeg)", value: "America/Winnipeg" },
+      { label: "America/Halifax (Atlantic - Halifax)", value: "America/Halifax" },
+      { label: "America/St_Johns (Newfoundland - St. John's)", value: "America/St_Johns" },
+    ],
     states: [
       { name: "Alberta", code: "AB" },
       { name: "British Columbia", code: "BC" },
@@ -184,6 +216,14 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+61",
     currency: { code: "AUD", symbol: "A$" },
     defaultTimezone: "Australia/Sydney",
+    timezones: [
+      { label: "Australia/Sydney (Eastern - Sydney / Melbourne)", value: "Australia/Sydney" },
+      { label: "Australia/Brisbane (Queensland - Brisbane)", value: "Australia/Brisbane" },
+      { label: "Australia/Adelaide (Central - Adelaide)", value: "Australia/Adelaide" },
+      { label: "Australia/Perth (Western - Perth)", value: "Australia/Perth" },
+      { label: "Australia/Darwin (Northern Territory - Darwin)", value: "Australia/Darwin" },
+      { label: "Australia/Hobart (Tasmania - Hobart)", value: "Australia/Hobart" },
+    ],
     states: [
       { name: "Australian Capital Territory", code: "ACT" },
       { name: "New South Wales", code: "NSW" },
@@ -201,6 +241,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+65",
     currency: { code: "SGD", symbol: "S$" },
     defaultTimezone: "Asia/Singapore",
+    timezones: [
+      { label: "Asia/Singapore (SGT - UTC+08:00)", value: "Asia/Singapore" },
+    ],
     states: [
       { name: "Central", code: "01" },
       { name: "East", code: "02" },
@@ -215,6 +258,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+966",
     currency: { code: "SAR", symbol: "SAR" },
     defaultTimezone: "Asia/Riyadh",
+    timezones: [
+      { label: "Asia/Riyadh (AST - UTC+03:00)", value: "Asia/Riyadh" },
+    ],
     states: [
       { name: "Riyadh", code: "01" },
       { name: "Makkah", code: "02" },
@@ -237,6 +283,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+974",
     currency: { code: "QAR", symbol: "QAR" },
     defaultTimezone: "Asia/Qatar",
+    timezones: [
+      { label: "Asia/Qatar (AST - UTC+03:00)", value: "Asia/Qatar" },
+    ],
     states: [
       { name: "Doha", code: "DA" },
       { name: "Al Rayyan", code: "RA" },
@@ -254,6 +303,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+49",
     currency: { code: "EUR", symbol: "€" },
     defaultTimezone: "Europe/Berlin",
+    timezones: [
+      { label: "Europe/Berlin (CET/CEST - UTC+01:00)", value: "Europe/Berlin" },
+    ],
     states: [
       { name: "Baden-Württemberg", code: "BW" },
       { name: "Bavaria", code: "BY" },
@@ -279,6 +331,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+33",
     currency: { code: "EUR", symbol: "€" },
     defaultTimezone: "Europe/Paris",
+    timezones: [
+      { label: "Europe/Paris (CET/CEST - UTC+01:00)", value: "Europe/Paris" },
+    ],
     states: [
       { name: "Auvergne-Rhône-Alpes", code: "ARA" },
       { name: "Bourgogne-Franche-Comté", code: "BFC" },
@@ -301,6 +356,9 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+81",
     currency: { code: "JPY", symbol: "¥" },
     defaultTimezone: "Asia/Tokyo",
+    timezones: [
+      { label: "Asia/Tokyo (JST - UTC+09:00)", value: "Asia/Tokyo" },
+    ],
     states: [
       { name: "Tokyo", code: "13" },
       { name: "Osaka", code: "27" },
@@ -319,7 +377,12 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
 export const COUNTRY_DIAL_OPTIONS = [
   { code: "+91", label: "IN +91", country: "India", iso: "IN" },
   { code: "+1", label: "US +1", country: "United States", iso: "US" },
-  { code: "+971", label: "AE +971", country: "United Arab Emirates", iso: "AE" },
+  {
+    code: "+971",
+    label: "AE +971",
+    country: "United Arab Emirates",
+    iso: "AE",
+  },
   { code: "+44", label: "UK +44", country: "United Kingdom", iso: "GB" },
   { code: "+33", label: "FR +33", country: "France", iso: "FR" },
   { code: "+61", label: "AU +61", country: "Australia", iso: "AU" },
@@ -330,24 +393,78 @@ export const COUNTRY_DIAL_OPTIONS = [
   { code: "+974", label: "QA +974", country: "Qatar", iso: "QA" },
 ];
 
+export interface TimezoneOption {
+  label: string;
+  value: string;
+}
+
+export const TIMEZONE_OPTIONS: TimezoneOption[] = [
+  { label: "Asia/Kolkata (IST)", value: "Asia/Kolkata" },
+  { label: "Asia/Dubai (GST)", value: "Asia/Dubai" },
+  { label: "America/New_York (EST)", value: "America/New_York" },
+  { label: "Europe/London (GMT)", value: "Europe/London" },
+  { label: "Europe/Paris (CET)", value: "Europe/Paris" },
+  { label: "Asia/Singapore (SGT)", value: "Asia/Singapore" },
+  { label: "Australia/Sydney (AEST)", value: "Australia/Sydney" },
+  { label: "Asia/Riyadh (AST)", value: "Asia/Riyadh" },
+  { label: "Asia/Tokyo (JST)", value: "Asia/Tokyo" },
+  { label: "UTC", value: "UTC" },
+];
+
+export const COUNTRY_OPTIONS: string[] = Object.values(COUNTRIES_MASTER).map(
+  (c) => c.name,
+);
+
+export const CURRENCY_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
+  label: `${c.currency.code} (${c.currency.symbol})`,
+  currency: c.currency.code,
+  symbol: c.currency.symbol,
+}));
+
+export const PHONE_CODE_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
+  code: c.phoneCode,
+  country: c.name,
+}));
+
 /**
- * Resolves a CountryMaster object by ISO Code or Country Name (case-insensitive).
+ * Resolves a CountryMaster object by ISO Code, Country Name, or Phone Dial Code (case-insensitive).
  */
-export function getCountryMaster(codeOrName: string): CountryMaster | undefined {
-  if (!codeOrName) return undefined;
-  const upper = codeOrName.toUpperCase().trim();
+export function getCountryMaster(
+  codeOrNameOrDial?: string,
+): CountryMaster | undefined {
+  if (!codeOrNameOrDial) return undefined;
+  const upper = codeOrNameOrDial.toUpperCase().trim();
 
   // Try direct ISO lookup first
   if (COUNTRIES_MASTER[upper]) {
     return COUNTRIES_MASTER[upper];
   }
 
-  // Look up by country name
-  const lower = codeOrName.toLowerCase().trim();
+  // Look up by country name, ISO code, or phone dial code
+  const lower = codeOrNameOrDial.toLowerCase().trim();
   const entry = Object.values(COUNTRIES_MASTER).find(
-    (c) => c.name.toLowerCase() === lower || c.isoCode.toLowerCase() === lower,
+    (c) =>
+      c.name.toLowerCase() === lower ||
+      c.isoCode.toLowerCase() === lower ||
+      c.phoneCode === codeOrNameOrDial.trim() ||
+      `${c.isoCode} ${c.phoneCode}`.toLowerCase() === lower,
   );
   return entry;
+}
+
+/**
+ * Checks if a country name, ISO code, or phone dial code represents India.
+ */
+export function isIndiaCountry(codeOrNameOrDial?: string): boolean {
+  if (!codeOrNameOrDial) return false;
+  const clean = codeOrNameOrDial.trim().toLowerCase();
+  return (
+    clean === "in" ||
+    clean === "india" ||
+    clean === "+91" ||
+    clean === "in +91" ||
+    clean === "91"
+  );
 }
 
 /**
@@ -361,9 +478,26 @@ export function getStatesForCountry(codeOrName: string): StateOption[] {
 /**
  * Returns currency info ({ code, symbol }) for a given country.
  */
-export function getCurrencyForCountry(codeOrName: string): { code: string; symbol: string } {
+export function getCurrencyForCountry(codeOrName: string): {
+  code: string;
+  symbol: string;
+} {
   const master = getCountryMaster(codeOrName);
   return master?.currency || { code: "INR", symbol: "₹" };
+}
+
+/**
+ * Returns available timezone options for a given country.
+ */
+export function getTimezonesForCountry(codeOrName: string): TimezoneOption[] {
+  const master = getCountryMaster(codeOrName);
+  if (master?.timezones && master.timezones.length > 0) {
+    return master.timezones;
+  }
+  if (master?.defaultTimezone) {
+    return [{ label: master.defaultTimezone, value: master.defaultTimezone }];
+  }
+  return TIMEZONE_OPTIONS;
 }
 
 /**
@@ -408,7 +542,9 @@ export function formatPhoneNumberWithCountryCode(
   const digits = trimmed.replace(/\D/g, "");
   if (!digits) return trimmed;
 
-  const currentCode = defaultCode.startsWith("+") ? defaultCode : `+${defaultCode}`;
+  const currentCode = defaultCode.startsWith("+")
+    ? defaultCode
+    : `+${defaultCode}`;
 
   if (currentCode === "+91") {
     if (digits.length === 12 && digits.startsWith("91")) {

@@ -8,6 +8,8 @@ export const revalidate = 0;
 export async function resolveStoreForAuthenticatedUser() {
   const { userId } = await auth();
 
+  console.log("Bridge secret:", process.env.BRIDGE_SECRET);
+
   if (!userId) {
     return NextResponse.json(
       {
@@ -15,7 +17,7 @@ export async function resolveStoreForAuthenticatedUser() {
         error: "Unauthorized: No active Default Clerk session.",
         code: "UNAUTHORIZED",
       },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
@@ -66,7 +68,7 @@ export async function resolveStoreForAuthenticatedUser() {
         error: "Server configuration error: Missing BRIDGE_SECRET.",
         code: "BRIDGE_MISCONFIGURED",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
@@ -105,7 +107,9 @@ export async function resolveStoreForAuthenticatedUser() {
     console.log("[BRIDGE_DEBUG] master bridge response:", {
       status: res.status,
       ok: res.ok,
-      contentType: res.headers?.get ? res.headers.get("content-type") : undefined,
+      contentType: res.headers?.get
+        ? res.headers.get("content-type")
+        : undefined,
       errorCode: data?.code,
       errorMsg: data?.error,
       hasDeploymentUrl: Boolean(data?.deployment?.url || data?.deploymentUrl),
@@ -118,7 +122,7 @@ export async function resolveStoreForAuthenticatedUser() {
           error: data.error || "Store resolution failed.",
           code: data.code || "STORE_RESOLUTION_FAILED",
         },
-        { status: res.status || 400 }
+        { status: res.status || 400 },
       );
     }
 
@@ -129,17 +133,18 @@ export async function resolveStoreForAuthenticatedUser() {
         deploymentUrl: data.deployment?.url || data.deploymentUrl,
         user: data.user,
       },
-      { status: 200 }
+      { status: 200 },
     );
   } catch (error: unknown) {
     console.error("Failed to connect to Master bridge:", error);
     return NextResponse.json(
       {
         success: false,
-        error: "Unable to reach Master control plane to resolve store deployment.",
+        error:
+          "Unable to reach Master control plane to resolve store deployment.",
         code: "BRIDGE_UNREACHABLE",
       },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }

@@ -6,6 +6,8 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 
 export function ItemRecipesView({ organizationId }: { organizationId: Id<"organizations"> }) {
+  const organizations = useQuery(api.organizations.list);
+  const currencySymbol = organizations?.[0]?.defaultCurrencySymbol || "$";
   // Existing backend queries
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
   const menuData = useQuery((api.menu as any).getOrganizationMenu, { organizationId }) as any[] | undefined;
@@ -267,7 +269,7 @@ export function ItemRecipesView({ organizationId }: { organizationId: Id<"organi
                       )}
                     </div>
                     <span className={`font-semibold ${isSelected ? "text-white" : "text-stone-700"}`}>
-                      ₹{item.price}
+                      {currencySymbol}{item.price}
                     </span>
                   </button>
                 );
@@ -292,7 +294,7 @@ export function ItemRecipesView({ organizationId }: { organizationId: Id<"organi
                     )}
                   </div>
                   <p className="text-xs text-[#78716c] mt-0.5">
-                    Menu Selling Price: <strong className="text-[#0c0a09]">₹{activeDish.price}</strong>
+                    Menu Selling Price: <strong className="text-[#0c0a09]">{currencySymbol}{activeDish.price}</strong>
                   </p>
                 </div>
 
@@ -300,13 +302,13 @@ export function ItemRecipesView({ organizationId }: { organizationId: Id<"organi
                 <div className="flex items-center space-x-4 bg-white p-2.5 px-4 rounded-xl border border-[#e7e5e4] text-xs">
                   <div>
                     <span className="text-[10px] text-stone-400 uppercase block">Food Cost</span>
-                    <span className="font-bold text-[#0c0a09]">₹{theoreticalFoodCost.toFixed(2)}</span>
+                    <span className="font-bold text-[#0c0a09]">{currencySymbol}{theoreticalFoodCost.toFixed(2)}</span>
                   </div>
                   <div className="h-6 w-px bg-stone-200" />
                   <div>
                     <span className="text-[10px] text-stone-400 uppercase block">Gross Margin</span>
                     <span className="font-bold text-emerald-700">
-                      {grossMarginPercentage.toFixed(1)}% (₹{grossProfitAmount.toFixed(2)})
+                      {grossMarginPercentage.toFixed(1)}% ({currencySymbol}{grossProfitAmount.toFixed(2)})
                     </span>
                   </div>
                 </div>
@@ -357,10 +359,10 @@ export function ItemRecipesView({ organizationId }: { organizationId: Id<"organi
                             {r.quantity} {r.servingUnit}
                           </td>
                           <td className="py-4 px-5 text-[#57534e]">
-                            {r.unitCost > 0 ? `₹${r.unitCost}` : "—"}
+                            {r.unitCost > 0 ? `${currencySymbol}${r.unitCost}` : "—"}
                           </td>
                           <td className="py-4 px-5 font-semibold text-[#0c0a09]">
-                            ₹{r.ingredientCost.toFixed(2)}
+                            {currencySymbol}{r.ingredientCost.toFixed(2)}
                           </td>
                           <td className="py-4 px-5 text-right">
                             <button
@@ -387,7 +389,7 @@ export function ItemRecipesView({ organizationId }: { organizationId: Id<"organi
                 <div className="p-4 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/50 flex items-center justify-between text-xs text-[#78716c] shrink-0">
                   <span>Showing {recipeLines.length} ingredient line(s)</span>
                   <span>
-                    Theoretical Food Cost: <strong className="text-[#0c0a09]">₹{theoreticalFoodCost.toFixed(2)}</strong>
+                    Theoretical Food Cost: <strong className="text-[#0c0a09]">{currencySymbol}{theoreticalFoodCost.toFixed(2)}</strong>
                   </span>
                 </div>
               )}
@@ -445,7 +447,7 @@ export function ItemRecipesView({ organizationId }: { organizationId: Id<"organi
             >
               {inventoryItems?.map((inv) => (
                 <option key={inv._id} value={inv._id}>
-                  {inv.name} ({inv.servingUnit}) — Unit Cost: ₹{inv.unitCost ?? 0}
+                  {inv.name} ({inv.servingUnit}) — Unit Cost: {currencySymbol}{inv.unitCost ?? 0}
                 </option>
               ))}
             </select>

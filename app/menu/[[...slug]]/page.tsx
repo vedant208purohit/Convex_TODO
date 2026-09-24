@@ -15,6 +15,7 @@ import { PosShell } from "../../components/PosShell";
 import { Toast, type ToastMessage } from "../../components/Toast";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { getCurrencyForCountry } from "../../../lib/constants/countries";
 
 // ==========================================
 // PIXEL-PERFECT ICONS (PREST THEME)
@@ -832,7 +833,11 @@ export default function MenuPage() {
     organization?._id ? { organizationId: organization._id } : "skip",
   );
 
-  const currencySymbol = taxSettings?.currencySymbol || "₹";
+  const currencySymbol =
+    organization?.defaultCurrencySymbol ||
+    (organization?.country ? getCurrencyForCountry(organization.country).symbol : undefined) ||
+    taxSettings?.currencySymbol ||
+    "$";
 
   // Multi-Menu Queries & Mutations
   const menus = useQuery(
@@ -4070,8 +4075,8 @@ export default function MenuPage() {
                         <label className="block text-sm font-medium text-[#0c0a09]">
                           Base Price *
                         </label>
-                        <div className="relative">
-                          <span className="absolute left-4 top-2.5 text-[#5e5e5e] text-sm font-semibold">
+                        <div className="flex rounded-lg border border-[#e7e5e4] bg-white overflow-hidden focus-within:border-[#141010] focus-within:ring-1 focus-within:ring-[#141010] transition-colors">
+                          <span className="inline-flex items-center px-3.5 bg-stone-50 border-r border-[#e7e5e4] text-[#5e5e5e] text-sm font-semibold select-none whitespace-nowrap">
                             {currencySymbol}
                           </span>
                           <input
@@ -4081,7 +4086,7 @@ export default function MenuPage() {
                             value={itemPrice}
                             onChange={(e) => setItemPrice(e.target.value)}
                             placeholder="0.00"
-                            className="w-full bg-white border border-[#e7e5e4] rounded-lg pl-9 pr-4 py-2.5 focus:outline-none focus:border-[#141010] focus:ring-1 focus:ring-[#141010] text-[#0c0a09] text-sm font-semibold"
+                            className="w-full bg-transparent px-3.5 py-2.5 focus:outline-none text-[#0c0a09] text-sm font-semibold placeholder:text-stone-400"
                           />
                         </div>
                       </div>
@@ -7522,9 +7527,9 @@ export default function MenuPage() {
                     Additional price ({currencySymbol}){" "}
                     <span className="text-red-500">*</span>
                   </label>
-                  <div className="relative rounded-md shadow-xs">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <span className="text-neutral-500 text-xs font-medium">
+                  <div className="flex rounded-md border border-neutral-300 bg-white overflow-hidden focus-within:border-neutral-900 focus-within:ring-1 focus-within:ring-neutral-900 shadow-xs">
+                    <div className="inline-flex items-center px-3 bg-neutral-50 border-r border-neutral-200">
+                      <span className="text-neutral-500 text-xs font-semibold whitespace-nowrap">
                         {currencySymbol}
                       </span>
                     </div>
@@ -7536,7 +7541,7 @@ export default function MenuPage() {
                       value={choicePrice}
                       onChange={(e) => setChoicePrice(e.target.value)}
                       placeholder="0.00"
-                      className="block w-full rounded-md border border-neutral-300 pl-7 text-xs py-2 text-neutral-900 placeholder-neutral-400 focus:border-neutral-900 focus:ring-neutral-900 outline-none"
+                      className="block w-full bg-transparent text-xs px-3 py-2 text-neutral-900 placeholder-neutral-400 focus:outline-none"
                     />
                   </div>
                   <p className="text-[11px] text-neutral-500 leading-tight">
