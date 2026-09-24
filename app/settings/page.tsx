@@ -7,7 +7,6 @@ import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrderProcessesView } from "../components/order-processes/OrderProcessesView";
 import { OrganizationEmployees } from "../components/OrganizationEmployees";
 import { OrganizationFeatures } from "../components/OrganizationFeatures";
-import { OrganizationWaiters } from "../components/OrganizationWaiters";
 import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes";
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
@@ -124,23 +123,6 @@ function StaffIcon({ className = "w-4 h-4" }: { className?: string }) {
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-
-function WaiterIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
     </svg>
   );
 }
@@ -263,7 +245,6 @@ type SettingsTab =
   | "printers"
   | "features"
   | "staff"
-  | "waiters"
   | "orderProcesses"
   | "payment"
   | "tables"
@@ -301,7 +282,6 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <FeaturesIcon className="w-4 h-4" />,
   },
   { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
-  { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
   {
     id: "orderProcesses",
     label: "Order Status",
@@ -416,7 +396,6 @@ function SettingsContent() {
             {/* {activeTab === "printers" && <OrganizationPrinters />} */}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
-            {activeTab === "waiters" && <OrganizationWaiters />}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
             {activeTab === "payment" && <OrganizationPaymentModes />}
             {activeTab === "tables" && <OrganizationTablesSettings />}
@@ -428,7 +407,6 @@ function SettingsContent() {
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
-              activeTab !== "waiters" &&
               activeTab !== "payment" &&
               activeTab !== "tables" &&
               activeTab !== "digitalStore" &&
