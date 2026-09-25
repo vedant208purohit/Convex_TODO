@@ -240,7 +240,7 @@ function CashierPosContent() {
   );
   const paymentModesList = useQuery(
     api.paymentModes.list,
-    activeOrg ? { organizationId: activeOrg._id } : {},
+    activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : {},
   );
   const printers = useQuery(api.organizationPrinters.list, {});
 
@@ -771,8 +771,11 @@ function CashierPosContent() {
 
   // Dynamic Payment Channels derived from active organization payment modes
   const activePaymentChannels = useMemo(() => {
-    if (paymentModesList && paymentModesList.length > 0) {
-      const channels = paymentModesList.map((m: any) => {
+    if (paymentModesList !== undefined) {
+      const activeModes = paymentModesList.filter(
+        (m: any) => m.active !== false && m.deletedAt === undefined
+      );
+      const channels = activeModes.map((m: any) => {
         const name = m.name;
         const lower = name.toLowerCase();
         let icon = (
@@ -820,7 +823,7 @@ function CashierPosContent() {
         };
       });
 
-      if (!channels.some((m: any) => m.name.toLowerCase().includes("split"))) {
+      if (channels.length > 0 && !channels.some((m: any) => m.name.toLowerCase().includes("split"))) {
         channels.push({
           id: "split-payment",
           name: "Split Payment",
@@ -835,53 +838,7 @@ function CashierPosContent() {
       return channels;
     }
 
-    return [
-      {
-        id: "pm_cash",
-        name: "Cash",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_credit",
-        name: "Credit Card",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_debit",
-        name: "Debit Card",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_upi",
-        name: "UPI QR",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_split",
-        name: "Split Payment",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-    ];
+    return [];
   }, [paymentModesList]);
 
   // Ensure selectedPaymentMode is valid for current store's active payment modes

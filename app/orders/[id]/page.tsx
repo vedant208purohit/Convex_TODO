@@ -324,7 +324,7 @@ export default function OrderDetailsDynamicPage() {
   // Query Real Store Payment Modes from DB
   const paymentModesList = useQuery(
     api.paymentModes.list,
-    activeOrg ? { organizationId: activeOrg._id } : {},
+    activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : {},
   );
 
   // Query Real Store Printers from DB
@@ -1801,15 +1801,8 @@ export default function OrderDetailsDynamicPage() {
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {(paymentModesList && paymentModesList.length > 0
-                          ? paymentModesList
-                          : [
-                              { _id: "m1", name: "Cash" },
-                              { _id: "m2", name: "Credit Card" },
-                              { _id: "m3", name: "Debit Card" },
-                              { _id: "m4", name: "UPI" },
-                              { _id: "m5", name: "Pay later" },
-                              { _id: "m6", name: "Wallet" },
-                            ]
+                          ? paymentModesList.filter((m: any) => m.active !== false)
+                          : []
                         ).map((pm: any) => {
                           const isSelected =
                             (refundPaymentMode || "Cash")
