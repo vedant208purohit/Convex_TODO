@@ -24,6 +24,8 @@ export interface CountryMaster {
   defaultTimezone: string;
   timezones?: TimezoneOption[];
   states: StateOption[];
+  locale: string;
+  dateFormat: string;
 }
 
 export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
@@ -33,6 +35,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+91",
     currency: { code: "INR", symbol: "₹" },
     defaultTimezone: "Asia/Kolkata",
+    locale: "en-IN",
+    dateFormat: "DD-MM-YYYY",
     timezones: [
       { label: "Asia/Kolkata (IST - UTC+05:30)", value: "Asia/Kolkata" },
     ],
@@ -82,6 +86,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+971",
     currency: { code: "AED", symbol: "AED" },
     defaultTimezone: "Asia/Dubai",
+    locale: "en-AE",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Asia/Dubai (GST - UTC+04:00)", value: "Asia/Dubai" },
     ],
@@ -101,6 +107,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+1",
     currency: { code: "USD", symbol: "$" },
     defaultTimezone: "America/New_York",
+    locale: "en-US",
+    dateFormat: "MM/DD/YYYY",
     timezones: [
       { label: "America/New_York (Eastern - EST/EDT)", value: "America/New_York" },
       { label: "America/Chicago (Central - CST/CDT)", value: "America/Chicago" },
@@ -170,6 +178,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+44",
     currency: { code: "GBP", symbol: "£" },
     defaultTimezone: "Europe/London",
+    locale: "en-GB",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Europe/London (GMT/BST - UTC+00:00)", value: "Europe/London" },
     ],
@@ -186,6 +196,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+1",
     currency: { code: "CAD", symbol: "CA$" },
     defaultTimezone: "America/Toronto",
+    locale: "en-CA",
+    dateFormat: "YYYY-MM-DD",
     timezones: [
       { label: "America/Toronto (Eastern - Toronto / Ottawa)", value: "America/Toronto" },
       { label: "America/Vancouver (Pacific - Vancouver)", value: "America/Vancouver" },
@@ -216,6 +228,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+61",
     currency: { code: "AUD", symbol: "A$" },
     defaultTimezone: "Australia/Sydney",
+    locale: "en-AU",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Australia/Sydney (Eastern - Sydney / Melbourne)", value: "Australia/Sydney" },
       { label: "Australia/Brisbane (Queensland - Brisbane)", value: "Australia/Brisbane" },
@@ -241,6 +255,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+65",
     currency: { code: "SGD", symbol: "S$" },
     defaultTimezone: "Asia/Singapore",
+    locale: "en-SG",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Asia/Singapore (SGT - UTC+08:00)", value: "Asia/Singapore" },
     ],
@@ -258,6 +274,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+966",
     currency: { code: "SAR", symbol: "SAR" },
     defaultTimezone: "Asia/Riyadh",
+    locale: "ar-SA",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Asia/Riyadh (AST - UTC+03:00)", value: "Asia/Riyadh" },
     ],
@@ -283,6 +301,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+974",
     currency: { code: "QAR", symbol: "QAR" },
     defaultTimezone: "Asia/Qatar",
+    locale: "ar-QA",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Asia/Qatar (AST - UTC+03:00)", value: "Asia/Qatar" },
     ],
@@ -303,6 +323,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+49",
     currency: { code: "EUR", symbol: "€" },
     defaultTimezone: "Europe/Berlin",
+    locale: "de-DE",
+    dateFormat: "DD.MM.YYYY",
     timezones: [
       { label: "Europe/Berlin (CET/CEST - UTC+01:00)", value: "Europe/Berlin" },
     ],
@@ -331,6 +353,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+33",
     currency: { code: "EUR", symbol: "€" },
     defaultTimezone: "Europe/Paris",
+    locale: "fr-FR",
+    dateFormat: "DD/MM/YYYY",
     timezones: [
       { label: "Europe/Paris (CET/CEST - UTC+01:00)", value: "Europe/Paris" },
     ],
@@ -356,6 +380,8 @@ export const COUNTRIES_MASTER: Record<string, CountryMaster> = {
     phoneCode: "+81",
     currency: { code: "JPY", symbol: "¥" },
     defaultTimezone: "Asia/Tokyo",
+    locale: "ja-JP",
+    dateFormat: "YYYY-MM-DD",
     timezones: [
       { label: "Asia/Tokyo (JST - UTC+09:00)", value: "Asia/Tokyo" },
     ],
@@ -415,16 +441,30 @@ export const COUNTRY_OPTIONS: string[] = Object.values(COUNTRIES_MASTER).map(
   (c) => c.name,
 );
 
-export const CURRENCY_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
-  label: `${c.currency.code} (${c.currency.symbol})`,
-  currency: c.currency.code,
-  symbol: c.currency.symbol,
-}));
+export const CURRENCY_OPTIONS = Array.from(
+  new Map(
+    Object.values(COUNTRIES_MASTER).map((c) => [
+      c.currency.code,
+      {
+        label: `${c.currency.code} (${c.currency.symbol})`,
+        currency: c.currency.code,
+        symbol: c.currency.symbol,
+      },
+    ]),
+  ).values(),
+);
 
-export const PHONE_CODE_OPTIONS = Object.values(COUNTRIES_MASTER).map((c) => ({
-  code: c.phoneCode,
-  country: c.name,
-}));
+export const PHONE_CODE_OPTIONS = Array.from(
+  new Map(
+    Object.values(COUNTRIES_MASTER).map((c) => [
+      c.phoneCode,
+      {
+        code: c.phoneCode,
+        country: c.name,
+      },
+    ]),
+  ).values(),
+);
 
 /**
  * Resolves a CountryMaster object by ISO Code, Country Name, or Phone Dial Code (case-insensitive).
@@ -584,3 +624,146 @@ export function formatPhoneNumberWithCountryCode(
   }
   return `${currentCode} ${digits}`;
 }
+
+/**
+ * Returns standard IETF BCP 47 locale string for a given country (e.g., 'en-IN', 'en-US', 'en-GB').
+ */
+export function getLocaleForCountry(codeOrName?: string): string {
+  const master = getCountryMaster(codeOrName);
+  return master?.locale || (codeOrName?.toLowerCase() === "india" || codeOrName?.toUpperCase() === "IN" ? "en-IN" : "en-US");
+}
+
+/**
+ * Returns the country's date format pattern (e.g. 'DD-MM-YYYY', 'MM/DD/YYYY').
+ */
+export function getDateFormatForCountry(codeOrName?: string): string {
+  const master = getCountryMaster(codeOrName);
+  return master?.dateFormat || "DD/MM/YYYY";
+}
+
+/**
+ * Centralized Number & Price Grouping Formatter
+ * Correctly handles Indian Lakh/Crore grouping (en-IN: 1,00,000.00) vs International Thousand/Million (en-US: 100,000.00).
+ */
+export function formatCurrencyAmount(
+  amount: number | string | undefined | null,
+  countryCodeOrName?: string,
+  minFractionDigits = 2,
+  maxFractionDigits = 2,
+): string {
+  if (amount === undefined || amount === null || amount === "") return "0.00";
+  const num = typeof amount === "number" ? amount : parseFloat(String(amount).replace(/[^0-9.-]+/g, ""));
+  if (isNaN(num)) return "0.00";
+
+  const locale = getLocaleForCountry(countryCodeOrName);
+
+  try {
+    return num.toLocaleString(locale, {
+      minimumFractionDigits: minFractionDigits,
+      maximumFractionDigits: maxFractionDigits,
+    });
+  } catch {
+    return num.toFixed(minFractionDigits);
+  }
+}
+
+/**
+ * Centralized Price Formatter with Currency Symbol
+ * Formats amount with attached currency symbol and country-specific number grouping.
+ * Supports both paise/cents (isPaise = true, divides by 100) or decimal units (isPaise = false).
+ */
+export function formatPriceWithSymbol(
+  amount: number | string | undefined | null,
+  symbol?: string,
+  countryCodeOrName?: string,
+  isPaise = false,
+): string {
+  if (amount === undefined || amount === null || amount === "") {
+    return symbol ? `${symbol} 0.00` : "0.00";
+  }
+  let num = typeof amount === "number" ? amount : parseFloat(String(amount).replace(/[^0-9.-]+/g, ""));
+  if (isNaN(num)) num = 0;
+  if (isPaise) num = num / 100;
+
+  const formattedNum = formatCurrencyAmount(num, countryCodeOrName);
+  return symbol ? `${symbol} ${formattedNum}` : formattedNum;
+}
+
+/**
+ * Centralized Store Date Formatter
+ * Formats timestamps or Dates into the store's regional standard date string.
+ */
+export function formatStoreDate(
+  dateInput: number | string | Date | undefined | null,
+  countryCodeOrName?: string,
+  timezone?: string,
+  options?: Intl.DateTimeFormatOptions,
+): string {
+  if (!dateInput) return "";
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+
+  const locale = getLocaleForCountry(countryCodeOrName);
+  const targetTz = timezone || getTimezoneForCountry(countryCodeOrName || "");
+
+  const defaultOptions: Intl.DateTimeFormatOptions = {
+    timeZone: targetTz,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    ...options,
+  };
+
+  try {
+    return new Intl.DateTimeFormat(locale, defaultOptions).format(d);
+  } catch {
+    return d.toLocaleDateString();
+  }
+}
+
+/**
+ * Centralized Store Date & Time Formatter
+ * Formats timestamp into date with localized time (e.g. '25/09/2026, 11:30 AM').
+ */
+export function formatStoreDateTime(
+  dateInput: number | string | Date | undefined | null,
+  countryCodeOrName?: string,
+  timezone?: string,
+): string {
+  return formatStoreDate(dateInput, countryCodeOrName, timezone, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+/**
+ * Centralized Store Time Formatter (e.g. '11:30 AM')
+ */
+export function formatStoreTime(
+  dateInput: number | string | Date | undefined | null,
+  timezone?: string,
+  countryCodeOrName?: string,
+): string {
+  if (!dateInput) return "";
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+
+  const locale = getLocaleForCountry(countryCodeOrName);
+  const targetTz = timezone || getTimezoneForCountry(countryCodeOrName || "");
+
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      timeZone: targetTz,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }).format(d);
+  } catch {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", hour12: true });
+  }
+}
+

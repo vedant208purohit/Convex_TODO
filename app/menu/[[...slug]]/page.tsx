@@ -14,8 +14,11 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { PosShell } from "../../components/PosShell";
 import { Toast, type ToastMessage } from "../../components/Toast";
 import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
-import { getCurrencyForCountry } from "../../../lib/constants/countries";
+import type { Id } from "../../../convex/_generated/dataModel";
+import {
+  getCurrencyForCountry,
+  formatCurrencyAmount,
+} from "../../../lib/constants/countries";
 
 // ==========================================
 // PIXEL-PERFECT ICONS (PREST THEME)
@@ -5560,8 +5563,8 @@ export default function MenuPage() {
                                 {/* Additional Price */}
                                 <td className="py-4 px-4 font-semibold text-[#141010] text-sm">
                                   {choice.price > 0
-                                    ? `+${currencySymbol}${(choice.price / 100).toFixed(0)}`
-                                    : `${currencySymbol}0`}
+                                    ? `+${currencySymbol}${formatCurrencyAmount(choice.price / 100, organization?.country)}`
+                                    : `${currencySymbol}0.00`}
                                 </td>
                                 {/* Dietary / Attributes */}
                                 <td className="py-4 px-4">
@@ -6640,7 +6643,10 @@ export default function MenuPage() {
                                       {/* Base Price */}
                                       <td className="px-4 py-3 text-right font-medium text-[#141010] whitespace-nowrap">
                                         {currencySymbol}
-                                        {(item.price / 100).toFixed(2)}
+                                        {formatCurrencyAmount(
+                                          item.price / 100,
+                                          organization?.country
+                                        )}
                                       </td>
 
                                       {/* Status Toggle */}
@@ -7076,7 +7082,10 @@ export default function MenuPage() {
                           </div>
                           <span className="font-medium text-sm text-[#141010]">
                             {currencySymbol}
-                            {(item.price / 100).toFixed(2)}
+                            {formatCurrencyAmount(
+                              item.price / 100,
+                              organization?.country
+                            )}
                           </span>
                         </div>
                       );
@@ -7986,9 +7995,9 @@ export default function MenuPage() {
                   <span className="text-sm font-semibold text-gray-900 shrink-0">
                     {unavailabilityTargetType === "choice"
                       ? targetUnavailabilityItem.price > 0
-                        ? `+${currencySymbol}${(targetUnavailabilityItem.price / 100).toFixed(2)}`
+                        ? `+${currencySymbol}${formatCurrencyAmount(targetUnavailabilityItem.price / 100, organization?.country)}`
                         : `${currencySymbol}0.00 (Free)`
-                      : `${currencySymbol}${(targetUnavailabilityItem.price / 100).toFixed(0)}`}
+                      : `${currencySymbol}${formatCurrencyAmount(targetUnavailabilityItem.price / 100, organization?.country)}`}
                   </span>
                 </div>
 
@@ -8151,9 +8160,9 @@ export default function MenuPage() {
                   <span className="text-sm font-semibold text-gray-900 shrink-0">
                     {duplicateTargetType === "choice"
                       ? targetDuplicateItem.price > 0
-                        ? `+${currencySymbol}${(targetDuplicateItem.price / 100).toFixed(2)}`
+                        ? `+${currencySymbol}${formatCurrencyAmount(targetDuplicateItem.price / 100, organization?.country)}`
                         : `${currencySymbol}0.00 (Free)`
-                      : `${currencySymbol}${(targetDuplicateItem.price / 100).toFixed(0)}`}
+                      : `${currencySymbol}${formatCurrencyAmount(targetDuplicateItem.price / 100, organization?.country)}`}
                   </span>
                 </div>
 

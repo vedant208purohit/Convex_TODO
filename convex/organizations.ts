@@ -1787,7 +1787,11 @@ export const syncStoreLocation = mutation({
     }
     if (args.state) patchPayload.state = args.state;
     if (args.city) patchPayload.city = args.city;
-    if (args.phone) patchPayload.phone = args.phone;
+    if (args.phone) {
+      const cleanCountry = args.country || org.country;
+      const validatedPhone = validatePhoneWithCountryCode(args.phone.trim(), cleanCountry);
+      patchPayload.phone = validatedPhone || args.phone.trim();
+    }
     if (args.organizationTimeZone) patchPayload.organizationTimeZone = args.organizationTimeZone;
     await ctx.db.patch(org._id, patchPayload);
     return { success: true, updated: patchPayload };
@@ -1836,7 +1840,11 @@ export const initializeStore = mutation({
     }
     if (args.state && args.state.trim()) patchPayload.state = args.state.trim();
     if (args.city && args.city.trim()) patchPayload.city = args.city.trim();
-    if (args.phone && args.phone.trim()) patchPayload.phone = args.phone.trim();
+    if (args.phone && args.phone.trim()) {
+      const cleanCountry = (args.country && args.country.trim()) || org.country;
+      const validatedPhone = validatePhoneWithCountryCode(args.phone.trim(), cleanCountry);
+      patchPayload.phone = validatedPhone || args.phone.trim();
+    }
     if (args.organizationTimeZone && args.organizationTimeZone.trim()) {
       patchPayload.organizationTimeZone = args.organizationTimeZone.trim();
     } else if (args.country && args.country.trim() && (!org.organizationTimeZone || org.organizationTimeZone === "UTC")) {

@@ -5,7 +5,10 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 
-import { COUNTRY_DIAL_OPTIONS } from "@/lib/constants/countries";
+import {
+  COUNTRY_DIAL_OPTIONS,
+  formatCurrencyAmount,
+} from "@/lib/constants/countries";
 
 interface EditOrderDrawerProps {
   isOpen: boolean;
@@ -271,9 +274,11 @@ export default function EditOrderDrawer({
                 <div className="divide-y divide-[#f5f5f4]">
                   {items.map((item: any) => {
                     const isChecked = selectedItemIds.has(item._id);
-                    const formattedPrice = item.display_item_price
-                      ? `${currencySymbol}${Math.round(parseFloat(item.display_item_price))}`
-                      : `${currencySymbol}${Math.round(item.itemPrice / 100)}`;
+                    const org = organizations?.[0];
+                    const numVal = item.display_item_price
+                      ? parseFloat(item.display_item_price)
+                      : (item.itemPrice || 0) / 100;
+                    const formattedPrice = `${currencySymbol}${formatCurrencyAmount(numVal, org?.country)}`;
 
                     return (
                       <div
