@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { COUNTRIES_MASTER, getStatesForCountry } from "@/lib/constants/countries";
 
 export function SuppliersView({
   organizationId,
@@ -81,6 +82,8 @@ export function SuppliersView({
   const [state, setState] = useState("Gujarat");
   const [city, setCity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const availableStates = useMemo(() => getStatesForCountry(country), [country]);
 
   // Active Dropdown menu state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);

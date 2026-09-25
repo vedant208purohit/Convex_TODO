@@ -20,43 +20,17 @@ interface CartLineItem {
   customizations?: any[];
 }
 
-const COUNTRY_DIAL_OPTIONS = [
-  { code: "+91", label: "IN +91", country: "India", iso: "IN" },
-  { code: "+1", label: "US/CA +1", country: "United States / Canada", iso: "US" },
-  { code: "+44", label: "UK +44", country: "United Kingdom", iso: "GB" },
-  { code: "+971", label: "UAE +971", country: "United Arab Emirates", iso: "AE" },
-  { code: "+61", label: "AU +61", country: "Australia", iso: "AU" },
-  { code: "+65", label: "SG +65", country: "Singapore", iso: "SG" },
-  { code: "+49", label: "DE +49", country: "Germany", iso: "DE" },
-  { code: "+33", label: "FR +33", country: "France", iso: "FR" },
-  { code: "+81", label: "JP +81", country: "Japan", iso: "JP" },
-  { code: "+966", label: "SA +966", country: "Saudi Arabia", iso: "SA" },
-  { code: "+974", label: "QA +974", country: "Qatar", iso: "QA" },
-];
-
-function formatPhoneNumberWithCountryCode(rawPhone: string, defaultCode: string = "+91"): string {
-  if (!rawPhone || !rawPhone.trim()) return "";
-  const trimmed = rawPhone.trim();
-
-  // If already starts with '+', ensure clean spacing between dial code and number
-  if (trimmed.startsWith("+")) {
-    const digitsOnly = trimmed.replace(/\D/g, "");
-    for (const opt of COUNTRY_DIAL_OPTIONS) {
-      const codeDigits = opt.code.replace(/\D/g, "");
-      if (digitsOnly.startsWith(codeDigits)) {
-        const local = digitsOnly.slice(codeDigits.length);
-        return `${opt.code} ${local}`;
-      }
-    }
-    return trimmed;
-  }
-
-  const digits = trimmed.replace(/\D/g, "");
-  if (!digits) return trimmed;
-
-  const currentCode = defaultCode.startsWith("+") ? defaultCode : `+${defaultCode}`;
-  return `${currentCode} ${digits}`;
-}
+import {
+  COUNTRY_DIAL_OPTIONS,
+  formatPhoneNumberWithCountryCode,
+  getPhoneCodeForCountry,
+  getCurrencyForCountry,
+  isIndiaCountry,
+  formatCurrencyAmount,
+  formatStoreDate,
+  formatStoreTime,
+  formatStoreDateTime,
+} from "../../lib/constants/countries";
 
 function getLayoutSignIcon(name?: string, isSelected?: boolean) {
   const n = (name || "").toLowerCase();
@@ -165,16 +139,8 @@ export default function CaptainPage() {
   const orgId = activeOrg?._id;
 
   const defaultOrgCountryCode = useMemo(() => {
-    if (!activeOrg) return "+91";
-    const country = (activeOrg.country || "").toUpperCase();
-    if (country === "US" || country === "USA" || country === "UNITED STATES") return "+1";
-    if (country === "UK" || country === "GB" || country === "UNITED KINGDOM") return "+44";
-    if (country === "AE" || country === "UAE" || country === "UNITED ARAB EMIRATES") return "+971";
-    if (country === "AU" || country === "AUSTRALIA") return "+61";
-    if (country === "SG" || country === "SINGAPORE") return "+65";
-    if (country === "CA" || country === "CANADA") return "+1";
-    return "+91";
-  }, [activeOrg]);
+    return getPhoneCodeForCountry(activeOrg?.country || "India");
+  }, [activeOrg?.country]);
 
   const layouts = useQuery(api.organizationLayouts.list);
   const [selectedLayoutId, setSelectedLayoutId] = useState<Id<"organizationLayouts"> | undefined>(undefined);
@@ -204,7 +170,11 @@ export default function CaptainPage() {
     activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
 
-  const currencySymbol = storeTaxSettings?.currencySymbol || "₹";
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : undefined) ||
+    storeTaxSettings?.currencySymbol ||
+    "$";
 
   // Fetch employees from store organizationUsers
   const employees = useQuery(
@@ -502,7 +472,7 @@ export default function CaptainPage() {
           taxAmountPaise: number;
           isInclusive: boolean;
         }>,
-        currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+        currencySymbol,
       };
     }
 
@@ -718,7 +688,7 @@ export default function CaptainPage() {
       totalTaxPaise,
       totalPayablePaise,
       componentBreakdown: Array.from(compAccumulator.values()),
-      currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+      currencySymbol,
     };
   }, [runningCart, allCatalogItems, storeTaxSettings, taxGroups, taxComponents]);
 
@@ -851,7 +821,7 @@ export default function CaptainPage() {
 
   const handleSaveCustomerInfo = () => {
     const digits = customerPhone.replace(/\D/g, "");
-    const isIndia = customerCountryCode === "+91" || customerCountryCode === "IN +91";
+    const isIndia = isIndiaCountry(customerCountryCode);
 
     if (!digits) {
       showToast("Please enter customer phone number");
@@ -1680,14 +1650,14 @@ export default function CaptainPage() {
                         value={customerPhone}
                         onChange={(e) => {
                           const val = e.target.value.replace(/\D/g, "");
-                          const isIndia = customerCountryCode === "+91" || customerCountryCode === "IN +91";
+                          const isIndia = isIndiaCountry(customerCountryCode);
                           const maxLen = isIndia ? 10 : 15;
                           setCustomerPhone(val.slice(0, maxLen));
                           setIsCustomerVerified(false);
                         }}
-                        maxLength={customerCountryCode === "+91" || customerCountryCode === "IN +91" ? 10 : 15}
+                        maxLength={isIndiaCountry(customerCountryCode) ? 10 : 15}
                         className="w-full text-sm font-sans px-3.5 py-2.5 border-none focus:outline-none text-[#0c0a09] placeholder:text-[#a8a29e] placeholder:font-normal bg-transparent font-medium"
-                        placeholder={customerCountryCode === "+91" || customerCountryCode === "IN +91" ? "Enter 10-digit mobile number..." : "Enter mobile number..."}
+                        placeholder={isIndiaCountry(customerCountryCode) ? "Enter 10-digit mobile number..." : "Enter mobile number..."}
                       />
                     </div>
                   </div>
@@ -1760,7 +1730,7 @@ export default function CaptainPage() {
                         <div className="bg-stone-50 border border-stone-200 rounded-lg p-2 text-center">
                           <span className="block text-[10px] text-stone-500 font-medium uppercase">Total Spend</span>
                           <span className="text-xs font-bold text-emerald-700 font-sans">
-                            {currencySymbol}{((customerStats.totalSpends || 0) / 100).toFixed(2)}
+                            {currencySymbol}{formatCurrencyAmount(((customerStats.totalSpends || 0) / 100), activeOrg?.country)}
                           </span>
                         </div>
                       </div>
@@ -1777,7 +1747,7 @@ export default function CaptainPage() {
                                 <div className="flex items-center justify-between text-[11px]">
                                   <span className="font-sans font-bold text-stone-900">{ord.orderNumber}</span>
                                   <span className="text-stone-500 text-[10px]">
-                                    {new Date(ord.createdAt).toLocaleDateString("en-IN", { month: "short", day: "numeric" })}
+                                    {formatStoreDate(ord.createdAt, activeOrg?.country, activeOrg?.organizationTimeZone, { month: "short", day: "numeric" })}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between text-[11px] text-stone-600">
@@ -1785,7 +1755,7 @@ export default function CaptainPage() {
                                     {ord.items?.map((i: any) => i.itemName).join(", ") || ord.itemsSummary || "Dine-in Items"}
                                   </span>
                                   <span className="font-sans font-bold text-stone-900 shrink-0 ml-1">
-                                    {currencySymbol}{((ord.totalAmount || 0) / 100).toFixed(2)}
+                                    {currencySymbol}{formatCurrencyAmount(((ord.totalAmount || 0) / 100), activeOrg?.country)}
                                   </span>
                                 </div>
                               </div>
@@ -1921,10 +1891,10 @@ export default function CaptainPage() {
                         const itemId = it._id || it.id;
                         const inCartItem = runningCart.find((ci) => ci.itemId === itemId);
                         const currentCartQty = inCartItem?.quantity || 0;
-                        const priceFormatted =
-                          it.price % 100 === 0
-                            ? (it.price / 100).toString()
-                            : (it.price / 100).toFixed(2);
+                        const priceFormatted = formatCurrencyAmount(
+                          it.price / 100,
+                          activeOrg?.country,
+                        );
                         const hasCustomizations = Boolean(entry.customizations && entry.customizations.length > 0);
 
                         return (
@@ -2038,7 +2008,7 @@ export default function CaptainPage() {
                       >
                         <span>View Running Cart ({runningCart.length} items)</span>
                         <span>•</span>
-                        <span>{currencySymbol}{(runningCartTotalPaise / 100).toFixed(2)}</span>
+                        <span>{currencySymbol}{formatCurrencyAmount(runningCartTotalPaise / 100, activeOrg?.country)}</span>
                       </button>
                     </div>
                   )}
@@ -2073,7 +2043,7 @@ export default function CaptainPage() {
                                 <div className="text-[10px] text-stone-500 font-mono space-y-0.5 mt-0.5">
                                   {(it.customizationOptions || (it as any).customizations).map((c: any, cIdx: number) => (
                                     <span key={cIdx} className="block">
-                                      + {c.name || c.optionName} {c.price ? `(${currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                      + {c.name || c.optionName} {c.price ? `(${currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
                                     </span>
                                   ))}
                                 </div>
@@ -2081,7 +2051,7 @@ export default function CaptainPage() {
                             </div>
                             <div className="flex items-center space-x-2 shrink-0 ml-1">
                               <span className="font-mono text-[#5e5e5e]">
-                                {it.quantity}x {currencySymbol}{(it.price / 100).toFixed(2)}
+                                {it.quantity}x {currencySymbol}{formatCurrencyAmount(it.price / 100, activeOrg?.country)}
                               </span>
                               <button
                                 onClick={() => handleUpdateRunningItemCount(idx, -it.quantity)}
@@ -2117,7 +2087,7 @@ export default function CaptainPage() {
                       <div className="flex items-center justify-between text-xs font-bold text-[#0c0a09] pb-2 border-b border-[#e7e5e4]">
                         <span>Cart 1 <span className="font-normal text-[#5e5e5e]">({activeOrder.items.length} items)</span></span>
                         <span className="text-[11px] font-mono text-[#7a716b]">
-                          {new Date(activeOrder.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {formatStoreTime(activeOrder.createdAt, activeOrg?.organizationTimeZone, activeOrg?.country)}
                         </span>
                       </div>
                       <div className="space-y-2.5 pt-3">
@@ -2136,7 +2106,7 @@ export default function CaptainPage() {
                                 <div className="text-[10px] text-stone-500 font-mono space-y-0.5 mt-0.5">
                                   {it.customizations.map((c: any, cIdx: number) => (
                                     <span key={cIdx} className="block">
-                                      + {c.optionName || c.name} {c.price ? `(${currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                      + {c.optionName || c.name} {c.price ? `(${currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
                                     </span>
                                   ))}
                                 </div>
@@ -2148,7 +2118,7 @@ export default function CaptainPage() {
                               )}
                             </div>
                             <span className="font-mono font-medium text-[#0c0a09] shrink-0 ml-2">
-                              {it.quantity}x {currencySymbol}{it.display_item_price}
+                              {it.quantity}x {currencySymbol}{formatCurrencyAmount(it.display_item_price ? parseFloat(it.display_item_price) : (it.price || 0) / 100, activeOrg?.country)}
                             </span>
                           </div>
                         ))}
@@ -2161,7 +2131,7 @@ export default function CaptainPage() {
                     <div className="flex items-center justify-between text-stone-600 font-medium">
                       <span>Subtotal</span>
                       <span className="font-mono font-semibold text-stone-900">
-                        {currencySymbol}{((activeOrder ? (activeOrder.subTotal || activeOrder.totalAmount) : cartTaxCalculation.subtotalPaise) / 100).toFixed(2)}
+                        {currencySymbol}{formatCurrencyAmount(((activeOrder ? (activeOrder.subTotal || activeOrder.totalAmount) : cartTaxCalculation.subtotalPaise) / 100), activeOrg?.country)}
                       </span>
                     </div>
 
@@ -2171,7 +2141,7 @@ export default function CaptainPage() {
                           <div key={cIdx} className="flex items-center justify-between text-stone-600 text-[11px]">
                             <span>{comp.name} ({comp.rate}%)</span>
                             <span className="font-mono text-stone-900 font-medium">
-                              {currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                              {currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
                             </span>
                           </div>
                         ))
@@ -2179,7 +2149,7 @@ export default function CaptainPage() {
                         <div className="flex items-center justify-between text-stone-600 text-[11px]">
                           <span>Taxes & Charges (GST)</span>
                           <span className="font-mono text-stone-900 font-medium">
-                            {currencySymbol}{exclusiveTaxAmount.toFixed(2)}
+                            {currencySymbol}{formatCurrencyAmount(exclusiveTaxAmount, activeOrg?.country)}
                           </span>
                         </div>
                       )
@@ -2188,7 +2158,7 @@ export default function CaptainPage() {
                     <div className="pt-2 border-t border-[#e7e5e4] flex items-center justify-between font-bold text-stone-900 text-sm">
                       <span>Grand Total</span>
                       <span className="font-mono text-emerald-700">
-                        {currencySymbol}{totalPayableAmount.toFixed(2)}
+                        {currencySymbol}{formatCurrencyAmount(totalPayableAmount, activeOrg?.country)}
                       </span>
                     </div>
                   </div>
@@ -2206,14 +2176,14 @@ export default function CaptainPage() {
                         onClick={() => setDrawerSubTab("payment")}
                         className="w-full py-2.5 bg-[#0c0a09] hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg transition shadow-xs cursor-pointer"
                       >
-                        Proceed to Payment ({currencySymbol}{totalPayableAmount.toFixed(2)})
+                        Proceed to Payment ({currencySymbol}{formatCurrencyAmount(totalPayableAmount, activeOrg?.country)})
                       </button>
                     ) : (
                       <button
                         onClick={() => setDrawerSubTab("payment")}
                         className="w-full py-2.5 bg-[#0c0a09] hover:bg-neutral-800 text-white text-xs font-semibold rounded-lg transition shadow-xs cursor-pointer"
                       >
-                        Proceed to Payment ({currencySymbol}{totalPayableAmount.toFixed(2)})
+                        Proceed to Payment ({currencySymbol}{formatCurrencyAmount(totalPayableAmount, activeOrg?.country)})
                       </button>
                     )}
                   </div>
@@ -2233,7 +2203,7 @@ export default function CaptainPage() {
                     <div className="flex items-center justify-between text-stone-600 font-medium">
                       <span>Subtotal</span>
                       <span className="font-mono font-semibold text-stone-900">
-                        {currencySymbol}{((activeOrder ? (activeOrder.subTotal || activeOrder.totalAmount) : cartTaxCalculation.subtotalPaise) / 100).toFixed(2)}
+                        {currencySymbol}{formatCurrencyAmount(((activeOrder ? (activeOrder.subTotal || activeOrder.totalAmount) : cartTaxCalculation.subtotalPaise) / 100), activeOrg?.country)}
                       </span>
                     </div>
 
@@ -2243,7 +2213,7 @@ export default function CaptainPage() {
                           <div key={cIdx} className="flex items-center justify-between text-stone-600 text-[11px]">
                             <span>{comp.name} ({comp.rate}%)</span>
                             <span className="font-mono text-stone-900 font-medium">
-                              {currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                              {currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
                             </span>
                           </div>
                         ))
@@ -2251,7 +2221,7 @@ export default function CaptainPage() {
                         <div className="flex items-center justify-between text-stone-600 text-[11px]">
                           <span>Taxes & Charges (GST)</span>
                           <span className="font-mono text-stone-900 font-medium">
-                            {currencySymbol}{exclusiveTaxAmount.toFixed(2)}
+                            {currencySymbol}{formatCurrencyAmount(exclusiveTaxAmount, activeOrg?.country)}
                           </span>
                         </div>
                       )
@@ -2260,7 +2230,7 @@ export default function CaptainPage() {
                     <div className="pt-2 border-t border-[#e7e5e4] flex items-center justify-between font-bold text-stone-900 text-sm">
                       <span>Total Payable</span>
                       <span className="font-mono text-emerald-700">
-                        {currencySymbol}{totalPayableAmount.toFixed(2)}
+                        {currencySymbol}{formatCurrencyAmount(totalPayableAmount, activeOrg?.country)}
                       </span>
                     </div>
                   </div>
@@ -2271,7 +2241,7 @@ export default function CaptainPage() {
                       <span className="text-xs font-semibold text-[#0c0a09]">Total payable amount</span>
                     </div>
                     <div className="bg-[#0c0a09] text-white px-5 py-3 flex items-center justify-center font-bold text-base font-mono">
-                      {currencySymbol}{totalPayableAmount.toFixed(2)}
+                      {currencySymbol}{formatCurrencyAmount(totalPayableAmount, activeOrg?.country)}
                     </div>
                   </div>
 
@@ -2340,7 +2310,7 @@ export default function CaptainPage() {
                           <input
                             type="text"
                             readOnly
-                            value={`${currencySymbol} ${cashChangeReturn.toFixed(2)}`}
+                            value={`${currencySymbol} ${formatCurrencyAmount(cashChangeReturn, activeOrg?.country)}`}
                             className="w-full text-xs px-3 py-2 bg-[#f1edec] border border-[#e7e5e4] rounded-lg text-[#0c0a09] font-mono font-semibold"
                           />
                         </div>
@@ -2359,7 +2329,7 @@ export default function CaptainPage() {
                             onClick={() => setCashTendered(amt)}
                             className="px-3 py-1.5 text-xs bg-white hover:bg-[#f1edec] text-[#0c0a09] rounded-lg border border-[#e7e5e4] font-mono transition cursor-pointer shadow-2xs"
                           >
-                            {currencySymbol}{amt}
+                            {currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
                           </button>
                         ))}
                       </div>
@@ -2391,7 +2361,7 @@ export default function CaptainPage() {
                           onClick={() => setNonCashTendered(totalPayableAmount)}
                           className="px-3 py-1.5 text-xs bg-white hover:bg-[#f1edec] text-[#0c0a09] rounded-lg border border-[#e7e5e4] font-mono transition cursor-pointer shadow-2xs font-semibold"
                         >
-                          Exact Amount ({currencySymbol}{totalPayableAmount.toFixed(2)})
+                          Exact Amount ({currencySymbol}{formatCurrencyAmount(totalPayableAmount, activeOrg?.country)})
                         </button>
                       </div>
                     </div>
@@ -2500,9 +2470,10 @@ export default function CaptainPage() {
               {/* Base Price */}
               <div className="text-sm font-bold text-stone-900 shrink-0 font-mono">
                 {currencySymbol}
-                {customizingCatalogEntry.item.price % 100 === 0
-                  ? (customizingCatalogEntry.item.price / 100).toString()
-                  : (customizingCatalogEntry.item.price / 100).toFixed(2)}
+                {formatCurrencyAmount(
+                  customizingCatalogEntry.item.price / 100,
+                  activeOrg?.country,
+                )}
               </div>
             </div>
 
@@ -2553,8 +2524,10 @@ export default function CaptainPage() {
                         const oid = option.id || option._id;
                         const isSelected = selectedInGroup.some((o) => (o.id || o._id) === oid);
                         const optPrice = option.price || 0;
-                        const optPriceFormatted =
-                          optPrice % 100 === 0 ? (optPrice / 100).toString() : (optPrice / 100).toFixed(2);
+                        const optPriceFormatted = formatCurrencyAmount(
+                          optPrice / 100,
+                          activeOrg?.country,
+                        );
 
                         return (
                           <div

@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { formatCurrencyAmount, getCurrencyForCountry } from "@/lib/constants/countries";
 
 const COMMON_UNITS = [
   "gram",
@@ -25,6 +26,10 @@ export function ItemRecipesView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
+  const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+
   // Existing backend queries (allMenus: true fetches all organization items)
   const inventoryItems = useQuery(api.inventory.listInventoryItems, {
     organizationId,
@@ -501,6 +506,8 @@ export function ItemRecipesView({
                     inventoryItems={inventoryItems || []}
                     searchQuery={searchQuery}
                     selectedCategory={selectedCategoryFilter}
+                    currencySymbol={currencySymbol}
+                    country={activeOrg?.country}
                     onDelete={openDeleteDialog}
                   />
                 ))}
@@ -794,12 +801,16 @@ function DishRecipeRows({
   inventoryItems,
   searchQuery,
   selectedCategory,
+  currencySymbol = "₹",
+  country,
   onDelete,
 }: {
   dish: { _id: string; name: string; price: number; categoryName?: string };
   inventoryItems: any[];
   searchQuery: string;
   selectedCategory: string;
+  currencySymbol?: string;
+  country?: string;
   onDelete: (
     recipeId: Id<"recipes">,
     ingredientName: string,
@@ -856,10 +867,10 @@ function DishRecipeRows({
               {r.quantity} {r.unit || r.servingUnit || "gram"}
             </td>
             <td className="py-3.5 px-5 text-[#57534e]">
-              {unitCost > 0 ? `₹${unitCost.toFixed(2)}` : "—"}
+              {unitCost > 0 ? `${currencySymbol}${formatCurrencyAmount(unitCost, country)}` : "—"}
             </td>
             <td className="py-3.5 px-5 font-semibold text-[#0c0a09]">
-              ₹{ingredientCost.toFixed(2)}
+              {currencySymbol}{formatCurrencyAmount(ingredientCost, country)}
             </td>
             <td className="py-3.5 px-5 text-right">
               <button

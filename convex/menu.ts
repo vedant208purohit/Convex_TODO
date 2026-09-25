@@ -1303,11 +1303,39 @@ export const listCategoryItems = query({
       const item = await ctx.db.get(ci.itemId);
       if (!item || item.deletedAt !== undefined) continue;
 
-      const imageUrl = await resolveAssetOrStorageUrl(ctx, {
-        assetId: item.imageAssetId,
-        storageId: item.imageStorageId,
-        organizationId: item.organizationId,
-      });
+      const [
+        imageUrl,
+        threeDModelUrl,
+        threeDModelIosUrl,
+        videoUrl,
+        threeDAsset,
+        threeDIosAsset,
+        videoAsset,
+      ] = await Promise.all([
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.imageAssetId,
+          storageId: item.imageStorageId,
+          organizationId: item.organizationId,
+        }),
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.threeDModelAssetId,
+          storageId: item.threeDModelStorageId,
+          organizationId: item.organizationId,
+        }),
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.threeDModelIosAssetId,
+          storageId: item.threeDModelIosStorageId,
+          organizationId: item.organizationId,
+        }),
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.videoAssetId,
+          storageId: item.videoStorageId,
+          organizationId: item.organizationId,
+        }),
+        item.threeDModelAssetId ? ctx.db.get(item.threeDModelAssetId) : null,
+        item.threeDModelIosAssetId ? ctx.db.get(item.threeDModelIosAssetId) : null,
+        item.videoAssetId ? ctx.db.get(item.videoAssetId) : null,
+      ]);
 
       results.push({
         categoryItemId: ci._id,
@@ -1317,6 +1345,12 @@ export const listCategoryItems = query({
           ...item,
           displayPrice: (item.price / 100).toFixed(2),
           imageUrl,
+          threeDModelUrl,
+          threeDModelFileName: (threeDAsset as any)?.fileName || undefined,
+          threeDModelIosUrl,
+          threeDModelIosFileName: (threeDIosAsset as any)?.fileName || undefined,
+          videoUrl,
+          videoFileName: (videoAsset as any)?.fileName || undefined,
         },
       });
     }
@@ -1370,16 +1404,50 @@ export const listAllItems = query({
       if (!cat || cat.deletedAt !== undefined) continue;
       const categoryName = cat.name;
 
-      const imageUrl = await resolveAssetOrStorageUrl(ctx, {
-        assetId: item.imageAssetId,
-        storageId: item.imageStorageId,
-        organizationId: args.organizationId,
-      });
+      const [
+        imageUrl,
+        threeDModelUrl,
+        threeDModelIosUrl,
+        videoUrl,
+        threeDAsset,
+        threeDIosAsset,
+        videoAsset,
+      ] = await Promise.all([
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.imageAssetId,
+          storageId: item.imageStorageId,
+          organizationId: args.organizationId,
+        }),
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.threeDModelAssetId,
+          storageId: item.threeDModelStorageId,
+          organizationId: args.organizationId,
+        }),
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.threeDModelIosAssetId,
+          storageId: item.threeDModelIosStorageId,
+          organizationId: args.organizationId,
+        }),
+        resolveAssetOrStorageUrl(ctx, {
+          assetId: item.videoAssetId,
+          storageId: item.videoStorageId,
+          organizationId: args.organizationId,
+        }),
+        item.threeDModelAssetId ? ctx.db.get(item.threeDModelAssetId) : null,
+        item.threeDModelIosAssetId ? ctx.db.get(item.threeDModelIosAssetId) : null,
+        item.videoAssetId ? ctx.db.get(item.videoAssetId) : null,
+      ]);
 
       results.push({
         ...item,
         displayPrice: (item.price / 100).toFixed(2),
         imageUrl,
+        threeDModelUrl,
+        threeDModelFileName: (threeDAsset as any)?.fileName || undefined,
+        threeDModelIosUrl,
+        threeDModelIosFileName: (threeDIosAsset as any)?.fileName || undefined,
+        videoUrl,
+        videoFileName: (videoAsset as any)?.fileName || undefined,
         categoryName,
       });
     }

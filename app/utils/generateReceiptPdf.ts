@@ -39,7 +39,7 @@ export function openReceiptPdfInNewTab({ order, org }: OrderReceiptData) {
   let currentY = 22;
 
   // 1. Currency Symbol Resolution (PDF-safe currency formatting)
-  const rawSymbol = org?.currencySymbol || "₹";
+  const rawSymbol = org?.defaultCurrencySymbol || org?.currencySymbol || "$";
   const currencySymbol =
     !rawSymbol || rawSymbol === "₹" || rawSymbol === "INR" || rawSymbol.charCodeAt(0) > 127
       ? "Rs."

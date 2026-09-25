@@ -60,44 +60,20 @@ interface OrgFormData {
   fssaiDocumentAssetId?: string;
 }
 
+import {
+  COUNTRIES_MASTER,
+  getStatesForCountry,
+  getCurrencyForCountry,
+  getTimezoneForCountry,
+  getTimezonesForCountry,
+  getPhoneCodeForCountry,
+  TIMEZONE_OPTIONS,
+  COUNTRY_OPTIONS,
+  CURRENCY_OPTIONS,
+  PHONE_CODE_OPTIONS,
+} from "@/lib/constants/countries";
+
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
-
-const COUNTRY_OPTIONS = [
-  "India",
-  "United States",
-  "United Arab Emirates",
-  "France",
-  "United Kingdom",
-  "Canada",
-  "Australia",
-];
-
-const TIMEZONE_OPTIONS = [
-  { label: "Asia/Kolkata (IST)", value: "Asia/Kolkata" },
-  { label: "Europe/Paris (CET)", value: "Europe/Paris" },
-  { label: "America/New_York (EST)", value: "America/New_York" },
-  { label: "Asia/Dubai (GST)", value: "Asia/Dubai" },
-  { label: "UTC", value: "UTC" },
-];
-
-const CURRENCY_OPTIONS = [
-  { label: "INR (₹)", currency: "INR", symbol: "₹" },
-  { label: "USD ($)", currency: "USD", symbol: "$" },
-  { label: "EUR (€)", currency: "EUR", symbol: "€" },
-  { label: "AED (AED)", currency: "AED", symbol: "AED" },
-  { label: "GBP (£)", currency: "GBP", symbol: "£" },
-  { label: "CAD ($)", currency: "CAD", symbol: "$" },
-  { label: "AUD ($)", currency: "AUD", symbol: "$" },
-];
-
-const PHONE_CODE_OPTIONS = [
-  { code: "+91", country: "India" },
-  { code: "+1", country: "United States" },
-  { code: "+971", country: "United Arab Emirates" },
-  { code: "+33", country: "France" },
-  { code: "+44", country: "United Kingdom" },
-  { code: "+61", country: "Australia" },
-];
 
 function parseTimeToDayMinutes(timeStr: string): number {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -326,13 +302,13 @@ export function OrganizationSettings() {
   useEffect(() => {
     if (!org) return;
 
-    let code = "+91";
-    let num = org.phone || "";
+    let code = org.country ? getPhoneCodeForCountry(org.country) : "+91";
+    let num = (org.phone || "").trim();
     if (num.startsWith("+")) {
       const match = PHONE_CODE_OPTIONS.find((opt) => num.startsWith(opt.code));
       if (match) {
         code = match.code;
-        num = num.slice(match.code.length);
+        num = num.slice(match.code.length).trim();
       }
     }
 
@@ -376,8 +352,8 @@ export function OrganizationSettings() {
       state: org.state || "",
       country: org.country || "India",
       organizationTimeZone: org.organizationTimeZone || "Asia/Kolkata",
-      defaultCurrency: org.defaultCurrency || "INR",
-      defaultCurrencySymbol: org.defaultCurrencySymbol || "₹",
+      defaultCurrency: org.defaultCurrency || (org.country ? getCurrencyForCountry(org.country).code : "USD"),
+      defaultCurrencySymbol: org.defaultCurrencySymbol || (org.country ? getCurrencyForCountry(org.country).symbol : "$"),
       email: org.email || "",
       phoneCountryCode: code,
       phoneNumber: num,
@@ -1146,7 +1122,7 @@ export function OrganizationSettings() {
       if (formData.defaultCurrency) updatePayload.defaultCurrency = formData.defaultCurrency;
       if (symbol) updatePayload.defaultCurrencySymbol = symbol;
       if (formData.email.trim()) updatePayload.email = formData.email.trim();
-      if (fullPhone) updatePayload.phone = fullPhone;
+      updatePayload.phone = fullPhone || "";
       if (formData.fax.trim()) updatePayload.fax = formData.fax.trim();
       if (formData.logoAssetId) {
         updatePayload.logoAssetId = formData.logoAssetId;
@@ -1410,21 +1386,15 @@ export function OrganizationSettings() {
               <h3 className="text-base font-medium text-[#1f1a17]">City & Region</h3>
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                      City*
-                    </label>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
-                      Read-only
-                    </span>
-                  </div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                    City*
+                  </label>
                   <input
                     type="text"
                     value={formData.city || ""}
-                    disabled
-                    readOnly
-                    placeholder="New Delhi"
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
+                    onChange={(e) => updateField("city", e.target.value)}
+                    placeholder="e.g. London / Ahmedabad / New York"
+                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] transition focus:border-[#1f1a17] focus:outline-none"
                   />
                 </div>
 
@@ -1442,22 +1412,43 @@ export function OrganizationSettings() {
                 </div>
 
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                      State*
-                    </label>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
-                      Read-only
-                    </span>
-                  </div>
-                  <input
-                    type="text"
-                    value={formData.state || ""}
-                    disabled
-                    readOnly
-                    placeholder="Delhi"
-                    className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
-                  />
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                    State*
+                  </label>
+                  {(() => {
+                    const countryStates = getStatesForCountry(formData.country);
+                    if (countryStates && countryStates.length > 0) {
+                      return (
+                        <select
+                          value={formData.state || ""}
+                          onChange={(e) => updateField("state", e.target.value)}
+                          className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none font-medium cursor-pointer"
+                          style={{
+                            backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                            backgroundPosition: "right 1rem center",
+                            backgroundRepeat: "no-repeat",
+                            backgroundSize: "1.5em 1.5em",
+                          }}
+                        >
+                          <option value="">Select state / province</option>
+                          {countryStates.map((s) => (
+                            <option key={s.code} value={s.name}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    }
+                    return (
+                      <input
+                        type="text"
+                        value={formData.state || ""}
+                        onChange={(e) => updateField("state", e.target.value)}
+                        placeholder="State / Province"
+                        className="mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 text-sm text-[#1f1a17] placeholder-[#8a7e75] transition focus:border-[#1f1a17] focus:outline-none"
+                      />
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -1472,13 +1463,15 @@ export function OrganizationSettings() {
                   <select
                     value={formData.country || "India"}
                     disabled
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                     style={{
+                      backgroundColor: "#f5efeb",
+                      color: "#6f655e",
                       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundPosition: "right 1rem center",
                       backgroundRepeat: "no-repeat",
                       backgroundSize: "1.5em 1.5em"
                     }}
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
                   >
                     {COUNTRY_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -1494,31 +1487,32 @@ export function OrganizationSettings() {
               <h3 className="text-base font-medium text-[#1f1a17]">Regional Settings</h3>
               <div className="mt-4 space-y-4">
                 <div>
-                  <div className="flex items-center justify-between">
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
-                      Timezone
-                    </label>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
-                      Read-only
-                    </span>
-                  </div>
-                  <select
-                    value={formData.organizationTimeZone || "Asia/Kolkata"}
-                    disabled
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
-                    style={{
-                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                      backgroundPosition: "right 1rem center",
-                      backgroundRepeat: "no-repeat",
-                      backgroundSize: "1.5em 1.5em"
-                    }}
-                  >
-                    {TIMEZONE_OPTIONS.map((tz) => (
-                      <option key={tz.value} value={tz.value}>
-                        {tz.label}
-                      </option>
-                    ))}
-                  </select>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
+                    Timezone
+                  </label>
+                  {(() => {
+                    const countryTimezones = getTimezonesForCountry(formData.country);
+                    const options = countryTimezones.length > 0 ? countryTimezones : TIMEZONE_OPTIONS;
+                    return (
+                      <select
+                        value={formData.organizationTimeZone || (options[0]?.value ?? "Asia/Kolkata")}
+                        onChange={(e) => updateField("organizationTimeZone", e.target.value)}
+                        className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#fdf8f7] px-4 py-3 pr-10 text-sm text-[#1f1a17] transition focus:border-[#1f1a17] focus:outline-none font-medium cursor-pointer"
+                        style={{
+                          backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236f655e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                          backgroundPosition: "right 1rem center",
+                          backgroundRepeat: "no-repeat",
+                          backgroundSize: "1.5em 1.5em"
+                        }}
+                      >
+                        {options.map((tz) => (
+                          <option key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  })()}
                 </div>
 
                 <div>

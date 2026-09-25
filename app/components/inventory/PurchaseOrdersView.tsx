@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { formatCurrencyAmount, getCurrencyForCountry } from "@/lib/constants/countries";
 
 export interface PurchaseOrderItem {
   id: string;
@@ -42,6 +43,10 @@ export function PurchaseOrdersView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
+  const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+
   // Consuming existing Convex backend queries & mutations
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
   const inventoryItems = useQuery(api.inventory.listInventoryItems, {
@@ -752,7 +757,7 @@ export function PurchaseOrdersView({
               Est. Total Amount
             </p>
             <p className="text-sm font-serif font-medium text-emerald-700">
-              ₹{totalPOAmount.toLocaleString()}
+              {currencySymbol}{formatCurrencyAmount(totalPOAmount, activeOrg?.country)}
             </p>
           </div>
         </div>
@@ -1042,15 +1047,12 @@ export function PurchaseOrdersView({
 
                         {/* Unit Cost */}
                         <td className="py-3.5 px-4 text-right font-medium text-stone-700">
-                          ₹{item.unitCost}
+                          {currencySymbol}{formatCurrencyAmount(item.unitCost, activeOrg?.country)}
                         </td>
 
                         {/* Total Cost */}
                         <td className="py-3.5 px-4 text-right font-semibold text-[#141413]">
-                          ₹
-                          {(
-                            item.orderedQuantity * item.unitCost
-                          ).toLocaleString()}
+                          {currencySymbol}{formatCurrencyAmount(item.orderedQuantity * item.unitCost, activeOrg?.country)}
                         </td>
 
                         {/* Action buttons matching old project logic */}

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { formatStoreDateTime } from "@/lib/constants/countries";
 
 interface StockLedgerRecord {
   _id: string;
@@ -21,6 +22,8 @@ interface StockLedgerRecord {
 }
 
 export function StockLedgerView({ organizationId }: { organizationId: Id<"organizations"> }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
   // Query inventory items to resolve ingredient names if needed
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
 
@@ -228,13 +231,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
                     return (
                       <tr key={entry._id} className="hover:bg-[#fafaf9] transition-colors">
                         <td className="py-4 px-5 text-[#57534e] whitespace-nowrap">
-                          {new Date(entry.createdAt).toLocaleString("en-IN", {
-                            day: "2-digit",
-                            month: "short",
-                            year: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {formatStoreDateTime(entry.createdAt, activeOrg?.organizationTimeZone, activeOrg?.country)}
                         </td>
                         <td className="py-4 px-5 font-medium text-[#0c0a09]">{entry.itemName}</td>
                         <td className="py-4 px-5">

@@ -88,17 +88,59 @@ export const ALLOWED_MIME_TYPES: Record<string, { maxSizeBytes: number; defaultE
   // Documents (max 25MB for PDFs)
   "application/pdf": { maxSizeBytes: 25 * 1024 * 1024, defaultExt: "pdf" },
 
-  // Media & 3D models (max 50MB)
-  "video/mp4": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "mp4" },
-  "video/webm": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "webm" },
-  "model/gltf-binary": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "glb" },
-  "model/gltf+json": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "gltf" },
-  "model/vnd.usdz+zip": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "usdz" },
-  "model/usdz+zip": { maxSizeBytes: 50 * 1024 * 1024, defaultExt: "usdz" },
+  // Media & 3D models (max 100MB)
+  "video/mp4": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "mp4" },
+  "video/webm": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "webm" },
+  "video/quicktime": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "mov" },
+  "model/gltf-binary": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "glb" },
+  "model/gltf+json": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "gltf" },
+  "model/vnd.usdz+zip": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "usdz" },
+  "model/usdz+zip": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "usdz" },
+  "model/usdz": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "usdz" },
+  "application/octet-stream": { maxSizeBytes: 100 * 1024 * 1024, defaultExt: "bin" },
 
   // Plain text (for test/diagnostics, max 2MB)
   "text/plain": { maxSizeBytes: 2 * 1024 * 1024, defaultExt: "txt" },
 };
+
+/**
+ * Resolves content type from filename extension if content type is generic or unknown.
+ */
+export function resolveContentType(contentType: string, fileName: string): string {
+  if (contentType && contentType !== "application/octet-stream" && ALLOWED_MIME_TYPES[contentType]) {
+    return contentType;
+  }
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "glb":
+      return "model/gltf-binary";
+    case "gltf":
+      return "model/gltf+json";
+    case "usdz":
+      return "model/vnd.usdz+zip";
+    case "mp4":
+      return "video/mp4";
+    case "mov":
+      return "video/quicktime";
+    case "webm":
+      return "video/webm";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "png":
+      return "image/png";
+    case "webp":
+      return "image/webp";
+    case "gif":
+      return "image/gif";
+    case "svg":
+      return "image/svg+xml";
+    case "pdf":
+      return "application/pdf";
+    default:
+      return contentType || "application/octet-stream";
+  }
+}
 
 /**
  * Validates and retrieves Cloudflare R2 configuration from environment variables.
@@ -218,7 +260,7 @@ export function validateUploadRequest(args: {
   fileName: string;
   contentType: string;
   fileSize: number;
-}): void {
+}): { effectiveContentType: string } {
   // 1. Asset Type Validation
   const isKnownAssetType = (ALLOWED_ASSET_TYPES as readonly string[]).includes(args.assetType);
   if (!isKnownAssetType && !/^[a-zA-Z0-9_-]{2,30}$/.test(args.assetType)) {
@@ -228,7 +270,8 @@ export function validateUploadRequest(args: {
   }
 
   // 2. MIME Type Validation
-  const mimeConfig = ALLOWED_MIME_TYPES[args.contentType];
+  const effectiveContentType = resolveContentType(args.contentType, args.fileName);
+  const mimeConfig = ALLOWED_MIME_TYPES[effectiveContentType];
   if (!mimeConfig) {
     throw new Error(
       `Unsupported contentType '${args.contentType}'. Supported types: ${Object.keys(ALLOWED_MIME_TYPES).join(", ")}`
@@ -244,9 +287,11 @@ export function validateUploadRequest(args: {
     const maxMb = (mimeConfig.maxSizeBytes / (1024 * 1024)).toFixed(1);
     const actualMb = (args.fileSize / (1024 * 1024)).toFixed(2);
     throw new Error(
-      `File size (${actualMb}MB) exceeds the maximum allowed size of ${maxMb}MB for contentType '${args.contentType}'.`
+      `File size (${actualMb}MB) exceeds the maximum allowed size of ${maxMb}MB for contentType '${effectiveContentType}'.`
     );
   }
+
+  return { effectiveContentType };
 }
 
 /**
@@ -316,7 +361,7 @@ export const generateUploadUrl = action({
     }
 
     // 3. Validate upload parameters
-    validateUploadRequest({
+    const { effectiveContentType } = validateUploadRequest({
       assetType: args.assetType,
       fileName: args.fileName,
       contentType: args.contentType,
@@ -328,7 +373,7 @@ export const generateUploadUrl = action({
       String(orgId),
       args.assetType,
       args.fileName,
-      args.contentType
+      effectiveContentType
     );
 
     // 5. Generate presigned PUT URL
@@ -339,7 +384,7 @@ export const generateUploadUrl = action({
     const command = new PutObjectCommand({
       Bucket: config.bucketName,
       Key: storageKey,
-      ContentType: args.contentType,
+      ContentType: effectiveContentType,
     });
 
     const uploadUrl = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
@@ -348,7 +393,7 @@ export const generateUploadUrl = action({
       uploadUrl,
       storageKey,
       expiresAt: Date.now() + expiresInSeconds * 1000,
-      contentType: args.contentType,
+      contentType: effectiveContentType,
     };
   },
 });
@@ -388,7 +433,7 @@ export const createAssetUpload = action({
     }
 
     // 3. Validate upload parameters
-    validateUploadRequest({
+    const { effectiveContentType } = validateUploadRequest({
       assetType: args.assetType,
       fileName: args.fileName,
       contentType: args.contentType,
@@ -400,7 +445,7 @@ export const createAssetUpload = action({
       String(orgId),
       args.assetType,
       args.fileName,
-      args.contentType
+      effectiveContentType
     );
 
     // 5. Insert pending metadata record in organization_assets
@@ -411,7 +456,7 @@ export const createAssetUpload = action({
         organizationId: normalizedOrgId,
         storageKey,
         fileName: args.fileName,
-        contentType: args.contentType,
+        contentType: effectiveContentType,
         fileSize: args.fileSize,
         assetType: args.assetType,
         createdBy: identity.subject,
@@ -426,7 +471,7 @@ export const createAssetUpload = action({
     const command = new PutObjectCommand({
       Bucket: config.bucketName,
       Key: storageKey,
-      ContentType: args.contentType,
+      ContentType: effectiveContentType,
     });
 
     const uploadUrl = await getSignedUrl(client, command, { expiresIn: expiresInSeconds });
