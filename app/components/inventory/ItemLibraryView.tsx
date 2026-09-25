@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { getCurrencyForCountry } from "@/lib/constants/countries";
 
 // Preset Buying Units & Relatable Serving Units matching old project
 const BUYING_UNITS = [
@@ -105,6 +106,9 @@ export function ItemLibraryView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
+  const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
   const rawItems = useQuery(api.inventory.listInventoryItems, { organizationId });
   const items = useMemo(() => rawItems ?? [], [rawItems]);
 
@@ -1618,7 +1622,7 @@ export function ItemLibraryView({
               )}
 
               <div>
-                <label className="block font-medium text-[#1c1917] mb-1">Unit cost (₹)</label>
+                <label className="block font-medium text-[#1c1917] mb-1">Unit cost ({currencySymbol})</label>
                 <input
                   type="number"
                   step="0.01"
