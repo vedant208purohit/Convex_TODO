@@ -165,7 +165,6 @@ const inventorySubItems = [
   { label: "Item library", tab: "itemLibrary" },
   { label: "Dead stock", tab: "deadStock" },
   { label: "Item recipes", tab: "itemRecipes" },
-  { label: "Stock ledger", tab: "stockLedger" },
 ];
 
 function NavLink({ href, label, icon }: NavItem) {

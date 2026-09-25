@@ -17,8 +17,6 @@ interface StockLedgerRecord {
   purchaseOrderId?: string;
   supplierId?: string;
   orderId?: string;
-  isDeadStock?: boolean;
-  reasonForDeadStock?: string;
   createdAt: number;
 }
 
@@ -57,12 +55,10 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
         stockType: r.stockType ?? (r.quantity < 0 ? "debit" : "credit"),
         quantity: Math.abs(r.quantity ?? 0),
         unit: r.unit ?? "unit",
-        sourceType: r.sourceType ?? (r.isDeadStock ? "DeadStock" : "Adjustment"),
+        sourceType: r.sourceType ?? "Adjustment",
         purchaseOrderId: r.purchaseOrderId,
         supplierId: r.supplierId,
         orderId: r.orderId,
-        isDeadStock: r.isDeadStock,
-        reasonForDeadStock: r.reasonForDeadStock,
         createdAt: r.createdAt ?? Date.now(),
       };
     });
@@ -88,9 +84,8 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
         const q = searchQuery.toLowerCase();
         const matchesName = entry.itemName?.toLowerCase().includes(q);
         const matchesSource = entry.sourceType?.toLowerCase().includes(q);
-        const matchesReason = entry.reasonForDeadStock?.toLowerCase().includes(q);
         const matchesUnit = entry.unit?.toLowerCase().includes(q);
-        if (!matchesName && !matchesSource && !matchesReason && !matchesUnit) {
+        if (!matchesName && !matchesSource && !matchesUnit) {
           return false;
         }
       }
@@ -264,9 +259,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
                           </span>
                         </td>
                         <td className="py-4 px-5 text-right font-mono text-[11px] text-[#78716c]">
-                          {entry.reasonForDeadStock ? (
-                            <span className="text-rose-700">{entry.reasonForDeadStock}</span>
-                          ) : entry.purchaseOrderId ? (
+                          {entry.purchaseOrderId ? (
                             `PO: ${entry.purchaseOrderId.slice(-6)}`
                           ) : entry.orderId ? (
                             `Order: ${entry.orderId.slice(-6)}`
