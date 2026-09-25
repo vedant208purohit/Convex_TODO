@@ -2072,7 +2072,8 @@ export function OrganizationTablesSettings() {
               <div className="pt-2">
                 <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm">
                   {(() => {
-                    const qrUrlStr = previewTableQr?.qrUrl || `https://pos.app/store?type=DineIn&table_id=${previewTable._id}&table_number=${encodeURIComponent(previewTable.tableNumber)}`;
+                    const storeParam = organization?.slug ? `store=${encodeURIComponent(organization.slug)}&` : "";
+                    const qrUrlStr = previewTableQr?.qrUrl || `https://pos.app/store?${storeParam}type=DineIn&table_id=${previewTable._id}&table_number=${encodeURIComponent(previewTable.tableNumber)}`;
                     const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrlStr)}`;
                     return (
                       <img

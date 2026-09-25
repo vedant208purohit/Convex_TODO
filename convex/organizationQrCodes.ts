@@ -50,16 +50,18 @@ export function buildQrUrl(
   qrType: "DineIn" | "TakeAway" | "Queue",
   name: string,
   tableId?: string,
+  storeSlug?: string,
 ): string {
   const baseUrl = process.env.FRONT_END_URL || "https://pos.app";
   const encodedName = encodeURIComponent(name.trim());
+  const storeParam = storeSlug ? `store=${encodeURIComponent(storeSlug)}&` : "";
 
   if (qrType === "DineIn") {
-    return `${baseUrl}/store?qr_id=${qrId}&type=DineIn&qr_name=${encodedName}&table_id=${tableId ?? ""}`;
+    return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=DineIn&qr_name=${encodedName}&table_id=${tableId ?? ""}`;
   } else if (qrType === "Queue") {
-    return `${baseUrl}/queue?qr_id=${qrId}&type=Queue&qr_name=${encodedName}`;
+    return `${baseUrl}/queue?${storeParam}qr_id=${qrId}&type=Queue&qr_name=${encodedName}`;
   } else {
-    return `${baseUrl}/store?qr_id=${qrId}&type=TakeAway&qr_name=${encodedName}`;
+    return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=TakeAway&qr_name=${encodedName}`;
   }
 }
 
@@ -321,7 +323,7 @@ export const create = mutation({
     updatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminOrCashier(ctx);
+    const { org } = await requireAdminOrCashier(ctx);
 
     const trimmedName = normalizeQrName(args.name);
     await validateUniqueQrName(ctx, trimmedName);
@@ -346,7 +348,7 @@ export const create = mutation({
       updatedAt: args.updatedAt ?? now,
     });
 
-    const qrUrl = buildQrUrl(qrId, args.qrType, trimmedName, effectiveTableId);
+    const qrUrl = buildQrUrl(qrId, args.qrType, trimmedName, effectiveTableId, org.slug);
     await ctx.db.patch(qrId, { qrUrl, updatedAt: now });
 
     return (await ctx.db.get(qrId))!;
@@ -368,7 +370,7 @@ export const update = mutation({
     tableId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    await requireAdminOrCashier(ctx);
+    const { org } = await requireAdminOrCashier(ctx);
 
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
@@ -403,6 +405,7 @@ export const update = mutation({
       effectiveType,
       effectiveName,
       effectiveTableId,
+      org.slug,
     );
 
     await ctx.db.patch(args.id, {
