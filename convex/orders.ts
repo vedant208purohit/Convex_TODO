@@ -803,7 +803,7 @@ export const updateOrderStatus = mutation({
     if (!order) throw new Error("Order not found");
 
     const process = await ctx.db.get(args.processId);
-    if (!process) throw new Error("Order process step not found");
+    if (!process || process.deletedAt !== undefined) throw new Error("Order process step not found");
 
     const now = Date.now();
 

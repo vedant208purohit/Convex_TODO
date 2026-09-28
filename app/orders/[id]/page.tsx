@@ -324,9 +324,16 @@ export default function OrderDetailsDynamicPage() {
     (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).code : "USD");
 
   // Query Real Store Order Processes from DB
-  const dbProcesses = useQuery(api.organizationOrderProcesses.list, {
-    published: true,
-  });
+  const dbProcesses = useQuery(api.organizationOrderProcesses.list, {});
+
+  // Derive sequential order processes sorted strictly by position
+  const sequentialProcesses = useMemo(() => {
+    if (!dbProcesses || dbProcesses.length === 0) return [];
+    const seq = dbProcesses.filter((p) => p.isSequence !== false);
+    const publishedSeq = seq.filter((p) => p.published);
+    const activeList = publishedSeq.length > 0 ? publishedSeq : seq;
+    return activeList.sort((a, b) => a.position - b.position);
+  }, [dbProcesses]);
 
   // Query Real Store Payment Modes from DB
   const paymentModesList = useQuery(
@@ -426,6 +433,59 @@ export default function OrderDetailsDynamicPage() {
   // Mutations
   const addPaymentMutation = useMutation(api.orders.addOrderPayment);
   const cancelOrderMutation = useMutation(api.orders.cancelOrder);
+  const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
+
+
+  const isCancelled = Boolean(
+    order?.isRejected ||
+      order?.orderStatusName === "Cancelled" ||
+      order?.orderStatusName === "Cancelled / Refunded",
+  );
+
+  const currentProcessIndex = useMemo(() => {
+    if (!order || sequentialProcesses.length === 0) return -1;
+    if (order.orderStatusId) {
+      const idx = sequentialProcesses.findIndex(
+        (p) => p._id === order.orderStatusId,
+      );
+      if (idx !== -1) return idx;
+    }
+    const normalizedName = (order.orderStatusName || "").trim().toLowerCase();
+    return sequentialProcesses.findIndex(
+      (p) => p.name.trim().toLowerCase() === normalizedName,
+    );
+  }, [order, sequentialProcesses]);
+
+  const currentProcess =
+    currentProcessIndex >= 0 ? sequentialProcesses[currentProcessIndex] : null;
+  const nextProcess =
+    currentProcessIndex >= 0 && currentProcessIndex < sequentialProcesses.length - 1
+      ? sequentialProcesses[currentProcessIndex + 1]
+      : null;
+  const isFinalStage =
+    currentProcessIndex >= 0 &&
+    currentProcessIndex === sequentialProcesses.length - 1;
+
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+
+  // Status Progression Handler
+  const handleAdvanceStatus = async () => {
+    if (!order?._id || !nextProcess?._id || isUpdatingStatus || isCancelled) return;
+    try {
+      setIsUpdatingStatus(true);
+      const res = await updateOrderStatusMutation({
+        orderId: order._id,
+        processId: nextProcess._id,
+      });
+      showToast(
+        `Order status updated to ${res?.statusName || nextProcess.name}`,
+      );
+    } catch (err: any) {
+      showToast(err?.message || "Failed to update order status");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
 
   // Drawer and Modal States
   const [drawerTab, setDrawerTab] = useState<
@@ -718,10 +778,40 @@ export default function OrderDetailsDynamicPage() {
                 <ArrowLeftIcon className="w-4 h-4 text-[#5e5e5e]" />
                 <span>Back to Orders</span>
               </button>
+
               <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{
+                    backgroundColor:
+                      currentProcess?.processColor ||
+                      (isCancelled ? "#e11d48" : "#EA9C1B"),
+                  }}
+                />
                 <span>{order.orderStatusName || "Live Order Status"}</span>
               </span>
+
+              {/* Dynamic Next Status Advancement Button in Header */}
+              {nextProcess && !isCancelled && (
+                <button
+                  type="button"
+                  onClick={handleAdvanceStatus}
+                  disabled={isUpdatingStatus}
+                  className="h-10 px-4 bg-[#219653] hover:bg-[#1a7c44] text-white font-medium text-xs sm:text-sm rounded-full transition-all cursor-pointer inline-flex items-center gap-2 shadow-xs disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-sm active:scale-[0.98]"
+                >
+                  {isUpdatingStatus ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Updating...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Mark as {nextProcess.name}</span>
+                      <span className="font-bold text-sm leading-none">➔</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -1268,6 +1358,62 @@ export default function OrderDetailsDynamicPage() {
                     Order Actions
                   </h3>
 
+                  {/* Order Status Advancement Block */}
+                  <div className="mb-4 p-3.5 rounded-xl border border-[#e7e5e4] bg-[#faf8f7] flex flex-col gap-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-semibold text-[#78716c] uppercase tracking-wider">
+                        Pipeline Status
+                      </span>
+                      {isFinalStage && !isCancelled && (
+                        <span className="text-[11px] font-semibold text-[#219653] bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          Final Stage
+                        </span>
+                      )}
+                      {isCancelled && (
+                        <span className="text-[11px] font-semibold text-[#e11d48] bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                          Cancelled
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                          !isCancelled && !isFinalStage ? "animate-pulse" : ""
+                        }`}
+                        style={{
+                          backgroundColor:
+                            currentProcess?.processColor ||
+                            (isCancelled ? "#e11d48" : "#262626"),
+                        }}
+                      />
+                      <span className="text-sm font-bold text-[#0c0a09]">
+                        {order.orderStatusName || "Accepted"}
+                      </span>
+                    </div>
+
+                    {nextProcess && !isCancelled && (
+                      <button
+                        type="button"
+                        onClick={handleAdvanceStatus}
+                        disabled={isUpdatingStatus}
+                        className="w-full mt-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#219653] hover:bg-[#1a7c44] text-white text-xs font-semibold rounded-lg transition-all cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99]"
+                      >
+                        {isUpdatingStatus ? (
+                          <>
+                            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                            <span>Updating Status...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Mark as {nextProcess.name}</span>
+                            <span className="font-bold text-sm leading-none">➔</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+
                   {/* 2-Column Action Grid */}
                   <div className="grid grid-cols-2 gap-2.5 mb-5">
                     {/* Edit Order */}
@@ -1667,52 +1813,35 @@ export default function OrderDetailsDynamicPage() {
                 {drawerTab === "timeline" && (
                   <div className="p-8">
                     {(() => {
-                      const sequenceList = (() => {
-                        if (dbProcesses && dbProcesses.length > 0) {
-                          const seq = dbProcesses
-                            .filter((p) => p.isSequence)
-                            .sort((a, b) => a.position - b.position);
-                          if (seq.length > 0) return seq;
-                        }
-                        return [
-                          {
-                            _id: "p1",
-                            name: "Accepted",
-                            position: 1,
-                            processColor: "#262626",
-                          },
-                          {
-                            _id: "p2",
-                            name: "Preparing",
-                            position: 2,
-                            processColor: "#EA9C1B",
-                          },
-                          {
-                            _id: "p3",
-                            name: "Cooking",
-                            position: 3,
-                            processColor: "#EA9C1B",
-                          },
-                          {
-                            _id: "p4",
-                            name: "Plating",
-                            position: 4,
-                            processColor: "#EA9C1B",
-                          },
-                          {
-                            _id: "p5",
-                            name: "Ready to deliver",
-                            position: 5,
-                            processColor: "#FC8019",
-                          },
-                          {
-                            _id: "p6",
-                            name: "Delivered",
-                            position: 6,
-                            processColor: "#219653",
-                          },
-                        ];
-                      })();
+                      const sequenceList =
+                        sequentialProcesses.length > 0
+                          ? sequentialProcesses
+                          : [
+                              {
+                                _id: "p1" as any,
+                                name: "Accepted",
+                                position: 1,
+                                processColor: "#262626",
+                              },
+                              {
+                                _id: "p2" as any,
+                                name: "In progress",
+                                position: 2,
+                                processColor: "#EA9C1B",
+                              },
+                              {
+                                _id: "p3" as any,
+                                name: "Ready to deliver",
+                                position: 3,
+                                processColor: "#FC8019",
+                              },
+                              {
+                                _id: "p4" as any,
+                                name: "Delivered",
+                                position: 4,
+                                processColor: "#219653",
+                              },
+                            ];
 
                       const currentStatusName = (
                         order.orderStatusName || "Accepted"
@@ -1721,6 +1850,7 @@ export default function OrderDetailsDynamicPage() {
                         .toLowerCase();
                       const currentIdx = sequenceList.findIndex(
                         (p) =>
+                          p._id === order.orderStatusId ||
                           p.name.trim().toLowerCase() === currentStatusName,
                       );
                       const activeIndex = currentIdx >= 0 ? currentIdx : 0;
@@ -1744,6 +1874,27 @@ export default function OrderDetailsDynamicPage() {
                           <div className="space-y-12 w-full relative z-10">
                             {sequenceList.map((step, idx) => {
                               const isCompleted = idx <= activeIndex;
+                              const matchingActivity = order.activities?.find(
+                                (a: any) =>
+                                  a.processId === step._id ||
+                                  a.processName?.trim().toLowerCase() ===
+                                    step.name.trim().toLowerCase(),
+                              );
+
+                              const stepTime = matchingActivity?.createdAt
+                                ? formatStoreTime(
+                                    new Date(matchingActivity.createdAt),
+                                    activeOrg?.organizationTimeZone,
+                                    activeOrg?.country,
+                                  )
+                                : formattedOrderTime;
+                              const stepDate = matchingActivity?.createdAt
+                                ? formatStoreDate(
+                                    new Date(matchingActivity.createdAt),
+                                    activeOrg?.country,
+                                    activeOrg?.organizationTimeZone,
+                                  )
+                                : formattedOrderDate;
 
                               return (
                                 <div
@@ -1755,10 +1906,10 @@ export default function OrderDetailsDynamicPage() {
                                     {isCompleted ? (
                                       <div>
                                         <span className="font-mono text-xs font-semibold text-[#141010] block">
-                                          {formattedOrderTime}
+                                          {stepTime}
                                         </span>
                                         <span className="text-[11px] text-[#7a716b] block">
-                                          {formattedOrderDate}
+                                          {stepDate}
                                         </span>
                                       </div>
                                     ) : (
