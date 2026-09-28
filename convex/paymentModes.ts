@@ -89,6 +89,48 @@ export async function validateUniquePaymentModeName(
   }
 }
 
+/**
+ * Validates that a payment mode is active and available for cashier / checkout use.
+ * Throws an error if the payment mode is disabled, soft-deleted, or does not belong to the organization.
+ */
+export async function validateActivePaymentMode(
+  ctx: QueryCtx | MutationCtx,
+  organizationId: Id<"organizations">,
+  modeRef: { paymentModeId?: Id<"paymentModes">; paymentModeName?: string }
+): Promise<void> {
+  if (modeRef.paymentModeId) {
+    const pm = await ctx.db.get(modeRef.paymentModeId);
+    if (!pm || pm.organizationId !== organizationId || pm.deletedAt !== undefined) {
+      throw new Error("Payment mode not found.");
+    }
+    if (!pm.active) {
+      throw new Error(`Payment mode "${pm.name}" is disabled and cannot be used for cashier checkout.`);
+    }
+    return;
+  }
+
+  if (modeRef.paymentModeName) {
+    const trimmed = modeRef.paymentModeName.trim();
+    const lower = trimmed.toLowerCase();
+    if (!trimmed || lower === "split" || lower === "split payment" || lower === "pending") {
+      return;
+    }
+
+    const allModes = await ctx.db
+      .query("paymentModes")
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+      .collect();
+
+    const matched = allModes.find(
+      (m) => m.deletedAt === undefined && m.name.trim().toLowerCase() === lower
+    );
+
+    if (matched && !matched.active) {
+      throw new Error(`Payment mode "${matched.name}" is disabled and cannot be used for cashier checkout.`);
+    }
+  }
+}
+
 // ----------------------------------------------------
 // QUERIES
 // ----------------------------------------------------
@@ -96,6 +138,7 @@ export async function validateUniquePaymentModeName(
 /**
  * Lists payment modes for the current store organization.
  * - Supports `activeOnly: true` filter for POS checkout/cashier workflows.
+ * - Enforces active-only visibility for non-admin callers (e.g. Cashiers).
  * - Excludes soft-deleted records.
  * - Returns results sorted deterministically by creation time ASC.
  */
@@ -105,10 +148,26 @@ export const list = query({
     activeOnly: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { org } = await requireMember(ctx, args.organizationId);
+    const { org, callerMember, identity } = await requireMember(ctx, args.organizationId);
+
+    const isOwner = !org.ownerClerkId || org.ownerClerkId === identity.subject;
+    const roles = Array.isArray(callerMember?.userType)
+      ? callerMember!.userType
+      : typeof callerMember?.userType === "string"
+        ? [callerMember!.userType]
+        : [];
+    const isAdmin =
+      isOwner ||
+      roles.some((role) =>
+        ["admin", "store_admin", "org_admin", "super_admin"].includes(
+          (role || "").trim().toLowerCase()
+        )
+      );
+
+    const filterActive = args.activeOnly === true || !isAdmin;
 
     let modes: Doc<"paymentModes">[];
-    if (args.activeOnly) {
+    if (filterActive) {
       modes = await ctx.db
         .query("paymentModes")
         .withIndex("by_org_active", (q) =>

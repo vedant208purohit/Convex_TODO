@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
 import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
+import { validateActivePaymentMode } from "./paymentModes";
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -358,6 +359,13 @@ export const createOrder = mutation({
 
     const resolvedCustomerPhone = args.customerPhone?.trim() || generateUniquePhone();
     const resolvedCustomerName = args.customerName?.trim() || "Guest Customer";
+
+    // 5.5 Validate Payment Mode Availability for Store Checkout
+    if (args.paymentMode && args.paymentMode !== "Pending") {
+      await validateActivePaymentMode(ctx, args.organizationId, {
+        paymentModeName: args.paymentMode,
+      });
+    }
 
     // 6. Insert Order Header
     const orderId = await ctx.db.insert("orders", {
@@ -882,6 +890,14 @@ export const completeOrder = mutation({
 
     const now = Date.now();
 
+    // 0. Validate Payment Mode Availability
+    if (args.paymentModeId || args.paymentMode) {
+      await validateActivePaymentMode(ctx, order.organizationId, {
+        paymentModeId: args.paymentModeId,
+        paymentModeName: args.paymentMode,
+      });
+    }
+
     // 2. Record Payment Log
     let payModeName = args.paymentMode || order.paymentMode;
     if (args.paymentModeId) {
@@ -1193,6 +1209,14 @@ export const addOrderPayment = mutation({
 
     const now = Date.now();
     const paymentModeId = args.paymentModeId ? ctx.db.normalizeId("paymentModes", args.paymentModeId) : undefined;
+
+    // 0. Validate Payment Mode Availability for payment settlement tenders
+    if (args.paymentType === "Credit") {
+      await validateActivePaymentMode(ctx, order.organizationId, {
+        paymentModeId: paymentModeId ?? undefined,
+        paymentModeName: args.paymentModeName,
+      });
+    }
 
     // 1. Insert transaction into orderPayments
     await ctx.db.insert("orderPayments", {

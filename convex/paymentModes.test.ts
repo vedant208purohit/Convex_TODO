@@ -559,4 +559,239 @@ describe("Payment Modes Domain Unit & Integration Tests", () => {
       expect(modesAfterReinit.length).toBe(4);
     });
   });
+
+  // ----------------------------------------------------
+  // 8. Cashier Payment Mode Visibility & Backend Enforcement
+  // ----------------------------------------------------
+  describe("Cashier Payment Mode Visibility & Backend Enforcement", () => {
+    async function setupStoreWithAdminAndCashier() {
+      const t = convexTest(schema, modules);
+
+      const orgId = await t.mutation(api.organizations.create, {
+        name: "Prestige Cafe",
+        ownerClerkId: "admin_owner_1",
+      });
+
+      const asAdmin = t.withIdentity({ subject: "admin_owner_1" });
+      await asAdmin.mutation(api.organizations.initializeStore, { id: orgId });
+
+      // Create a Cashier user
+      const cashierClerkId = "cashier_user_pos_1";
+      await asAdmin.mutation(api.organizationUsers.create, {
+        userId: cashierClerkId,
+        firstName: "Cashier",
+        lastName: "Staff",
+        userType: ["cashier"],
+      });
+
+      const asCashier = t.withIdentity({ subject: cashierClerkId });
+
+      return { t, orgId, asAdmin, asCashier };
+    }
+
+    test("Cashier receives only active payment modes while Admin Settings receives all modes", async () => {
+      const { asAdmin, asCashier, orgId } = await setupStoreWithAdminAndCashier();
+
+      // Admin toggles Cash OFF
+      const allModes = await asAdmin.query(api.organizationPaymentModes.list);
+      const cashMode = allModes.find((m) => m.name === "Cash");
+      expect(cashMode).toBeDefined();
+
+      await asAdmin.mutation(api.organizationPaymentModes.toggleActive, {
+        id: cashMode!._id,
+        active: false,
+      });
+
+      // Admin Settings still sees Cash (as inactive)
+      const adminModes = await asAdmin.query(api.organizationPaymentModes.list);
+      const adminCash = adminModes.find((m) => m.name === "Cash");
+      expect(adminCash?.active).toBe(false);
+      expect(adminModes.length).toBe(4);
+
+      // Cashier query (api.paymentModes.list with activeOnly) does NOT see Cash
+      const cashierModes = await asCashier.query(api.paymentModes.list, {
+        organizationId: orgId,
+        activeOnly: true,
+      });
+      expect(cashierModes.some((m) => m.name === "Cash")).toBe(false);
+      expect(cashierModes.map((m) => m.name)).toEqual([
+        "Credit Card",
+        "Debit Card",
+        "UPI",
+      ]);
+
+      // Admin toggles Cash back ON
+      await asAdmin.mutation(api.organizationPaymentModes.toggleActive, {
+        id: cashMode!._id,
+        active: true,
+      });
+
+      // Cashier query immediately sees Cash again
+      const cashierModesAfter = await asCashier.query(api.paymentModes.list, {
+        organizationId: orgId,
+        activeOnly: true,
+      });
+      expect(cashierModesAfter.some((m) => m.name === "Cash")).toBe(true);
+      expect(cashierModesAfter.length).toBe(4);
+    });
+
+    test("All standard payment modes (Cash, Credit Card, Debit Card, UPI) follow the same toggle rule", async () => {
+      const { asAdmin, asCashier, orgId } = await setupStoreWithAdminAndCashier();
+
+      const modes = await asAdmin.query(api.organizationPaymentModes.list);
+      const testModes = ["Cash", "Credit Card", "Debit Card", "UPI"];
+
+      for (const modeName of testModes) {
+        const targetDoc = modes.find((m) => m.name === modeName);
+        expect(targetDoc).toBeDefined();
+
+        // 1. Toggle OFF
+        await asAdmin.mutation(api.organizationPaymentModes.toggleActive, {
+          id: targetDoc!._id,
+          active: false,
+        });
+
+        // Verify Cashier does not see this mode
+        const cashierListOff = await asCashier.query(api.paymentModes.list, {
+          organizationId: orgId,
+          activeOnly: true,
+        });
+        expect(cashierListOff.some((m) => m.name === modeName)).toBe(false);
+
+        // 2. Toggle ON
+        await asAdmin.mutation(api.organizationPaymentModes.toggleActive, {
+          id: targetDoc!._id,
+          active: true,
+        });
+
+        // Verify Cashier sees this mode again
+        const cashierListOn = await asCashier.query(api.paymentModes.list, {
+          organizationId: orgId,
+          activeOnly: true,
+        });
+        expect(cashierListOn.some((m) => m.name === modeName)).toBe(true);
+      }
+    });
+
+    test("Backend rejects order creation or payment recording with disabled payment mode", async () => {
+      const { asAdmin, asCashier, orgId, t } = await setupStoreWithAdminAndCashier();
+
+      // Create a test menu item
+      const itemId = await asAdmin.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Espresso",
+        price: 25000,
+      });
+
+      // Admin toggles Cash OFF
+      const allModes = await asAdmin.query(api.organizationPaymentModes.list);
+      const cashMode = allModes.find((m) => m.name === "Cash");
+      await asAdmin.mutation(api.organizationPaymentModes.toggleActive, {
+        id: cashMode!._id,
+        active: false,
+      });
+
+      // Cashier tries to create an order using disabled Cash mode -> REJECTED
+      await expect(
+        asCashier.mutation(api.orders.createOrder, {
+          organizationId: orgId,
+          orderType: "TakeAway",
+          orderSource: "Prest-Cashier",
+          paymentMode: "Cash",
+          items: [{ itemId, quantity: 1 }],
+        })
+      ).rejects.toThrow('Payment mode "Cash" is disabled and cannot be used for cashier checkout.');
+
+      // Cashier creates order with enabled UPI mode -> SUCCEEDS
+      const validOrder = await asCashier.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "TakeAway",
+        orderSource: "Prest-Cashier",
+        paymentMode: "UPI",
+        items: [{ itemId, quantity: 1 }],
+      });
+      expect(validOrder.orderId).toBeDefined();
+
+      // Create a Pending order to test settlement mutations
+      const pendingOrder = await asCashier.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        orderSource: "Prest-Cashier",
+        paymentMode: "Pending",
+        paymentStatus: "Pending",
+        items: [{ itemId, quantity: 1 }],
+      });
+
+      // Attempt completeOrder with disabled Cash mode -> REJECTED
+      await expect(
+        asCashier.mutation(api.orders.completeOrder, {
+          orderId: pendingOrder.orderId,
+          paymentModeId: cashMode!._id,
+        })
+      ).rejects.toThrow('Payment mode "Cash" is disabled and cannot be used for cashier checkout.');
+
+      // Attempt addOrderPayment with disabled Cash mode -> REJECTED
+      await expect(
+        asCashier.mutation(api.orders.addOrderPayment, {
+          orderId: pendingOrder.orderId,
+          paymentModeName: "Cash",
+          paymentType: "Credit",
+          amount: 25000,
+        })
+      ).rejects.toThrow('Payment mode "Cash" is disabled and cannot be used for cashier checkout.');
+
+      // Attempt recordOrderPayment with disabled Cash mode -> REJECTED
+      await expect(
+        asCashier.mutation(api.orderPayments.recordOrderPayment, {
+          orderId: pendingOrder.orderId,
+          paymentModeId: cashMode!._id,
+          paymentModeName: "Cash",
+          amount: 25000,
+        })
+      ).rejects.toThrow('Payment mode "Cash" is disabled and cannot be used for cashier checkout.');
+    });
+
+    test("Organization isolation: Disabling Cash in Store A does not disable Cash in Store B", async () => {
+      const t = convexTest(schema, modules);
+
+      // Store A
+      const orgAId = await t.mutation(api.organizations.create, {
+        name: "Store A",
+        ownerClerkId: "admin_a",
+      });
+      const asAdminA = t.withIdentity({ subject: "admin_a" });
+      await asAdminA.mutation(api.organizations.initializeStore, { id: orgAId });
+
+      // Store B
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Store B",
+        ownerClerkId: "admin_b",
+      });
+      const asAdminB = t.withIdentity({ subject: "admin_b" });
+      await asAdminB.mutation(api.organizations.initializeStore, { id: orgBId });
+
+      // In Store A, disable Cash
+      const modesA = await asAdminA.query(api.paymentModes.list, { organizationId: orgAId });
+      const cashA = modesA.find((m) => m.name === "Cash");
+      await asAdminA.mutation(api.paymentModes.update, {
+        id: cashA!._id,
+        active: false,
+      });
+
+      // Store A Cashier query should NOT see Cash
+      const cashierListA = await asAdminA.query(api.paymentModes.list, {
+        organizationId: orgAId,
+        activeOnly: true,
+      });
+      expect(cashierListA.some((m) => m.name === "Cash")).toBe(false);
+
+      // Store B Cashier query MUST STILL SEE Cash
+      const cashierListB = await asAdminB.query(api.paymentModes.list, {
+        organizationId: orgBId,
+        activeOnly: true,
+      });
+      expect(cashierListB.some((m) => m.name === "Cash")).toBe(true);
+      expect(cashierListB.length).toBe(4);
+    });
+  });
 });
