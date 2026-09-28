@@ -47,7 +47,9 @@ export function DeadStockView({
 
   // Form State
   const [selectedItemId, setSelectedItemId] = useState<string>("");
-  const [quantity, setQuantity] = useState<number | "">(1);
+  const [itemSearchText, setItemSearchText] = useState<string>("");
+  const [showSearchDropdown, setShowSearchDropdown] = useState<boolean>(false);
+  const [quantity, setQuantity] = useState<number | "">("");
   const [unit, setUnit] = useState<string>("litre (l)");
   const [supplierId, setSupplierId] = useState<string>("");
   const [poNumber, setPoNumber] = useState<string>("");
@@ -106,17 +108,11 @@ export function DeadStockView({
 
   const openAddDrawer = () => {
     setEditingRecord(null);
-    if (inventoryItems && inventoryItems.length > 0) {
-      const first = inventoryItems[0];
-      setSelectedItemId(first._id);
-      setUnit(first.buyingUnit || first.servingUnit || "litre (l)");
-    } else {
-      setSelectedItemId("");
-      setUnit("litre (l)");
-    }
-    setQuantity(1);
-    setSupplierId("");
-    setPoNumber("");
+    setSelectedItemId("");
+    setItemSearchText("");
+    setShowSearchDropdown(false);
+    setUnit("Kilogram");
+    setQuantity("");
     setMarkedDate(new Date().toISOString().slice(0, 10));
     setReason("Expired");
     setIsDrawerOpen(true);
@@ -125,10 +121,10 @@ export function DeadStockView({
   const openEditDrawer = (rec: LocalDeadStockRecord) => {
     setEditingRecord(rec);
     setSelectedItemId(rec.inventoryItemId);
+    setItemSearchText(rec.itemName);
+    setShowSearchDropdown(false);
     setQuantity(rec.quantity);
     setUnit(rec.unit);
-    setSupplierId(rec.supplierId || "");
-    setPoNumber(rec.poNumber || "");
     setMarkedDate(rec.markedDate);
     setReason(rec.reasonForDeadStock);
     setActiveMenuId(null);
@@ -139,23 +135,41 @@ export function DeadStockView({
     setSelectedItemId(itemId);
     const found = inventoryItems?.find((i) => i._id === itemId);
     if (found) {
-      setUnit(found.buyingUnit || found.servingUnit || "litre (l)");
+      setItemSearchText(found.name);
+      setUnit(found.buyingUnit || found.servingUnit || "Kilogram");
     }
   };
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedItemId) {
-      alert("Please select an inventory item.");
+    
+    let finalItemId = selectedItemId;
+    let finalItemName = itemSearchText;
+
+    if (!finalItemId && itemSearchText) {
+      const match = inventoryItems?.find(
+        (i) => i.name.toLowerCase() === itemSearchText.toLowerCase()
+      );
+      if (match) {
+        finalItemId = match._id;
+        finalItemName = match.name;
+      } else {
+        finalItemId = `item_${Date.now()}`;
+      }
+    }
+
+    if (!finalItemId && !finalItemName) {
+      alert("Please select or enter an inventory item.");
       return;
     }
+
     const numQty = Number(quantity);
     if (!numQty || numQty <= 0) {
       alert("Quantity must be greater than zero.");
       return;
     }
 
-    const selectedItem = inventoryItems?.find((i) => i._id === selectedItemId);
+    const selectedItem = inventoryItems?.find((i) => i._id === finalItemId);
 
     setIsSubmitting(true);
     try {
@@ -165,12 +179,10 @@ export function DeadStockView({
             l._id === editingRecord._id
               ? {
                   ...l,
-                  inventoryItemId: selectedItemId,
-                  itemName: selectedItem?.name ?? l.itemName,
+                  inventoryItemId: finalItemId,
+                  itemName: selectedItem?.name ?? finalItemName,
                   quantity: numQty,
                   unit,
-                  supplierId,
-                  poNumber,
                   reasonForDeadStock: reason,
                   markedDate,
                 }
@@ -178,19 +190,22 @@ export function DeadStockView({
           )
         );
       } else {
-        await logDeadStockMutation({
-          organizationId,
-          inventoryItemId: selectedItemId as Id<"inventoryItems">,
-          quantity: numQty,
-          unit: unit.trim(),
-          reasonForDeadStock: reason,
-        });
+        // Log mutation if valid convex ID, else local sync
+        if (selectedItem) {
+          await logDeadStockMutation({
+            organizationId,
+            inventoryItemId: selectedItem._id,
+            quantity: numQty,
+            unit: unit.trim(),
+            reasonForDeadStock: reason,
+          });
+        }
 
         const newRec: LocalDeadStockRecord = {
           _id: `dead_${Date.now()}`,
           createdAt: Date.now(),
-          inventoryItemId: selectedItemId,
-          itemName: selectedItem?.name ?? "Ingredient Item",
+          inventoryItemId: finalItemId,
+          itemName: selectedItem?.name ?? finalItemName,
           quantity: numQty,
           unit: unit.trim(),
           reasonForDeadStock: reason,
@@ -230,7 +245,7 @@ export function DeadStockView({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
         <div>
           <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
-            Dead stock
+            Dead stock log
           </h1>
           <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
             Track spoiled, expired, or damaged non-moving inventory logs.
@@ -256,7 +271,7 @@ export function DeadStockView({
             <input
               type="text"
               className="w-full pl-9.5 pr-4 py-2 bg-white text-xs text-[#1c1917] border border-[#e7e5e4] rounded-full focus:outline-none focus:ring-1 focus:ring-[#0c0a09] placeholder:text-[#a8a29e] transition shadow-2xs"
-              placeholder="Search by item name or reason..."
+              placeholder="Search by item name/recipe name"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
@@ -479,24 +494,30 @@ export function DeadStockView({
       {isDrawerOpen && (
         <div
           className="fixed inset-0 bg-stone-900/30 backdrop-blur-[2px] z-40 transition-opacity"
-          onClick={() => setIsDrawerOpen(false)}
+          onClick={() => {
+            setIsDrawerOpen(false);
+            setShowSearchDropdown(false);
+          }}
         />
       )}
 
-      {/* SLIDE-OVER DRAWER: Record item dead stock (Matches Image 1 for Add & Image 2 for Edit) */}
+      {/* SLIDE-OVER DRAWER: Record item dead stock (Matches Old Project Screenshot 2 Exactly) */}
       <aside
         className={`fixed top-0 right-0 h-full w-full max-w-md md:max-w-lg bg-white border-l border-stone-200 shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col ${
           isDrawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        {/* Header (Title: Record item dead stock for both) */}
+        {/* Header: Record item dead stock */}
         <div className="p-6 border-b border-stone-200 flex items-center justify-between bg-white shrink-0">
           <h2 className="text-xl text-stone-900 font-semibold tracking-tight">
             Record item dead stock
           </h2>
           <button
             type="button"
-            onClick={() => setIsDrawerOpen(false)}
+            onClick={() => {
+              setIsDrawerOpen(false);
+              setShowSearchDropdown(false);
+            }}
             className="text-stone-500 hover:text-stone-900 p-1 rounded-md transition cursor-pointer"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -510,53 +531,71 @@ export function DeadStockView({
           </button>
         </div>
 
-        {/* Drawer Form Body */}
+        {/* Drawer Form Body - Exactly 4 fields matching Image 2 */}
         <form
           id="deadStockFormRecord"
           onSubmit={handleFormSubmit}
           className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-stone-800"
         >
-          {/* Field 1: Inventory item/ Recipe * */}
-          <div>
-            <label className="block font-medium mb-1 text-stone-800">
+          {/* Field 1: Inventory item/ Recipe * (Search Input with Icon matching Screenshot 2) */}
+          <div className="relative">
+            <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
               Inventory item/ Recipe <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <select
-                required
-                className="w-full appearance-none px-3.5 py-2.5 bg-white text-xs border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition cursor-pointer pr-9 font-medium text-stone-800"
-                value={selectedItemId}
-                onChange={(e) => handleItemSelect(e.target.value)}
+              <svg
+                className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {inventoryItems?.length === 0 ? (
-                  <option value="" disabled>
-                    Search by inventory item name/recipe
-                  </option>
-                ) : (
-                  inventoryItems?.map((inv) => (
-                    <option key={inv._id} value={inv._id}>
-                      {inv.name}
-                    </option>
-                  ))
-                )}
-              </select>
-              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-stone-500">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M19 9l-7 7-7-7"
-                  />
-                </svg>
-              </div>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+              <input
+                type="text"
+                required
+                className="w-full pl-10 pr-4 py-2.5 bg-[#fafaf8] text-xs md:text-[13px] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400 font-medium text-stone-800"
+                placeholder="Search by inventory item name/recipe"
+                value={itemSearchText}
+                onChange={(e) => {
+                  setItemSearchText(e.target.value);
+                  setShowSearchDropdown(true);
+                }}
+                onFocus={() => setShowSearchDropdown(true)}
+              />
+              {showSearchDropdown && inventoryItems && inventoryItems.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-stone-200 rounded-md shadow-lg z-50 py-1">
+                  {inventoryItems
+                    .filter((item) =>
+                      item.name.toLowerCase().includes(itemSearchText.toLowerCase())
+                    )
+                    .map((item) => (
+                      <button
+                        key={item._id}
+                        type="button"
+                        className="w-full px-3.5 py-2 text-left text-xs hover:bg-stone-50 text-stone-900 font-medium transition cursor-pointer"
+                        onClick={() => {
+                          handleItemSelect(item._id);
+                          setShowSearchDropdown(false);
+                        }}
+                      >
+                        {item.name}
+                      </button>
+                    ))}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Field 2: Quantity * | Measured unit */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Field 2: Quantity * | (i) Measured unit */}
+          <div className="grid grid-cols-3 gap-3 items-start">
             <div className="col-span-2">
-              <label className="block font-medium mb-1 text-stone-800">
+              <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
                 Quantity <span className="text-rose-500">*</span>
               </label>
               <input
@@ -564,7 +603,7 @@ export function DeadStockView({
                 min="0.01"
                 step="any"
                 required
-                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400"
+                className="w-full px-3.5 py-2.5 bg-[#fafaf8] text-xs md:text-[13px] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400 text-stone-800"
                 placeholder="Enter the item quantity"
                 value={quantity}
                 onChange={(e) =>
@@ -572,103 +611,88 @@ export function DeadStockView({
                 }
               />
             </div>
-            <div>
-              <label className="block font-medium mb-1 text-stone-600">
-                Measured unit
+            <div className="relative">
+              <label className="block font-medium mb-1.5 text-stone-600 text-[13px] flex items-center space-x-1.5 group/tooltip cursor-pointer w-fit">
+                <div className="relative flex items-center">
+                  <svg
+                    className="w-4 h-4 text-stone-400 group-hover/tooltip:text-stone-700 transition shrink-0"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.75" />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.75"
+                      d="M12 11.5v4.5m0-7h.01"
+                    />
+                  </svg>
+                  {/* Tooltip Popup on Hover */}
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:flex flex-col items-center pointer-events-none z-50 whitespace-nowrap">
+                    <div className="bg-[#1c1917] text-white text-[11px] font-semibold px-3 py-1.5 rounded-md shadow-lg border border-stone-800">
+                      Enter the amount of this item being added to stock.
+                    </div>
+                    {/* Tooltip Arrow */}
+                    <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#1c1917] -mt-px" />
+                  </div>
+                </div>
+                <span>Measured unit</span>
               </label>
               <input
                 type="text"
                 disabled
-                className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
+                className="w-full px-3.5 py-2.5 bg-[#fafaf8] text-stone-600 border border-[#e5e7eb] rounded-md text-xs md:text-[13px] font-medium"
                 value={unit}
               />
             </div>
           </div>
 
-          {/* EDIT MODE ONLY EXTRA FIELDS: Supplier & PO number (Matching Image 2) */}
-          {editingRecord && (
-            <>
-              {/* Field 3: Supplier (Only in Edit mode) */}
-              <div>
-                <label className="block font-medium mb-1 text-stone-800">
-                  Supplier
-                </label>
-                <select
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
-                  value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
-                >
-                  <option value="">Select supplier</option>
-                  {suppliers?.map((s) => (
-                    <option key={s._id} value={s._id}>
-                      {s.supplierName} ({s.companyName || "Supplier"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Field 4: PO number (Only in Edit mode) */}
-              <div>
-                <label className="block font-medium mb-1 text-stone-800">
-                  PO number
-                </label>
-                <select
-                  className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
-                  value={poNumber}
-                  onChange={(e) => setPoNumber(e.target.value)}
-                >
-                  <option value="">Search purchase order number</option>
-                  {purchaseOrders?.map((po: any) => (
-                    <option key={po._id} value={po.poNumber}>
-                      {po.poNumber} ({po.supplierName || "PO"})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-
-          {/* Field 5: Marked date */}
+          {/* Field 3: Marked date */}
           <div>
-            <label className="block font-medium mb-1 text-stone-800">Marked date</label>
+            <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
+              Marked date
+            </label>
             <input
               type="date"
-              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium"
               value={markedDate}
               onChange={(e) => setMarkedDate(e.target.value)}
             />
-            <p className="text-[11px] text-stone-500 mt-1">
+            <p className="text-[11px] text-stone-500 mt-1.5">
               Note: Select a date to mark dead stock: only today and yesterday are allowed.
             </p>
           </div>
 
-          {/* Field 6: Reason for recording dead stock */}
+          {/* Field 4: Reason for recording dead stock */}
           <div>
-            <label className="block font-medium mb-1 text-stone-800">
+            <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
               Reason for recording dead stock
             </label>
             <select
-              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             >
               <option value="Expired">Expired</option>
               <option value="Damaged">Damaged</option>
               <option value="Low demand">Low demand</option>
-              <option value="Spoiled">Spoiled</option>
             </select>
-            <p className="text-[11px] text-stone-500 mt-2 leading-normal">
+            <p className="text-[11px] text-stone-500 mt-2 leading-relaxed">
               Note: You can edit dead stock quantities only on the same day they are recorded. After that, editing is locked; you may remove the entry and add a new one if needed.
             </p>
           </div>
         </form>
 
-        {/* Drawer Footer Actions */}
-        <div className="p-4 px-6 border-t border-stone-200 bg-white flex items-center justify-end space-x-3 shrink-0">
+        {/* Drawer Footer Actions matching Screenshot 2 */}
+        <div className="p-4 px-6 border-t border-stone-200 bg-white flex items-center justify-between space-x-3 shrink-0">
           <button
             type="button"
-            onClick={() => setIsDrawerOpen(false)}
-            className="w-1/2 py-2.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-semibold transition cursor-pointer"
+            onClick={() => {
+              setIsDrawerOpen(false);
+              setShowSearchDropdown(false);
+            }}
+            className="w-1/2 py-2.5 rounded-md bg-[#f3f4f6] hover:bg-[#e5e7eb] text-[#111827] text-xs font-semibold transition cursor-pointer"
           >
             Cancel
           </button>
@@ -676,7 +700,7 @@ export function DeadStockView({
             type="submit"
             form="deadStockFormRecord"
             disabled={isSubmitting}
-            className="w-1/2 py-2.5 rounded-lg bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
+            className="w-1/2 py-2.5 rounded-md bg-[#111827] hover:bg-[#1f2937] text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
           >
             {isSubmitting
               ? "Saving..."

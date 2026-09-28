@@ -1,10 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useQuery, useMutation } from "convex/react";
+import React, { useState, useMemo, useRef, Fragment } from "react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { formatCurrencyAmount, getCurrencyForCountry } from "@/lib/constants/countries";
+import {
+  formatCurrencyAmount,
+  getCurrencyForCountry,
+} from "@/lib/constants/countries";
 
 export interface PurchaseOrderItem {
   id: string;
@@ -32,9 +35,12 @@ export interface PurchaseOrderRecord {
   companyName?: string;
   itemsCount: number;
   purchasePriority: "high" | "medium" | "low";
-  status: "drafted" | "sent" | "settled" | "cancelled";
+  status: "drafted" | "sent" | "partially_received" | "settled" | "cancelled";
   totalAmount?: number;
   notes?: string;
+  invoiceStorageKey?: string;
+  invoiceAssetId?: string;
+  invoiceUrl?: string;
   items?: PurchaseOrderItem[];
 }
 
@@ -44,8 +50,13 @@ export function PurchaseOrdersView({
   organizationId: Id<"organizations">;
 }) {
   const organizations = useQuery(api.organizations.list);
-  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
-  const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+  const activeOrg =
+    organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country
+      ? getCurrencyForCountry(activeOrg.country).symbol
+      : "₹");
 
   // Consuming existing Convex backend queries & mutations
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
@@ -55,6 +66,11 @@ export function PurchaseOrdersView({
 
   const createPOMutation = useMutation(api.inventory.createPurchaseOrder);
   const settlePOMutation = useMutation(api.inventory.settlePurchaseOrder);
+  const attachPOInvoiceMutation = useMutation(api.inventory.attachPOInvoice);
+
+  // R2 Storage Actions
+  const createAssetUpload = useAction(api.r2.createAssetUpload);
+  const confirmAssetUpload = useAction(api.r2.confirmAssetUpload);
 
   // Status Filter & Search State
   const [activeTabStatus, setActiveTabStatus] = useState<string>("all");
@@ -74,6 +90,120 @@ export function PurchaseOrdersView({
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSettling, setIsSettling] = useState(false);
+
+  // Invoice Upload State
+  const invoiceFileInputRef = useRef<HTMLInputElement>(null);
+  const [isUploadingInvoice, setIsUploadingInvoice] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState<string | null>(null);
+
+  // Invoice File Upload Handler using R2 Infrastructure
+  const handleInvoiceFileUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedPO || !activeOrg?._id) return;
+
+    // File Type Validation (PDF, JPG, JPEG, PNG)
+    const allowedTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/jpg",
+      "image/png",
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      showToast(
+        "Invalid file type. Please select a PDF, JPG, or PNG document.",
+        "error",
+      );
+      e.target.value = "";
+      return;
+    }
+
+    // File Size Validation (Max 25MB)
+    const maxSizeBytes = 25 * 1024 * 1024;
+    if (file.size > maxSizeBytes) {
+      showToast("File size exceeds the maximum limit of 25MB.", "error");
+      e.target.value = "";
+      return;
+    }
+
+    setIsUploadingInvoice(true);
+    setUploadStatusText("Uploading invoice to storage...");
+
+    try {
+      // 1. Create asset upload in R2 (inserts pending record in organization_assets)
+      const uploadResult = await createAssetUpload({
+        assetType: "invoice_pdf",
+        fileName: file.name,
+        contentType: file.type || "application/pdf",
+        fileSize: file.size,
+        organizationId: activeOrg._id,
+      });
+
+      // 2. Direct HTTP PUT to Cloudflare R2 presigned URL
+      setUploadStatusText("Uploading file...");
+      const putResult = await fetch(uploadResult.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/pdf" },
+        body: file,
+      });
+
+      if (!putResult.ok) {
+        throw new Error(
+          `Failed to upload invoice file (Status: ${putResult.status})`,
+        );
+      }
+
+      // 3. Confirm asset upload in organization_assets (marks status = "uploaded")
+      setUploadStatusText("Saving invoice reference...");
+      await confirmAssetUpload({
+        assetId: uploadResult.assetId,
+      });
+
+      // 4. Attach invoice reference to Purchase Order in Convex DB
+      await attachPOInvoiceMutation({
+        purchaseOrderId: selectedPO._id as any,
+        invoiceStorageKey: uploadResult.storageKey,
+        invoiceAssetId: uploadResult.assetId,
+      });
+
+      // 5. Update local PO state
+      const updatedPO: PurchaseOrderRecord = {
+        ...selectedPO,
+        invoiceStorageKey: uploadResult.storageKey,
+        invoiceAssetId: uploadResult.assetId,
+      };
+      setSelectedPO(updatedPO);
+      setLocalPOs((prev) =>
+        prev.map((po) => (po._id === selectedPO._id ? updatedPO : po)),
+      );
+
+      showToast("Supplier invoice uploaded successfully!", "success");
+    } catch (err: any) {
+      console.error("Failed to upload supplier invoice:", err);
+      showToast(err?.message || "Failed to upload supplier invoice.", "error");
+    } finally {
+      setIsUploadingInvoice(false);
+      setUploadStatusText(null);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  // Expandable Nested Table State
+  const [expandedPoIds, setExpandedPoIds] = useState<Record<string, boolean>>(
+    {},
+  );
+
+  // Toast message state
+  const [toastMessage, setToastMessage] = useState<{
+    text: string;
+    type: "success" | "error";
+  } | null>(null);
+
+  const showToast = (text: string, type: "success" | "error" = "success") => {
+    setToastMessage({ text, type });
+    setTimeout(() => setToastMessage(null), 4000);
+  };
 
   // Initial Demo PO Records matching the visual design reference
   const [localPOs, setLocalPOs] = useState<PurchaseOrderRecord[]>([
@@ -384,14 +514,31 @@ export function PurchaseOrdersView({
         ),
       );
       setSelectedPO(null);
-      alert(
+      showToast(
         `${purchaseOrder.poNumber} settled successfully. Stock has been credited into inventory.`,
+        "success",
       );
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to settle Purchase Order:", err);
+      showToast(err?.message || "Failed to settle Purchase Order.", "error");
     } finally {
       setIsSettling(false);
     }
+  };
+
+  const handleDispatchPO = (purchaseOrder: PurchaseOrderRecord) => {
+    setLocalPOs((prev) =>
+      prev.map((p) =>
+        p._id === purchaseOrder._id ? { ...p, status: "sent" } : p,
+      ),
+    );
+    if (selectedPO?._id === purchaseOrder._id) {
+      setSelectedPO((prev) => (prev ? { ...prev, status: "sent" } : null));
+    }
+    showToast(
+      `${purchaseOrder.poNumber} marked as Sent / In-Transit.`,
+      "success",
+    );
   };
 
   const handleCancelPO = (purchaseOrder: PurchaseOrderRecord) => {
@@ -409,6 +556,7 @@ export function PurchaseOrdersView({
     if (selectedPO?._id === purchaseOrder._id) {
       setSelectedPO(null);
     }
+    showToast(`${purchaseOrder.poNumber} cancelled.`, "success");
   };
 
   // Item management handlers for PO Detail View
@@ -695,10 +843,10 @@ export function PurchaseOrdersView({
                 type="button"
                 disabled={isSettling}
                 onClick={() => handleSettlePO(selectedPO)}
-                className="px-5 py-2 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold shadow-sm hover:shadow transition cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
+                className="px-5 py-2 rounded-full bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold shadow-sm hover:shadow transition cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
               >
                 <svg
-                  className="w-4 h-4"
+                  className="w-4 h-4 text-white stroke-white"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -710,7 +858,7 @@ export function PurchaseOrdersView({
                     d="M5 13l4 4L19 7"
                   />
                 </svg>
-                <span>
+                <span className="text-white !text-white font-semibold">
                   {isSettling ? "Settling..." : "Settle & Restock PO"}
                 </span>
               </button>
@@ -757,8 +905,115 @@ export function PurchaseOrdersView({
               Est. Total Amount
             </p>
             <p className="text-sm font-serif font-medium text-emerald-700">
-              {currencySymbol}{formatCurrencyAmount(totalPOAmount, activeOrg?.country)}
+              {currencySymbol}
+              {formatCurrencyAmount(totalPOAmount, activeOrg?.country)}
             </p>
+          </div>
+        </div>
+
+        {/* Supplier Invoice Upload & View Card */}
+        <div className="bg-white p-5 rounded-2xl border border-[#eceae4] shadow-subtle flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-[#faf9f7] border border-[#e2dfd7] flex items-center justify-center text-stone-700 shrink-0">
+              <svg
+                className="w-5 h-5 text-stone-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="1.8"
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <div>
+              <h4 className="text-xs font-semibold text-[#141413] tracking-tight">
+                Supplier Invoice
+              </h4>
+              <p className="text-[11px] text-stone-500">
+                {selectedPO.invoiceStorageKey || selectedPO.invoiceUrl
+                  ? "Scanned supplier invoice PDF / Image copy attached"
+                  : "Attach scanned PDF or image copy of supplier bill (Max 25MB)"}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-3">
+            <input
+              type="file"
+              ref={invoiceFileInputRef}
+              onChange={handleInvoiceFileUpload}
+              accept="application/pdf,image/jpeg,image/png,image/jpg"
+              className="hidden"
+            />
+
+            {selectedPO.invoiceUrl && (
+              <a
+                href={selectedPO.invoiceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-1.5 bg-[#faf9f7] hover:bg-stone-100 text-stone-800 border border-[#e2dfd7] rounded-full text-xs font-medium transition cursor-pointer flex items-center space-x-1.5"
+              >
+                <svg
+                  className="w-3.5 h-3.5 text-stone-600"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+                  />
+                </svg>
+                <span>View Invoice</span>
+              </a>
+            )}
+
+            <button
+              type="button"
+              disabled={isUploadingInvoice}
+              onClick={() => invoiceFileInputRef.current?.click()}
+              className="px-4 py-1.5 bg-stone-900 hover:bg-stone-800 text-white !text-white border border-stone-800 rounded-full text-xs font-medium transition cursor-pointer disabled:opacity-50 flex items-center space-x-2 shadow-2xs"
+            >
+              {isUploadingInvoice ? (
+                <>
+                  <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>{uploadStatusText || "Uploading..."}</span>
+                </>
+              ) : (
+                <>
+                  <svg
+                    className="w-3.5 h-3.5 text-white stroke-white"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                      d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                    />
+                  </svg>
+                  <span>
+                    {selectedPO.invoiceStorageKey || selectedPO.invoiceUrl
+                      ? "Replace Invoice"
+                      : "Upload Invoice"}
+                  </span>
+                </>
+              )}
+            </button>
           </div>
         </div>
 
@@ -999,97 +1254,165 @@ export function PurchaseOrdersView({
                             <input
                               type="number"
                               min="0"
+                              max={item.orderedQuantity}
                               value={
                                 item.receivedQuantity ??
                                 (item.isReceived ? item.orderedQuantity : 0)
                               }
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                const val = Number(e.target.value);
+                                const missing = Math.max(
+                                  0,
+                                  item.orderedQuantity - val,
+                                );
                                 handleItemQtyChange(
                                   item.id,
                                   "receivedQuantity",
-                                  Number(e.target.value),
-                                )
-                              }
+                                  val,
+                                );
+                                handleItemQtyChange(
+                                  item.id,
+                                  "missingQuantity",
+                                  missing,
+                                );
+                              }}
                               className="w-16 px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded text-center text-xs font-semibold focus:outline-none"
                             />
                           ) : (
                             <span className="font-medium text-emerald-700">
-                              {item.receivedQuantity ?? 0} {item.buyingUnit}
+                              {item.receivedQuantity ??
+                                (item.isReceived
+                                  ? item.orderedQuantity
+                                  : 0)}{" "}
+                              {item.buyingUnit}
                             </span>
                           )}
                         </td>
 
-                        {/* Missing Qty */}
+                        {/* Missing Qty (Computed Frontend Display) */}
                         <td className="py-3.5 px-4 text-center">
-                          {selectedPO.status !== "settled" ? (
-                            <input
-                              type="number"
-                              min="0"
-                              value={
-                                item.missingQuantity ??
-                                (item.isMissing ? item.orderedQuantity : 0)
-                              }
-                              onChange={(e) =>
-                                handleItemQtyChange(
-                                  item.id,
-                                  "missingQuantity",
-                                  Number(e.target.value),
-                                )
-                              }
-                              className="w-16 px-2 py-1 bg-rose-50 border border-rose-200 text-rose-800 rounded text-center text-xs font-semibold focus:outline-none"
-                            />
-                          ) : (
-                            <span className="font-medium text-rose-700">
-                              {item.missingQuantity ?? 0} {item.buyingUnit}
-                            </span>
-                          )}
+                          {(() => {
+                            const recQty =
+                              item.receivedQuantity ??
+                              (item.isReceived ? item.orderedQuantity : 0);
+                            const calcMissing = Math.max(
+                              0,
+                              item.orderedQuantity - recQty,
+                            );
+                            return selectedPO.status !== "settled" ? (
+                              <input
+                                type="number"
+                                min="0"
+                                value={calcMissing}
+                                onChange={(e) =>
+                                  handleItemQtyChange(
+                                    item.id,
+                                    "missingQuantity",
+                                    Number(e.target.value),
+                                  )
+                                }
+                                className={`w-16 px-2 py-1 border rounded text-center text-xs font-semibold focus:outline-none ${
+                                  calcMissing > 0
+                                    ? "bg-amber-50 border-amber-300 text-amber-800 font-bold"
+                                    : "bg-stone-50 border-stone-200 text-stone-600"
+                                }`}
+                              />
+                            ) : (
+                              <span
+                                className={`font-medium ${calcMissing > 0 ? "text-amber-800 font-bold" : "text-stone-500"}`}
+                              >
+                                {calcMissing} {item.buyingUnit}
+                              </span>
+                            );
+                          })()}
                         </td>
 
                         {/* Unit Cost */}
                         <td className="py-3.5 px-4 text-right font-medium text-stone-700">
-                          {currencySymbol}{formatCurrencyAmount(item.unitCost, activeOrg?.country)}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            item.unitCost,
+                            activeOrg?.country,
+                          )}
                         </td>
 
                         {/* Total Cost */}
                         <td className="py-3.5 px-4 text-right font-semibold text-[#141413]">
-                          {currencySymbol}{formatCurrencyAmount(item.orderedQuantity * item.unitCost, activeOrg?.country)}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            item.orderedQuantity * item.unitCost,
+                            activeOrg?.country,
+                          )}
                         </td>
 
-                        {/* Action buttons matching old project logic */}
+                        {/* Line Discrepancy Status & Action */}
                         <td className="py-3.5 px-5 text-center whitespace-nowrap">
-                          {selectedPO.status !== "settled" ? (
-                            <div className="inline-flex items-center space-x-1.5">
-                              <button
-                                type="button"
-                                onClick={() => handleToggleReceived(item.id)}
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer border ${
-                                  item.isReceived
-                                    ? "bg-emerald-600 text-white border-emerald-600"
-                                    : "bg-white text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-                                }`}
-                              >
-                                {item.isReceived
-                                  ? "Received ✓"
-                                  : "Mark Received"}
-                              </button>
+                          {(() => {
+                            const recQty =
+                              item.receivedQuantity ??
+                              (item.isReceived ? item.orderedQuantity : 0);
+                            const missingQty = Math.max(
+                              0,
+                              item.orderedQuantity - recQty,
+                            );
+                            const isShortShip =
+                              recQty > 0 && recQty < item.orderedQuantity;
+                            const isFullyRec =
+                              recQty >= item.orderedQuantity || item.isReceived;
 
-                              <button
-                                type="button"
-                                onClick={() => handleToggleMissing(item.id)}
-                                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition cursor-pointer border ${
-                                  item.isMissing
-                                    ? "bg-rose-600 text-white border-rose-600"
-                                    : "bg-white text-rose-700 border-rose-300 hover:bg-rose-50"
-                                }`}
-                              >
-                                {item.isMissing ? "Missing ⚠" : "Mark Missing"}
-                              </button>
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-stone-400 italic">
-                              Settled
-                            </span>
-                          )}
+                            if (isShortShip) {
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs">
+                                  <span className="w-1.5 h-1.5 mr-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  Short Shipment ({missingQty} missing)
+                                </span>
+                              );
+                            }
+
+                            if (isFullyRec) {
+                              return (
+                                <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-300">
+                                  <svg
+                                    className="w-3.5 h-3.5 mr-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M5 13l4 4L19 7"
+                                    />
+                                  </svg>
+                                  Fully Received
+                                </span>
+                              );
+                            }
+
+                            return selectedPO.status !== "settled" ? (
+                              <div className="inline-flex items-center space-x-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleReceived(item.id)}
+                                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-emerald-700 border border-emerald-300 hover:bg-emerald-50 transition cursor-pointer"
+                                >
+                                  Mark Received
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleMissing(item.id)}
+                                  className="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-rose-700 border border-rose-300 hover:bg-rose-50 transition cursor-pointer"
+                                >
+                                  Mark Missing
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-stone-400 italic">
+                                Pending
+                              </span>
+                            );
+                          })()}
                         </td>
                       </tr>
                     );
@@ -1104,7 +1427,49 @@ export function PurchaseOrdersView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbfbfa]">
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbfbfa] relative">
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div
+          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg border text-xs font-medium flex items-center space-x-2 transition-all duration-300 ${
+            toastMessage.type === "success"
+              ? "bg-stone-900 text-white border-stone-800"
+              : "bg-rose-900 text-white border-rose-800"
+          }`}
+        >
+          {toastMessage.type === "success" ? (
+            <svg
+              className="w-4 h-4 text-emerald-400 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M5 13l4 4L19 7"
+              />
+            </svg>
+          ) : (
+            <svg
+              className="w-4 h-4 text-rose-400 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          )}
+          <span>{toastMessage.text}</span>
+        </div>
+      )}
+
       {/* Header Bar */}
       <header className="px-8 pt-8 pb-6 border-b border-[#eceae4] bg-[#fbfbfa] shrink-0">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -1315,186 +1680,278 @@ export function PurchaseOrdersView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f3f1ec] text-xs">
-                  {filteredPOs.map((po) => (
-                    <tr
-                      key={po._id}
-                      onClick={() => setSelectedPO(po)}
-                      className="hover:bg-[#fcfbf9] transition-colors group cursor-pointer"
-                    >
-                      <td className="py-4 px-5 font-semibold text-[#141413] tracking-tight">
-                        {po.poNumber}
-                      </td>
-                      <td className="py-4 px-4 text-stone-600 whitespace-nowrap">
-                        {new Date(po.createdAt).toLocaleDateString("en-GB", {
-                          day: "2-digit",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="font-medium text-[#141413]">
-                          {po.supplierName}
-                        </div>
-                        <div className="text-[11px] text-[#787670]">
-                          {po.companyName || po.supplierName}
-                        </div>
-                      </td>
-                      <td className="py-4 px-4 text-center font-medium text-stone-700">
-                        {po.itemsCount} {po.itemsCount === 1 ? "item" : "items"}
-                      </td>
-                      <td className="py-4 px-4">
-                        {renderPriorityBadge(po.purchasePriority)}
-                      </td>
-                      <td className="py-4 px-4">
-                        {renderStatusBadge(po.status)}
-                      </td>
-                      <td className="py-4 px-5 text-right whitespace-nowrap">
-                        <div className="inline-flex items-center space-x-2">
-                          {po.status === "settled" ? (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedPO(po)}
-                              className="px-3.5 py-1 bg-[#f4f3ef] hover:bg-stone-200 text-stone-800 rounded-full text-xs font-medium transition-colors cursor-pointer"
-                            >
-                              View Summary
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => setSelectedPO(po)}
-                              className="px-3.5 py-1 bg-white hover:bg-[#141413] hover:text-white text-[#141413] border border-[#dcdad3] rounded-full text-xs font-medium transition-colors cursor-pointer shadow-2xs"
-                            >
-                              Open Order &rarr;
-                            </button>
-                          )}
-
-                          {/* 3-dots Menu Button & Popover Dropdown (Screenshot 1 & 2 exact) */}
-                          <div className="relative inline-block text-left">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenuPoId(
-                                  openMenuPoId === po._id ? null : po._id,
-                                );
-                              }}
-                              className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition cursor-pointer flex items-center justify-center"
-                              title="Actions menu"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="currentColor"
-                                viewBox="0 0 24 24"
+                  {filteredPOs.map((po) => {
+                    const isExpanded = !!expandedPoIds[po._id];
+                    return (
+                      <React.Fragment key={po._id}>
+                        <tr
+                          onClick={() => setSelectedPO(po)}
+                          className="hover:bg-[#fcfbf9] transition-colors group cursor-pointer"
+                        >
+                          <td className="py-4 px-5 font-semibold text-[#141413] tracking-tight">
+                            <div className="flex items-center space-x-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedPoIds((prev) => ({
+                                    ...prev,
+                                    [po._id]: !prev[po._id],
+                                  }));
+                                }}
+                                className="p-1 text-stone-400 hover:text-stone-900 hover:bg-stone-100 rounded transition cursor-pointer"
+                                title={
+                                  isExpanded ? "Collapse items" : "Expand items"
+                                }
                               >
-                                <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-                              </svg>
-                            </button>
-
-                            {openMenuPoId === po._id && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-40 cursor-default"
+                                <svg
+                                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                    isExpanded ? "rotate-90" : ""
+                                  }`}
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M9 5l7 7-7 7"
+                                  />
+                                </svg>
+                              </button>
+                              <span>{po.poNumber}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-stone-600 whitespace-nowrap">
+                            {new Date(po.createdAt).toLocaleDateString(
+                              "en-GB",
+                              {
+                                day: "2-digit",
+                                month: "short",
+                                year: "numeric",
+                              },
+                            )}
+                          </td>
+                          <td className="py-4 px-4">
+                            <div className="font-medium text-[#141413]">
+                              {po.supplierName}
+                            </div>
+                            <div className="text-[11px] text-[#787670]">
+                              {po.companyName || po.supplierName}
+                            </div>
+                          </td>
+                          <td className="py-4 px-4 text-center font-medium text-stone-700">
+                            {po.itemsCount}{" "}
+                            {po.itemsCount === 1 ? "item" : "items"}
+                          </td>
+                          <td className="py-4 px-4">
+                            {renderPriorityBadge(po.purchasePriority)}
+                          </td>
+                          <td className="py-4 px-4">
+                            {renderStatusBadge(po.status)}
+                          </td>
+                          <td className="py-4 px-5 text-right whitespace-nowrap">
+                            <div className="inline-flex items-center space-x-2">
+                              {po.status === "settled" ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPO(po)}
+                                  className="px-3.5 py-1 bg-[#f4f3ef] hover:bg-stone-200 text-stone-800 rounded-full text-xs font-medium transition-colors cursor-pointer"
+                                >
+                                  View Summary
+                                </button>
+                              ) : po.status === "drafted" ? (
+                                <button
+                                  type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setOpenMenuPoId(null);
+                                    handleDispatchPO(po);
                                   }}
-                                />
-                                <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-2xl border border-stone-200 py-1.5 z-50 text-xs font-medium text-[#141413] divide-y divide-stone-100 text-left">
-                                  <div className="py-1">
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        po.status === "settled" ||
-                                        po.status === "cancelled"
-                                      }
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenuPoId(null);
-                                        setSelectedPO(po);
-                                      }}
-                                      className="w-full text-left px-4 py-2 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-[#141413] font-medium"
-                                    >
-                                      Add items
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        po.status === "settled" ||
-                                        po.status === "cancelled"
-                                      }
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenuPoId(null);
-                                        if (po.supplierId) {
-                                          setSelectedSupplierId(po.supplierId);
-                                        }
-                                        setIsNewPODrawerOpen(true);
-                                      }}
-                                      className="w-full text-left px-4 py-2 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-[#141413]"
-                                    >
-                                      Edit supplier
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenuPoId(null);
-                                        setSelectedPO(po);
-                                      }}
-                                      className="w-full text-left px-4 py-2 hover:bg-stone-100 transition cursor-pointer text-[#141413]"
-                                    >
-                                      View order
-                                    </button>
-                                  </div>
+                                  className="px-3.5 py-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-full text-xs font-medium transition-colors cursor-pointer"
+                                >
+                                  Dispatch / Send
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedPO(po)}
+                                  className="px-3.5 py-1 bg-white hover:bg-[#141413] hover:text-white text-[#141413] border border-[#dcdad3] rounded-full text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+                                >
+                                  Open Order &rarr;
+                                </button>
+                              )}
 
-                                  <div className="py-1">
-                                    <button
-                                      type="button"
-                                      disabled
-                                      className="w-full text-left px-4 py-2 text-stone-300 cursor-not-allowed"
-                                    >
-                                      View chat
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setOpenMenuPoId(null);
-                                        alert(
-                                          `Downloading PDF for ${po.poNumber}...`,
-                                        );
-                                      }}
-                                      className="w-full text-left px-4 py-2 hover:bg-stone-100 transition cursor-pointer text-[#141413]"
-                                    >
-                                      Download PDF
-                                    </button>
-                                  </div>
+                              {/* 3-dots Menu Button & Popover Dropdown */}
+                              <div className="relative inline-block text-left">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuPoId(
+                                      openMenuPoId === po._id ? null : po._id,
+                                    );
+                                  }}
+                                  className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition cursor-pointer flex items-center justify-center"
+                                  title="Actions menu"
+                                >
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                                  </svg>
+                                </button>
 
-                                  <div className="pt-1">
-                                    <button
-                                      type="button"
-                                      disabled={
-                                        po.status === "settled" ||
-                                        po.status === "cancelled"
-                                      }
+                                {openMenuPoId === po._id && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-40 cursor-default"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenuPoId(null);
-                                        handleCancelPO(po);
                                       }}
-                                      className="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer font-medium"
-                                    >
-                                      Cancel PO
-                                    </button>
-                                  </div>
+                                    />
+                                    <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-2xl border border-stone-200 py-1.5 z-50 text-xs font-medium text-[#141413] divide-y divide-stone-100 text-left">
+                                      <div className="py-1">
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenuPoId(null);
+                                            setSelectedPO(po);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-stone-100 transition cursor-pointer text-[#141413] font-medium"
+                                        >
+                                          View details
+                                        </button>
+                                        {po.status === "drafted" && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenMenuPoId(null);
+                                              handleDispatchPO(po);
+                                            }}
+                                            className="w-full text-left px-4 py-2 hover:bg-sky-50 text-sky-700 transition cursor-pointer font-medium"
+                                          >
+                                            Dispatch / Send PO
+                                          </button>
+                                        )}
+                                        {po.status === "sent" && (
+                                          <button
+                                            type="button"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              setOpenMenuPoId(null);
+                                              handleSettlePO(po);
+                                            }}
+                                            className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-emerald-700 transition cursor-pointer font-medium"
+                                          >
+                                            Settle PO & Restock
+                                          </button>
+                                        )}
+                                      </div>
+
+                                      <div className="pt-1">
+                                        <button
+                                          type="button"
+                                          disabled={
+                                            po.status === "settled" ||
+                                            po.status === "cancelled"
+                                          }
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setOpenMenuPoId(null);
+                                            handleCancelPO(po);
+                                          }}
+                                          className="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer font-medium"
+                                        >
+                                          Cancel PO
+                                        </button>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Expandable Child Table Row */}
+                        {isExpanded && (
+                          <tr className="bg-[#faf9f7] border-b border-[#e8e5dc]">
+                            <td colSpan={7} className="py-3 px-6">
+                              <div className="bg-white border border-[#e4e1d8] rounded-xl p-4 shadow-2xs">
+                                <div className="flex items-center justify-between pb-2 mb-2 border-b border-stone-100">
+                                  <span className="text-xs font-semibold text-stone-800">
+                                    Line items in {po.poNumber} (
+                                    {po.items?.length || 0})
+                                  </span>
+                                  <span className="text-xs font-serif font-semibold text-emerald-700">
+                                    Est. Total: {currencySymbol}
+                                    {formatCurrencyAmount(
+                                      po.totalAmount || 0,
+                                      activeOrg?.country,
+                                    )}
+                                  </span>
                                 </div>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                                {!po.items || po.items.length === 0 ? (
+                                  <p className="text-xs text-stone-400 italic">
+                                    No line items in this purchase order.
+                                  </p>
+                                ) : (
+                                  <div className="space-y-1.5">
+                                    {po.items.map((item, idx) => (
+                                      <div
+                                        key={item.id || idx}
+                                        className="flex items-center justify-between text-xs py-1.5 px-3 rounded hover:bg-stone-50 border border-transparent hover:border-stone-200 transition"
+                                      >
+                                        <div className="flex items-center space-x-2">
+                                          <span className="font-semibold text-stone-900">
+                                            ├── {item.name}
+                                          </span>
+                                          <span className="text-[11px] text-stone-400 font-mono">
+                                            ({item.sku})
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center space-x-6 text-stone-600">
+                                          <span>
+                                            Qty:{" "}
+                                            <strong>
+                                              {item.orderedQuantity}
+                                            </strong>{" "}
+                                            {item.buyingUnit}
+                                          </span>
+                                          <span>
+                                            Cost: {currencySymbol}
+                                            {formatCurrencyAmount(
+                                              item.unitCost,
+                                              activeOrg?.country,
+                                            )}
+                                            /{item.buyingUnit}
+                                          </span>
+                                          <span className="font-semibold text-stone-900">
+                                            Line Total: {currencySymbol}
+                                            {formatCurrencyAmount(
+                                              item.orderedQuantity *
+                                                item.unitCost,
+                                              activeOrg?.country,
+                                            )}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

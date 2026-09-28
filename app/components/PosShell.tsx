@@ -160,19 +160,19 @@ const navItems: NavItem[] = [
 ];
 
 const inventorySubItems = [
-  { label: "Purchase order", tab: "purchaseOrders" },
-  { label: "Supplier", tab: "suppliers" },
-  { label: "Item library", tab: "itemLibrary" },
-  { label: "Dead stock", tab: "deadStock" },
-  { label: "Item recipes", tab: "itemRecipes" },
+  { label: "Purchase order", tab: "purchaseOrders", path: "/inventory/purchase-orders" },
+  { label: "Supplier", tab: "suppliers", path: "/inventory/suppliers" },
+  { label: "Item library", tab: "itemLibrary", path: "/inventory/item-library" },
+  { label: "Dead stock", tab: "deadStock", path: "/inventory/dead-stock" },
+  { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
 ];
 
 function NavLink({ href, label, icon }: NavItem) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname === href || (href === "/settings" && pathname === "/organization");
+  const active = pathname === href || pathname.startsWith(`${href}/`) || (href === "/settings" && pathname === "/organization");
   const qs = searchParams.toString();
-  const targetHref = qs ? `${href}?${qs}` : href;
+  const targetHref = href === "/inventory" ? "/inventory/purchase-orders" : (qs ? `${href}?${qs}` : href);
 
   return (
     <Link
@@ -199,7 +199,7 @@ export function PosShell({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isInventoryPage = pathname === "/inventory";
+  const isInventoryPage = pathname.startsWith("/inventory");
   const currentTab = searchParams.get("tab") || "purchaseOrders";
 
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
@@ -264,12 +264,13 @@ export function PosShell({
                     <div className="ml-5 pl-3 my-1.5 border-l border-[#e7e5e4] flex flex-col gap-1">
                       {inventorySubItems.map((sub) => {
                         const isSubActive =
-                          isInventoryPage &&
-                          (currentTab === sub.tab || (sub.tab === "purchaseOrders" && !searchParams.get("tab")));
+                          pathname === sub.path ||
+                          (pathname === "/inventory" && currentTab === sub.tab) ||
+                          (pathname === "/inventory" && sub.tab === "purchaseOrders" && !searchParams.get("tab"));
                         return (
                           <Link
                             key={sub.tab}
-                            href={`/inventory?tab=${sub.tab}`}
+                            href={sub.path}
                             className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
                                 ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
                                 : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"

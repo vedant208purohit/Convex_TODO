@@ -1130,7 +1130,7 @@ export function ItemLibraryView({
             <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9]/80 text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 bg-white z-10 select-none">
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 z-20 select-none">
                     <th
                       className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
                       onClick={() => handleSort("name")}
@@ -1240,9 +1240,20 @@ export function ItemLibraryView({
                               {item.name.charAt(0).toUpperCase()}
                             </div>
                             <div>
-                              <p className="font-medium text-[#0c0a09] hover:underline">
-                                {item.name}
-                              </p>
+                              <div className="flex items-center space-x-2">
+                                <p className="font-medium text-[#0c0a09] hover:underline">
+                                  {item.name}
+                                </p>
+                                {(item.isLowStock || available <= minRefill) ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                    🔴 LOW
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    🟢 OK
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[11px] text-[#a8a29e]">
                                 {item.description || "Raw ingredient"}
                               </p>
@@ -1274,13 +1285,13 @@ export function ItemLibraryView({
                               />
                               {/* Min Refill Level Marker */}
                               <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-rose-600 z-10"
+                                className="absolute top-0 bottom-0 w-0.5 bg-rose-600"
                                 style={{ left: `${minPct}%` }}
                                 title={`Minimum Stock Refill level: ${minRefill}${shortUnit}`}
                               />
                               {/* Baseline Stock Level Marker */}
                               <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-sky-600 z-10"
+                                className="absolute top-0 bottom-0 w-0.5 bg-sky-600"
                                 style={{ left: `${basePct}%` }}
                                 title={`Baseline stock level: ${baseline}${shortUnit}`}
                               />

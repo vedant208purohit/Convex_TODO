@@ -1043,6 +1043,7 @@ postpaidOrderRequests: defineTable({
     city: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_org", ["organizationId"]),
 
   inventoryItems: defineTable({
@@ -1085,11 +1086,15 @@ postpaidOrderRequests: defineTable({
     status: v.union(
       v.literal("drafted"),
       v.literal("sent"),
+      v.literal("partially_received"),
       v.literal("settled"),
       v.literal("cancelled")
     ),
     totalAmount: v.number(),
     notes: v.optional(v.string()),
+    invoiceStorageKey: v.optional(v.string()),
+    invoiceAssetId: v.optional(v.id("organization_assets")),
+    invoiceUrl: v.optional(v.string()),
     settledAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

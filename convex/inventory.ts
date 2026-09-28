@@ -69,10 +69,11 @@ export const updateSupplier = mutation({
 export const listSuppliers = query({
   args: { organizationId: v.id("organizations") },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const all = await ctx.db
       .query("suppliers")
       .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
       .collect();
+    return all.filter((s) => !s.deletedAt);
   },
 });
 
@@ -81,6 +82,75 @@ export const deleteSupplier = mutation({
   handler: async (ctx, args) => {
     const supplier = await ctx.db.get(args.id);
     if (!supplier) throw new Error("Supplier not found");
+
+    // Check if supplier is linked to historical Purchase Orders
+    const linkedPO = await ctx.db
+      .query("purchaseOrders")
+      .withIndex("by_supplier", (q) => q.eq("supplierId", args.id))
+      .first();
+
+    if (linkedPO) {
+      // Soft-delete to preserve historical PO relationship data integrity
+      await ctx.db.patch(args.id, {
+        deletedAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+    } else {
+      await ctx.db.delete(args.id);
+    }
+
+    return { success: true };
+  },
+});
+
+// ==========================================
+// 1.5 INVENTORY CATEGORY MASTER CRUD
+// ==========================================
+
+export const createInventoryCategory = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const id = await ctx.db.insert("inventoryCategories", {
+      organizationId: args.organizationId,
+      name: args.name.trim(),
+      createdAt: now,
+    });
+    return { categoryId: id };
+  },
+});
+
+export const listInventoryCategories = query({
+  args: { organizationId: v.id("organizations") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("inventoryCategories")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+  },
+});
+
+export const updateInventoryCategory = mutation({
+  args: {
+    id: v.id("inventoryCategories"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const cat = await ctx.db.get(args.id);
+    if (!cat) throw new Error("Inventory Category not found");
+    await ctx.db.patch(args.id, { name: args.name.trim() });
+    return { success: true };
+  },
+});
+
+export const deleteInventoryCategory = mutation({
+  args: { id: v.id("inventoryCategories") },
+  handler: async (ctx, args) => {
+    const cat = await ctx.db.get(args.id);
+    if (!cat) throw new Error("Inventory Category not found");
     await ctx.db.delete(args.id);
     return { success: true };
   },
@@ -279,6 +349,9 @@ export const createPurchaseOrder = mutation({
     supplierId: v.id("suppliers"),
     purchasePriority: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
     notes: v.optional(v.string()),
+    invoiceStorageKey: v.optional(v.string()),
+    invoiceAssetId: v.optional(v.id("organization_assets")),
+    invoiceUrl: v.optional(v.string()),
     items: v.array(
       v.object({
         inventoryItemId: v.id("inventoryItems"),
@@ -290,7 +363,6 @@ export const createPurchaseOrder = mutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
     const todayPOs = await ctx.db
       .query("purchaseOrders")
@@ -324,6 +396,9 @@ export const createPurchaseOrder = mutation({
       status: "drafted",
       totalAmount,
       notes: args.notes,
+      invoiceStorageKey: args.invoiceStorageKey,
+      invoiceAssetId: args.invoiceAssetId,
+      invoiceUrl: args.invoiceUrl,
       createdAt: now,
       updatedAt: now,
     });
@@ -343,6 +418,68 @@ export const createPurchaseOrder = mutation({
     }
 
     return { purchaseOrderId, poNumber, totalAmount };
+  },
+});
+
+export const attachPOInvoice = mutation({
+  args: {
+    purchaseOrderId: v.id("purchaseOrders"),
+    invoiceStorageKey: v.optional(v.string()),
+    invoiceAssetId: v.optional(v.id("organization_assets")),
+    invoiceUrl: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const po = await ctx.db.get(args.purchaseOrderId);
+    if (!po) throw new Error("Purchase Order not found");
+
+    await ctx.db.patch(args.purchaseOrderId, {
+      invoiceStorageKey: args.invoiceStorageKey,
+      invoiceAssetId: args.invoiceAssetId,
+      invoiceUrl: args.invoiceUrl,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+export const updatePurchaseOrderReceiving = mutation({
+  args: {
+    purchaseOrderId: v.id("purchaseOrders"),
+    items: v.array(
+      v.object({
+        purchaseOrderItemId: v.id("purchaseOrderItems"),
+        receivedQuantity: v.number(),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    const po = await ctx.db.get(args.purchaseOrderId);
+    if (!po) throw new Error("Purchase Order not found");
+    const now = Date.now();
+
+    let allReceived = true;
+    for (const itemInput of args.items) {
+      const line = await ctx.db.get(itemInput.purchaseOrderItemId);
+      if (line) {
+        await ctx.db.patch(line._id, {
+          receivedQuantity: itemInput.receivedQuantity,
+        });
+        if (itemInput.receivedQuantity < line.orderedQuantity) {
+          allReceived = false;
+        }
+      }
+    }
+
+    const newStatus = allReceived ? "sent" : "partially_received";
+    if (po.status !== "settled" && po.status !== "cancelled") {
+      await ctx.db.patch(po._id, {
+        status: newStatus,
+        updatedAt: now,
+      });
+    }
+
+    return { success: true, status: newStatus };
   },
 });
 
@@ -397,7 +534,7 @@ export const settlePurchaseOrder = mutation({
 });
 
 // ==========================================
-// 5. DEAD STOCK LOGGING & SPOILAGE TRACKER
+// 5. DEAD STOCK LOGGING & PHYSICAL AUDIT ADJUSTMENTS
 // ==========================================
 
 export const logDeadStock = mutation({
@@ -435,5 +572,44 @@ export const logDeadStock = mutation({
     });
 
     return { success: true, newStock };
+  },
+});
+
+export const adjustInventoryStock = mutation({
+  args: {
+    organizationId: v.id("organizations"),
+    inventoryItemId: v.id("inventoryItems"),
+    actualStockCount: v.number(),
+    reason: v.optional(v.string()), // e.g. "Physical Stock Audit Count", "Spill/Loss Correction", "Initial Count"
+  },
+  handler: async (ctx, args) => {
+    const invItem = await ctx.db.get(args.inventoryItemId);
+    if (!invItem) throw new Error("Inventory item not found");
+
+    const now = Date.now();
+    const currentStock = invItem.availableStock;
+    const diff = args.actualStockCount - currentStock;
+    if (diff === 0) return { success: true, updatedStock: currentStock };
+
+    const stockType = diff > 0 ? "credit" : "debit";
+    const absQty = Math.abs(diff);
+
+    await ctx.db.insert("inventoryItemStocks", {
+      organizationId: args.organizationId,
+      inventoryItemId: args.inventoryItemId,
+      stockType,
+      quantity: absQty,
+      unit: invItem.buyingUnit || "unit",
+      sourceType: "ManualAdjustment",
+      reasonForDeadStock: args.reason || "Physical Stock Audit Count",
+      createdAt: now,
+    });
+
+    await ctx.db.patch(args.inventoryItemId, {
+      availableStock: args.actualStockCount,
+      updatedAt: now,
+    });
+
+    return { success: true, updatedStock: args.actualStockCount, diff };
   },
 });
