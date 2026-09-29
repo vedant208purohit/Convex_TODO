@@ -83,6 +83,11 @@ export function SuppliersView({
   const [city, setCity] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Form Validation Error States
+  const [phoneError, setPhoneError] = useState("");
+  const [whatsappError, setWhatsappError] = useState("");
+  const [emailError, setEmailError] = useState("");
+
   const availableStates = useMemo(() => getStatesForCountry(country), [country]);
 
   // Active Dropdown menu state
@@ -153,6 +158,9 @@ export function SuppliersView({
     setCountry("India");
     setState("Gujarat");
     setCity("");
+    setPhoneError("");
+    setWhatsappError("");
+    setEmailError("");
     setIsDrawerOpen(true);
   };
 
@@ -170,6 +178,9 @@ export function SuppliersView({
     setCountry("India");
     setState("Gujarat");
     setCity(s.city || "");
+    setPhoneError("");
+    setWhatsappError("");
+    setEmailError("");
     setActiveMenuId(null);
     setIsDrawerOpen(true);
   };
@@ -189,12 +200,58 @@ export function SuppliersView({
 
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    let hasValidationError = false;
+
     if (!supplierName.trim()) {
       alert("Supplier name is required.");
       return;
     }
     if (!companyName.trim()) {
       alert("Company name is required.");
+      return;
+    }
+
+    // Phone number validation (10 digits max/exact if provided)
+    const cleanPhone = phoneNumber.trim();
+    if (cleanPhone) {
+      if (!/^\d{10}$/.test(cleanPhone)) {
+        setPhoneError("Please enter a valid 10-digit phone number.");
+        hasValidationError = true;
+      } else {
+        setPhoneError("");
+      }
+    } else {
+      setPhoneError("");
+    }
+
+    // WhatsApp number validation (10 digits max/exact if provided)
+    const cleanWhatsapp = whatsappNumber.trim();
+    if (cleanWhatsapp) {
+      if (!/^\d{10}$/.test(cleanWhatsapp)) {
+        setWhatsappError("Please enter a valid 10-digit WhatsApp number.");
+        hasValidationError = true;
+      } else {
+        setWhatsappError("");
+      }
+    } else {
+      setWhatsappError("");
+    }
+
+    // Email address validation
+    const cleanEmail = email.trim();
+    if (cleanEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        setEmailError("Please enter a valid email address (e.g. name@example.com).");
+        hasValidationError = true;
+      } else {
+        setEmailError("");
+      }
+    } else {
+      setEmailError("");
+    }
+
+    if (hasValidationError) {
       return;
     }
 
@@ -921,11 +978,21 @@ export function SuppliersView({
                   </label>
                   <input
                     type="tel"
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition font-mono"
-                    placeholder="Enter Your Contact Number"
+                    maxLength={10}
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      phoneError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition font-mono`}
+                    placeholder="Enter 10-digit contact number"
                     value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setPhoneNumber(val);
+                      if (phoneError) setPhoneError("");
+                    }}
                   />
+                  {phoneError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{phoneError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -934,11 +1001,21 @@ export function SuppliersView({
                   </label>
                   <input
                     type="tel"
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition font-mono"
-                    placeholder="Enter Your WhatsApp Number"
+                    maxLength={10}
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      whatsappError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition font-mono`}
+                    placeholder="Enter 10-digit WhatsApp number"
                     value={whatsappNumber}
-                    onChange={(e) => setWhatsappNumber(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                      setWhatsappNumber(val);
+                      if (whatsappError) setWhatsappError("");
+                    }}
                   />
+                  {whatsappError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{whatsappError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -947,11 +1024,19 @@ export function SuppliersView({
                   </label>
                   <input
                     type="email"
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition"
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      emailError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition`}
                     placeholder="Enter supplier email address"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (emailError) setEmailError("");
+                    }}
                   />
+                  {emailError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{emailError}</p>
+                  )}
                 </div>
               </div>
 

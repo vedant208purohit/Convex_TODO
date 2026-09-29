@@ -8,6 +8,7 @@ import {
   formatCurrencyAmount,
   getCurrencyForCountry,
 } from "@/lib/constants/countries";
+import { downloadPurchaseOrderPdf } from "@/app/utils/generatePurchaseOrderPdf";
 
 export interface PurchaseOrderItem {
   id: string;
@@ -319,8 +320,13 @@ export function PurchaseOrdersView({
     },
   ]);
 
-  // 3-dots Menu Popover State
-  const [openMenuPoId, setOpenMenuPoId] = useState<string | null>(null);
+  // 3-dots Menu Popover State (Position fixed to prevent overflow clipping)
+  const [menuState, setMenuState] = useState<{
+    poId: string;
+    top: number;
+    right: number;
+    openUpward: boolean;
+  } | null>(null);
 
   // Form State for New PO (matching createPurchaseOrder args exactly)
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>("");
@@ -1665,22 +1671,22 @@ export function PurchaseOrdersView({
             </div>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-[#eceae4] overflow-hidden shadow-subtle">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+          <div className="bg-white rounded-xl border border-[#eceae4] shadow-subtle flex flex-col flex-1 min-h-[calc(100vh-250px)]">
+            <div className="overflow-x-auto flex-1 w-full rounded-xl">
+              <table className="w-full text-left border-collapse min-w-[750px]">
                 <thead>
                   <tr className="border-b border-[#f0eee9] bg-[#faf9f7] text-[11px] font-semibold text-[#787670] uppercase tracking-wider">
-                    <th className="py-3 px-5">PO Number</th>
-                    <th className="py-3 px-4">Created</th>
-                    <th className="py-3 px-4">Supplier</th>
-                    <th className="py-3 px-4 text-center">Items</th>
-                    <th className="py-3 px-4">Priority</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-5 text-right">Actions</th>
+                    <th className="py-3.5 px-4">PO Number</th>
+                    <th className="py-3.5 px-4">Created</th>
+                    <th className="py-3.5 px-4">Supplier</th>
+                    <th className="py-3.5 px-4 text-center">Items</th>
+                    <th className="py-3.5 px-4">Priority</th>
+                    <th className="py-3.5 px-4">Status</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f3f1ec] text-xs">
-                  {filteredPOs.map((po) => {
+                  {filteredPOs.map((po, poIndex) => {
                     const isExpanded = !!expandedPoIds[po._id];
                     return (
                       <React.Fragment key={po._id}>
@@ -1688,7 +1694,7 @@ export function PurchaseOrdersView({
                           onClick={() => setSelectedPO(po)}
                           className="hover:bg-[#fcfbf9] transition-colors group cursor-pointer"
                         >
-                          <td className="py-4 px-5 font-semibold text-[#141413] tracking-tight">
+                          <td className="py-3.5 px-4 font-semibold text-[#141413] tracking-tight">
                             <div className="flex items-center space-x-2">
                               <button
                                 type="button"
@@ -1723,7 +1729,7 @@ export function PurchaseOrdersView({
                               <span>{po.poNumber}</span>
                             </div>
                           </td>
-                          <td className="py-4 px-4 text-stone-600 whitespace-nowrap">
+                          <td className="py-3.5 px-4 text-stone-600 whitespace-nowrap">
                             {new Date(po.createdAt).toLocaleDateString(
                               "en-GB",
                               {
@@ -1733,7 +1739,7 @@ export function PurchaseOrdersView({
                               },
                             )}
                           </td>
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4">
                             <div className="font-medium text-[#141413]">
                               {po.supplierName}
                             </div>
@@ -1741,17 +1747,17 @@ export function PurchaseOrdersView({
                               {po.companyName || po.supplierName}
                             </div>
                           </td>
-                          <td className="py-4 px-4 text-center font-medium text-stone-700">
+                          <td className="py-3.5 px-4 text-center font-medium text-stone-700">
                             {po.itemsCount}{" "}
                             {po.itemsCount === 1 ? "item" : "items"}
                           </td>
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4">
                             {renderPriorityBadge(po.purchasePriority)}
                           </td>
-                          <td className="py-4 px-4">
+                          <td className="py-3.5 px-4">
                             {renderStatusBadge(po.status)}
                           </td>
-                          <td className="py-4 px-5 text-right whitespace-nowrap">
+                          <td className="py-3.5 px-4 text-right whitespace-nowrap">
                             <div className="inline-flex items-center space-x-2">
                               {po.status === "settled" ? (
                                 <button
@@ -1782,15 +1788,27 @@ export function PurchaseOrdersView({
                                 </button>
                               )}
 
-                              {/* 3-dots Menu Button & Popover Dropdown */}
+                              {/* 3-dots Menu Button */}
                               <div className="relative inline-block text-left">
                                 <button
                                   type="button"
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setOpenMenuPoId(
-                                      openMenuPoId === po._id ? null : po._id,
-                                    );
+                                    if (menuState?.poId === po._id) {
+                                      setMenuState(null);
+                                    } else {
+                                      const rect =
+                                        e.currentTarget.getBoundingClientRect();
+                                      const spaceBelow =
+                                        window.innerHeight - rect.bottom;
+                                      const openUpward = spaceBelow < 290;
+                                      setMenuState({
+                                        poId: po._id,
+                                        top: openUpward ? rect.top : rect.bottom,
+                                        right: window.innerWidth - rect.right,
+                                        openUpward,
+                                      });
+                                    }
                                   }}
                                   className="p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 transition cursor-pointer flex items-center justify-center"
                                   title="Actions menu"
@@ -1804,57 +1822,139 @@ export function PurchaseOrdersView({
                                   </svg>
                                 </button>
 
-                                {openMenuPoId === po._id && (
+                                {/* Fixed-Position Popover Dropdown (Bypasses Table/Card Overflow & Clipping) */}
+                                {menuState?.poId === po._id && (
                                   <>
                                     <div
                                       className="fixed inset-0 z-40 cursor-default"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setOpenMenuPoId(null);
+                                        setMenuState(null);
                                       }}
                                     />
-                                    <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl shadow-2xl border border-stone-200 py-1.5 z-50 text-xs font-medium text-[#141413] divide-y divide-stone-100 text-left">
+                                    <div
+                                      style={{
+                                        position: "fixed",
+                                        right: `${Math.max(16, menuState.right)}px`,
+                                        ...(menuState.openUpward
+                                          ? {
+                                              bottom: `${
+                                                window.innerHeight -
+                                                menuState.top +
+                                                6
+                                              }px`,
+                                            }
+                                          : { top: `${menuState.top + 6}px` }),
+                                      }}
+                                      className="w-56 bg-white rounded-xl shadow-2xl border border-stone-200 py-1.5 z-50 text-xs font-medium text-[#141413] divide-y divide-stone-100 text-left"
+                                    >
                                       <div className="py-1">
+                                        {/* 1. Add items */}
+                                        <button
+                                          type="button"
+                                          disabled={po.status !== "drafted"}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMenuState(null);
+                                            if (po.supplierId) {
+                                              setSelectedSupplierId(po.supplierId);
+                                            }
+                                            setIsNewPODrawerOpen(true);
+                                          }}
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-[#141413] font-medium whitespace-nowrap"
+                                        >
+                                          <svg className="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                          </svg>
+                                          <span className="truncate">Add items</span>
+                                        </button>
+
+                                        {/* 2. Edit supplier */}
+                                        <button
+                                          type="button"
+                                          disabled={po.status === "settled" || po.status === "cancelled"}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMenuState(null);
+                                            setSelectedPO(po);
+                                          }}
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-[#141413] font-medium whitespace-nowrap"
+                                        >
+                                          <svg className="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1" />
+                                          </svg>
+                                          <span className="truncate">Edit supplier</span>
+                                        </button>
+
+                                        {/* 3. Edit PO details */}
+                                        <button
+                                          type="button"
+                                          disabled={po.status === "settled" || po.status === "cancelled"}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMenuState(null);
+                                            setSelectedPO(po);
+                                          }}
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-stone-100 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer text-[#141413] font-medium whitespace-nowrap"
+                                        >
+                                          <svg className="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                          </svg>
+                                          <span className="truncate">Edit PO details</span>
+                                        </button>
+
+                                        {/* 4. View order */}
                                         <button
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setOpenMenuPoId(null);
+                                            setMenuState(null);
                                             setSelectedPO(po);
                                           }}
-                                          className="w-full text-left px-4 py-2 hover:bg-stone-100 transition cursor-pointer text-[#141413] font-medium"
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-stone-100 transition cursor-pointer text-[#141413] font-medium whitespace-nowrap"
                                         >
-                                          View details
+                                          <svg className="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                          </svg>
+                                          <span className="truncate">View order</span>
                                         </button>
-                                        {po.status === "drafted" && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenMenuPoId(null);
-                                              handleDispatchPO(po);
-                                            }}
-                                            className="w-full text-left px-4 py-2 hover:bg-sky-50 text-sky-700 transition cursor-pointer font-medium"
-                                          >
-                                            Dispatch / Send PO
-                                          </button>
-                                        )}
-                                        {po.status === "sent" && (
-                                          <button
-                                            type="button"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              setOpenMenuPoId(null);
-                                              handleSettlePO(po);
-                                            }}
-                                            className="w-full text-left px-4 py-2 hover:bg-emerald-50 text-emerald-700 transition cursor-pointer font-medium"
-                                          >
-                                            Settle PO & Restock
-                                          </button>
-                                        )}
+
+                                        {/* 5. View chat */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMenuState(null);
+                                            alert(`Supplier Chat for ${po.supplierName || "Supplier"}: Vendor chat messaging integration feature is coming soon.`);
+                                          }}
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-stone-100 transition cursor-pointer text-[#141413] font-medium whitespace-nowrap"
+                                        >
+                                          <svg className="w-4 h-4 text-stone-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                          </svg>
+                                          <span className="truncate">View chat</span>
+                                        </button>
+
+                                        {/* 6. Download PDF */}
+                                        <button
+                                          type="button"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMenuState(null);
+                                            downloadPurchaseOrderPdf({ po, org: activeOrg });
+                                          }}
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-amber-50 text-amber-800 transition cursor-pointer font-medium whitespace-nowrap"
+                                        >
+                                          <svg className="w-4 h-4 text-amber-700 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                          <span className="truncate">Download PDF</span>
+                                        </button>
                                       </div>
 
                                       <div className="pt-1">
+                                        {/* 7. Cancel PO */}
                                         <button
                                           type="button"
                                           disabled={
@@ -1863,12 +1963,15 @@ export function PurchaseOrdersView({
                                           }
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setOpenMenuPoId(null);
+                                            setMenuState(null);
                                             handleCancelPO(po);
                                           }}
-                                          className="w-full text-left px-4 py-2 hover:bg-rose-50 text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer font-medium"
+                                          className="w-full flex items-center space-x-2.5 px-4 py-2 hover:bg-rose-50 text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed transition cursor-pointer font-medium whitespace-nowrap"
                                         >
-                                          Cancel PO
+                                          <svg className="w-4 h-4 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                          </svg>
+                                          <span className="truncate">Cancel PO</span>
                                         </button>
                                       </div>
                                     </div>
