@@ -140,6 +140,8 @@ export function ItemRecipesView({
   // Submission & Error State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [drawerError, setDrawerError] = useState<string | null>(null);
+  const [recipeNameError, setRecipeNameError] = useState("");
+  const [recipeQtyError, setRecipeQtyError] = useState("");
 
   // Delete Confirmation State
   const [deleteConfirmation, setDeleteConfirmation] = useState<{
@@ -255,6 +257,8 @@ export function ItemRecipesView({
   // Open Create Recipe Drawer
   const openCreateRecipeDrawer = () => {
     setDrawerError(null);
+    setRecipeNameError("");
+    setRecipeQtyError("");
     setRecipeDishName("");
     setRecipeQuantity("");
     setRecipeUnit("Kilogram (kg)");
@@ -279,12 +283,23 @@ export function ItemRecipesView({
     e.preventDefault();
     setDrawerError(null);
 
+    let hasValidationError = false;
+
     if (!recipeDishName.trim()) {
-      setDrawerError("Please enter the recipe name.");
-      return;
+      setRecipeNameError("Recipe name is required.");
+      hasValidationError = true;
+    } else {
+      setRecipeNameError("");
     }
-    if (!recipeQuantity || Number(recipeQuantity) <= 0) {
-      setDrawerError("Please enter a valid recipe quantity.");
+
+    if (!recipeQuantity || Number(recipeQuantity) <= 0 || isNaN(Number(recipeQuantity))) {
+      setRecipeQtyError("Recipe quantity is required.");
+      hasValidationError = true;
+    } else {
+      setRecipeQtyError("");
+    }
+
+    if (hasValidationError) {
       return;
     }
 
@@ -900,12 +915,21 @@ export function ItemRecipesView({
             </label>
             <input
               type="text"
-              required
               placeholder="Enter the recipe name"
-              className="w-full bg-[#f4ece8]/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg border border-[#d0c4be] focus:outline-none focus:ring-1 focus:ring-[#1e1b19] transition text-xs text-[#1e1b19]"
+              className={`w-full bg-[#f4ece8]/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg border ${
+                recipeNameError
+                  ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                  : "border-[#d0c4be] focus:ring-[#1e1b19]"
+              } focus:outline-none focus:ring-1 transition text-xs text-[#1e1b19]`}
               value={recipeDishName}
-              onChange={(e) => setRecipeDishName(e.target.value)}
+              onChange={(e) => {
+                setRecipeDishName(e.target.value);
+                if (recipeNameError) setRecipeNameError("");
+              }}
             />
+            {recipeNameError && (
+              <p className="text-[11px] text-rose-500 mt-1">{recipeNameError}</p>
+            )}
           </div>
 
           {/* Field 2: Recipe Quantity * */}
@@ -917,16 +941,23 @@ export function ItemRecipesView({
               type="number"
               min="0.01"
               step="any"
-              required
               placeholder="Enter quantity"
-              className="w-full bg-[#f4ece8]/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg border border-[#d0c4be] focus:outline-none focus:ring-1 focus:ring-[#1e1b19] transition text-xs text-[#1e1b19]"
+              className={`w-full bg-[#f4ece8]/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg border ${
+                recipeQtyError
+                  ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                  : "border-[#d0c4be] focus:ring-[#1e1b19]"
+              } focus:outline-none focus:ring-1 transition text-xs text-[#1e1b19]`}
               value={recipeQuantity}
-              onChange={(e) =>
+              onChange={(e) => {
                 setRecipeQuantity(
                   e.target.value ? Number(e.target.value) : "",
-                )
-              }
+                );
+                if (recipeQtyError) setRecipeQtyError("");
+              }}
             />
+            {recipeQtyError && (
+              <p className="text-[11px] text-rose-500 mt-1">{recipeQtyError}</p>
+            )}
           </div>
 
           {/* Field 3: Units * */}

@@ -191,6 +191,14 @@ export function ItemLibraryView({
   const [initialStock, setInitialStock] = useState<number>(0);
   const [unitCost, setUnitCost] = useState<number>(0);
 
+  // Form Validation Error States
+  const [nameError, setNameError] = useState("");
+  const [categoryError, setCategoryError] = useState("");
+  const [buyingUnitError, setBuyingUnitError] = useState("");
+  const [servingUnitError, setServingUnitError] = useState("");
+  const [minRefillError, setMinRefillError] = useState("");
+  const [baselineError, setBaselineError] = useState("");
+
   // Add Item Stock Drawer Form State
   const [addStockQuantity, setAddStockQuantity] = useState<number | "">("");
   const [addStockSupplierId, setAddStockSupplierId] = useState<string>("");
@@ -272,15 +280,21 @@ export function ItemLibraryView({
     setEditingItem(null);
     setDrawerMode("create");
     setName("");
-    setCategory("Dairy items");
+    setCategory("");
     setDescription("");
     setSkuNumber("");
-    setBuyingUnit("piece");
-    setServingUnit("piece");
-    setMinimumStockRefillLevel(1);
-    setBaselineStockLevel(1);
+    setBuyingUnit("");
+    setServingUnit("");
+    setMinimumStockRefillLevel("" as any);
+    setBaselineStockLevel("" as any);
     setInitialStock(0);
     setUnitCost(0);
+    setNameError("");
+    setCategoryError("");
+    setBuyingUnitError("");
+    setServingUnitError("");
+    setMinRefillError("");
+    setBaselineError("");
     setIsDrawerOpen(true);
   };
 
@@ -288,15 +302,21 @@ export function ItemLibraryView({
     setEditingItem(item);
     setDrawerMode("edit");
     setName(item.name || "");
-    setCategory("Dairy items");
+    setCategory(item.category || "Dairy items");
     setDescription(item.description || "");
     setSkuNumber(item.skuNumber || "");
-    setBuyingUnit(item.buyingUnit || "piece");
-    setServingUnit(item.servingUnit || "piece");
-    setMinimumStockRefillLevel(item.minimumStockRefillLevel || 1);
-    setBaselineStockLevel(item.baselineStockLevel || 1);
+    setBuyingUnit(item.buyingUnit || "");
+    setServingUnit(item.servingUnit || "");
+    setMinimumStockRefillLevel(item.minimumStockRefillLevel ?? "");
+    setBaselineStockLevel(item.baselineStockLevel ?? "");
     setInitialStock(item.availableStock || 0);
     setUnitCost(item.unitCost || 0);
+    setNameError("");
+    setCategoryError("");
+    setBuyingUnitError("");
+    setServingUnitError("");
+    setMinRefillError("");
+    setBaselineError("");
     setActiveMenuId(null);
     setIsDrawerOpen(true);
   };
@@ -373,8 +393,61 @@ export function ItemLibraryView({
       return;
     }
 
+    let hasValidationError = false;
+
     if (!name.trim()) {
-      alert("Item name is required.");
+      setNameError("Item name is required.");
+      hasValidationError = true;
+    } else {
+      setNameError("");
+    }
+
+    if (!category.trim()) {
+      setCategoryError("Select category is required.");
+      hasValidationError = true;
+    } else {
+      setCategoryError("");
+    }
+
+    if (!buyingUnit.trim()) {
+      setBuyingUnitError("Buying unit is required.");
+      hasValidationError = true;
+    } else {
+      setBuyingUnitError("");
+    }
+
+    if (!servingUnit.trim()) {
+      setServingUnitError("Serving unit is required.");
+      hasValidationError = true;
+    } else {
+      setServingUnitError("");
+    }
+
+    if (
+      minimumStockRefillLevel === undefined ||
+      minimumStockRefillLevel === null ||
+      minimumStockRefillLevel === ("" as any) ||
+      isNaN(Number(minimumStockRefillLevel))
+    ) {
+      setMinRefillError("Minimum stock refill level is required.");
+      hasValidationError = true;
+    } else {
+      setMinRefillError("");
+    }
+
+    if (
+      baselineStockLevel === undefined ||
+      baselineStockLevel === null ||
+      baselineStockLevel === ("" as any) ||
+      isNaN(Number(baselineStockLevel))
+    ) {
+      setBaselineError("Baseline stock level is required.");
+      hasValidationError = true;
+    } else {
+      setBaselineError("");
+    }
+
+    if (hasValidationError) {
       return;
     }
 
@@ -1479,11 +1552,33 @@ export function ItemLibraryView({
                 </label>
                 <input
                   type="text"
-                  required
-                  className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] placeholder:text-[#a8a29e] transition"
+                  className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                    nameError
+                      ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                      : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                  } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition`}
                   placeholder="Enter item name"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (nameError) setNameError("");
+                  }}
+                />
+                {nameError && (
+                  <p className="text-[11px] text-rose-500 mt-1">{nameError}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block font-medium text-[#1c1917] mb-1">
+                  Description
+                </label>
+                <textarea
+                  rows={3}
+                  className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] placeholder:text-[#a8a29e] transition resize-y"
+                  placeholder="Enter item description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
                 />
               </div>
 
@@ -1492,16 +1587,27 @@ export function ItemLibraryView({
                   Select category <span className="text-rose-500">*</span>
                 </label>
                 <select
-                  className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] transition"
+                  className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                    categoryError
+                      ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                      : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                  } rounded-lg focus:outline-none focus:ring-1 transition`}
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => {
+                    setCategory(e.target.value);
+                    if (categoryError) setCategoryError("");
+                  }}
                 >
+                  <option value="">Search category</option>
                   {DEFAULT_CATEGORIES.map((cat) => (
                     <option key={cat} value={cat}>
                       {cat}
                     </option>
                   ))}
                 </select>
+                {categoryError && (
+                  <p className="text-[11px] text-rose-500 mt-1">{categoryError}</p>
+                )}
               </div>
 
               <div>
@@ -1530,16 +1636,27 @@ export function ItemLibraryView({
                     Buying unit <span className="text-rose-500">*</span>
                   </label>
                   <select
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] transition"
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      buyingUnitError
+                        ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                        : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 transition`}
                     value={buyingUnit}
-                    onChange={(e) => handleBuyingUnitChange(e.target.value)}
+                    onChange={(e) => {
+                      handleBuyingUnitChange(e.target.value);
+                      if (buyingUnitError) setBuyingUnitError("");
+                    }}
                   >
+                    <option value="">Select buying unit</option>
                     {BUYING_UNITS.map((u) => (
                       <option key={u.value} value={u.value}>
                         {u.label}
                       </option>
                     ))}
                   </select>
+                  {buyingUnitError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{buyingUnitError}</p>
+                  )}
                 </div>
 
                 <div>
@@ -1547,16 +1664,27 @@ export function ItemLibraryView({
                     Serving unit <span className="text-rose-500">*</span>
                   </label>
                   <select
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] transition"
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      servingUnitError
+                        ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                        : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 transition`}
                     value={servingUnit}
-                    onChange={(e) => setServingUnit(e.target.value)}
+                    onChange={(e) => {
+                      setServingUnit(e.target.value);
+                      if (servingUnitError) setServingUnitError("");
+                    }}
                   >
+                    <option value="">Select serving unit</option>
                     {relatableUnits.map((u) => (
                       <option key={u.value} value={u.value}>
                         {u.label}
                       </option>
                     ))}
                   </select>
+                  {servingUnitError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{servingUnitError}</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1576,12 +1704,21 @@ export function ItemLibraryView({
                   </label>
                   <input
                     type="number"
-                    required
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] font-mono"
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      minRefillError
+                        ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                        : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 font-mono`}
                     placeholder="Enter stock refill level"
                     value={minimumStockRefillLevel}
-                    onChange={(e) => setMinimumStockRefillLevel(Number(e.target.value))}
+                    onChange={(e) => {
+                      setMinimumStockRefillLevel(e.target.value === "" ? ("" as any) : Number(e.target.value));
+                      if (minRefillError) setMinRefillError("");
+                    }}
                   />
+                  {minRefillError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{minRefillError}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block font-medium text-[#78716c] mb-1">Unit</label>
@@ -1601,12 +1738,21 @@ export function ItemLibraryView({
                   </label>
                   <input
                     type="number"
-                    required
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] font-mono"
+                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                      baselineError
+                        ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                        : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    } rounded-lg focus:outline-none focus:ring-1 font-mono`}
                     placeholder="Enter baseline stock level"
                     value={baselineStockLevel}
-                    onChange={(e) => setBaselineStockLevel(Number(e.target.value))}
+                    onChange={(e) => {
+                      setBaselineStockLevel(e.target.value === "" ? ("" as any) : Number(e.target.value));
+                      if (baselineError) setBaselineError("");
+                    }}
                   />
+                  {baselineError && (
+                    <p className="text-[11px] text-rose-500 mt-1">{baselineError}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block font-medium text-[#78716c] mb-1">Unit</label>
@@ -1617,31 +1763,6 @@ export function ItemLibraryView({
                     value={buyingUnit}
                   />
                 </div>
-              </div>
-
-              {drawerMode !== "edit" && (
-                <div>
-                  <label className="block font-medium text-[#1c1917] mb-1">Initial stock</label>
-                  <input
-                    type="number"
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] font-mono"
-                    placeholder="Enter initial stock quantity"
-                    value={initialStock}
-                    onChange={(e) => setInitialStock(Number(e.target.value))}
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block font-medium text-[#1c1917] mb-1">Unit cost ({currencySymbol})</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] font-mono"
-                  placeholder="Enter unit cost"
-                  value={unitCost}
-                  onChange={(e) => setUnitCost(Number(e.target.value))}
-                />
               </div>
             </div>
           </form>
