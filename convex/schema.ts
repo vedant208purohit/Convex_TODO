@@ -747,13 +747,15 @@ postpaidOrderRequests: defineTable({
   organizationQrCodes: defineTable({
     legacyId: v.optional(v.string()),
 
+    organizationId: v.optional(v.id("organizations")),
     name: v.string(),
     description: v.optional(v.string()),
 
     qrType: v.union(
       v.literal("DineIn"),
       v.literal("TakeAway"),
-      v.literal("Queue")
+      v.literal("Queue"),
+      v.literal("Delivery")
     ),
 
     qrUrl: v.optional(v.string()),
@@ -769,7 +771,72 @@ postpaidOrderRequests: defineTable({
     .index("by_name", ["name"])
     .index("by_table", ["tableId"])
     .index("by_qr_type", ["qrType"])
+    .index("by_org", ["organizationId"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Customer Ordering Sessions Domain Table (QR Customer Journey)
+  organizationOrderingSessions: defineTable({
+    legacyId: v.optional(v.string()),
+
+    organizationId: v.id("organizations"),
+    qrId: v.id("organizationQrCodes"),
+    tableId: v.optional(v.string()),
+    qrType: v.string(),
+
+    status: v.union(
+      v.literal("active"),
+      v.literal("converted"),
+      v.literal("abandoned"),
+      v.literal("expired")
+    ),
+
+    cartItemCount: v.number(),
+    orderId: v.optional(v.id("orders")),
+    orderTotalAmount: v.optional(v.number()),
+
+    firstScanAt: v.number(),
+    lastActivityAt: v.number(),
+    convertedAt: v.optional(v.number()),
+
+    deviceType: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    os: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_qr_id", ["qrId"])
+    .index("by_status", ["status"])
+    .index("by_order", ["orderId"])
+    .index("by_created_at", ["organizationId", "createdAt"]),
+
+  // Organization QR Scans Telemetry Audit Log Table
+  organizationQrScans: defineTable({
+    legacyId: v.optional(v.string()),
+
+    organizationId: v.id("organizations"),
+    qrId: v.id("organizationQrCodes"),
+    tableId: v.optional(v.string()),
+    sessionId: v.optional(v.id("organizationOrderingSessions")),
+
+    deviceType: v.optional(v.string()),
+    os: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    screenResolution: v.optional(v.string()),
+    language: v.optional(v.string()),
+    referrer: v.optional(v.string()),
+    ipAddress: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+
+    createdAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_qr_id", ["qrId"])
+    .index("by_session", ["sessionId"])
+    .index("by_created_at", ["organizationId", "createdAt"]),
 
   // Organization Queue Configurations Domain Table
   organizationQueueConfigurations: defineTable({

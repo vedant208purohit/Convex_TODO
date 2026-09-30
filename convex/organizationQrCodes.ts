@@ -47,7 +47,7 @@ export async function requireAdminOrCashier(
  */
 export function buildQrUrl(
   qrId: string,
-  qrType: "DineIn" | "TakeAway" | "Queue",
+  qrType: "DineIn" | "TakeAway" | "Queue" | "Delivery",
   name: string,
   tableId?: string,
   storeSlug?: string,
@@ -60,6 +60,8 @@ export function buildQrUrl(
     return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=DineIn&qr_name=${encodedName}&table_id=${tableId ?? ""}`;
   } else if (qrType === "Queue") {
     return `${baseUrl}/queue?${storeParam}qr_id=${qrId}&type=Queue&qr_name=${encodedName}`;
+  } else if (qrType === "Delivery") {
+    return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=Delivery&qr_name=${encodedName}`;
   } else {
     return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=TakeAway&qr_name=${encodedName}`;
   }
@@ -115,7 +117,12 @@ function validateDineInTable(tableId?: string): string {
 export const list = query({
   args: {
     qrType: v.optional(
-      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Queue")),
+      v.union(
+        v.literal("DineIn"),
+        v.literal("TakeAway"),
+        v.literal("Queue"),
+        v.literal("Delivery"),
+      ),
     ),
   },
   handler: async (ctx, args) => {
@@ -315,6 +322,7 @@ export const create = mutation({
       v.literal("DineIn"),
       v.literal("TakeAway"),
       v.literal("Queue"),
+      v.literal("Delivery"),
     ),
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),
@@ -337,6 +345,7 @@ export const create = mutation({
     const now = Date.now();
 
     const qrId = await ctx.db.insert("organizationQrCodes", {
+      organizationId: org._id,
       legacyId: args.legacyId,
       name: trimmedName,
       description: args.description?.trim() || undefined,
@@ -364,7 +373,12 @@ export const update = mutation({
     name: v.optional(v.string()),
     description: v.optional(v.string()),
     qrType: v.optional(
-      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Queue")),
+      v.union(
+        v.literal("DineIn"),
+        v.literal("TakeAway"),
+        v.literal("Queue"),
+        v.literal("Delivery"),
+      ),
     ),
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),

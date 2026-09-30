@@ -33,6 +33,7 @@ import type * as organizationOrderProcesses from "../organizationOrderProcesses.
 import type * as organizationPaymentModes from "../organizationPaymentModes.js";
 import type * as organizationPrinters from "../organizationPrinters.js";
 import type * as organizationQrCodes from "../organizationQrCodes.js";
+import type * as organizationQrCustomerJourney from "../organizationQrCustomerJourney.js";
 import type * as organizationQueueConfigurations from "../organizationQueueConfigurations.js";
 import type * as organizationQueues from "../organizationQueues.js";
 import type * as organizationSchedulePickups from "../organizationSchedulePickups.js";
@@ -46,6 +47,7 @@ import type * as processNotifications from "../processNotifications.js";
 import type * as providerPaymentTransfers from "../providerPaymentTransfers.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
+import type * as razorpay from "../razorpay.js";
 import type * as surveyAttempts from "../surveyAttempts.js";
 import type * as surveyQuestions from "../surveyQuestions.js";
 import type * as surveys from "../surveys.js";
@@ -84,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   organizationPaymentModes: typeof organizationPaymentModes;
   organizationPrinters: typeof organizationPrinters;
   organizationQrCodes: typeof organizationQrCodes;
+  organizationQrCustomerJourney: typeof organizationQrCustomerJourney;
   organizationQueueConfigurations: typeof organizationQueueConfigurations;
   organizationQueues: typeof organizationQueues;
   organizationSchedulePickups: typeof organizationSchedulePickups;
@@ -97,6 +100,7 @@ declare const fullApi: ApiFromModules<{
   providerPaymentTransfers: typeof providerPaymentTransfers;
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
+  razorpay: typeof razorpay;
   surveyAttempts: typeof surveyAttempts;
   surveyQuestions: typeof surveyQuestions;
   surveys: typeof surveys;
