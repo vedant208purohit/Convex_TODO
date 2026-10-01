@@ -1,12 +1,32 @@
-import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+import { auth, createClerkClient } from "@clerk/nextjs/server";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function resolveStoreForAuthenticatedUser() {
+// Extracts userId from either Clerk cookie session (web) or Bearer token (mobile)
+async function resolveUserId(request: NextRequest): Promise<string | null> {
   const { userId } = await auth();
+  if (userId) return userId;
+
+  const authHeader = request.headers.get("Authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const token = authHeader.slice(7);
+  try {
+    const clerk = createClerkClient({
+      secretKey: process.env.CLERK_SECRET_KEY,
+    });
+    const payload = await clerk.verifyToken(token);
+    return payload.sub || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveStoreForAuthenticatedUser(request: NextRequest) {
+  const userId = await resolveUserId(request);
 
   if (!userId) {
     return NextResponse.json(
@@ -74,7 +94,6 @@ export async function resolveStoreForAuthenticatedUser() {
         "x-bridge-timestamp": timestamp.toString(),
       },
       body: JSON.stringify({ defaultClerkId: userId }),
-      // Short cache lifetime / no-store to prevent stale deployment resolutions
       cache: "no-store",
     });
 
@@ -145,10 +164,10 @@ export async function resolveStoreForAuthenticatedUser() {
   }
 }
 
-export async function GET() {
-  return resolveStoreForAuthenticatedUser();
+export async function GET(request: NextRequest) {
+  return resolveStoreForAuthenticatedUser(request);
 }
 
-export async function POST() {
-  return resolveStoreForAuthenticatedUser();
+export async function POST(request: NextRequest) {
+  return resolveStoreForAuthenticatedUser(request);
 }
