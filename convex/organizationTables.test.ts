@@ -355,4 +355,241 @@ describe("Organization Tables Domain Unit & Business Logic Tests", () => {
       expect(tables[0].currentOrder).toBeNull();
     });
   });
+
+  // ----------------------------------------------------
+  // Dine-In QR Auto-Provisioning & Telemetry Integration
+  // ----------------------------------------------------
+  describe("Dine-In QR Code Auto-Provisioning & Telemetry Integration", () => {
+    test("Table creation automatically provisions a Dine-In QR document with matching organizationId, tableId, tableNumber, and canonical qrUrl", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T12",
+        seatingCapacity: 4,
+      });
+
+      // Query the auto-provisioned QR code by table
+      const qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: tableId.toString(),
+      });
+
+      expect(qrDoc).not.toBeNull();
+      expect(qrDoc?.organizationId).toBe(orgId);
+      expect(qrDoc?.tableId).toBe(tableId.toString());
+      expect(qrDoc?.tableNumber).toBe("T12");
+      expect(qrDoc?.qrType).toBe("DineIn");
+      expect(qrDoc?.name).toBe("Table T12");
+      expect(qrDoc?.counter).toBe(0);
+
+      // Verify canonical qrUrl contains the Convex QR document ID
+      expect(qrDoc?.qrUrl).toBeDefined();
+      expect(qrDoc?.qrUrl).toContain(`qr_id=${qrDoc?._id}`);
+      expect(qrDoc?.qrUrl).toContain("type=DineIn");
+      expect(qrDoc?.qrUrl).toContain(`table_id=${tableId}`);
+    });
+
+    test("Table update syncs QR code name, tableNumber, and qrUrl when tableNumber changes", async () => {
+      const { asAdmin } = await setupStoreWithAdmin();
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T10",
+        seatingCapacity: 2,
+      });
+
+      let qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: tableId.toString(),
+      });
+      expect(qrDoc?.tableNumber).toBe("T10");
+      expect(qrDoc?.name).toBe("Table T10");
+
+      // Update tableNumber to T10-VIP
+      await asAdmin.mutation(api.organizationTables.update, {
+        id: tableId,
+        tableNumber: "T10-VIP",
+      });
+
+      qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: tableId.toString(),
+      });
+      expect(qrDoc?.tableNumber).toBe("T10-VIP");
+      expect(qrDoc?.name).toBe("Table T10-VIP");
+      expect(qrDoc?.qrUrl).toContain("qr_name=Table%20T10-VIP");
+    });
+
+    test("Table removal soft-deletes the associated Dine-In QR code", async () => {
+      const { asAdmin } = await setupStoreWithAdmin();
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T50",
+        seatingCapacity: 4,
+      });
+
+      let qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: tableId.toString(),
+      });
+      expect(qrDoc).not.toBeNull();
+
+      // Soft-delete the table
+      await asAdmin.mutation(api.organizationTables.remove, { id: tableId });
+
+      qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: tableId.toString(),
+      });
+      expect(qrDoc).toBeNull();
+    });
+
+    test("backfillTableQrCodes safely provisions QR documents for existing tables without QRs", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create a table directly without calling the create mutation helper (or simulating legacy data)
+      const now = Date.now();
+      const legacyTableId = await t.run(async (ctx) => {
+        return await ctx.db.insert("organizationTables", {
+          tableNumber: "T-LEGACY",
+          seatingCapacity: 4,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      // Verify no QR exists initially for the legacy table
+      let qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: legacyTableId.toString(),
+      });
+      expect(qrDoc).toBeNull();
+
+      // Run backfill
+      const backfillResult = await asAdmin.mutation(
+        api.organizationTables.backfillTableQrCodes,
+        {}
+      );
+      expect(backfillResult.success).toBe(true);
+      expect(backfillResult.provisionedCount).toBeGreaterThanOrEqual(1);
+
+      // Verify QR document now exists with canonical qr_id
+      qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: legacyTableId.toString(),
+      });
+      expect(qrDoc).not.toBeNull();
+      expect(qrDoc?.tableNumber).toBe("T-LEGACY");
+      expect(qrDoc?.qrUrl).toContain(`qr_id=${qrDoc?._id}`);
+
+      // Run backfill again to verify idempotency (zero new provisions)
+      const idempotentResult = await asAdmin.mutation(
+        api.organizationTables.backfillTableQrCodes,
+        {}
+      );
+      expect(idempotentResult.provisionedCount).toBe(0);
+    });
+
+    test("Multi-store isolation: Store A and Store B tables receive strictly isolated QR codes", async () => {
+      // Store A isolated deployment
+      const tA = convexTest(schema, modules);
+      const orgA = await tA.mutation(api.organizations.create, {
+        name: "Store Alpha",
+        ownerClerkId: "admin_a",
+      });
+      const adminA = tA.withIdentity({ subject: "admin_a" });
+
+      // Store B isolated deployment
+      const tB = convexTest(schema, modules);
+      const orgB = await tB.mutation(api.organizations.create, {
+        name: "Store Beta",
+        ownerClerkId: "admin_b",
+      });
+      const adminB = tB.withIdentity({ subject: "admin_b" });
+
+      const tableA = await adminA.mutation(api.organizationTables.create, {
+        tableNumber: "T1",
+        seatingCapacity: 4,
+      });
+
+      const tableB = await adminB.mutation(api.organizationTables.create, {
+        tableNumber: "T1",
+        seatingCapacity: 4,
+      });
+
+      const qrA = await adminA.query(api.organizationQrCodes.getByTable, {
+        tableId: tableA.toString(),
+      });
+      const qrB = await adminB.query(api.organizationQrCodes.getByTable, {
+        tableId: tableB.toString(),
+      });
+
+      expect(qrA).not.toBeNull();
+      expect(qrB).not.toBeNull();
+      expect(qrA?.organizationId).toBe(orgA);
+      expect(qrB?.organizationId).toBe(orgB);
+      expect(qrA?.tableId).toBe(tableA.toString());
+      expect(qrB?.tableId).toBe(tableB.toString());
+      expect(qrA?.qrType).toBe("DineIn");
+      expect(qrB?.qrType).toBe("DineIn");
+    });
+
+    test("Multi-table isolation: Table T11 and Table T12 within one store have distinct QR docs and URLs", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const table11 = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T11",
+        seatingCapacity: 2,
+      });
+      const table12 = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T12",
+        seatingCapacity: 4,
+      });
+
+      const qr11 = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: table11.toString(),
+      });
+      const qr12 = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: table12.toString(),
+      });
+
+      expect(qr11?._id).not.toBe(qr12?._id);
+      expect(qr11?.tableId).toBe(table11.toString());
+      expect(qr12?.tableId).toBe(table12.toString());
+      expect(qr11?.qrUrl).toContain(`qr_id=${qr11?._id}`);
+      expect(qr12?.qrUrl).toContain(`qr_id=${qr12?._id}`);
+    });
+
+    test("Auto-provisioned QR URL is immediately consumable by telemetry recordScan", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const tableId = await asAdmin.mutation(api.organizationTables.create, {
+        tableNumber: "T12",
+        seatingCapacity: 4,
+      });
+
+      const qrDoc = await asAdmin.query(api.organizationQrCodes.getByTable, {
+        tableId: tableId.toString(),
+      });
+      expect(qrDoc).not.toBeNull();
+
+      // Customer scans the generated QR code (public unauthenticated scan)
+      const scanRes = await t.mutation(
+        api.organizationQrCustomerJourney.recordScan,
+        {
+          qrId: qrDoc!._id,
+          deviceType: "mobile",
+          os: "iOS",
+          browser: "Safari",
+        }
+      );
+
+      expect(scanRes).toBeDefined();
+      expect(scanRes.qrId).toBe(qrDoc!._id);
+      expect(scanRes.organizationId).toBe(orgId);
+      expect(scanRes.tableId).toBe(tableId.toString());
+      expect(scanRes.tableNumber).toBe("T12");
+      expect(scanRes.sessionId).toBeDefined();
+
+      // Verify scan log and session created in database
+      const analytics = await asAdmin.query(
+        api.organizationQrCustomerJourney.getQrAnalyticsSummary,
+        { qrId: qrDoc!._id }
+      );
+      expect(analytics.totalScans).toBe(1);
+      expect(analytics.totalSessions).toBe(1);
+    });
+  });
 });

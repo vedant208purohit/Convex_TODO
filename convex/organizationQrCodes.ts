@@ -334,8 +334,6 @@ export const create = mutation({
     const { org } = await requireAdminOrCashier(ctx);
 
     const trimmedName = normalizeQrName(args.name);
-    await validateUniqueQrName(ctx, trimmedName);
-
     let effectiveTableId: string | undefined = undefined;
 
     if (args.qrType === "DineIn") {
@@ -343,6 +341,35 @@ export const create = mutation({
     }
 
     const now = Date.now();
+
+    // Idempotency: If DineIn QR code already exists for this tableId, update and return it
+    if (args.qrType === "DineIn" && effectiveTableId) {
+      const existingTableQrs = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_table", (q) => q.eq("tableId", effectiveTableId))
+        .collect();
+      const activeForTable = existingTableQrs.find((q) => q.deletedAt === undefined);
+      if (activeForTable) {
+        await validateUniqueQrName(ctx, trimmedName, activeForTable._id);
+        const newUrl = buildQrUrl(
+          activeForTable._id,
+          "DineIn",
+          trimmedName,
+          effectiveTableId,
+          org.slug
+        );
+        await ctx.db.patch(activeForTable._id, {
+          name: trimmedName,
+          description: args.description?.trim() || activeForTable.description,
+          tableNumber: args.tableNumber?.trim() || activeForTable.tableNumber,
+          qrUrl: newUrl,
+          updatedAt: now,
+        });
+        return (await ctx.db.get(activeForTable._id))!;
+      }
+    }
+
+    await validateUniqueQrName(ctx, trimmedName);
 
     const qrId = await ctx.db.insert("organizationQrCodes", {
       organizationId: org._id,

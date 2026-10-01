@@ -7,6 +7,7 @@ import {
   getCallerMembership,
   requireMember,
 } from "./organizationUsers";
+import { buildQrUrl } from "./organizationQrCodes";
 
 // ----------------------------------------------------
 // AUTHORIZATION HELPERS
@@ -331,6 +332,80 @@ export const get = query({
   },
 });
 
+/**
+ * Provisions a Dine-In QR code for an organization table if one does not already exist.
+ * Ensures strict 1:1 table -> DineIn QR mapping and idempotent creation.
+ */
+export async function provisionTableQrCode(
+  ctx: MutationCtx,
+  args: {
+    tableId: string;
+    tableNumber: string;
+    orgId: Id<"organizations">;
+    orgSlug?: string;
+    layoutName?: string;
+  }
+): Promise<Doc<"organizationQrCodes">> {
+  // 1. Idempotency Check: Return existing active QR code if already present for this table
+  const existingTableQrs = await ctx.db
+    .query("organizationQrCodes")
+    .withIndex("by_table", (q) => q.eq("tableId", args.tableId))
+    .collect();
+
+  const activeTableQr = existingTableQrs.find((q) => q.deletedAt === undefined);
+  if (activeTableQr) {
+    return activeTableQr;
+  }
+
+  // 2. Generate a unique name for the Dine-In QR code
+  let candidateName = `Table ${args.tableNumber.trim()}`;
+  if (args.layoutName && args.layoutName.trim()) {
+    const nameMatches = await ctx.db
+      .query("organizationQrCodes")
+      .withIndex("by_name", (q) => q.eq("name", candidateName))
+      .collect();
+    const activeDuplicate = nameMatches.find((q) => q.deletedAt === undefined);
+    if (activeDuplicate) {
+      candidateName = `${args.layoutName.trim()} - Table ${args.tableNumber.trim()}`;
+    }
+  }
+
+  const existingNameMatches = await ctx.db
+    .query("organizationQrCodes")
+    .withIndex("by_name", (q) => q.eq("name", candidateName))
+    .collect();
+  if (existingNameMatches.some((q) => q.deletedAt === undefined)) {
+    candidateName = `${candidateName} (${args.tableId})`;
+  }
+
+  const now = Date.now();
+
+  // 3. Insert the QR document to obtain its authoritative Convex _id
+  const qrId = await ctx.db.insert("organizationQrCodes", {
+    organizationId: args.orgId,
+    name: candidateName,
+    qrType: "DineIn",
+    counter: 0,
+    tableNumber: args.tableNumber.trim(),
+    tableId: args.tableId,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  // 4. Build canonical QR URL with qr_id and update the document
+  const qrUrl = buildQrUrl(
+    qrId,
+    "DineIn",
+    candidateName,
+    args.tableId,
+    args.orgSlug
+  );
+
+  await ctx.db.patch(qrId, { qrUrl, updatedAt: now });
+
+  return (await ctx.db.get(qrId))!;
+}
+
 // ----------------------------------------------------
 // MUTATIONS
 // ----------------------------------------------------
@@ -357,14 +432,15 @@ export const create = mutation({
     updatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireAdminOrCashier(ctx);
+    const { org } = await requireAdminOrCashier(ctx);
 
     const trimmedTableNumber = normalizeTableNumber(args.tableNumber);
     validateSeatingCapacity(args.seatingCapacity);
 
+    let layoutDoc: Doc<"organizationLayouts"> | null = null;
     if (args.layoutId) {
-      const layout = await ctx.db.get(args.layoutId);
-      if (!layout || layout.deletedAt !== undefined) {
+      layoutDoc = await ctx.db.get(args.layoutId);
+      if (!layoutDoc || layoutDoc.deletedAt !== undefined) {
         throw new Error("Organization layout not found");
       }
     }
@@ -401,6 +477,15 @@ export const create = mutation({
       updatedAt: args.updatedAt ?? now,
     });
 
+    // Auto-provision Dine-In QR code for the newly created table
+    await provisionTableQrCode(ctx, {
+      tableId: tableId.toString(),
+      tableNumber: trimmedTableNumber,
+      orgId: org._id,
+      orgSlug: org.slug,
+      layoutName: layoutDoc?.name,
+    });
+
     return tableId;
   },
 });
@@ -425,7 +510,7 @@ export const update = mutation({
     layoutId: v.optional(v.id("organizationLayouts")),
   },
   handler: async (ctx, args) => {
-    await requireAdminOrCashier(ctx);
+    const { org } = await requireAdminOrCashier(ctx);
 
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
@@ -494,6 +579,31 @@ export const update = mutation({
       updatedAt: now,
     });
 
+    // If tableNumber changed, sync active DineIn QR code name, tableNumber, and qrUrl
+    if (args.tableNumber !== undefined && effectiveTableNumber !== existing.tableNumber) {
+      const tableQrs = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_table", (q) => q.eq("tableId", args.id.toString()))
+        .collect();
+      const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
+      if (activeQr) {
+        const newName = `Table ${effectiveTableNumber}`;
+        const newUrl = buildQrUrl(
+          activeQr._id,
+          "DineIn",
+          newName,
+          args.id.toString(),
+          org.slug
+        );
+        await ctx.db.patch(activeQr._id, {
+          tableNumber: effectiveTableNumber,
+          name: newName,
+          qrUrl: newUrl,
+          updatedAt: now,
+        });
+      }
+    }
+
     return { success: true };
   },
 });
@@ -553,7 +663,7 @@ export const toggleTableBlock = mutation({
 });
 
 /**
- * Soft deletes an organization table
+ * Soft deletes an organization table and any linked active QR codes
  */
 export const remove = mutation({
   args: { id: v.id("organizationTables") },
@@ -572,7 +682,72 @@ export const remove = mutation({
       updatedAt: now,
     });
 
+    // Soft-delete linked QR codes
+    const tableQrs = await ctx.db
+      .query("organizationQrCodes")
+      .withIndex("by_table", (q) => q.eq("tableId", args.id.toString()))
+      .collect();
+    for (const qr of tableQrs) {
+      if (qr.deletedAt === undefined) {
+        await ctx.db.patch(qr._id, { deletedAt: now, updatedAt: now });
+      }
+    }
+
     return { success: true };
+  },
+});
+
+/**
+ * Idempotent Admin Mutation: Backfills missing Dine-In QR code records for all active tables.
+ */
+export const backfillTableQrCodes = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const { org } = await requireAdminOrCashier(ctx, args.organizationId);
+
+    const allTables = await ctx.db.query("organizationTables").collect();
+    const activeTables = allTables.filter((t) => t.deletedAt === undefined);
+
+    const layouts = await ctx.db.query("organizationLayouts").collect();
+    const layoutMap = new Map<string, string>();
+    for (const l of layouts) {
+      layoutMap.set(l._id, l.name);
+    }
+
+    let provisionedCount = 0;
+    let existingCount = 0;
+
+    for (const table of activeTables) {
+      const existingQrs = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_table", (q) => q.eq("tableId", table._id.toString()))
+        .collect();
+
+      const activeQr = existingQrs.find((q) => q.deletedAt === undefined);
+      if (activeQr) {
+        existingCount++;
+        continue;
+      }
+
+      await provisionTableQrCode(ctx, {
+        tableId: table._id.toString(),
+        tableNumber: table.tableNumber,
+        orgId: org._id,
+        orgSlug: org.slug,
+        layoutName: table.layoutId ? layoutMap.get(table.layoutId) : undefined,
+      });
+
+      provisionedCount++;
+    }
+
+    return {
+      success: true,
+      totalActiveTables: activeTables.length,
+      provisionedCount,
+      existingCount,
+    };
   },
 });
 
