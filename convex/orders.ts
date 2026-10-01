@@ -7,6 +7,73 @@ import { validateActivePaymentMode } from "./paymentModes";
 import { resolveOrderItemStation } from "./stations";
 
 // ==========================================
+// ORDER ACTIVITY DURATION & LIFECYCLE HELPER
+// ==========================================
+
+/**
+ * Authoritative server-side helper to record order activity transitions and elapsed duration.
+ * Legacy behavior:
+ * - Position 1 / Initial step: totalDuration = 0.
+ * - Subsequent steps: totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000)) (integer seconds).
+ * - Closes previous active activity by setting completedAt = now.
+ */
+export async function recordOrderActivity(
+  ctx: MutationCtx,
+  args: {
+    organizationId: Id<"organizations">;
+    orderId: Id<"orders">;
+    processId?: Id<"organizationOrderProcesses">;
+    processName: string;
+    position?: number;
+    now?: number;
+  }
+) {
+  const now = args.now ?? Date.now();
+
+  const existingActivities = await ctx.db
+    .query("orderActivities")
+    .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+    .collect();
+
+  const activeActivities = existingActivities.filter((a) => a.deletedAt === undefined);
+
+  let totalDuration = 0;
+  if (activeActivities.length > 0) {
+    const sorted = [...activeActivities].sort(
+      (a, b) => a.position - b.position || a.createdAt - b.createdAt
+    );
+    const firstActivity = sorted[0];
+    const sinceFirstStep = firstActivity.startedAt ?? firstActivity.createdAt;
+    totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000));
+
+    // Close the previous active activity if not already completed
+    const lastActivity = sorted[sorted.length - 1];
+    if (lastActivity && lastActivity.completedAt === undefined) {
+      await ctx.db.patch(lastActivity._id, {
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  const nextPosition = args.position ?? activeActivities.length + 1;
+
+  const activityId = await ctx.db.insert("orderActivities", {
+    organizationId: args.organizationId,
+    orderId: args.orderId,
+    processId: args.processId,
+    processName: args.processName,
+    position: nextPosition,
+    totalDuration,
+    startedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return { activityId, totalDuration, position: nextPosition };
+}
+
+// ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
 // ==========================================
 
@@ -428,13 +495,13 @@ export const createOrder = mutation({
     }
 
     // 8. Log Initial Activity Entry
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: args.organizationId,
       orderId,
       processId: initialStatus?._id,
       processName: initialStatus?.name ?? "Accepted",
       position: 1,
-      createdAt: now,
+      now,
     });
 
     // 8.5 Record Initial Order Credit Payment Entry (if settled)
@@ -823,21 +890,13 @@ export const updateOrderStatus = mutation({
 
     const now = Date.now();
 
-    // Appends entry in orderActivities
-    const existingActivities = await ctx.db
-      .query("orderActivities")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    const nextPosition = existingActivities.length + 1;
-
-    await ctx.db.insert("orderActivities", {
+    // Appends entry in orderActivities with duration calculation
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processId: process._id,
       processName: process.name,
-      position: nextPosition,
-      createdAt: now,
+      now,
     });
 
     await ctx.db.patch(order._id, {
@@ -930,6 +989,17 @@ export const completeOrder = mutation({
       transactionReference: args.transactionReference,
       createdAt: now,
     });
+
+    // Close any open order activities on completion
+    const openActivities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+    for (const act of openActivities) {
+      if (act.completedAt === undefined && act.deletedAt === undefined) {
+        await ctx.db.patch(act._id, { completedAt: now, updatedAt: now });
+      }
+    }
 
     // 3. Clear Dine-In Table Occupancy & Complete Postpaid Order Request
     const orderTableId = order.tableId;
@@ -1385,12 +1455,12 @@ export const deleteMultipleOrderItems = mutation({
     });
 
     // Log modification activity
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Removed ${args.orderItemIds.length} item(s)`,
       position: 50,
-      createdAt: now,
+      now,
     });
 
     return {
@@ -1434,13 +1504,13 @@ export const cancelOrder = mutation({
       }
     }
 
-    // Log activity
-    await ctx.db.insert("orderActivities", {
+    // Log cancellation activity
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: "Cancelled",
       position: 99,
-      createdAt: now,
+      now,
     });
 
     return { success: true };
@@ -1575,17 +1645,11 @@ export const addItemsToExistingOrder = mutation({
     });
 
     // 3. Log modification activity
-    const existingActivities = await ctx.db
-      .query("orderActivities")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Added ${args.items.length} item(s) to table order`,
-      position: existingActivities.length + 1,
-      createdAt: now,
+      now,
     });
 
     return {
@@ -1711,18 +1775,42 @@ export const moveOrderTable = mutation({
     });
 
     // 4. Log activity
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Moved order to Table #${newTable.tableNumber}`,
       position: 60,
-      createdAt: now,
+      now,
     });
 
     return {
       success: true,
       newTableNumber: newTable.tableNumber,
     };
+  },
+});
+
+/**
+ * Lists all activity transitions and duration metrics for an order.
+ */
+export const listOrderActivities = query({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) {
+      return [];
+    }
+
+    const activities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+      .collect();
+
+    return activities
+      .filter((a) => a.deletedAt === undefined)
+      .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
   },
 });
 

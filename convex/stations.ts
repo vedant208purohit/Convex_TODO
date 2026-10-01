@@ -683,6 +683,19 @@ export const getStationOrders = query({
         }
       }
 
+      // Fetch order activities with duration metrics
+      const activities = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const sortedActivities = activities
+        .filter((a) => a.deletedAt === undefined)
+        .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
+
+      const latestActivity = sortedActivities[sortedActivities.length - 1];
+      const currentDuration = latestActivity?.totalDuration ?? 0;
+
       stationOrders.push({
         order: {
           _id: order._id,
@@ -692,6 +705,8 @@ export const getStationOrders = query({
           orderStatusName: order.orderStatusName,
           orderStatusId: order.orderStatusId,
           processStatus,
+          activities: sortedActivities,
+          currentDuration,
           specialNotes: order.specialNotes,
           isCompleted: order.isCompleted,
           isRejected: order.isRejected,
