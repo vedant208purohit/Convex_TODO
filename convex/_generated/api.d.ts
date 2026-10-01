@@ -46,6 +46,8 @@ import type * as processNotifications from "../processNotifications.js";
 import type * as providerPaymentTransfers from "../providerPaymentTransfers.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
+import type * as razorpay from "../razorpay.js";
+import type * as stations from "../stations.js";
 import type * as surveyAttempts from "../surveyAttempts.js";
 import type * as surveyQuestions from "../surveyQuestions.js";
 import type * as surveys from "../surveys.js";
@@ -97,6 +99,8 @@ declare const fullApi: ApiFromModules<{
   providerPaymentTransfers: typeof providerPaymentTransfers;
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
+  razorpay: typeof razorpay;
+  stations: typeof stations;
   surveyAttempts: typeof surveyAttempts;
   surveyQuestions: typeof surveyQuestions;
   surveys: typeof surveys;

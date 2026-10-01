@@ -4,6 +4,7 @@ import { resolveNotificationsForOrderStatus } from "./processNotifications";
 import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
 import { validateActivePaymentMode } from "./paymentModes";
+import { resolveOrderItemStation } from "./stations";
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -404,6 +405,12 @@ export const createOrder = mutation({
 
     // 7. Insert Order Line Items
     for (const line of lineItemConfigs) {
+      const stationId = await resolveOrderItemStation(
+        ctx,
+        args.organizationId,
+        line.itemId
+      );
+
       await ctx.db.insert("orderItems", {
         organizationId: args.organizationId,
         orderId,
@@ -415,6 +422,7 @@ export const createOrder = mutation({
         customizations: line.customizations,
         isReady: false,
         isToGo: line.isToGo ?? false,
+        stationId,
         createdAt: now,
       });
     }
@@ -1519,6 +1527,12 @@ export const addItemsToExistingOrder = mutation({
 
     // 1. Insert new order items
     for (const line of lineItemConfigs) {
+      const stationId = await resolveOrderItemStation(
+        ctx,
+        order.organizationId,
+        line.itemId
+      );
+
       await ctx.db.insert("orderItems", {
         organizationId: order.organizationId,
         orderId: order._id,
@@ -1530,6 +1544,7 @@ export const addItemsToExistingOrder = mutation({
         customizations: line.customizations,
         isReady: false,
         isToGo: line.isToGo ?? false,
+        stationId,
         createdAt: now,
       });
     }

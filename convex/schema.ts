@@ -167,11 +167,32 @@ export default defineSchema({
 
   // Phase 1 Seeded Support Entities
   stations: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     name: v.string(),
     isMain: v.boolean(),
     createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_deleted", ["organizationId", "deletedAt"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  stationItems: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    stationId: v.id("stations"),
+    itemId: v.id("items"),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_station", ["organizationId", "stationId"])
+    .index("by_org_item", ["organizationId", "itemId"])
+    .index("by_station_item", ["stationId", "itemId"])
+    .index("by_legacy_id", ["legacyId"]),
 
   paymentModes: defineTable({
     legacyId: v.optional(v.string()),
@@ -1005,7 +1026,9 @@ postpaidOrderRequests: defineTable({
     createdAt: v.number(),
   })
     .index("by_order", ["orderId"])
-    .index("by_org", ["organizationId"]),
+    .index("by_org", ["organizationId"])
+    .index("by_station", ["stationId"])
+    .index("by_org_station", ["organizationId", "stationId"]),
 
   orderActivities: defineTable({
     organizationId: v.id("organizations"),
