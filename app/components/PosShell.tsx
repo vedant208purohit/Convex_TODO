@@ -105,6 +105,18 @@ function CaptainIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="5" height="5" x="3" y="3" rx="1" />
+      <rect width="5" height="5" x="16" y="3" rx="1" />
+      <rect width="5" height="5" x="3" y="16" rx="1" />
+      <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+      <path d="M12 7v3a2 2 0 0 1-2 2H7" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
@@ -148,6 +160,11 @@ const navItems: NavItem[] = [
     icon: <KdsIcon className="w-4 h-4" />,
   },
   {
+    href: "/qr-codes",
+    label: "QR Codes",
+    icon: <QrCodesIcon className="w-4 h-4" />,
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: <SettingsIcon className="w-4 h-4" />,
@@ -170,9 +187,20 @@ const inventorySubItems = [
 function NavLink({ href, label, icon }: NavItem) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname === href || pathname.startsWith(`${href}/`) || (href === "/settings" && pathname === "/organization");
+  const active =
+    pathname === href ||
+    pathname.startsWith(`${href}/`) ||
+    (href === "/settings" && pathname === "/organization") ||
+    (href === "/qr-codes" && pathname.startsWith("/qr"));
   const qs = searchParams.toString();
-  const targetHref = href === "/inventory" ? "/inventory/purchase-orders" : (qs ? `${href}?${qs}` : href);
+  const targetHref =
+    href === "/inventory"
+      ? "/inventory/purchase-orders"
+      : href === "/qr-codes" || href === "/settings"
+      ? href
+      : qs
+      ? `${href}?${qs}`
+      : href;
 
   return (
     <Link

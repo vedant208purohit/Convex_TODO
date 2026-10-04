@@ -89,6 +89,7 @@ export const createOrder = mutation({
     ),
     orderSource: v.optional(v.string()), // "Prest-Cashier", "Prest-Captain", "Prest-Online"
     tableId: v.optional(v.id("organizationTables")),
+    qrId: v.optional(v.union(v.id("organizationQrCodes"), v.string())),
     waiterUserId: v.optional(v.string()),
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
@@ -448,6 +449,58 @@ export const createOrder = mutation({
       });
     }
 
+    // Resolve QR Code reference for attribution
+    let autoQrId: Id<"organizationQrCodes"> | undefined = undefined;
+
+    if (args.qrId) {
+      try {
+        const directQr = await ctx.db.get(args.qrId as Id<"organizationQrCodes">);
+        if (directQr && directQr.deletedAt === undefined) {
+          autoQrId = directQr._id;
+        }
+      } catch {}
+    }
+
+    if (!autoQrId && args.tableId) {
+      const tableQrs = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_table", (q) => q.eq("tableId", args.tableId!.toString()))
+        .collect();
+      const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
+      if (activeQr) {
+        autoQrId = activeQr._id;
+      }
+    }
+
+    const isOnlineOrQrSource =
+      !args.orderSource ||
+      args.orderSource === "Prest-Online" ||
+      args.orderSource.toUpperCase().includes("QR");
+
+    if (!autoQrId && isOnlineOrQrSource) {
+      const isTakeawayType = args.orderType === "TakeAway" || args.orderType === "ScheduledPickup";
+      const isDeliveryType = args.orderType === "Delivery" || args.orderType === "ScheduledDelivery";
+
+      if (isTakeawayType || isDeliveryType) {
+        const orgQrs = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
+          .collect();
+
+        const activeQr = orgQrs.find((q) => {
+          if (q.deletedAt !== undefined || q.status === "INACTIVE") return false;
+          const normalized = q.qrType ? q.qrType.toUpperCase().replace(/[-_\s]/g, "") : "";
+          if (isTakeawayType && (normalized === "TAKEAWAY" || q.qrType === "TakeAway")) return true;
+          if (isDeliveryType && (normalized === "DELIVERY" || q.qrType === "Delivery")) return true;
+          return false;
+        });
+
+        if (activeQr) {
+          autoQrId = activeQr._id;
+        }
+      }
+    }
+
     // 6. Insert Order Header
     const orderId = await ctx.db.insert("orders", {
       organizationId: args.organizationId,
@@ -461,6 +514,7 @@ export const createOrder = mutation({
       isRejected: false,
       isModify: false,
       tableId: args.tableId,
+      qrId: autoQrId,
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
@@ -1930,6 +1984,130 @@ export const moveOrderTable = mutation({
   },
 });
 
+// ==========================================
+// AUTHENTICATED CUSTOMER ORDERS QUERY
+// ==========================================
+
+export const listCustomerOrders = query({
+  args: {
+    organizationId: v.id("organizations"),
+    orderIds: v.optional(v.array(v.string())),
+    placedOrderIds: v.optional(v.array(v.string())),
+    customerPhone: v.optional(v.string()),
+    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
+    const placedSet = new Set(sessionOrderIds);
+
+    if (!identity && placedSet.size === 0) {
+      return [];
+    }
+
+    const clerkUserId = identity?.subject;
+    const userEmail = identity?.email?.toLowerCase().trim();
+    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
+
+    // Collect allowed email and phone identifiers for this user
+    const allowedEmails = new Set<string>();
+    if (userEmail) allowedEmails.add(userEmail);
+
+    const allowedPhoneDigits = new Set<string>();
+    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
+      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
+    }
+
+    if (clerkUserId) {
+      const userOrgRecords = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
+        )
+        .collect();
+
+      for (const u of userOrgRecords) {
+        if (u.deletedAt !== undefined) continue;
+        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
+        if (u.phone) {
+          const uDig = u.phone.replace(/\D/g, "");
+          if (uDig.length >= 7) {
+            allowedPhoneDigits.add(uDig.slice(-10));
+          }
+        }
+      }
+    }
+
+    // Query orders for this store
+    const orgOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    // Strictly filter to orders belonging to this authenticated customer or placed in session
+    const filteredOrders = orgOrders.filter((order) => {
+      // Placed in current browser session
+      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      if (order.customerEmail) {
+        const oEmail = order.customerEmail.toLowerCase().trim();
+        if (allowedEmails.has(oEmail)) return true;
+      }
+
+      if (order.customerPhone) {
+        const oDigits = order.customerPhone.replace(/\D/g, "");
+        if (oDigits.length >= 7) {
+          const oLast10 = oDigits.slice(-10);
+          if (allowedPhoneDigits.has(oLast10)) return true;
+        }
+      }
+
+      return false;
+    });
+
+    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
+
+    const enrichedOrders: Array<any> = [];
+    for (const order of sorted) {
+      const items = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const activities = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      let tableInfo: any = null;
+      if (order.tableId) {
+        try {
+          tableInfo = await ctx.db.get(order.tableId as Id<"organizationTables">);
+        } catch {
+          // Table doc format fallback
+        }
+      }
+
+      enrichedOrders.push({
+        ...order,
+        display_sub_total: (order.subTotal / 100).toFixed(2),
+        display_tax_total: (order.taxTotal / 100).toFixed(2),
+        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
+        display_total_amount: (order.totalAmount / 100).toFixed(2),
+        items: items.map((i) => ({
+          ...i,
+          display_item_price: (i.itemPrice / 100).toFixed(2),
+          display_total_price: (i.totalPrice / 100).toFixed(2),
+        })),
+        activities: activities.sort((a, b) => a.position - b.position),
+        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      });
+    }
+
+    return enrichedOrders;
 /**
  * Lists all activity transitions and duration metrics for an order.
  */

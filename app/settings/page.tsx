@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useCallback, Suspense } from "react";
+import { ReactNode, useCallback, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
@@ -14,6 +14,7 @@ import { OrganizationQueueSettings } from "../components/OrganizationQueueSettin
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrganizationQrManagement } from "../components/OrganizationQrManagement";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -267,7 +268,6 @@ type SettingsTab =
   | "orderProcesses"
   | "payment"
   | "tables"
-  | "qrCodes"
   | "liveScreens"
   | "queue"
   | "digitalStore"
@@ -318,11 +318,6 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <TablesIcon className="w-4 h-4" />,
   },
   {
-    id: "qrCodes",
-    label: "QR Codes",
-    icon: <QrCodesIcon className="w-4 h-4" />,
-  },
-  {
     id: "liveScreens",
     label: "Live Screens",
     icon: <LiveScreensIcon className="w-4 h-4" />,
@@ -344,12 +339,12 @@ function SettingsContent() {
   const searchParams = useSearchParams();
 
   // Read active tab from URL param, default to "organization"
-  const rawTab = searchParams.get("tab") as SettingsTab | null;
-  const validTabIds = SETTINGS_TABS.map((t) => t.id);
+  const rawTab = searchParams.get("tab");
+  const validTabIds = SETTINGS_TABS.map((t) => t.id as string);
   const activeTab: SettingsTab =
-    rawTab && validTabIds.includes(rawTab) ? rawTab : "organization";
+    rawTab && validTabIds.includes(rawTab) ? (rawTab as SettingsTab) : "organization";
 
-  // Update URL when tab changes (replaces history so back button works naturally)
+  // Update URL when tab changes
   const setActiveTab = useCallback(
     (tab: SettingsTab) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -359,17 +354,24 @@ function SettingsContent() {
     [router, searchParams],
   );
 
+  // If user navigates directly to ?tab=qrCodes, send them to the dedicated full-width /qr-codes page
+  useEffect(() => {
+    if (rawTab === "qrCodes") {
+      router.replace("/qr-codes");
+    }
+  }, [rawTab, router]);
+
   return (
     <PosShell title="Settings" subtitle="Management Portal">
       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
         {/* Workspace Context Header */}
-        <div className="bg-[#fdf8f7] px-6 lg:px-8 py-6 border-b border-[#e7e5e4] shrink-0">
+        <div className="bg-[#fdf8f7] px-6 lg:px-8 py-5 border-b border-[#e7e5e4] shrink-0">
           <div className="flex items-end justify-between w-full">
             <div>
               <p className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] mb-1">
                 Workspace
               </p>
-              <h1 className="font-garamond text-[32px] text-[#141010] font-normal leading-tight">
+              <h1 className="font-garamond text-[30px] text-[#141010] font-normal leading-tight">
                 Settings
               </h1>
             </div>
@@ -377,16 +379,16 @@ function SettingsContent() {
         </div>
 
         {/* Settings Two-Panel Layout */}
-        <div className="flex-1 flex flex-col lg:flex-row w-full p-6 lg:p-8 gap-6 min-h-0 overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row w-full p-5 lg:p-7 gap-5 min-h-0 overflow-hidden">
           {/* Left Panel: Settings Navigation */}
-          <div className="w-full lg:w-72 xl:w-80 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full">
-            <div className="p-4 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0">
-              <h2 className="font-sans text-[16px] font-semibold text-[#141010]">
+          <div className="w-full lg:w-48 xl:w-56 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full">
+            <div className="p-3.5 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0">
+              <h2 className="font-sans text-[15px] font-semibold text-[#141010]">
                 Settings Menu
               </h2>
             </div>
 
-            <nav className="flex-1 py-2 divide-y divide-[#e7e5e4]/50 overflow-y-auto">
+            <nav className="flex-1 py-1.5 divide-y divide-[#e7e5e4]/50 overflow-y-auto">
               {SETTINGS_TABS.map((tab) => {
                 const isSelected = activeTab === tab.id;
                 return (
@@ -394,15 +396,16 @@ function SettingsContent() {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-3 px-5 py-3.5 text-left text-[14px] font-medium transition-colors cursor-pointer select-none ${isSelected
+                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors cursor-pointer select-none whitespace-nowrap ${
+                      isSelected
                         ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
                         : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
-                      }`}
+                    }`}
                   >
-                    <span className="w-5 flex items-center justify-center text-[#5e5e5e]">
+                    <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
                       {tab.icon}
                     </span>
-                    <span>{tab.label}</span>
+                    <span className="truncate">{tab.label}</span>
                   </button>
                 );
               })}
@@ -410,7 +413,7 @@ function SettingsContent() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-6 lg:p-8 flex flex-col h-full min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-4 lg:p-6 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
             {/* {activeTab === "printers" && <OrganizationPrinters />} */}
