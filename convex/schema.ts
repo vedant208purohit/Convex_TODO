@@ -979,6 +979,10 @@ postpaidOrderRequests: defineTable({
       })
     ),
 
+    // Scheduled Delivery Timing (First-class schema fields for scheduled orders)
+    scheduledDeliveryDate: v.optional(v.string()),
+    scheduledDeliveryTime: v.optional(v.string()),
+
     paymentMode: v.string(),
     paymentStatus: v.union(
       v.literal("Pending"),
