@@ -13,7 +13,7 @@ import {
 // ----------------------------------------------------
 
 /**
- * Requires caller to be an active Store Admin or Cashier in the store database.
+ * Requires caller to be an active Store Admin, Cashier, or Captain in the store database.
  */
 export async function requireAdminOrCashier(
   ctx: QueryCtx | MutationCtx,
@@ -26,9 +26,10 @@ export async function requireAdminOrCashier(
   if (
     !callerMember ||
     (!callerMember.userType.includes("admin") &&
-      !callerMember.userType.includes("cashier"))
+      !callerMember.userType.includes("cashier") &&
+      !callerMember.userType.includes("captain"))
   ) {
-    throw new Error("Forbidden. Admin or Cashier access required.");
+    throw new Error("Forbidden. Admin, Cashier, or Captain access required.");
   }
 
   return { identity, org, callerMember };
@@ -186,6 +187,132 @@ export const list = query({
     );
 
     return active;
+  },
+});
+
+/**
+ * Fetches all tables enriched with live currentOrder details and active postpaidOrderRequest
+ * for Captain Floor & Table Management.
+ */
+export const listCaptainTables = query({
+  args: {
+    layoutId: v.optional(v.id("organizationLayouts")),
+  },
+  handler: async (ctx, args) => {
+    try {
+      await requireMember(ctx);
+    } catch {
+      // Allow POS staff reading
+    }
+
+    const allTables = await ctx.db.query("organizationTables").collect();
+    let active = allTables.filter((table) => table.deletedAt === undefined);
+
+    if (args.layoutId !== undefined) {
+      active = active.filter((table) => table.layoutId === args.layoutId);
+    }
+
+    // Sort naturally by tableNumber
+    active.sort((a, b) =>
+      a.tableNumber.localeCompare(b.tableNumber, undefined, { numeric: true })
+    );
+
+    const layouts = await ctx.db.query("organizationLayouts").collect();
+    const layoutMap = new Map<string, string>();
+    for (const l of layouts) {
+      layoutMap.set(l._id, l.name);
+    }
+
+    const enrichedTables: Array<any> = [];
+
+    for (const table of active) {
+      let currentOrder: any = null;
+      let orderItems: Array<any> = [];
+
+      if (table.currentOrderId) {
+        const normOrderId = ctx.db.normalizeId("orders", table.currentOrderId);
+        if (normOrderId) {
+          const ord = await ctx.db.get(normOrderId);
+          if (ord && !ord.isCompleted && !ord.isRejected) {
+            const rawItems = await ctx.db
+              .query("orderItems")
+              .withIndex("by_order", (q) => q.eq("orderId", ord._id))
+              .collect();
+
+            orderItems = rawItems.map((item) => ({
+              ...item,
+              display_item_price: (item.itemPrice / 100).toFixed(2),
+              display_total_price: (item.totalPrice / 100).toFixed(2),
+            }));
+
+            let waiterInfo = null;
+            if (ord.waiterUserId) {
+              const normUserWaiterId = ctx.db.normalizeId("organizationUsers", ord.waiterUserId);
+              if (normUserWaiterId) {
+                const empDoc = await ctx.db.get(normUserWaiterId);
+                if (empDoc) {
+                  waiterInfo = {
+                    id: empDoc._id,
+                    firstName: empDoc.firstName || "",
+                    lastName: empDoc.lastName || "",
+                    waiterCode: empDoc.phone || "",
+                  };
+                }
+              }
+              if (!waiterInfo) {
+                const normWaiterId = ctx.db.normalizeId("organizationWaiters", ord.waiterUserId);
+                if (normWaiterId) {
+                  const waiterDoc = await ctx.db.get(normWaiterId);
+                  if (waiterDoc) {
+                    waiterInfo = {
+                      id: waiterDoc._id,
+                      firstName: waiterDoc.firstName,
+                      lastName: waiterDoc.lastName,
+                      waiterCode: waiterDoc.waiterCode,
+                    };
+                  }
+                }
+              }
+            }
+
+            currentOrder = {
+              ...ord,
+              display_sub_total: (ord.subTotal / 100).toFixed(2),
+              display_tax_total: (ord.taxTotal / 100).toFixed(2),
+              display_total_amount: (ord.totalAmount / 100).toFixed(2),
+              items: orderItems,
+              waiter: waiterInfo,
+            };
+          }
+        }
+      }
+
+      // Check active postpaid request
+      const activePostpaidReqs = await ctx.db
+        .query("postpaidOrderRequests")
+        .withIndex("by_table_and_status", (q) =>
+          q.eq("tableId", table._id).eq("status", "requested")
+        )
+        .collect();
+
+      const latestReq = activePostpaidReqs.find((r) => r.deletedAt === undefined);
+
+      enrichedTables.push({
+        ...table,
+        layoutName: table.layoutId ? layoutMap.get(table.layoutId) || "DineIn" : "DineIn",
+        currentOrder,
+        orderItems,
+        postpaidOrderRequest: latestReq ? {
+          id: latestReq._id,
+          status: latestReq.status,
+          userId: latestReq.userId,
+          otpVerified: latestReq.otpVerifiedAt !== undefined,
+          createdAt: latestReq.createdAt,
+        } : null,
+      });
+    }
+
+    return enrichedTables;
   },
 });
 
@@ -394,6 +521,34 @@ export const clearOrder = mutation({
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Toggles the isBlock status of a table (Block/Unblock)
+ */
+export const toggleTableBlock = mutation({
+  args: {
+    id: v.id("organizationTables"),
+    isBlock: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdminOrCashier(ctx);
+
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.deletedAt !== undefined) {
+      throw new Error("Organization table not found");
+    }
+
+    const newBlockedState = args.isBlock !== undefined ? args.isBlock : !existing.isBlock;
+    const now = Date.now();
+
+    await ctx.db.patch(args.id, {
+      isBlock: newBlockedState,
+      updatedAt: now,
+    });
+
+    return { success: true, isBlock: newBlockedState };
   },
 });
 

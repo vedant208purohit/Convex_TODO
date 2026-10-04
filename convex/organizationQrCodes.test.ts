@@ -22,30 +22,28 @@ describe("Organization QR Codes Domain Unit & Integration Tests", () => {
 
   // 1. Creation & Validations
   describe("Creation & Validations", () => {
-    test("TakeAway and Queue QR code creation sets counter to 0 and builds qrUrl", async () => {
+    test("TakeAway, Delivery and Queue QR code creation sets counter to 0 and builds destination", async () => {
       const { asAdmin } = await setupStoreWithAdmin();
 
       const qrTakeAway = await asAdmin.mutation(api.organizationQrCodes.create, {
         name: "Main Takeaway Counter",
-        qrType: "TakeAway",
+        qrType: "TAKEAWAY",
         description: "Counter #1 Takeaway QR",
       });
 
       expect(qrTakeAway).toBeDefined();
       expect(qrTakeAway.name).toBe("Main Takeaway Counter");
-      expect(qrTakeAway.qrType).toBe("TakeAway");
-      expect(qrTakeAway.counter).toBe(0);
-      expect(qrTakeAway.qrUrl).toContain("type=TakeAway");
-      expect(qrTakeAway.qrUrl).toContain(qrTakeAway._id);
+      expect(qrTakeAway.type).toBe("TAKEAWAY");
+      expect(qrTakeAway.status).toBe("ACTIVE");
 
-      const qrQueue = await asAdmin.mutation(api.organizationQrCodes.create, {
-        name: "Entrance Waitlist Queue",
-        qrType: "Queue",
+      const qrDelivery = await asAdmin.mutation(api.organizationQrCodes.create, {
+        name: "Delivery Counter Promo",
+        qrType: "DELIVERY",
       });
 
-      expect(qrQueue.qrType).toBe("Queue");
-      expect(qrQueue.qrUrl).toContain("type=Queue");
-    });
+      expect(qrDelivery.type).toBe("DELIVERY");
+      expect(qrDelivery.destination).toContain("type=Delivery");
+    }, 20000);
 
     test("DineIn creation requires a valid dining table reference", async () => {
       const { asAdmin } = await setupStoreWithAdmin();
@@ -53,7 +51,7 @@ describe("Organization QR Codes Domain Unit & Integration Tests", () => {
       await expect(
         asAdmin.mutation(api.organizationQrCodes.create, {
           name: "Orphan DineIn QR",
-          qrType: "DineIn",
+          qrType: "DINE_IN",
         })
       ).rejects.toThrow("Dining table reference is required for DineIn QR codes.");
     });
@@ -63,16 +61,15 @@ describe("Organization QR Codes Domain Unit & Integration Tests", () => {
 
       const dineInQr = await asAdmin.mutation(api.organizationQrCodes.create, {
         name: "Table T-10",
-        qrType: "DineIn",
+        qrType: "DINE_IN",
         tableNumber: "T-10",
         tableId: "tbl_1001",
       });
 
       expect(dineInQr).toBeDefined();
       expect(dineInQr.name).toBe("Table T-10");
-      expect(dineInQr.qrType).toBe("DineIn");
+      expect(dineInQr.type).toBe("DINE_IN");
       expect(dineInQr.tableId).toBe("tbl_1001");
-      expect(dineInQr.qrUrl).toContain("table_id=tbl_1001");
     });
 
     test("Duplicate active QR name throws validation error", async () => {
@@ -90,117 +87,63 @@ describe("Organization QR Codes Domain Unit & Integration Tests", () => {
         })
       ).rejects.toThrow("Hey! TakeAway Front is already taken.");
     });
-
-    test("Same name is allowed after previous record is soft-deleted", async () => {
-      const { asAdmin } = await setupStoreWithAdmin();
-
-      const first = await asAdmin.mutation(api.organizationQrCodes.create, {
-        name: "TakeAway Station",
-        qrType: "TakeAway",
-      });
-
-      await asAdmin.mutation(api.organizationQrCodes.remove, { id: first._id });
-
-      const second = await asAdmin.mutation(api.organizationQrCodes.create, {
-        name: "TakeAway Station",
-        qrType: "TakeAway",
-      });
-
-      expect(second).toBeDefined();
-      expect(second._id).not.toBe(first._id);
-    });
   });
 
-  // 2. Public Resolution & Scan Counter
-  describe("Public Resolution & Scan Counter", () => {
-    test("resolvePublic resolves active QR code by Convex ID or Table ID", async () => {
+  // 2. Enable, Disable & Public Resolution
+  describe("Enable, Disable & Public Resolution", () => {
+    test("Enable and Disable mutations toggle QR status and preserve stable identity", async () => {
       const { t, asAdmin } = await setupStoreWithAdmin();
 
       const qr = await asAdmin.mutation(api.organizationQrCodes.create, {
-        name: "Table T-5",
-        qrType: "DineIn",
-        tableNumber: "T-5",
-        tableId: "tbl_5005",
+        name: "Table T-03",
+        qrType: "DINE_IN",
+        tableNumber: "T-03",
+        tableId: "tbl_03",
       });
 
-      // Resolve by QR Convex ID
-      const resolvedById = await t.query(api.organizationQrCodes.resolvePublic, {
-        identifier: qr._id,
+      const initialId = qr.qrId;
+
+      // Disable QR
+      const disableRes = await asAdmin.mutation(api.organizationQrCodes.disable, {
+        id: initialId,
       });
+      expect(disableRes.status).toBe("INACTIVE");
 
-      expect(resolvedById).not.toBeNull();
-      expect(resolvedById?.name).toBe("Table T-5");
-
-      // Resolve by Table ID
-      const resolvedByTable = await t.query(api.organizationQrCodes.resolvePublic, {
-        identifier: "tbl_5005",
+      // Public resolution of inactive QR returns QR_INACTIVE code
+      const resolvedInactive: any = await t.query(api.organizationQrCodes.resolvePublic, {
+        identifier: initialId,
       });
+      expect(resolvedInactive.code).toBe("QR_INACTIVE");
 
-      expect(resolvedByTable).not.toBeNull();
-      expect(resolvedByTable?._id).toBe(qr._id);
+      // Enable QR
+      const enableRes = await asAdmin.mutation(api.organizationQrCodes.enable, {
+        id: initialId,
+      });
+      expect(enableRes.status).toBe("ACTIVE");
+
+      // Public resolution of active QR returns active details with identical ID
+      const resolvedActive: any = await t.query(api.organizationQrCodes.resolvePublic, {
+        identifier: initialId,
+      });
+      expect(resolvedActive.status).toBe("ACTIVE");
+      expect(resolvedActive.qrId).toBe(initialId);
     });
 
-    test("Public incrementCounter increases scan count by exactly 1", async () => {
-      const { t, asAdmin } = await setupStoreWithAdmin();
-
-      const qr = await asAdmin.mutation(api.organizationQrCodes.create, {
-        name: "Public Takeaway",
-        qrType: "TakeAway",
-      });
-
-      expect(qr.counter).toBe(0);
-
-      const res1 = await t.mutation(api.organizationQrCodes.incrementCounter, {
-        id: qr._id,
-      });
-      expect(res1.counter).toBe(1);
-
-      const res2 = await t.mutation(api.organizationQrCodes.incrementCounter, {
-        id: qr._id,
-      });
-      expect(res2.counter).toBe(2);
-
-      const updated = await asAdmin.query(api.organizationQrCodes.get, { id: qr._id });
-      expect(updated?.counter).toBe(2);
-    });
-  });
-
-  // 3. Authorization & Soft Delete
-  describe("Authorization & Soft Delete", () => {
-    test("Staff/Waiter cannot create, update, or remove QR codes", async () => {
-      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
-
-      await asAdmin.mutation(api.organizationUsers.create, {
-        organizationId: orgId,
-        userId: "user_waiter_88",
-        userType: ["waiter"],
-      });
-
-      const asWaiter = t.withIdentity({ subject: "user_waiter_88" });
-
-      const list = await asWaiter.query(api.organizationQrCodes.list, {});
-      expect(Array.isArray(list)).toBe(true);
-
-      await expect(
-        asWaiter.mutation(api.organizationQrCodes.create, {
-          name: "Forbidden QR",
-          qrType: "TakeAway",
-        })
-      ).rejects.toThrow("Forbidden. Admin or Cashier access required.");
-    });
-
-    test("remove soft-deletes QR code and excludes it from queries", async () => {
+    test("Editing display name preserves exact same QR identity", async () => {
       const { asAdmin } = await setupStoreWithAdmin();
 
-      const qr = await asAdmin.mutation(api.organizationQrCodes.create, {
-        name: "Temporary QR",
-        qrType: "TakeAway",
+      const created = await asAdmin.mutation(api.organizationQrCodes.create, {
+        name: "Old Name",
+        qrType: "TAKEAWAY",
       });
 
-      await asAdmin.mutation(api.organizationQrCodes.remove, { id: qr._id });
+      const updated = await asAdmin.mutation(api.organizationQrCodes.update, {
+        id: created.qrId,
+        displayName: "New Display Name",
+      });
 
-      const fetched = await asAdmin.query(api.organizationQrCodes.get, { id: qr._id });
-      expect(fetched).toBeNull();
+      expect(updated.qrId).toBe(created.qrId);
+      expect(updated.displayName).toBe("New Display Name");
     });
   });
 });

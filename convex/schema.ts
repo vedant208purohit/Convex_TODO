@@ -167,11 +167,32 @@ export default defineSchema({
 
   // Phase 1 Seeded Support Entities
   stations: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     name: v.string(),
     isMain: v.boolean(),
     createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_deleted", ["organizationId", "deletedAt"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  stationItems: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    stationId: v.id("stations"),
+    itemId: v.id("items"),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_station", ["organizationId", "stationId"])
+    .index("by_org_item", ["organizationId", "itemId"])
+    .index("by_station_item", ["stationId", "itemId"])
+    .index("by_legacy_id", ["legacyId"]),
 
   paymentModes: defineTable({
     legacyId: v.optional(v.string()),
@@ -706,9 +727,47 @@ postpaidOrderRequests: defineTable({
     .index("by_status", ["status"])
     .index("by_legacy_id", ["legacyId"]),
 
+  // Order Delivery Status History Domain Table (Migrated from legacy order_deliver_statuses)
+  orderDeliverStatuses: defineTable({
+    // Legacy PostgreSQL Migration Tracking
+    legacyId: v.optional(v.string()),
+
+    // Delivery Attempt Relationship
+    deliveryId: v.id("orderDelivers"),
+
+    // Canonical Status
+    status: v.union(
+      v.literal("pending"),
+      v.literal("open"),
+      v.literal("accepted"),
+      v.literal("live"),
+      v.literal("ended"),
+      v.literal("cancelled"),
+      v.literal("failed")
+    ),
+
+    // Provider Raw / Descriptive Status
+    providerStatus: v.optional(v.string()),
+
+    // Sanitized Webhook or API Payload Snapshot
+    payloadSnapshot: v.optional(v.any()),
+
+    // Optional Event Message / Error / Notes
+    notes: v.optional(v.string()),
+
+    // Standard Timestamps & Soft Deletion
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_delivery", ["deliveryId"])
+    .index("by_status", ["status"])
+    .index("by_legacy_id", ["legacyId"]),
+
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({
     legacyId: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
 
     name: v.string(),
     description: v.optional(v.string()),
@@ -716,10 +775,20 @@ postpaidOrderRequests: defineTable({
     qrType: v.union(
       v.literal("DineIn"),
       v.literal("TakeAway"),
-      v.literal("Queue")
+      v.literal("Delivery"),
+      v.literal("Queue"),
+      v.literal("DINE_IN"),
+      v.literal("TAKEAWAY"),
+      v.literal("DELIVERY")
+    ),
+
+    status: v.optional(
+      v.union(v.literal("ACTIVE"), v.literal("INACTIVE"))
     ),
 
     qrUrl: v.optional(v.string()),
+    destination: v.optional(v.string()),
+    publicToken: v.optional(v.string()),
     counter: v.number(),
 
     tableNumber: v.optional(v.string()),
@@ -727,12 +796,106 @@ postpaidOrderRequests: defineTable({
 
     createdAt: v.number(),
     updatedAt: v.number(),
+    activatedAt: v.optional(v.number()),
+    disabledAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
   })
+    .index("by_organization", ["organizationId"])
     .index("by_name", ["name"])
     .index("by_table", ["tableId"])
     .index("by_qr_type", ["qrType"])
+    .index("by_status", ["status"])
+    .index("by_public_token", ["publicToken"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization QR Scans Telemetry Table
+  organizationQrScans: defineTable({
+    qrId: v.id("organizationQrCodes"),
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.string()),
+    sessionId: v.string(),
+    scannedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    // Rich Telemetry Fields
+    ipAddress: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    deviceType: v.optional(v.string()),
+    os: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    region: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    referrer: v.optional(v.string()),
+    screenResolution: v.optional(v.string()),
+    language: v.optional(v.string()),
+  })
+    .index("by_qr", ["qrId"])
+    .index("by_session", ["sessionId"])
+    .index("by_organization", ["organizationId"])
+    .index("by_scanned_at", ["scannedAt"]),
+
+  // Organization Ordering Sessions Domain Table
+  organizationOrderingSessions: defineTable({
+    sessionId: v.string(),
+    qrId: v.id("organizationQrCodes"),
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.string()),
+    status: v.union(
+      v.literal("ACTIVE"),
+      v.literal("EXPIRED"),
+      v.literal("COMPLETED")
+    ),
+    startedAt: v.number(),
+    firstScanAt: v.optional(v.number()),
+    lastActivityAt: v.number(),
+    cartItemCount: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_session_id", ["sessionId"])
+    .index("by_qr", ["qrId"])
+    .index("by_organization", ["organizationId"])
+    .index("by_started_at", ["startedAt"]),
+
+  // Organization Carts Domain Table
+  organizationCarts: defineTable({
+    cartId: v.string(),
+    sessionId: v.string(),
+    qrId: v.id("organizationQrCodes"),
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.string()),
+    itemCount: v.number(),
+    hasItems: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_cart_id", ["cartId"])
+    .index("by_session", ["sessionId"])
+    .index("by_qr", ["qrId"])
+    .index("by_organization", ["organizationId"]),
+
+  // Organization Event Audit Logs Table (Subticket 06)
+  organizationEventLogs: defineTable({
+    eventId: v.string(),
+    eventType: v.string(),
+    entityId: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    processingStatus: v.union(
+      v.literal("RECEIVED"),
+      v.literal("PROCESSED"),
+      v.literal("FAILED")
+    ),
+    error: v.optional(v.string()),
+    payloadSnapshot: v.optional(v.any()),
+  })
+    .index("by_event_id", ["eventId"])
+    .index("by_event_type", ["eventType"])
+    .index("by_status", ["processingStatus"]),
 
   // Organization Queue Configurations Domain Table
   organizationQueueConfigurations: defineTable({
@@ -895,6 +1058,10 @@ postpaidOrderRequests: defineTable({
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
 
+    // QR & Session Attribution (Subticket 03)
+    qrId: v.optional(v.id("organizationQrCodes")),
+    sessionId: v.optional(v.string()),
+
     // Customer Relationship & Information (from Frontend POS / Online)
     customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
@@ -921,8 +1088,18 @@ postpaidOrderRequests: defineTable({
       })
     ),
 
+    // Scheduled Delivery Timing (First-class schema fields for scheduled orders)
+    scheduledDeliveryDate: v.optional(v.string()),
+    scheduledDeliveryTime: v.optional(v.string()),
+
     paymentMode: v.string(),
-    paymentStatus: v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed")),
+    paymentStatus: v.union(
+      v.literal("Pending"),
+      v.literal("Paid"),
+      v.literal("Failed"),
+      v.literal("Refunded"),
+      v.literal("Partially Refunded")
+    ),
 
     specialNotes: v.optional(v.string()),
     taxInfoSnapshot: v.optional(v.any()),
@@ -935,7 +1112,9 @@ postpaidOrderRequests: defineTable({
     .index("by_org_table", ["organizationId", "tableId"])
     .index("by_created_at", ["organizationId", "createdAt"])
     .index("by_customer", ["customerId"])
-    .index("by_user_address", ["userAddressId"]),
+    .index("by_user_address", ["userAddressId"])
+    .index("by_qr", ["qrId"])
+    .index("by_session", ["sessionId"]),
 
   orderItems: defineTable({
     organizationId: v.id("organizations"),
@@ -957,20 +1136,33 @@ postpaidOrderRequests: defineTable({
       )
     ),
     isReady: v.boolean(),
+    isToGo: v.optional(v.boolean()),
     stationId: v.optional(v.id("stations")),
     createdAt: v.number(),
   })
     .index("by_order", ["orderId"])
-    .index("by_org", ["organizationId"]),
+    .index("by_org", ["organizationId"])
+    .index("by_station", ["stationId"])
+    .index("by_org_station", ["organizationId", "stationId"]),
 
   orderActivities: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     orderId: v.id("orders"),
     processId: v.optional(v.id("organizationOrderProcesses")),
     processName: v.string(),
     position: v.number(),
+    totalDuration: v.optional(v.number()), // Total duration in seconds elapsed since initial order step
+    startedAt: v.optional(v.number()), // Epoch timestamp in ms
+    completedAt: v.optional(v.number()), // Epoch timestamp in ms
     createdAt: v.number(),
-  }).index("by_order", ["orderId"]),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_org", ["organizationId"])
+    .index("by_order_process", ["orderId", "processId"])
+    .index("by_legacy_id", ["legacyId"]),
 
   orderPayments: defineTable({
     organizationId: v.id("organizations"),
@@ -999,6 +1191,7 @@ postpaidOrderRequests: defineTable({
     city: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
   }).index("by_org", ["organizationId"]),
 
   inventoryItems: defineTable({
@@ -1041,11 +1234,15 @@ postpaidOrderRequests: defineTable({
     status: v.union(
       v.literal("drafted"),
       v.literal("sent"),
+      v.literal("partially_received"),
       v.literal("settled"),
       v.literal("cancelled")
     ),
     totalAmount: v.number(),
     notes: v.optional(v.string()),
+    invoiceStorageKey: v.optional(v.string()),
+    invoiceAssetId: v.optional(v.id("organization_assets")),
+    invoiceUrl: v.optional(v.string()),
     settledAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1193,5 +1390,118 @@ postpaidOrderRequests: defineTable({
     deletedAt: v.optional(v.number()),
   })
     .index("by_process", ["organizationOrderProcessId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // Provider Payment Transfers Domain Table (Marketplace Payout / Split Ledger)
+  providerPaymentTransfers: defineTable({
+    legacyId: v.optional(v.string()),
+    orderPaymentId: v.id("orderPayments"),
+    organizationId: v.optional(v.id("organizations")),
+
+    transferId: v.optional(v.string()),
+    transferAmount: v.number(), // Minor currency units (paise / cents integer)
+    transferStatus: v.union(
+      v.literal("created"),
+      v.literal("processed"),
+      v.literal("failed"),
+      v.literal("reversed"),
+      v.literal("pending")
+    ),
+    settlementStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("settled")
+      )
+    ),
+
+    errorMessage: v.optional(v.string()),
+
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order_payment", ["orderPaymentId"])
+    .index("by_transfer_id", ["transferId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  // ==========================================
+  // CUSTOMER FEEDBACK & RAPIDFIRE SURVEY DOMAIN
+  // ==========================================
+
+  surveys: defineTable({
+    legacyId: v.optional(v.string()),
+    name: v.string(),
+    introduction: v.optional(v.string()),
+    afterSurveyContent: v.optional(v.string()),
+    active: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_active", ["active"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  surveyQuestions: defineTable({
+    legacyId: v.optional(v.string()),
+    surveyId: v.id("surveys"),
+    type: v.union(
+      v.literal("numeric"),
+      v.literal("checkbox"),
+      v.literal("radio"),
+      v.literal("select"),
+      v.literal("short"),
+      v.literal("long"),
+      v.literal("date")
+    ),
+    questionText: v.string(),
+    defaultText: v.optional(v.string()),
+    placeholder: v.optional(v.string()),
+    position: v.number(),
+    answerOptions: v.optional(v.array(v.string())),
+    validationRules: v.optional(
+      v.object({
+        presence: v.optional(v.boolean()),
+        minimumLength: v.optional(v.number()),
+        maximumLength: v.optional(v.number()),
+        greaterThanOrEqualTo: v.optional(v.number()),
+        lessThanOrEqualTo: v.optional(v.number()),
+      })
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_survey_id", ["surveyId"])
+    .index("by_survey_position", ["surveyId", "position"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  surveyAttempts: defineTable({
+    legacyId: v.optional(v.string()),
+    surveyId: v.id("surveys"),
+    orderId: v.optional(v.id("orders")),
+    customerId: v.optional(v.string()),
+    published: v.boolean(),
+    submittedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_survey_id", ["surveyId"])
+    .index("by_survey_published", ["surveyId", "published"])
+    .index("by_order_id", ["orderId"])
+    .index("by_order_survey", ["orderId", "surveyId"])
+    .index("by_customer_id", ["customerId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  surveyAnswers: defineTable({
+    legacyId: v.optional(v.string()),
+    attemptId: v.id("surveyAttempts"),
+    questionId: v.id("surveyQuestions"),
+    answerText: v.optional(v.string()),
+    selectedOptions: v.optional(v.array(v.string())),
+    numericValue: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_attempt_id", ["attemptId"])
+    .index("by_attempt_question", ["attemptId", "questionId"])
+    .index("by_question_id", ["questionId"])
     .index("by_legacy_id", ["legacyId"]),
 }, { schemaValidation: false });

@@ -1,6 +1,8 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireAuth, resolveStoreOrganization, getCallerMembership } from "./organizationUsers";
+import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
+import { validateActivePaymentMode } from "./paymentModes";
 
 /**
  * Retrieves payment transaction records for a specific order.
@@ -48,6 +50,11 @@ export const recordOrderPayment = mutation({
     if (!order) {
       throw new Error("Order not found.");
     }
+
+    await validateActivePaymentMode(ctx, order.organizationId, {
+      paymentModeId: args.paymentModeId,
+      paymentModeName: args.paymentModeName,
+    });
 
     const now = Date.now();
 
@@ -105,6 +112,9 @@ export const recordOrderPayment = mutation({
         });
       }
     }
+
+    // Automated Provider Payment Transfer Hook (Fail-safe marketplace payout routing)
+    await handleOrderCompletionTransfer(ctx, order._id);
 
     return { paymentId, success: true };
   },

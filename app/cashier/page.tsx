@@ -8,6 +8,25 @@ import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
 import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
+import {
+  COUNTRY_DIAL_OPTIONS,
+  formatPhoneNumberWithCountryCode,
+  getPhoneCodeForCountry,
+  getCurrencyForCountry,
+  formatCurrencyAmount,
+  formatStoreDate,
+  formatStoreTime,
+  formatStoreDateTime,
+} from "../../lib/constants/countries";
+
+// ==========================================
+// DYNAMIC DIETARY MARK RENDERER
+// ==========================================
+
+function renderDietaryMark(_it: any) {
+  // Veg / Non-Veg labels/marks disabled for items
+  return null;
+}
 
 // ==========================================
 // TYPES
@@ -42,91 +61,6 @@ interface CartItem {
     tax_mode?: "inclusive" | "exclusive";
     tax_info?: any;
   }>;
-}
-
-// ==========================================
-// DYNAMIC DIETARY MARK RENDERER
-// ==========================================
-
-function renderDietaryMark(_it: any) {
-  // Veg / Non-Veg labels/marks disabled for items
-  return null;
-}
-
-const COUNTRY_DIAL_OPTIONS = [
-  { code: "+91", label: "IN +91", country: "India", iso: "IN" },
-  { code: "+1", label: "US +1", country: "United States", iso: "US" },
-  { code: "+971", label: "AE +971", country: "United Arab Emirates", iso: "AE" },
-  { code: "+44", label: "UK +44", country: "United Kingdom", iso: "GB" },
-  { code: "+33", label: "FR +33", country: "France", iso: "FR" },
-  { code: "+61", label: "AU +61", country: "Australia", iso: "AU" },
-  { code: "+65", label: "SG +65", country: "Singapore", iso: "SG" },
-  { code: "+49", label: "DE +49", country: "Germany", iso: "DE" },
-  { code: "+81", label: "JP +81", country: "Japan", iso: "JP" },
-  { code: "+966", label: "SA +966", country: "Saudi Arabia", iso: "SA" },
-  { code: "+974", label: "QA +974", country: "Qatar", iso: "QA" },
-];
-
-function formatPhoneNumberWithCountryCode(rawPhone: string, defaultCode: string = "+91"): string {
-  if (!rawPhone || !rawPhone.trim()) return "";
-  const trimmed = rawPhone.trim();
-
-  // If already starts with '+', ensure clean spacing between dial code and number
-  if (trimmed.startsWith("+")) {
-    const digitsOnly = trimmed.replace(/\D/g, "");
-    for (const opt of COUNTRY_DIAL_OPTIONS) {
-      const codeDigits = opt.code.replace(/\D/g, "");
-      if (digitsOnly.startsWith(codeDigits)) {
-        const local = digitsOnly.slice(codeDigits.length);
-        return `${opt.code} ${local}`;
-      }
-    }
-    return trimmed;
-  }
-
-  const digits = trimmed.replace(/\D/g, "");
-  if (!digits) return trimmed;
-
-  const currentCode = defaultCode.startsWith("+") ? defaultCode : `+${defaultCode}`;
-
-  if (currentCode === "+91") {
-    // Standard Indian mobile number is 10 digits (can start with 6, 7, 8, 9, or 91...)
-    if (digits.length === 12 && digits.startsWith("91")) {
-      return `+91 ${digits.slice(2)}`;
-    }
-    return `+91 ${digits}`;
-  } else if (currentCode === "+1") {
-    if (digits.length === 11 && digits.startsWith("1")) {
-      return `+1 ${digits.slice(1)}`;
-    }
-    return `+1 ${digits}`;
-  } else if (currentCode === "+971") {
-    if (digits.length === 12 && digits.startsWith("971")) {
-      return `+971 ${digits.slice(3)}`;
-    }
-    return `+971 ${digits}`;
-  } else if (currentCode === "+44") {
-    if (digits.length === 12 && digits.startsWith("44")) {
-      return `+44 ${digits.slice(2)}`;
-    }
-    return `+44 ${digits}`;
-  } else if (currentCode === "+33") {
-    if (digits.length === 11 && digits.startsWith("33")) {
-      return `+33 ${digits.slice(2)}`;
-    }
-    return `+33 ${digits}`;
-  } else if (currentCode === "+61") {
-    if (digits.length === 11 && digits.startsWith("61")) {
-      return `+61 ${digits.slice(2)}`;
-    }
-    return `+61 ${digits}`;
-  }
-
-  const dialDigits = currentCode.replace(/\D/g, "");
-  if (digits.startsWith(dialDigits) && digits.length > dialDigits.length + 8) {
-    return `${currentCode} ${digits.slice(dialDigits.length)}`;
-  }
-  return `${currentCode} ${digits}`;
 }
 
 interface CartTab {
@@ -183,24 +117,24 @@ function CashierPosContent() {
 
   // Dynamic Country Dial Code resolved from Store Organization Country
   const defaultOrgCountryCode = useMemo(() => {
-    const c = (activeOrg?.country || "").toLowerCase().trim();
-    if (c === "india" || c === "in" || c === "+91") return "+91";
-    if (c === "united arab emirates" || c === "uae" || c === "ae" || c === "+971") return "+971";
-    if (c === "united states" || c === "usa" || c === "us" || c === "canada" || c === "ca" || c === "+1") return "+1";
-    if (c === "united kingdom" || c === "uk" || c === "gb" || c === "+44") return "+44";
-    if (c === "france" || c === "fr" || c === "+33") return "+33";
-    if (c === "australia" || c === "au" || c === "+61") return "+61";
-    if (c === "germany" || c === "de" || c === "+49") return "+49";
-    if (c === "singapore" || c === "sg" || c === "+65") return "+65";
-    if (c === "saudi arabia" || c === "ksa" || c === "sa" || c === "+966") return "+966";
-    if (c === "qatar" || c === "qa" || c === "+974") return "+974";
-    return "+91";
+    return getPhoneCodeForCountry(activeOrg?.country || "India");
   }, [activeOrg?.country]);
 
-  // 2. Query Menu Data & Categories
+  // 2. Query Multi-Menu Data & Categories
+  const [selectedMenuId, setSelectedMenuId] = useState<string>("all");
+  const menusList = useQuery(
+    api.menu.listMenus,
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
+  );
   const menuCategories = useQuery(
     api.menu.getOrganizationMenu,
-    activeOrg ? { organizationId: activeOrg._id } : "skip",
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          allMenus: selectedMenuId === "all",
+          menuId: selectedMenuId !== "all" ? (selectedMenuId as Id<"menus">) : undefined,
+        }
+      : "skip",
   );
 
   // 3. Query Taxation Engine (Store Settings, Tax Groups & Split Components)
@@ -217,6 +151,12 @@ function CashierPosContent() {
     activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
 
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : undefined) ||
+    storeTaxSettings?.currencySymbol ||
+    "$";
+
   // 4. Query Tables, Staff (Employees), Customers, Payment Modes, and Printers
   const tables = useQuery(api.organizationTables.list, {});
   const employeesList = useQuery(
@@ -229,7 +169,7 @@ function CashierPosContent() {
   );
   const paymentModesList = useQuery(
     api.paymentModes.list,
-    activeOrg ? { organizationId: activeOrg._id } : {},
+    activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : {},
   );
   const printers = useQuery(api.organizationPrinters.list, {});
 
@@ -410,6 +350,8 @@ function CashierPosContent() {
     const itemsList: Array<{
       categoryName: string;
       categoryId: string;
+      menuName?: string;
+      menuId?: string;
       item: any;
       itemImageUrl?: string;
       customizations?: any[];
@@ -419,6 +361,8 @@ function CashierPosContent() {
       const catObj = catEntry?.category || catEntry;
       const categoryName = catObj?.name || "General";
       const categoryId = catObj?.id || catObj?._id || "";
+      const menuName = catObj?.menuName || catObj?.menu_name;
+      const menuId = catObj?.menuId || catObj?.menu_id;
       const rawItems = catObj?.items || [];
 
       if (Array.isArray(rawItems)) {
@@ -444,6 +388,8 @@ function CashierPosContent() {
             itemsList.push({
               categoryName,
               categoryId,
+              menuName,
+              menuId,
               item: actualItem,
               itemImageUrl,
               customizations,
@@ -521,7 +467,7 @@ function CashierPosContent() {
           isInclusive: boolean;
         }>,
         isTaxExempt: false,
-        currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+        currencySymbol,
       };
     }
 
@@ -742,7 +688,7 @@ function CashierPosContent() {
       totalPayablePaise,
       componentBreakdown: Array.from(compAccumulator.values()),
       isTaxExempt: subtotalPaise > 0 && totalTaxPaise === 0,
-      currencySymbol: storeTaxSettings?.currencySymbol || "₹",
+      currencySymbol,
     };
   }, [activeCart, storeTaxSettings, taxGroups, taxComponents, allCatalogItems]);
 
@@ -754,8 +700,11 @@ function CashierPosContent() {
 
   // Dynamic Payment Channels derived from active organization payment modes
   const activePaymentChannels = useMemo(() => {
-    if (paymentModesList && paymentModesList.length > 0) {
-      const channels = paymentModesList.map((m: any) => {
+    if (paymentModesList !== undefined) {
+      const activeModes = paymentModesList.filter(
+        (m: any) => m.active !== false && m.deletedAt === undefined
+      );
+      const channels = activeModes.map((m: any) => {
         const name = m.name;
         const lower = name.toLowerCase();
         let icon = (
@@ -803,7 +752,7 @@ function CashierPosContent() {
         };
       });
 
-      if (!channels.some((m: any) => m.name.toLowerCase().includes("split"))) {
+      if (channels.length > 0 && !channels.some((m: any) => m.name.toLowerCase().includes("split"))) {
         channels.push({
           id: "split-payment",
           name: "Split Payment",
@@ -818,53 +767,7 @@ function CashierPosContent() {
       return channels;
     }
 
-    return [
-      {
-        id: "pm_cash",
-        name: "Cash",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_credit",
-        name: "Credit Card",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_debit",
-        name: "Debit Card",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_upi",
-        name: "UPI QR",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-      {
-        id: "pm_split",
-        name: "Split Payment",
-        icon: (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-          </svg>
-        ),
-      },
-    ];
+    return [];
   }, [paymentModesList]);
 
   // Ensure selectedPaymentMode is valid for current store's active payment modes
@@ -2060,11 +1963,14 @@ function CashierPosContent() {
                 </div>
               ) : (
                 activeCart.items.map((cartItem) => {
-                  const lineTotal = (
-                    (cartItem.price * cartItem.quantity) /
-                    100
-                  ).toFixed(2);
-                  const unitPrice = (cartItem.price / 100).toFixed(2);
+                  const lineTotal = formatCurrencyAmount(
+                    (cartItem.price * cartItem.quantity) / 100,
+                    activeOrg?.country,
+                  );
+                  const unitPrice = formatCurrencyAmount(
+                    cartItem.price / 100,
+                    activeOrg?.country,
+                  );
 
                   return (
                     <div
@@ -2089,7 +1995,7 @@ function CashierPosContent() {
                                   className="text-[10px] bg-[#f1edec] text-[#141010] px-1.5 py-0.5 rounded font-normal"
                                 >
                                   + {c.name || "Add-on"}{" "}
-                                  {c.price ? `(+${taxCalculation.currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                  {c.price ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
                                 </span>
                               ))}
                             </div>
@@ -2173,7 +2079,7 @@ function CashierPosContent() {
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span className="font-mono text-[#141010]">
-                    {taxCalculation.currencySymbol}{(cartSubtotalPaise / 100).toFixed(2)}
+                    {taxCalculation.currencySymbol}{formatCurrencyAmount(cartSubtotalPaise / 100, activeOrg?.country)}
                   </span>
                 </div>
 
@@ -2187,7 +2093,7 @@ function CashierPosContent() {
                       {comp.name} ({comp.rate}%)
                     </span>
                     <span className="font-mono text-stone-700">
-                      {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                      {taxCalculation.currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
                     </span>
                   </div>
                 ))}
@@ -2198,7 +2104,7 @@ function CashierPosContent() {
                     Total Payable
                   </div>
                   <div className="font-serif text-2xl font-semibold text-[#141010] leading-none mt-0.5">
-                    {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                    {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                   </div>
                 </div>
 
@@ -2234,15 +2140,62 @@ function CashierPosContent() {
             className="flex-1 flex flex-col bg-white rounded-2xl border border-[#e7e5e4] shadow-xs overflow-hidden relative"
             data-purpose="catalog-search-area"
           >
-            {/* Top Search Area */}
-            <div className="p-3.5 border-b border-[#e7e5e4] bg-white flex flex-col gap-2 relative z-20">
-              <span className="text-xs font-bold text-[#141010]">Search menu</span>
+            {/* Top Menu Switcher & Search Area */}
+            <div className="p-3.5 border-b border-[#e7e5e4] bg-white flex flex-col gap-2.5 relative z-20">
+              {menusList && menusList.length > 0 && (
+                <div className="flex flex-wrap items-center gap-1">
+                  <div className="flex flex-wrap items-center gap-1 bg-[#f5f5f4] p-0.5 rounded-lg border border-[#e7e5e4]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMenuId("all");
+                        setSelectedCategory("All Items");
+                      }}
+                      className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                        selectedMenuId === "all"
+                          ? "bg-white text-[#141010] shadow-2xs font-semibold"
+                          : "text-[#78716c] hover:text-[#141010]"
+                      }`}
+                    >
+                      All Menus
+                    </button>
+                    {menusList.map((m) => (
+                      <button
+                        key={m._id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedMenuId(m._id);
+                          setSelectedCategory("All Items");
+                        }}
+                        className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
+                          selectedMenuId === m._id
+                            ? "bg-white text-[#141010] shadow-2xs font-semibold"
+                            : "text-[#78716c] hover:text-[#141010]"
+                        }`}
+                      >
+                        {m.name}
+                        {m.isDefault && (
+                          <span className="ml-1 text-[10px] text-[#a8a29e] font-normal">
+                            (Default)
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 {/* Search Input with Clear Button and Dropdown Icon */}
                 <div className="relative flex-1">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8a7e75]">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <circle cx="11" cy="11" r="7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </div>
                   <input
                     ref={searchInputRef}
-                    className="w-full pl-3 pr-8 py-2 text-xs border border-[#141010] rounded-lg focus:ring-1 focus:ring-[#141010] focus:border-[#141010] font-medium text-[#141010] placeholder-[#a8a29e] bg-white shadow-2xs focus:outline-none"
+                    className="w-full pl-8 pr-8 py-2 text-xs border border-[#141010] rounded-lg focus:ring-1 focus:ring-[#141010] focus:border-[#141010] font-medium text-[#141010] placeholder-[#a8a29e] bg-white shadow-2xs focus:outline-none"
                     placeholder="Search via item name/number (Shortcut: F1)"
                     type="text"
                     value={searchQuery}
@@ -2287,8 +2240,8 @@ function CashierPosContent() {
                       }
                     }}
                   />
-                  {/* Dropdown / Clear Icon */}
-                  {searchQuery ? (
+                  {/* Clear Button */}
+                  {searchQuery && (
                     <button
                       type="button"
                       onClick={() => {
@@ -2311,12 +2264,6 @@ function CashierPosContent() {
                         />
                       </svg>
                     </button>
-                  ) : (
-                    <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none text-[#8a7e75]">
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-                      </svg>
-                    </div>
                   )}
                 </div>
 
@@ -2374,8 +2321,9 @@ function CashierPosContent() {
                   <div className="divide-y divide-[#e7e5e4]/50 text-xs max-h-64 overflow-y-auto">
                     {autocompleteMatches.map((entry, idx) => {
                       const isHighlighted = idx === highlightedIndex;
-                      const priceFormatted = (entry.item.price / 100).toFixed(
-                        2,
+                      const priceFormatted = formatCurrencyAmount(
+                        entry.item.price / 100,
+                        activeOrg?.country,
                       );
 
                       return (
@@ -2403,6 +2351,11 @@ function CashierPosContent() {
                             >
                               {entry.item.name}
                             </span>
+                            {entry.menuName && selectedMenuId === "all" && menusList && menusList.length > 1 && (
+                              <span className="text-[10px] bg-stone-100 text-stone-600 border border-[#e7e5e4] px-1.5 py-0.5 rounded font-normal">
+                                {entry.menuName}
+                              </span>
+                            )}
                             <span className="text-[10px] bg-white border border-[#e7e5e4] px-1.5 py-0.5 rounded text-[#5e5e5e]">
                               {entry.categoryName}
                             </span>
@@ -2459,7 +2412,9 @@ function CashierPosContent() {
 
               {filteredCatalogItems.length === 0 ? (
                 <div className="py-16 text-center text-xs text-[#8a7e75]">
-                  No menu items found in {selectedCategory}.
+                  {selectedCategory === "All Items"
+                    ? "No menu items found in this menu."
+                    : `No menu items found in ${selectedCategory}.`}
                 </div>
               ) : (
                 filteredCatalogItems.map((entry) => {
@@ -2468,10 +2423,10 @@ function CashierPosContent() {
                     (ci) => ci.itemId === it._id || ci.itemId === it.id,
                   );
                   const currentCartQty = inCartItem?.quantity || 0;
-                  const priceFormatted =
-                    it.price % 100 === 0
-                      ? (it.price / 100).toString()
-                      : (it.price / 100).toFixed(2);
+                  const priceFormatted = formatCurrencyAmount(
+                    it.price / 100,
+                    activeOrg?.country,
+                  );
 
                   return (
                     <div
@@ -2515,6 +2470,11 @@ function CashierPosContent() {
                         <span className="text-xs font-medium text-[#141010]">
                           {it.name}
                         </span>
+                        {entry.menuName && selectedMenuId === "all" && menusList && menusList.length > 1 && (
+                          <span className="text-[10px] text-stone-500 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded font-normal">
+                            {entry.menuName}
+                          </span>
+                        )}
                         {it.quantityUnit && (
                           <span className="text-[11px] text-[#8a7e75]">
                             ({it.quantityUnit})
@@ -2667,7 +2627,7 @@ function CashierPosContent() {
                                           isSelected ? "text-stone-300" : "text-stone-500"
                                         }`}
                                       >
-                                        {count} items • {taxCalculation.currencySymbol}{(total / 100).toFixed(2)}
+                                        {count} items • {taxCalculation.currencySymbol}{formatCurrencyAmount(total / 100, activeOrg?.country)}
                                       </span>
                                     </button>
                                   );
@@ -2722,18 +2682,18 @@ function CashierPosContent() {
                                     className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
                                   >
                                     + {c.name || "Add-on"}{" "}
-                                    {c.price ? `(+${taxCalculation.currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                    {c.price ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
                                   </span>
                                 ))}
                               </div>
                             )}
                             <div className="text-xs text-stone-400 mt-0.5">
-                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{(item.price / 100).toFixed(2)}
+                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{formatCurrencyAmount(item.price / 100, activeOrg?.country)}
                             </div>
                           </div>
                         </div>
                         <span className="font-medium text-stone-900 shrink-0">
-                          {taxCalculation.currencySymbol}{((item.price * item.quantity) / 100).toFixed(2)}
+                          {taxCalculation.currencySymbol}{formatCurrencyAmount((item.price * item.quantity) / 100, activeOrg?.country)}
                         </span>
                       </li>
                     ))}
@@ -2747,7 +2707,7 @@ function CashierPosContent() {
                     <div className="flex justify-between">
                       <span>Subtotal</span>
                       <span className="font-medium text-stone-900">
-                        {taxCalculation.currencySymbol}{(cartSubtotalPaise / 100).toFixed(2)}
+                        {taxCalculation.currencySymbol}{formatCurrencyAmount(cartSubtotalPaise / 100, activeOrg?.country)}
                       </span>
                     </div>
 
@@ -2761,7 +2721,7 @@ function CashierPosContent() {
                           {comp.name} ({comp.rate}%)
                         </span>
                         <span className="font-medium text-stone-900">
-                          {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                          {taxCalculation.currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
                         </span>
                       </div>
                     ))}
@@ -2774,7 +2734,7 @@ function CashierPosContent() {
                             Zone 1
                           </span>
                         </span>
-                        <span className="text-stone-900">{taxCalculation.currencySymbol}58.00</span>
+                        <span className="text-stone-900">{taxCalculation.currencySymbol}{formatCurrencyAmount(58, activeOrg?.country)}</span>
                       </div>
                     )}
                   </div>
@@ -2793,7 +2753,7 @@ function CashierPosContent() {
                         </span>
                       </div>
                       <div className="font-serif text-2xl font-bold text-stone-950 tracking-tight">
-                        {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                        {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                       </div>
                     </div>
                   </div>
@@ -2891,7 +2851,7 @@ function CashierPosContent() {
                       </label>
                       <input
                         id="first-name"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                         type="text"
                         placeholder="Enter first name..."
                         value={activeCart.customerFirstName || ""}
@@ -2919,7 +2879,7 @@ function CashierPosContent() {
                       </label>
                       <input
                         id="last-name"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                         type="text"
                         placeholder="Enter last name..."
                         value={activeCart.customerLastName || ""}
@@ -2974,7 +2934,7 @@ function CashierPosContent() {
                         </div>
                         <input
                           id="phone-number"
-                          className="flex-1 min-w-0 block w-full px-3.5 py-2.5 text-sm text-stone-900 font-medium focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                          className="flex-1 min-w-0 block w-full px-3.5 py-2.5 text-sm text-stone-900 font-medium focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                           type="tel"
                           placeholder="Enter 10-digit mobile number..."
                           value={activeCart.customerPhone || ""}
@@ -2990,7 +2950,7 @@ function CashierPosContent() {
                       </label>
                       <input
                         id="email-address"
-                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-300 placeholder:font-normal placeholder:italic"
+                        className="w-full text-sm border border-stone-200 rounded-lg px-3.5 py-2.5 text-stone-900 font-medium focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white placeholder:text-stone-400 placeholder:font-normal not-italic"
                         type="email"
                         placeholder="Enter email address..."
                         value={activeCart.customerEmail || ""}
@@ -3551,7 +3511,7 @@ function CashierPosContent() {
                             Delivery Charge
                           </span>
                           <div className="mt-1 flex items-baseline gap-1.5">
-                            <span className="font-serif text-xl font-bold text-stone-950">₹58.00</span>
+                            <span className="font-serif text-xl font-bold text-stone-950">{currencySymbol}58.00</span>
                           </div>
                           <p className="text-[11px] text-stone-500 mt-0.5">Standard zone (within 4.5 km)</p>
                         </div>
@@ -3928,18 +3888,18 @@ function CashierPosContent() {
                                     className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
                                   >
                                     + {c.name || "Add-on"}{" "}
-                                    {c.price ? `(+${taxCalculation.currencySymbol}${(c.price / 100).toFixed(2)})` : ""}
+                                    {c.price ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
                                   </span>
                                 ))}
                               </div>
                             )}
                             <p className="text-xs text-[#8a7e75] mt-0.5">
-                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{(item.price / 100).toFixed(2)}
+                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{formatCurrencyAmount(item.price / 100, activeOrg?.country)}
                             </p>
                           </div>
                         </div>
                         <span className="font-medium text-[#1c1b1b] shrink-0">
-                          {taxCalculation.currencySymbol}{((item.price * item.quantity) / 100).toFixed(2)}
+                          {taxCalculation.currencySymbol}{formatCurrencyAmount((item.price * item.quantity) / 100, activeOrg?.country)}
                         </span>
                       </div>
                     ))}
@@ -3955,7 +3915,7 @@ function CashierPosContent() {
                   <div className="flex justify-between text-[#5e5e5e]">
                     <span>Subtotal</span>
                     <span className="font-medium text-[#1c1b1b]">
-                      {taxCalculation.currencySymbol}{(cartSubtotalPaise / 100).toFixed(2)}
+                      {taxCalculation.currencySymbol}{formatCurrencyAmount(cartSubtotalPaise / 100, activeOrg?.country)}
                     </span>
                   </div>
 
@@ -3969,7 +3929,7 @@ function CashierPosContent() {
                         {comp.name} ({comp.rate}%)
                       </span>
                       <span className="font-medium text-[#1c1b1b]">
-                        {taxCalculation.currencySymbol}{(comp.taxAmountPaise / 100).toFixed(2)}
+                        {taxCalculation.currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
                       </span>
                     </div>
                   ))}
@@ -3977,7 +3937,7 @@ function CashierPosContent() {
                   {activeCart.orderType === "Delivery" && (
                     <div className="flex justify-between text-[#5e5e5e]">
                       <span>Delivery Fee (Zone 1)</span>
-                      <span className="font-medium text-[#1c1b1b]">{taxCalculation.currencySymbol}58.00</span>
+                      <span className="font-medium text-[#1c1b1b]">{taxCalculation.currencySymbol}{formatCurrencyAmount(58, activeOrg?.country)}</span>
                     </div>
                   )}
                 </div>
@@ -3995,7 +3955,7 @@ function CashierPosContent() {
                     </div>
                     <div className="text-right">
                       <span className="font-serif text-4xl sm:text-5xl font-normal tracking-tight text-[#141010]">
-                        {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                        {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                       </span>
                     </div>
                   </div>
@@ -4084,7 +4044,7 @@ function CashierPosContent() {
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
-                            {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                            {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                           </span>
                         </div>
                       </div>
@@ -4101,14 +4061,12 @@ function CashierPosContent() {
                             </span>
                           )}
                         </div>
-                        <div className="relative rounded-xl shadow-xs">
-                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <span className={`font-medium text-lg transition-colors ${
-                              tenderCashGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                            }`}>
-                              {taxCalculation.currencySymbol}
-                            </span>
-                          </div>
+                        <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
+                          <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                            tenderCashGiven.trim() ? "text-[#141010]" : "text-stone-400"
+                          }`}>
+                            {taxCalculation.currencySymbol}
+                          </span>
                           <input
                             id="cash-tendered-input"
                             name="cash-tendered"
@@ -4116,7 +4074,7 @@ function CashierPosContent() {
                             placeholder="0.00"
                             value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
-                            className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                            className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                           />
                         </div>
                       </div>
@@ -4146,7 +4104,7 @@ function CashierPosContent() {
                               Exact Total
                             </span>
                             <span className="text-sm font-serif font-bold">
-                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                             </span>
                           </button>
 
@@ -4186,7 +4144,7 @@ function CashierPosContent() {
                                     Cash Note
                                   </span>
                                   <span className="text-sm font-serif font-bold">
-                                    {taxCalculation.currencySymbol}{amt.toLocaleString("en-IN")}
+                                    {taxCalculation.currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
                                   </span>
                                 </button>
                               );
@@ -4229,7 +4187,7 @@ function CashierPosContent() {
                               </div>
                               <div className="text-left sm:text-right">
                                 <span className="font-serif text-3xl sm:text-4xl font-semibold text-emerald-800 tracking-tight">
-                                  {taxCalculation.currencySymbol}{changeVal.toFixed(2)}
+                                  {taxCalculation.currencySymbol}{formatCurrencyAmount(changeVal, activeOrg?.country)}
                                 </span>
                               </div>
                             </div>
@@ -4247,7 +4205,7 @@ function CashierPosContent() {
                               </div>
                               <div className="text-left sm:text-right">
                                 <span className="font-serif text-3xl sm:text-4xl font-semibold text-amber-900 tracking-tight">
-                                  {taxCalculation.currencySymbol}{Math.abs(changeVal).toFixed(2)}
+                                  {taxCalculation.currencySymbol}{formatCurrencyAmount(Math.abs(changeVal), activeOrg?.country)}
                                 </span>
                               </div>
                             </div>
@@ -4271,7 +4229,7 @@ function CashierPosContent() {
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
-                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                             </span>
                           </div>
                         </div>
@@ -4288,14 +4246,12 @@ function CashierPosContent() {
                               </span>
                             )}
                           </div>
-                          <div className="relative rounded-xl shadow-xs">
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                              <span className={`font-medium text-lg transition-colors ${
-                                tenderCardGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                              }`}>
-                                {taxCalculation.currencySymbol}
-                              </span>
-                            </div>
+                          <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
+                            <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                              tenderCardGiven.trim() ? "text-[#141010]" : "text-stone-400"
+                            }`}>
+                              {taxCalculation.currencySymbol}
+                            </span>
                             <input
                               id="card-tendered-input"
                               name="card-tendered"
@@ -4303,7 +4259,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={tenderCardGiven}
                               onChange={(e) => setTenderCardGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4333,7 +4289,7 @@ function CashierPosContent() {
                                 Exact Total
                               </span>
                               <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                                {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                               </span>
                             </button>
 
@@ -4373,7 +4329,7 @@ function CashierPosContent() {
                                       Note
                                     </span>
                                     <span className="text-sm font-serif font-bold">
-                                      {taxCalculation.currencySymbol}{amt.toLocaleString("en-IN")}
+                                      {taxCalculation.currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
                                     </span>
                                   </button>
                                 );
@@ -4415,7 +4371,7 @@ function CashierPosContent() {
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
-                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                             </span>
                           </div>
                         </div>
@@ -4432,14 +4388,12 @@ function CashierPosContent() {
                               </span>
                             )}
                           </div>
-                          <div className="relative rounded-xl shadow-xs">
-                            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                              <span className={`font-medium text-lg transition-colors ${
-                                tenderUpiGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                              }`}>
-                                {taxCalculation.currencySymbol}
-                              </span>
-                            </div>
+                          <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
+                            <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                              tenderUpiGiven.trim() ? "text-[#141010]" : "text-stone-400"
+                            }`}>
+                              {taxCalculation.currencySymbol}
+                            </span>
                             <input
                               id="upi-tendered-input"
                               name="upi-tendered"
@@ -4447,7 +4401,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={tenderUpiGiven}
                               onChange={(e) => setTenderUpiGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4477,7 +4431,7 @@ function CashierPosContent() {
                                 Exact Total
                               </span>
                               <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                                {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                               </span>
                             </button>
 
@@ -4517,7 +4471,7 @@ function CashierPosContent() {
                                       Note
                                     </span>
                                     <span className="text-sm font-serif font-bold">
-                                      {taxCalculation.currencySymbol}{amt.toLocaleString("en-IN")}
+                                      {taxCalculation.currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
                                     </span>
                                   </button>
                                 );
@@ -4554,7 +4508,7 @@ function CashierPosContent() {
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
-                            {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                            {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                           </span>
                         </div>
                       </div>
@@ -4600,18 +4554,16 @@ function CashierPosContent() {
                                   ))}
                               </select>
                             </div>
-                            <div className="relative rounded-xl">
-                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                <span className="font-semibold text-base text-stone-900">
-                                  {taxCalculation.currencySymbol}
-                                </span>
-                              </div>
+                            <div className="flex rounded-xl border border-stone-200 bg-stone-50 overflow-hidden focus-within:bg-white focus-within:ring-2 focus-within:ring-stone-900 transition">
+                              <span className="inline-flex items-center px-3 bg-stone-100 border-r border-stone-200 font-semibold text-sm text-stone-900 whitespace-nowrap select-none">
+                                {taxCalculation.currencySymbol}
+                              </span>
                               <input
                                 type="text"
                                 value={splitPart1Amount}
                                 onChange={(e) => setSplitPart1Amount(e.target.value)}
                                 placeholder="0.00"
-                                className="block w-full pl-8 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-lg font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-stone-900 focus:outline-none transition"
+                                className="block w-full px-3 py-2.5 bg-transparent text-lg font-bold text-stone-900 focus:outline-none"
                               />
                             </div>
                           </div>
@@ -4636,18 +4588,16 @@ function CashierPosContent() {
                                   ))}
                               </select>
                             </div>
-                            <div className="relative rounded-xl">
-                              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                <span className="font-semibold text-base text-stone-900">
-                                  {taxCalculation.currencySymbol}
-                                </span>
-                              </div>
+                            <div className="flex rounded-xl border border-stone-200 bg-stone-50 overflow-hidden focus-within:bg-white focus-within:ring-2 focus-within:ring-stone-900 transition">
+                              <span className="inline-flex items-center px-3 bg-stone-100 border-r border-stone-200 font-semibold text-sm text-stone-900 whitespace-nowrap select-none">
+                                {taxCalculation.currencySymbol}
+                              </span>
                               <input
                                 type="text"
                                 value={splitPart2Amount}
                                 onChange={(e) => setSplitPart2Amount(e.target.value)}
                                 placeholder="0.00"
-                                className="block w-full pl-8 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-lg font-bold text-stone-900 focus:bg-white focus:ring-2 focus:ring-stone-900 focus:outline-none transition"
+                                className="block w-full px-3 py-2.5 bg-transparent text-lg font-bold text-stone-900 focus:outline-none"
                               />
                             </div>
                           </div>
@@ -4669,7 +4619,7 @@ function CashierPosContent() {
                                 <span>100% Balanced &amp; Allocated across split channels</span>
                               </div>
                               <span className="font-bold text-sm">
-                                {taxCalculation.currencySymbol}{(allocatedPaise / 100).toFixed(2)}
+                                {taxCalculation.currencySymbol}{formatCurrencyAmount(allocatedPaise / 100, activeOrg?.country)}
                               </span>
                             </div>
                           );
@@ -4679,7 +4629,7 @@ function CashierPosContent() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-base">⚠️</span>
                                 <span>
-                                  Remaining {taxCalculation.currencySymbol}{(Math.abs(diffPaise) / 100).toFixed(2)} unallocated
+                                  Remaining {taxCalculation.currencySymbol}{formatCurrencyAmount(Math.abs(diffPaise) / 100, activeOrg?.country)} unallocated
                                 </span>
                               </div>
                               <button
@@ -4701,11 +4651,11 @@ function CashierPosContent() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-base">⚠️</span>
                                 <span>
-                                  Split exceeds total by {taxCalculation.currencySymbol}{(diffPaise / 100).toFixed(2)}
+                                  Split exceeds total by {taxCalculation.currencySymbol}{formatCurrencyAmount(diffPaise / 100, activeOrg?.country)}
                                 </span>
                               </div>
                               <span className="font-bold">
-                                {taxCalculation.currencySymbol}{(allocatedPaise / 100).toFixed(2)} / {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                                {taxCalculation.currencySymbol}{formatCurrencyAmount(allocatedPaise / 100, activeOrg?.country)} / {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                               </span>
                             </div>
                           );
@@ -4734,7 +4684,7 @@ function CashierPosContent() {
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
-                              {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                             </span>
                           </div>
                         </div>
@@ -4766,7 +4716,7 @@ function CashierPosContent() {
                               placeholder="0.00"
                               value={customTenderGiven}
                               onChange={(e) => setCustomTenderGiven(e.target.value)}
-                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-300/80 placeholder:font-light placeholder:italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
+                              className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                             />
                           </div>
                         </div>
@@ -4795,7 +4745,7 @@ function CashierPosContent() {
                                 Exact Total
                               </span>
                               <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                                {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
                               </span>
                             </button>
                           </div>
@@ -4844,29 +4794,30 @@ function CashierPosContent() {
                   <span className="text-base font-semibold text-[#141010]">
                     {selectedPaymentMode.toLowerCase().includes("cash")
                       ? tenderCashGiven.trim()
-                        ? `${taxCalculation.currencySymbol}${parseFloat(tenderCashGiven).toFixed(2)}`
+                        ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderCashGiven), activeOrg?.country)}`
                         : `${taxCalculation.currencySymbol}0.00`
                       : selectedPaymentMode.toLowerCase().includes("card") ||
                         selectedPaymentMode.toLowerCase().includes("credit") ||
                         selectedPaymentMode.toLowerCase().includes("debit")
                       ? tenderCardGiven.trim()
-                        ? `${taxCalculation.currencySymbol}${parseFloat(tenderCardGiven).toFixed(2)}`
-                        : `${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}`
+                        ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderCardGiven), activeOrg?.country)}`
+                        : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`
                       : selectedPaymentMode.toLowerCase().includes("upi") ||
                         selectedPaymentMode.toLowerCase().includes("qr") ||
                         selectedPaymentMode.toLowerCase().includes("gpay") ||
                         selectedPaymentMode.toLowerCase().includes("phonepe") ||
                         selectedPaymentMode.toLowerCase().includes("paytm")
                       ? tenderUpiGiven.trim()
-                        ? `${taxCalculation.currencySymbol}${parseFloat(tenderUpiGiven).toFixed(2)}`
-                        : `${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}`
+                        ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderUpiGiven), activeOrg?.country)}`
+                        : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`
                       : selectedPaymentMode.toLowerCase().includes("split")
-                      ? `${taxCalculation.currencySymbol}${(
-                          parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0")
-                        ).toFixed(2)}`
+                      ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(
+                          parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0"),
+                          activeOrg?.country
+                        )}`
                       : customTenderGiven.trim()
-                      ? `${taxCalculation.currencySymbol}${parseFloat(customTenderGiven).toFixed(2)}`
-                      : `${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}`}
+                      ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(customTenderGiven), activeOrg?.country)}`
+                      : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`}
                   </span>
                 </div>
 
@@ -4995,8 +4946,12 @@ function CashierPosContent() {
                 <span className="text-[#7a716b]">Total Paid:</span>
                 <span className="font-bold text-[#141010]">
                   {taxCalculation.currencySymbol}
-                  {completedOrderData.display_total_amount ||
-                    (completedOrderData.totalAmount / 100).toFixed(2)}
+                  {formatCurrencyAmount(
+                    completedOrderData.display_total_amount
+                      ? parseFloat(completedOrderData.display_total_amount)
+                      : completedOrderData.totalAmount / 100,
+                    activeOrg?.country
+                  )}
                 </span>
               </div>
               <div className="flex justify-between">
@@ -5090,9 +5045,10 @@ function CashierPosContent() {
               {/* Base Price */}
               <div className="text-sm font-bold text-stone-900 shrink-0">
                 {taxCalculation.currencySymbol}
-                {customizingCatalogEntry.item.price % 100 === 0
-                  ? (customizingCatalogEntry.item.price / 100).toString()
-                  : (customizingCatalogEntry.item.price / 100).toFixed(2)}
+                {formatCurrencyAmount(
+                  customizingCatalogEntry.item.price / 100,
+                  activeOrg?.country,
+                )}
               </div>
             </div>
 
@@ -5137,8 +5093,10 @@ function CashierPosContent() {
                         const oid = option.id || option._id;
                         const isSelected = selectedInGroup.some((o) => (o.id || o._id) === oid);
                         const optPrice = option.price || 0;
-                        const optPriceFormatted =
-                          optPrice % 100 === 0 ? (optPrice / 100).toString() : (optPrice / 100).toFixed(2);
+                        const optPriceFormatted = formatCurrencyAmount(
+                          optPrice / 100,
+                          activeOrg?.country,
+                        );
 
                         return (
                           <div
@@ -5235,10 +5193,10 @@ function CashierPosContent() {
                   .flat()
                   .reduce((acc, curr) => acc + (curr.price || 0), 0);
                 const modalTotalPaise = (customizingCatalogEntry.item.price + totalAddonPaise) * customizationQty;
-                const modalTotalFormatted =
-                  modalTotalPaise % 100 === 0
-                    ? (modalTotalPaise / 100).toString()
-                    : (modalTotalPaise / 100).toFixed(2);
+                const modalTotalFormatted = formatCurrencyAmount(
+                  modalTotalPaise / 100,
+                  activeOrg?.country,
+                );
 
                 return (
                   <button
@@ -5246,7 +5204,7 @@ function CashierPosContent() {
                     onClick={handleConfirmCustomizationModal}
                     className="px-6 py-2.5 bg-[#0c0a09] hover:bg-stone-800 active:scale-98 text-white rounded-lg text-xs font-semibold shadow-md transition cursor-pointer flex items-center gap-1.5"
                   >
-                    <span>Add to cart | {modalTotalFormatted}</span>
+                    <span>Add to cart | {taxCalculation.currencySymbol}{modalTotalFormatted}</span>
                   </button>
                 );
               })()}

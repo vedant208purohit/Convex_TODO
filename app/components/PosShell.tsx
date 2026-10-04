@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
-import { ReactNode } from "react";
+import { ReactNode, useState, useEffect } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 // ==========================================
 // PIXEL-PERFECT SIDEBAR SVG ICONS
@@ -95,6 +97,26 @@ function CashierIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function CaptainIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M19 21V5a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v5m-4 0h4" />
+    </svg>
+  );
+}
+
+function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect width="5" height="5" x="3" y="3" rx="1" />
+      <rect width="5" height="5" x="16" y="3" rx="1" />
+      <rect width="5" height="5" x="3" y="16" rx="1" />
+      <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+      <path d="M12 7v3a2 2 0 0 1-2 2H7" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
@@ -123,6 +145,11 @@ const navItems: NavItem[] = [
     icon: <CashierIcon className="w-4 h-4" />,
   },
   {
+    href: "/captain",
+    label: "Captain",
+    icon: <CaptainIcon className="w-4 h-4" />,
+  },
+  {
     href: "/inventory",
     label: "Inventory",
     icon: <InventoryIcon className="w-4 h-4" />,
@@ -131,6 +158,11 @@ const navItems: NavItem[] = [
     href: "/kds",
     label: "KDS",
     icon: <KdsIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/qr-codes",
+    label: "QR Codes",
+    icon: <QrCodesIcon className="w-4 h-4" />,
   },
   {
     href: "/settings",
@@ -144,30 +176,45 @@ const navItems: NavItem[] = [
   },
 ];
 
+const inventorySubItems = [
+  { label: "Purchase order", tab: "purchaseOrders", path: "/inventory/purchase-orders" },
+  { label: "Supplier", tab: "suppliers", path: "/inventory/suppliers" },
+  { label: "Item library", tab: "itemLibrary", path: "/inventory/item-library" },
+  { label: "Dead stock", tab: "deadStock", path: "/inventory/dead-stock" },
+  { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
+];
+
 function NavLink({ href, label, icon }: NavItem) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname === href || (href === "/settings" && pathname === "/organization");
+  const active =
+    pathname === href ||
+    pathname.startsWith(`${href}/`) ||
+    (href === "/settings" && pathname === "/organization") ||
+    (href === "/qr-codes" && pathname.startsWith("/qr"));
   const qs = searchParams.toString();
-  const targetHref = qs ? `${href}?${qs}` : href;
+  const targetHref =
+    href === "/inventory"
+      ? "/inventory/purchase-orders"
+      : href === "/qr-codes" || href === "/settings"
+      ? href
+      : qs
+      ? `${href}?${qs}`
+      : href;
 
   return (
     <Link
       href={targetHref}
-      className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${
-        active
+      className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${active
           ? "text-[#141010] font-bold border-r-2 border-[#141010] bg-[#f1edec] opacity-100"
           : "text-[#5e5e5e] hover:bg-[#f1edec]"
-      }`}
+        }`}
     >
       <span className="w-5 text-center flex items-center justify-center">{icon}</span>
       <span className="font-medium text-[15px]">{label}</span>
     </Link>
   );
 }
-
-import { useQuery } from "convex/react";
-import { api } from "../../convex/_generated/api";
 
 export function PosShell({
   title,
@@ -178,6 +225,19 @@ export function PosShell({
   subtitle?: string;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const isInventoryPage = pathname.startsWith("/inventory");
+  const currentTab = searchParams.get("tab") || "purchaseOrders";
+
+  const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
+
+  useEffect(() => {
+    if (isInventoryPage) {
+      setIsInventoryExpanded(true);
+    }
+  }, [isInventoryPage]);
+
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
   const branchName = activeOrg?.name || "Flagship Main Store";
@@ -201,9 +261,64 @@ export function PosShell({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1">
-          {navItems.map((item) => (
-            <NavLink key={item.href} {...item} />
-          ))}
+          {navItems.map((item) => {
+            if (item.href === "/inventory") {
+              return (
+                <div key={item.href} className="flex flex-col px-3 my-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsInventoryExpanded((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isInventoryPage
+                        ? "bg-[#f1edec] text-[#141010] font-bold"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                      }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 flex items-center justify-center">{item.icon}</span>
+                      <span className="font-medium text-[15px]">{item.label}</span>
+                    </div>
+                    <svg
+                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${isInventoryExpanded ? "rotate-180" : ""
+                        }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isInventoryExpanded && (
+                    <div className="ml-5 pl-3 my-1.5 border-l border-[#e7e5e4] flex flex-col gap-1">
+                      {inventorySubItems.map((sub) => {
+                        const isSubActive =
+                          pathname === sub.path ||
+                          (pathname === "/inventory" && currentTab === sub.tab) ||
+                          (pathname === "/inventory" && sub.tab === "purchaseOrders" && !searchParams.get("tab"));
+                        return (
+                          <Link
+                            key={sub.tab}
+                            href={sub.path}
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
+                                ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
+                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
+                              }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            return <NavLink key={item.href} {...item} />;
+          })}
         </nav>
       </aside>
 

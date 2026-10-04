@@ -1,9 +1,14 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useMutation } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
+
+import {
+  COUNTRY_DIAL_OPTIONS,
+  formatCurrencyAmount,
+} from "@/lib/constants/countries";
 
 interface EditOrderDrawerProps {
   isOpen: boolean;
@@ -18,6 +23,8 @@ export default function EditOrderDrawer({
   order,
   onSuccess,
 }: EditOrderDrawerProps) {
+  const organizations = useQuery(api.organizations.list);
+  const currencySymbol = organizations?.[0]?.defaultCurrencySymbol || "$";
   const updateOrderCustomer = useMutation(api.orders.updateOrderCustomer);
   const deleteMultipleOrderItems = useMutation(api.orders.deleteMultipleOrderItems);
 
@@ -204,10 +211,11 @@ export default function EditOrderDrawer({
                       onChange={(e) => setCountryCode(e.target.value)}
                       className="bg-transparent border-none text-xs font-semibold text-[#1c1917] focus:outline-none cursor-pointer pr-1"
                     >
-                      <option value="+91">+91</option>
-                      <option value="+1">+1</option>
-                      <option value="+44">+44</option>
-                      <option value="+971">+971</option>
+                      {COUNTRY_DIAL_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.iso} {opt.code}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   {/* Phone Input */}
@@ -266,9 +274,11 @@ export default function EditOrderDrawer({
                 <div className="divide-y divide-[#f5f5f4]">
                   {items.map((item: any) => {
                     const isChecked = selectedItemIds.has(item._id);
-                    const formattedPrice = item.display_item_price
-                      ? `₹${Math.round(parseFloat(item.display_item_price))}`
-                      : `₹${Math.round(item.itemPrice / 100)}`;
+                    const org = organizations?.[0];
+                    const numVal = item.display_item_price
+                      ? parseFloat(item.display_item_price)
+                      : (item.itemPrice || 0) / 100;
+                    const formattedPrice = `${currencySymbol}${formatCurrencyAmount(numVal, org?.country)}`;
 
                     return (
                       <div

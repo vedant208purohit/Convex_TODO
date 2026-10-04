@@ -28,6 +28,8 @@ async function resolveUserId(request: NextRequest): Promise<string | null> {
 async function resolveStoreForAuthenticatedUser(request: NextRequest) {
   const userId = await resolveUserId(request);
 
+  console.log("Bridge secret:", process.env.BRIDGE_SECRET);
+
   if (!userId) {
     return NextResponse.json(
       {
@@ -35,48 +37,60 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
         error: "Unauthorized: No active Default Clerk session.",
         code: "UNAUTHORIZED",
       },
-      { status: 401 }
+      { status: 401 },
     );
   }
 
-  const MANUAL_BRIDGE_SECRET = "7fc001fee3518e5bf73bb2d94052422ef3bc10ee190c518306a8212a5c411672";
-  const bridgeSecret =
-    process.env.BRIDGE_SECRET ||
-    process.env.NEXT_PUBLIC_BRIDGE_SECRET ||
-    MANUAL_BRIDGE_SECRET;
+  const bridgeSecret = process.env.BRIDGE_SECRET;
+
+  const masterBaseUrl =
+    process.env.MASTER_POS_URL ||
+    process.env.NEXT_PUBLIC_MASTER_POS_URL ||
+    "http://localhost:3001";
+
+  let safeMasterHost = "unknown";
+  try {
+    safeMasterHost = new URL(masterBaseUrl).host;
+  } catch {
+    safeMasterHost = "invalid-url";
+  }
+
+  let safeConvexHost = "none";
+  if (process.env.NEXT_PUBLIC_CONVEX_URL) {
+    try {
+      safeConvexHost = new URL(process.env.NEXT_PUBLIC_CONVEX_URL).host;
+    } catch {
+      safeConvexHost = "invalid-url";
+    }
+  }
+
+  console.log("[BRIDGE_DEBUG] resolve-store started");
+  console.log("[BRIDGE_DEBUG] runtime:", {
+    NODE_ENV: process.env.NODE_ENV,
+    VERCEL_ENV: process.env.VERCEL_ENV,
+    VERCEL_URL: process.env.VERCEL_URL,
+    VERCEL_GIT_COMMIT_SHA: process.env.VERCEL_GIT_COMMIT_SHA,
+    VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF,
+  });
+  console.log("[BRIDGE_DEBUG] configuration:", {
+    MASTER_POS_URL_PRESENT: Boolean(process.env.MASTER_POS_URL),
+    MASTER_POS_URL_HOST: safeMasterHost,
+    BRIDGE_SECRET_PRESENT: Boolean(bridgeSecret),
+    NEXT_PUBLIC_CONVEX_URL_PRESENT: Boolean(process.env.NEXT_PUBLIC_CONVEX_URL),
+    NEXT_PUBLIC_CONVEX_URL_HOST: safeConvexHost,
+  });
 
   if (!bridgeSecret) {
-    console.warn("BRIDGE_SECRET is not configured on Default POS server.");
-    if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-      return NextResponse.json(
-        {
-          success: true,
-          organization: {
-            id: "default_org",
-            slug: "store",
-            name: "Default Store",
-          },
-          deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-          user: { role: "admin", status: "active" },
-        },
-        { status: 200 }
-      );
-    }
-
+    console.error("BRIDGE_SECRET is not configured on Default POS server.");
     return NextResponse.json(
       {
         success: false,
         error: "Server configuration error: Missing BRIDGE_SECRET.",
         code: "BRIDGE_MISCONFIGURED",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
-
-  const masterBaseUrl =
-    process.env.MASTER_POS_URL ||
-    process.env.NEXT_PUBLIC_MASTER_POS_URL ||
-    "http://localhost:3001";
 
   const bridgeUrl = `${masterBaseUrl.replace(/\/$/, "")}/api/bridge/resolve-store`;
   const timestamp = Date.now();
@@ -84,6 +98,16 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
     .createHmac("sha256", bridgeSecret)
     .update(`${userId}:${timestamp}`)
     .digest("hex");
+
+  console.log("[BRIDGE_DEBUG] calling master bridge:", {
+    url: bridgeUrl,
+    method: "POST",
+    headers: ["Content-Type", "x-bridge-signature", "x-bridge-timestamp"],
+    payload: {
+      defaultClerkId_present: Boolean(userId),
+      defaultClerkId_prefix: userId ? userId.substring(0, 8) + "..." : "none",
+    },
+  });
 
   try {
     const res = await fetch(bridgeUrl, {
@@ -99,30 +123,25 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
 
     const data = await res.json().catch(() => ({}));
 
-    if (!res.ok || !data.success) {
-      if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-        return NextResponse.json(
-          {
-            success: true,
-            organization: {
-              id: "default_org",
-              slug: "store",
-              name: "Default Store",
-            },
-            deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-            user: { role: "admin", status: "active" },
-          },
-          { status: 200 }
-        );
-      }
+    console.log("[BRIDGE_DEBUG] master bridge response:", {
+      status: res.status,
+      ok: res.ok,
+      contentType: res.headers?.get
+        ? res.headers.get("content-type")
+        : undefined,
+      errorCode: data?.code,
+      errorMsg: data?.error,
+      hasDeploymentUrl: Boolean(data?.deployment?.url || data?.deploymentUrl),
+    });
 
+    if (!res.ok || !data.success) {
       return NextResponse.json(
         {
           success: false,
           error: data.error || "Store resolution failed.",
           code: data.code || "STORE_RESOLUTION_FAILED",
         },
-        { status: res.status || 400 }
+        { status: res.status || 400 },
       );
     }
 
@@ -133,33 +152,18 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
         deploymentUrl: data.deployment?.url || data.deploymentUrl,
         user: data.user,
       },
-      { status: 200 }
+      { status: 200 },
     );
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Failed to connect to Master bridge:", error);
-    if (process.env.NEXT_PUBLIC_CONVEX_URL) {
-      return NextResponse.json(
-        {
-          success: true,
-          organization: {
-            id: "default_org",
-            slug: "store",
-            name: "Default Store",
-          },
-          deploymentUrl: process.env.NEXT_PUBLIC_CONVEX_URL,
-          user: { role: "admin", status: "active" },
-        },
-        { status: 200 }
-      );
-    }
-
     return NextResponse.json(
       {
         success: false,
-        error: "Unable to reach Master control plane to resolve store deployment.",
+        error:
+          "Unable to reach Master control plane to resolve store deployment.",
         code: "BRIDGE_UNREACHABLE",
       },
-      { status: 502 }
+      { status: 502 },
     );
   }
 }

@@ -10,7 +10,6 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-store)", () => {
   const originalEnv = process.env;
-  const originalFetch = global.fetch;
   const TEST_BRIDGE_SECRET = "default-pos-bridge-secret-test-99";
 
   beforeEach(() => {
@@ -35,7 +34,7 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
 
   test("returns 500 BRIDGE_MISCONFIGURED when BRIDGE_SECRET is missing", async () => {
     delete process.env.BRIDGE_SECRET;
-    delete (process.env as any).NODE_ENV;
+    delete (process.env as Record<string, string | undefined>).NODE_ENV;
     mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_1" });
 
     const res = await GET();
@@ -49,14 +48,15 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
     mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_123" });
 
     let capturedUrl = "";
-    let capturedOptions: any = null;
+    let capturedOptions: any = {};
 
-    (global.fetch as any).mockImplementationOnce(async (url: string, options: any) => {
-      capturedUrl = url;
-      capturedOptions = options;
+    vi.mocked(global.fetch).mockImplementationOnce(async (input: RequestInfo | URL, init?: RequestInit) => {
+      capturedUrl = String(input);
+      capturedOptions = init || {};
       return {
         ok: true,
         status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
         json: async () => ({
           success: true,
           organization: {
@@ -72,7 +72,7 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
             status: "active",
           },
         }),
-      };
+      } as Response;
     });
 
     const res = await GET();
@@ -86,12 +86,13 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
 
     // Verify Master Bridge request parameters
     expect(capturedUrl).toBe("http://localhost:3001/api/bridge/resolve-store");
-    expect(capturedOptions.method).toBe("POST");
-    expect(capturedOptions.headers["Content-Type"]).toBe("application/json");
+    expect(capturedOptions?.method).toBe("POST");
+    const headers = capturedOptions?.headers as Record<string, string>;
+    expect(headers["Content-Type"]).toBe("application/json");
 
-    const sentTimestamp = capturedOptions.headers["x-bridge-timestamp"];
-    const sentSignature = capturedOptions.headers["x-bridge-signature"];
-    const sentBody = JSON.parse(capturedOptions.body);
+    const sentTimestamp = headers["x-bridge-timestamp"];
+    const sentSignature = headers["x-bridge-signature"];
+    const sentBody = JSON.parse(String(capturedOptions?.body));
 
     expect(sentBody.defaultClerkId).toBe("user_clerk_b_123");
 
@@ -106,16 +107,17 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
   test("POST handler works identically to GET", async () => {
     mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_post" });
 
-    (global.fetch as any).mockResolvedValueOnce({
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: true,
       status: 200,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         success: true,
         organization: { id: "org_1", slug: "store-1", name: "Store 1" },
         deployment: { url: "https://store-1.convex.cloud" },
         user: { role: "admin", status: "active" },
       }),
-    });
+    } as Response);
 
     const res = await POST();
     expect(res.status).toBe(200);
@@ -127,14 +129,15 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
   test("handles 404 STORE_NOT_ASSIGNED from Master bridge", async () => {
     mockAuth.mockResolvedValueOnce({ userId: "user_unassigned" });
 
-    (global.fetch as any).mockResolvedValueOnce({
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 404,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         error: "Store not assigned for this user.",
         code: "STORE_NOT_ASSIGNED",
       }),
-    });
+    } as Response);
 
     const res = await GET();
     expect(res.status).toBe(404);
@@ -146,14 +149,15 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
   test("handles 403 ACCOUNT_INACTIVE from Master bridge", async () => {
     mockAuth.mockResolvedValueOnce({ userId: "user_inactive" });
 
-    (global.fetch as any).mockResolvedValueOnce({
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 403,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         error: "User account is inactive.",
         code: "ACCOUNT_INACTIVE",
       }),
-    });
+    } as Response);
 
     const res = await GET();
     expect(res.status).toBe(403);
@@ -165,14 +169,15 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
   test("handles 503 DEPLOYMENT_UNAVAILABLE from Master bridge", async () => {
     mockAuth.mockResolvedValueOnce({ userId: "user_waiting_deployment" });
 
-    (global.fetch as any).mockResolvedValueOnce({
+    vi.mocked(global.fetch).mockResolvedValueOnce({
       ok: false,
       status: 503,
+      headers: new Headers({ "content-type": "application/json" }),
       json: async () => ({
         error: "Store deployment is not ready.",
         code: "DEPLOYMENT_UNAVAILABLE",
       }),
-    });
+    } as Response);
 
     const res = await GET();
     expect(res.status).toBe(503);
@@ -181,10 +186,51 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
     expect(data.code).toBe("DEPLOYMENT_UNAVAILABLE");
   });
 
+  test("handles 500 BRIDGE_MISCONFIGURED relayed from Master bridge", async () => {
+    mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_1" });
+
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        error: "Server configuration error.",
+        code: "BRIDGE_MISCONFIGURED",
+      }),
+    } as Response);
+
+    const res = await GET();
+    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.success).toBe(false);
+    expect(data.error).toBe("Server configuration error.");
+    expect(data.code).toBe("BRIDGE_MISCONFIGURED");
+  });
+
+  test("handles 401 INVALID_SIGNATURE relayed from Master bridge", async () => {
+    mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_1" });
+
+    vi.mocked(global.fetch).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: async () => ({
+        error: "Unauthorized: Invalid request signature.",
+        code: "INVALID_SIGNATURE",
+      }),
+    } as Response);
+
+    const res = await GET();
+    expect(res.status).toBe(401);
+    const data = await res.json();
+    expect(data.success).toBe(false);
+    expect(data.code).toBe("INVALID_SIGNATURE");
+  });
+
   test("handles network failures to Master bridge (502 BRIDGE_UNREACHABLE)", async () => {
     mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_1" });
 
-    (global.fetch as any).mockRejectedValueOnce(new Error("ECONNREFUSED"));
+    vi.mocked(global.fetch).mockRejectedValueOnce(new Error("ECONNREFUSED"));
 
     const res = await GET();
     expect(res.status).toBe(502);

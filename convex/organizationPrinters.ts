@@ -121,7 +121,8 @@ export const list = query({
 export const listStations = query({
   args: {},
   handler: async (ctx) => {
-    return await ctx.db.query("stations").collect();
+    const stations = await ctx.db.query("stations").collect();
+    return stations.filter((s) => s.deletedAt === undefined);
   },
 });
 

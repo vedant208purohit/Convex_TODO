@@ -10,43 +10,18 @@ import EditOrderDrawer from "../components/orders/EditOrderDrawer";
 import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
 import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
 
+import {
+  formatPhoneNumberWithCountryCode,
+  getCurrencyForCountry,
+  formatCurrencyAmount,
+  formatStoreDate,
+  formatStoreTime,
+  formatStoreDateTime,
+} from "../../lib/constants/countries";
+
 function formatOrderPhoneDisplay(phone?: string): string {
   if (!phone || !phone.trim()) return "-";
-  const trimmed = phone.trim();
-
-  // If already formatted with space like "+91 9173393946", return as is
-  if (/^\+\d{1,4}\s\d+/.test(trimmed)) {
-    return trimmed;
-  }
-
-  // If starts with country code without space, format with space
-  if (trimmed.startsWith("+91")) {
-    const local = trimmed.slice(3).trim();
-    return `+91 ${local}`;
-  } else if (trimmed.startsWith("+971")) {
-    const local = trimmed.slice(4).trim();
-    return `+971 ${local}`;
-  } else if (trimmed.startsWith("+1")) {
-    const local = trimmed.slice(2).trim();
-    return `+1 ${local}`;
-  } else if (trimmed.startsWith("+44")) {
-    const local = trimmed.slice(3).trim();
-    return `+44 ${local}`;
-  } else if (trimmed.startsWith("+33")) {
-    const local = trimmed.slice(3).trim();
-    return `+33 ${local}`;
-  } else if (trimmed.startsWith("+61")) {
-    const local = trimmed.slice(3).trim();
-    return `+61 ${local}`;
-  }
-
-  // If raw digits without '+' (e.g. 10 digits for India)
-  const digits = trimmed.replace(/\D/g, "");
-  if (digits.length === 10) {
-    return `+91 ${digits}`;
-  }
-
-  return trimmed;
+  return formatPhoneNumberWithCountryCode(phone, "+91");
 }
 
 function formatTableDisplay(tableNum?: string): string {
@@ -490,6 +465,13 @@ export default function OrdersPage() {
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
 
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "$");
+  const currencyCode =
+    activeOrg?.defaultCurrency ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).code : "USD");
+
   // Query Real Store Order Processes from DB
   const dbProcesses = useQuery(api.organizationOrderProcesses.list, {
     published: true,
@@ -498,7 +480,7 @@ export default function OrdersPage() {
   // Query Real Store Payment Modes from DB
   const paymentModesList = useQuery(
     api.paymentModes.list,
-    activeOrg ? { organizationId: activeOrg._id } : {},
+    activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : {},
   );
 
   // Query Real Store Printers from DB
@@ -796,9 +778,12 @@ export default function OrdersPage() {
       ordersResponse?.totalGrossAmount === undefined ||
       ordersResponse.totalGrossAmount === null
     )
-      return "₹0.00";
-    return `₹${(ordersResponse.totalGrossAmount / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  }, [ordersResponse]);
+      return `${currencySymbol}0.00`;
+    return `${currencySymbol}${formatCurrencyAmount(
+      ordersResponse.totalGrossAmount / 100,
+      activeOrg?.country
+    )}`;
+  }, [ordersResponse, currencySymbol, activeOrg?.country]);
 
   // Real Status Pipeline Stages matching defx-pos & defx-pos-frontend
   const pipelineStages = useMemo(() => {
@@ -1164,7 +1149,7 @@ export default function OrdersPage() {
     try {
       const amountPaise = selectedOrderDetails.totalAmount;
       const selectedMode = paymentModesList?.find(
-        (m) => m.name.toLowerCase() === paymentTenderMode.toLowerCase(),
+        (m: any) => m.name.toLowerCase() === paymentTenderMode.toLowerCase(),
       );
       await addPaymentMutation({
         orderId: selectedOrderId,
@@ -1177,7 +1162,7 @@ export default function OrdersPage() {
       setDrawerTab(null);
       setTenderCashGiven("");
       showToast(
-        `Payment of ₹${selectedOrderDetails.display_total_amount} via ${paymentTenderMode} recorded successfully.`,
+        `Payment of ${currencySymbol}${selectedOrderDetails.display_total_amount} via ${paymentTenderMode} recorded successfully.`,
       );
     } catch (err: any) {
       showToast(err.message || "Failed to record payment");
@@ -1196,7 +1181,7 @@ export default function OrdersPage() {
     }
     try {
       const selectedMode = paymentModesList?.find(
-        (m) => m.name.toLowerCase() === refundPaymentMode.toLowerCase(),
+        (m: any) => m.name.toLowerCase() === refundPaymentMode.toLowerCase(),
       );
       await addPaymentMutation({
         orderId: selectedOrderId,
@@ -1209,7 +1194,7 @@ export default function OrdersPage() {
       setDrawerTab(null);
       setRefundAmountInput("");
       showToast(
-        `Refund of ₹${amountVal.toFixed(2)} processed successfully via ${refundPaymentMode}.`,
+        `Refund of ${currencySymbol}${amountVal.toFixed(2)} processed successfully via ${refundPaymentMode}.`,
       );
     } catch (err: any) {
       showToast(err.message || "Failed to process refund");
@@ -1268,12 +1253,16 @@ export default function OrdersPage() {
     const orderCreatedDate = order?.createdAt
       ? new Date(order.createdAt)
       : new Date();
-    const formattedOrderDate = formatDateDisplay(orderCreatedDate);
-    const formattedOrderTime = orderCreatedDate.toLocaleTimeString("en-IN", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const formattedOrderDate = formatStoreDate(
+      orderCreatedDate,
+      activeOrg?.country,
+      activeOrg?.organizationTimeZone
+    );
+    const formattedOrderTime = formatStoreTime(
+      orderCreatedDate,
+      activeOrg?.organizationTimeZone,
+      activeOrg?.country
+    );
     const isPaid = order?.paymentStatus === "Paid";
 
     return (
@@ -1554,14 +1543,14 @@ export default function OrdersPage() {
                                         {item.customizations
                                           .map(
                                             (c: any) =>
-                                              `${c.optionName} ₹${(c.price / 100).toFixed(2)}`,
+                                              `${c.optionName} ${currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)}`,
                                           )
                                           .join(", ")}
                                       </span>
                                     )}
                                 </td>
                                 <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
-                                  ₹{item.display_item_price}
+                                  {currencySymbol}{formatCurrencyAmount(item.display_item_price ?? ((item.itemPrice || 0) / 100), activeOrg?.country)}
                                 </td>
                                 <td className="py-3.5 px-4 text-center align-top">
                                   <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
@@ -1569,7 +1558,7 @@ export default function OrdersPage() {
                                   </span>
                                 </td>
                                 <td className="py-3.5 px-6 text-right text-xs font-bold text-[#0c0a09] align-top">
-                                  ₹{item.display_total_price}
+                                  {currencySymbol}{formatCurrencyAmount(item.display_total_price ?? ((item.totalPrice || 0) / 100), activeOrg?.country)}
                                 </td>
                               </tr>
                             ))
@@ -1594,7 +1583,7 @@ export default function OrdersPage() {
                           <div className="flex justify-between items-center text-[#7a716b]">
                             <span className="font-medium">Sub Total</span>
                             <span className="font-semibold text-[#0c0a09]">
-                              ₹{order?.display_sub_total || "0.00"}
+                              {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
                             </span>
                           </div>
 
@@ -1610,11 +1599,11 @@ export default function OrdersPage() {
                                     {c.name} ({c.rate}%)
                                   </span>
                                   <span className="font-semibold text-[#0c0a09]">
-                                    +₹
-                                    {(
-                                      ((order.subTotal || 0) * c.rate) /
-                                      10000
-                                    ).toFixed(2)}
+                                    +{currencySymbol}
+                                    {formatCurrencyAmount(
+                                      ((order.subTotal || 0) * c.rate) / 10000,
+                                      activeOrg?.country
+                                    )}
                                   </span>
                                 </div>
                               ),
@@ -1623,7 +1612,7 @@ export default function OrdersPage() {
                             <div className="flex justify-between items-center text-[#7a716b]">
                               <span>GST (Tax Total)</span>
                               <span className="font-semibold text-[#0c0a09]">
-                                ₹{order?.display_tax_total || "0.00"}
+                                {currencySymbol}{formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
                               </span>
                             </div>
                           )}
@@ -1635,7 +1624,7 @@ export default function OrdersPage() {
                                 Discount Applied
                               </span>
                               <span className="font-semibold">
-                                -₹{order?.display_discount_amount}
+                                -{currencySymbol}{formatCurrencyAmount(order?.display_discount_amount, activeOrg?.country)}
                               </span>
                             </div>
                           )}
@@ -1650,7 +1639,7 @@ export default function OrdersPage() {
                               </span>
                             </div>
                             <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
-                              ₹{order?.display_total_amount || "0.00"}
+                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)}
                             </span>
                           </div>
                         </div>
@@ -1668,18 +1657,33 @@ export default function OrdersPage() {
                         <CreditCardIcon className="w-4 h-4 text-[#7a716b]" />
                         Payment Information
                       </h2>
-                      <span
-                        className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${
-                          isPaid
-                            ? "text-emerald-700 bg-emerald-50 border border-emerald-200"
-                            : "text-amber-800 bg-amber-50 border border-amber-200"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${isPaid ? "bg-emerald-600" : "bg-amber-600"}`}
-                        />
-                        {isPaid ? "Fully Settled" : "Payment Due"}
-                      </span>
+                      {(() => {
+                        const status = (order?.paymentStatus || "Pending").toLowerCase();
+                        let label = "Payment Due";
+                        let classes = "text-amber-800 bg-amber-50 border border-amber-200";
+                        let dotClass = "bg-amber-600";
+
+                        if (status === "paid") {
+                          label = "Fully Settled";
+                          classes = "text-emerald-700 bg-emerald-50 border border-emerald-200";
+                          dotClass = "bg-emerald-600";
+                        } else if (status === "refunded") {
+                          label = "Refunded";
+                          classes = "text-rose-700 bg-rose-50 border border-rose-200";
+                          dotClass = "bg-rose-600";
+                        } else if (status === "partially refunded" || status === "partially_refunded") {
+                          label = "Partially Refunded";
+                          classes = "text-purple-700 bg-purple-50 border border-purple-200";
+                          dotClass = "bg-purple-600";
+                        }
+
+                        return (
+                          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${classes}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                            {label}
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     <div className="overflow-x-auto">
@@ -1696,14 +1700,10 @@ export default function OrdersPage() {
                           {order?.payments && order.payments.length > 0 ? (
                             order.payments.map((p: any, idx: number) => {
                               const pDate = new Date(p.createdAt);
-                              const pDateStr = formatDateDisplay(pDate);
-                              const pTimeStr = pDate.toLocaleTimeString(
-                                "en-IN",
-                                {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                  hour12: true,
-                                },
+                              const pDateTimeStr = formatStoreDateTime(
+                                pDate,
+                                activeOrg?.country,
+                                activeOrg?.organizationTimeZone
                               );
                               const isDebit = p.paymentType === "Debit";
                               const isCredit = !isDebit;
@@ -1712,7 +1712,7 @@ export default function OrdersPage() {
                               return (
                                 <tr key={p._id || idx}>
                                   <td className="py-2.5 text-[#0c0a09] font-medium font-sans">
-                                    {pDateStr} {pTimeStr}
+                                    {pDateTimeStr}
                                   </td>
                                   <td className="py-2.5">
                                     <span
@@ -1733,27 +1733,19 @@ export default function OrdersPage() {
                                     {typeDisplay}
                                   </td>
                                   <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                                    {isCredit ? "" : "-"}₹
-                                    {((p.amount || 0) / 100).toFixed(2)}
+                                    {isCredit ? "" : "-"}{currencySymbol}
+                                    {formatCurrencyAmount(
+                                      (p.amount || 0) / 100,
+                                      activeOrg?.country
+                                    )}
                                   </td>
                                 </tr>
                               );
                             })
                           ) : (
                             <tr>
-                              <td className="py-2.5 text-[#0c0a09] font-medium font-sans">
-                                {formattedOrderDate} {formattedOrderTime}
-                              </td>
-                              <td className="py-2.5">
-                                <span className="px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
-                                  {order?.paymentMode || "Cash"}
-                                </span>
-                              </td>
-                              <td className="py-2.5 text-emerald-700 font-semibold">
-                                Credit
-                              </td>
-                              <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                                ₹{order?.display_total_amount || "0.00"}
+                              <td colSpan={4} className="py-6 text-center text-stone-500 font-medium italic">
+                                No payments recorded yet (Payment Pending)
                               </td>
                             </tr>
                           )}
@@ -1774,32 +1766,34 @@ export default function OrdersPage() {
                     <h2 className="text-[20px] font-semibold text-[#0c0a09] border-b border-[#e7e5e4] pb-3 mb-4 flex items-center justify-between">
                       <span>Billing &amp; Tax Breakdown</span>
                       <span className="text-xs font-semibold text-[#7a716b]">
-                        INR (₹)
+                        {currencyCode} ({currencySymbol})
                       </span>
                     </h2>
                     <div className="space-y-3 text-sm">
                       <div className="flex justify-between items-center text-[#7a716b]">
                         <span className="font-medium">Sub Total</span>
                         <span className="font-semibold text-[#0c0a09]">
-                          ₹{order?.display_sub_total || "0.00"}
+                          {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-[#7a716b] text-xs">
                         <span>CGST (2.5%)</span>
                         <span className="font-semibold text-[#0c0a09]">
-                          ₹
-                          {order?.subTotal
-                            ? ((order.subTotal * 0.025) / 100).toFixed(2)
-                            : "0.00"}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            order?.subTotal ? ((order.subTotal * 0.025) / 100) : 0,
+                            activeOrg?.country
+                          )}
                         </span>
                       </div>
                       <div className="flex justify-between items-center text-[#7a716b] text-xs">
                         <span>SGST (2.5%)</span>
                         <span className="font-semibold text-[#0c0a09]">
-                          ₹
-                          {order?.subTotal
-                            ? ((order.subTotal * 0.025) / 100).toFixed(2)
-                            : "0.00"}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            order?.subTotal ? ((order.subTotal * 0.025) / 100) : 0,
+                            activeOrg?.country
+                          )}
                         </span>
                       </div>
                       {parseFloat(order?.display_discount_amount || "0") >
@@ -1807,7 +1801,7 @@ export default function OrdersPage() {
                         <div className="flex justify-between items-center text-emerald-700 text-xs">
                           <span className="font-medium">Discount</span>
                           <span className="font-semibold">
-                            -₹{order?.display_discount_amount}
+                            -{currencySymbol}{formatCurrencyAmount(order?.display_discount_amount, activeOrg?.country)}
                           </span>
                         </div>
                       )}
@@ -1821,7 +1815,7 @@ export default function OrdersPage() {
                           </span>
                         </div>
                         <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
-                          ₹{order?.display_total_amount || "0.00"}
+                          {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)}
                         </span>
                       </div>
                     </div>
@@ -1843,7 +1837,7 @@ export default function OrdersPage() {
                           Debit Amount
                         </div>
                         <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
-                          ₹{order?.display_refundable_amount || (Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100).toFixed(2))}
+                          {currencySymbol}{formatCurrencyAmount(order?.display_refundable_amount ?? Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100), activeOrg?.country)}
                         </div>
                       </div>
 
@@ -2152,7 +2146,7 @@ export default function OrdersPage() {
                         </span>
                       </div>
                       <span className="font-sans text-2xl font-bold text-[#141010] tracking-tight">
-                        ₹{order.display_total_amount}
+                        {currencySymbol}{order?.display_total_amount}
                       </span>
                     </div>
 
@@ -2187,18 +2181,17 @@ export default function OrdersPage() {
                         <label className="block text-xs font-semibold uppercase tracking-wider text-[#7a716b] mb-2">
                           Total given amount
                         </label>
-                        <div className="relative">
-                          <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-sm font-semibold text-[#7a716b]">
-                            ₹
+                        <div className="flex rounded-lg border border-[#e7e5e4] bg-white overflow-hidden focus-within:border-black focus-within:ring-1 focus-within:ring-black">
+                          <span className="inline-flex items-center px-3.5 bg-stone-50 border-r border-[#e7e5e4] text-sm font-semibold text-[#7a716b] select-none whitespace-nowrap">
+                            {currencySymbol}
                           </span>
                           <input
-                            className="w-full pl-8 pr-4 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#e7e5e4] rounded-lg focus:border-black focus:ring-black focus:outline-none bg-white"
+                            className="w-full px-3.5 py-2.5 font-sans text-sm font-semibold text-[#141010] bg-transparent focus:outline-none"
                             type="number"
                             step="any"
-                            value={
-                              tenderCashGiven || order.display_total_amount
-                            }
+                            value={tenderCashGiven}
                             onChange={(e) => setTenderCashGiven(e.target.value)}
+                            placeholder="0.00"
                           />
                         </div>
                       </div>
@@ -2240,7 +2233,7 @@ export default function OrdersPage() {
                                 }
                                 className="py-2 text-xs font-medium font-sans bg-[#faf8f5] hover:bg-[#f4eee8] text-[#141010] border border-[#e7e5e4] rounded-md transition-colors text-center cursor-pointer"
                               >
-                                ₹{amt.toLocaleString("en-IN")}
+                                {currencySymbol}{amt.toLocaleString("en-US")}
                               </button>
                             ));
                           })()}
@@ -2262,7 +2255,7 @@ export default function OrdersPage() {
                               Return amount
                             </span>
                             <span className="font-sans text-base font-bold text-emerald-700">
-                              ₹{change.toFixed(2)}
+                              {currencySymbol}{formatCurrencyAmount(change, activeOrg?.country)}
                             </span>
                           </div>
                         );
@@ -2416,7 +2409,7 @@ export default function OrdersPage() {
                         Total refund amount
                       </div>
                       <div className="bg-[#141010] text-white px-6 py-3 font-bold text-lg font-mono flex items-center justify-center tracking-tight">
-                        ₹{order.display_total_amount || "0"}
+                        {currencySymbol}{order?.display_total_amount || "0"}
                       </div>
                     </div>
 
@@ -2427,15 +2420,8 @@ export default function OrdersPage() {
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {(paymentModesList && paymentModesList.length > 0
-                          ? paymentModesList
-                          : [
-                              { _id: "m1", name: "Cash" },
-                              { _id: "m2", name: "Credit Card" },
-                              { _id: "m3", name: "Debit Card" },
-                              { _id: "m4", name: "UPI" },
-                              { _id: "m5", name: "Pay later" },
-                              { _id: "m6", name: "Wallet" },
-                            ]
+                          ? paymentModesList.filter((m: any) => m.active !== false)
+                          : []
                         ).map((pm: any) => {
                           const isSelected =
                             (refundPaymentMode || "Cash")
@@ -2468,11 +2454,7 @@ export default function OrdersPage() {
                         className="w-full px-3.5 py-2.5 font-sans text-sm font-semibold text-[#141010] border border-[#141010] rounded-md focus:border-black focus:ring-black focus:outline-none bg-white"
                         type="number"
                         step="any"
-                        value={
-                          refundAmountInput ||
-                          order.display_total_amount ||
-                          "0.00"
-                        }
+                        value={refundAmountInput}
                         onChange={(e) => setRefundAmountInput(e.target.value)}
                       />
                     </div>
@@ -2481,24 +2463,35 @@ export default function OrdersPage() {
               </div>
 
               {/* Drawer Action Footers */}
-              {drawerTab === "pay" && (
-                <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleSettlePayment}
-                    className="w-full py-3 bg-[#0c0a09] hover:bg-black text-white text-sm font-semibold rounded-lg shadow-xs transition-colors text-center cursor-pointer"
-                  >
-                    Payment Received
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDrawerTab(null)}
-                    className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+              {drawerTab === "pay" && (() => {
+                const givenNum = parseFloat(tenderCashGiven);
+                const isValidPay = !isNaN(givenNum) && givenNum > 0;
+                const settleAmt = isValidPay ? givenNum : 0;
+
+                return (
+                  <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleSettlePayment}
+                      disabled={!isValidPay}
+                      className={`w-full py-3 bg-[#0c0a09] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
+                        !isValidPay
+                          ? "opacity-40 cursor-not-allowed pointer-events-none"
+                          : "hover:bg-black cursor-pointer"
+                      }`}
+                    >
+                      Record Payment ({currencySymbol}{formatCurrencyAmount(settleAmt, activeOrg?.country)})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTab(null)}
+                      className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              })()}
 
               {drawerTab === "timeline" && (
                 <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] shrink-0">
@@ -2512,24 +2505,35 @@ export default function OrdersPage() {
                 </div>
               )}
 
-              {drawerTab === "refund" && (
-                <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleIssueRefund}
-                    className="w-full py-3 bg-[#1f7d43] hover:bg-[#186636] text-white text-sm font-semibold rounded-lg shadow-xs transition-colors text-center cursor-pointer"
-                  >
-                    Confirm Refund
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDrawerTab(null)}
-                    className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
+              {drawerTab === "refund" && (() => {
+                const refundVal = parseFloat(refundAmountInput);
+                const isRefundValid = !isNaN(refundVal) && refundVal > 0;
+                const displayAmt = isRefundValid ? formatCurrencyAmount(refundVal, activeOrg?.country) : "0.00";
+
+                return (
+                  <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={handleIssueRefund}
+                      disabled={!isRefundValid}
+                      className={`w-full py-3 bg-[#1f7d43] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
+                        !isRefundValid
+                          ? "opacity-40 cursor-not-allowed pointer-events-none"
+                          : "hover:bg-[#186636] cursor-pointer"
+                      }`}
+                    >
+                      Confirm Refund ({currencySymbol}{displayAmt})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDrawerTab(null)}
+                      className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -2968,10 +2972,17 @@ export default function OrdersPage() {
                 {displayedOrders.length > 0 ? (
                   displayedOrders.map((order) => {
                     const isPaid = order.paymentStatus === "Paid";
+                    const isRefunded =
+                      order.paymentStatus === "Refunded" ||
+                      order.orderStatusName === "Refunded" ||
+                      order.orderStatusName === "Cancelled / Refunded";
+                    const isPartiallyRefunded =
+                      order.paymentStatus === "Partially Refunded";
                     const isCod =
-                      (order.paymentMode || "")
-                        .toLowerCase()
-                        .includes("cash") && !isPaid;
+                      (order.paymentMode || "").toLowerCase().includes("cash") &&
+                      !isPaid &&
+                      !isRefunded &&
+                      !isPartiallyRefunded;
                     const orderDateStr = new Date(
                       order.createdAt,
                     ).toLocaleString("en-IN", {
@@ -3027,6 +3038,7 @@ export default function OrdersPage() {
                             const dotColor =
                               matchedStage?.color ||
                               (order.orderStatusName === "Cancelled" ||
+                              order.orderStatusName === "Cancelled / Refunded" ||
                               order.isRejected
                                 ? "#e11d48"
                                 : order.orderStatusName === "Completed" ||
@@ -3090,27 +3102,37 @@ export default function OrdersPage() {
 
                         {/* 6. Payment Status */}
                         <td className="py-4 px-5">
-                          {isPaid ? (
+                          {isRefunded ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Refunded
+                            </span>
+                          ) : isPartiallyRefunded ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              Partially Refunded
+                            </span>
+                          ) : isPaid ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckmarkIcon className="w-3 h-3" />₹
-                              {order.display_total_amount} Paid
+                              <CheckmarkIcon className="w-3 h-3" />{currencySymbol}
+                              {formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Paid
                             </span>
                           ) : isCod ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              ₹{order.display_total_amount} Unpaid (COD)
+                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Unpaid (COD)
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                              ₹{order.display_total_amount} Unpaid
+                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Unpaid
                             </span>
                           )}
                         </td>
 
                         {/* 7. Order Price */}
                         <td className="py-4 px-5 text-right font-bold text-sm text-[#0c0a09]">
-                          ₹{order.display_total_amount}
+                          {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)}
                         </td>
                       </tr>
                     );

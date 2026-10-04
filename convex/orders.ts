@@ -1,6 +1,77 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
+import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
+import { Id } from "./_generated/dataModel";
+import { validateActivePaymentMode } from "./paymentModes";
+import { resolveOrderItemStation } from "./stations";
+
+// ==========================================
+// ORDER ACTIVITY DURATION & LIFECYCLE HELPER
+// ==========================================
+
+/**
+ * Authoritative server-side helper to record order activity transitions and elapsed duration.
+ * Legacy behavior:
+ * - Position 1 / Initial step: totalDuration = 0.
+ * - Subsequent steps: totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000)) (integer seconds).
+ * - Closes previous active activity by setting completedAt = now.
+ */
+export async function recordOrderActivity(
+  ctx: MutationCtx,
+  args: {
+    organizationId: Id<"organizations">;
+    orderId: Id<"orders">;
+    processId?: Id<"organizationOrderProcesses">;
+    processName: string;
+    position?: number;
+    now?: number;
+  }
+) {
+  const now = args.now ?? Date.now();
+
+  const existingActivities = await ctx.db
+    .query("orderActivities")
+    .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+    .collect();
+
+  const activeActivities = existingActivities.filter((a) => a.deletedAt === undefined);
+
+  let totalDuration = 0;
+  if (activeActivities.length > 0) {
+    const sorted = [...activeActivities].sort(
+      (a, b) => a.position - b.position || a.createdAt - b.createdAt
+    );
+    const firstActivity = sorted[0];
+    const sinceFirstStep = firstActivity.startedAt ?? firstActivity.createdAt;
+    totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000));
+
+    // Close the previous active activity if not already completed
+    const lastActivity = sorted[sorted.length - 1];
+    if (lastActivity && lastActivity.completedAt === undefined) {
+      await ctx.db.patch(lastActivity._id, {
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  const nextPosition = args.position ?? activeActivities.length + 1;
+
+  const activityId = await ctx.db.insert("orderActivities", {
+    organizationId: args.organizationId,
+    orderId: args.orderId,
+    processId: args.processId,
+    processName: args.processName,
+    position: nextPosition,
+    totalDuration,
+    startedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return { activityId, totalDuration, position: nextPosition };
+}
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -18,6 +89,7 @@ export const createOrder = mutation({
     ),
     orderSource: v.optional(v.string()), // "Prest-Cashier", "Prest-Captain", "Prest-Online"
     tableId: v.optional(v.id("organizationTables")),
+    qrId: v.optional(v.union(v.id("organizationQrCodes"), v.string())),
     waiterUserId: v.optional(v.string()),
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
@@ -48,12 +120,17 @@ export const createOrder = mutation({
       })
     ),
 
+    // Scheduled Delivery Timing
+    scheduledDeliveryDate: v.optional(v.string()),
+    scheduledDeliveryTime: v.optional(v.string()),
+
     paymentMode: v.optional(v.string()),
     specialNotes: v.optional(v.string()),
     items: v.array(
       v.object({
         itemId: v.id("items"),
         quantity: v.number(),
+        isToGo: v.optional(v.boolean()),
         customizations: v.optional(
           v.array(
             v.object({
@@ -68,6 +145,15 @@ export const createOrder = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
+
+    // Validation for Scheduled Delivery timing fields
+    if (args.orderType === "ScheduledDelivery") {
+      if (!args.scheduledDeliveryDate || !args.scheduledDeliveryTime) {
+        throw new Error(
+          "Scheduled delivery requires scheduledDeliveryDate and scheduledDeliveryTime."
+        );
+      }
+    }
 
     // 0. Postpaid QR Verification Guard
     const reqTableId = args.tableId;
@@ -154,7 +240,7 @@ export const createOrder = mutation({
               optionId: custOption._id,
               optionName: custOption.name,
               price: custOption.price,
-              isGst: custOption.isGst,
+              isGst: custOption.isGst !== undefined ? custOption.isGst : dbItem.isGst,
               taxGroupId: custOption.taxGroupId,
               taxMode: custOption.taxMode,
             });
@@ -231,7 +317,8 @@ export const createOrder = mutation({
       // 2. Customization items tax calculation
       for (const cust of resolvedCustomizations) {
         const custLineTotal = (cust.price || 0) * inputItem.quantity;
-        if (cust.isGst && custLineTotal > 0) {
+        const custIsGstActive = cust.isGst !== undefined ? cust.isGst : dbItem.isGst;
+        if (custIsGstActive && custLineTotal > 0) {
           let custTg = null;
           const tgId = cust.taxGroupId || fallbackTaxGroup?._id;
           if (tgId) {
@@ -300,6 +387,7 @@ export const createOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        isToGo: inputItem.isToGo ?? false,
       });
     }
 
@@ -354,6 +442,65 @@ export const createOrder = mutation({
     const resolvedCustomerPhone = args.customerPhone?.trim() || generateUniquePhone();
     const resolvedCustomerName = args.customerName?.trim() || "Guest Customer";
 
+    // 5.5 Validate Payment Mode Availability for Store Checkout
+    if (args.paymentMode && args.paymentMode !== "Pending") {
+      await validateActivePaymentMode(ctx, args.organizationId, {
+        paymentModeName: args.paymentMode,
+      });
+    }
+
+    // Resolve QR Code reference for attribution
+    let autoQrId: Id<"organizationQrCodes"> | undefined = undefined;
+
+    if (args.qrId) {
+      try {
+        const directQr = await ctx.db.get(args.qrId as Id<"organizationQrCodes">);
+        if (directQr && directQr.deletedAt === undefined) {
+          autoQrId = directQr._id;
+        }
+      } catch {}
+    }
+
+    if (!autoQrId && args.tableId) {
+      const tableQrs = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_table", (q) => q.eq("tableId", args.tableId!.toString()))
+        .collect();
+      const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
+      if (activeQr) {
+        autoQrId = activeQr._id;
+      }
+    }
+
+    const isOnlineOrQrSource =
+      !args.orderSource ||
+      args.orderSource === "Prest-Online" ||
+      args.orderSource.toUpperCase().includes("QR");
+
+    if (!autoQrId && isOnlineOrQrSource) {
+      const isTakeawayType = args.orderType === "TakeAway" || args.orderType === "ScheduledPickup";
+      const isDeliveryType = args.orderType === "Delivery" || args.orderType === "ScheduledDelivery";
+
+      if (isTakeawayType || isDeliveryType) {
+        const orgQrs = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
+          .collect();
+
+        const activeQr = orgQrs.find((q) => {
+          if (q.deletedAt !== undefined || q.status === "INACTIVE") return false;
+          const normalized = q.qrType ? q.qrType.toUpperCase().replace(/[-_\s]/g, "") : "";
+          if (isTakeawayType && (normalized === "TAKEAWAY" || q.qrType === "TakeAway")) return true;
+          if (isDeliveryType && (normalized === "DELIVERY" || q.qrType === "Delivery")) return true;
+          return false;
+        });
+
+        if (activeQr) {
+          autoQrId = activeQr._id;
+        }
+      }
+    }
+
     // 6. Insert Order Header
     const orderId = await ctx.db.insert("orders", {
       organizationId: args.organizationId,
@@ -367,6 +514,7 @@ export const createOrder = mutation({
       isRejected: false,
       isModify: false,
       tableId: args.tableId,
+      qrId: autoQrId,
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
@@ -380,6 +528,10 @@ export const createOrder = mutation({
       deliveryCharge: args.deliveryCharge,
       userAddressId: args.userAddressId,
       deliveryAddress: args.deliveryAddress,
+      scheduledDeliveryDate:
+        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryDate : undefined,
+      scheduledDeliveryTime:
+        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryTime : undefined,
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",
       paymentStatus: resolvedPaymentStatus,
@@ -391,6 +543,12 @@ export const createOrder = mutation({
 
     // 7. Insert Order Line Items
     for (const line of lineItemConfigs) {
+      const stationId = await resolveOrderItemStation(
+        ctx,
+        args.organizationId,
+        line.itemId
+      );
+
       await ctx.db.insert("orderItems", {
         organizationId: args.organizationId,
         orderId,
@@ -401,18 +559,20 @@ export const createOrder = mutation({
         totalPrice: line.totalPrice,
         customizations: line.customizations,
         isReady: false,
+        isToGo: line.isToGo ?? false,
+        stationId,
         createdAt: now,
       });
     }
 
     // 8. Log Initial Activity Entry
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: args.organizationId,
       orderId,
       processId: initialStatus?._id,
       processName: initialStatus?.name ?? "Accepted",
       position: 1,
-      createdAt: now,
+      now,
     });
 
     // 8.5 Record Initial Order Credit Payment Entry (if settled)
@@ -609,8 +769,56 @@ export const getOrderDetails = query({
     const remainingDue = Math.max(0, order.totalAmount - netPaid);
     const refundableAmount = Math.max(0, totalCredit - totalDebit);
 
+    let effectivePaymentStatus = order.paymentStatus;
+    let effectiveOrderStatusName = order.orderStatusName;
+
+    if (payments.length > 0) {
+      if (netPaid >= order.totalAmount) {
+        effectivePaymentStatus = "Paid";
+        if (effectiveOrderStatusName === "Cancelled / Refunded") {
+          effectiveOrderStatusName = "Accepted";
+        }
+      } else if (netPaid <= 0 && totalCredit > 0 && totalDebit >= totalCredit) {
+        effectivePaymentStatus = "Refunded";
+        effectiveOrderStatusName = "Cancelled / Refunded";
+      } else if (totalDebit > 0 && netPaid > 0 && netPaid < order.totalAmount) {
+        effectivePaymentStatus = "Partially Refunded";
+      } else if (netPaid > 0 && netPaid < order.totalAmount) {
+        effectivePaymentStatus = "Pending";
+      }
+    }
+
+    // Look up active survey attempt if any exists
+    let surveyQrUrl: string | null = null;
+    const activeSurvey = await ctx.db
+      .query("surveys")
+      .withIndex("by_active", (q) => q.eq("active", true))
+      .first();
+
+    if (activeSurvey) {
+      const attempt = await ctx.db
+        .query("surveyAttempts")
+        .withIndex("by_order_survey", (q) =>
+          q.eq("orderId", order._id).eq("surveyId", activeSurvey._id)
+        )
+        .first();
+
+      if (attempt) {
+        const baseUrl =
+          process.env.FRONTEND_URL ||
+          process.env.PUBLIC_URL ||
+          "";
+        surveyQrUrl = baseUrl
+          ? `${baseUrl.replace(/\/$/, "")}/attempts/${attempt._id}`
+          : `/attempts/${attempt._id}`;
+      }
+    }
+
     return {
       ...order,
+      paymentStatus: effectivePaymentStatus,
+      orderStatusName: effectiveOrderStatusName,
+      surveyQrUrl,
       totalCredit,
       totalDebit,
       netPaid,
@@ -634,6 +842,129 @@ export const getOrderDetails = query({
       payments,
       table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
     };
+  },
+});
+
+// ==========================================
+// 2.5 AUTHENTICATED CUSTOMER ORDERS QUERY
+// ==========================================
+
+export const listCustomerOrders = query({
+  args: {
+    organizationId: v.id("organizations"),
+    orderIds: v.optional(v.array(v.string())),
+    placedOrderIds: v.optional(v.array(v.string())),
+    customerPhone: v.optional(v.string()),
+    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
+    const placedSet = new Set(sessionOrderIds);
+
+    if (!identity && placedSet.size === 0) {
+      return [];
+    }
+
+    const clerkUserId = identity?.subject;
+    const userEmail = identity?.email?.toLowerCase().trim();
+    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
+
+    // Collect allowed email and phone identifiers for this user
+    const allowedEmails = new Set<string>();
+    if (userEmail) allowedEmails.add(userEmail);
+
+    const allowedPhoneDigits = new Set<string>();
+    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
+      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
+    }
+
+    if (clerkUserId) {
+      const userOrgRecords = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
+        )
+        .collect();
+
+      for (const u of userOrgRecords) {
+        if (u.deletedAt !== undefined) continue;
+        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
+        if (u.phone) {
+          const uDig = u.phone.replace(/\D/g, "");
+          if (uDig.length >= 7) {
+            allowedPhoneDigits.add(uDig.slice(-10));
+          }
+        }
+      }
+    }
+
+    // Query orders for this store
+    const orgOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    // Strictly filter to orders belonging to this authenticated customer or placed in session
+    const filteredOrders = orgOrders.filter((order) => {
+      // Placed in current browser session
+      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      if (order.customerEmail) {
+        const oEmail = order.customerEmail.toLowerCase().trim();
+        if (allowedEmails.has(oEmail)) return true;
+      }
+
+      if (order.customerPhone) {
+        const oDigits = order.customerPhone.replace(/\D/g, "");
+        if (oDigits.length >= 7) {
+          const oLast10 = oDigits.slice(-10);
+          if (allowedPhoneDigits.has(oLast10)) return true;
+        }
+      }
+
+      return false;
+    });
+
+    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
+
+    const enrichedOrders: Array<any> = [];
+    for (const order of sorted) {
+      const items = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const activities = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      let tableInfo: any = null;
+      if (order.tableId) {
+        tableInfo = await ctx.db.get(order.tableId);
+      }
+
+      enrichedOrders.push({
+        ...order,
+        display_sub_total: (order.subTotal / 100).toFixed(2),
+        display_tax_total: (order.taxTotal / 100).toFixed(2),
+        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
+        display_total_amount: (order.totalAmount / 100).toFixed(2),
+        items: items.map((i) => ({
+          ...i,
+          display_item_price: (i.itemPrice / 100).toFixed(2),
+          display_total_price: (i.totalPrice / 100).toFixed(2),
+        })),
+        activities: activities.sort((a, b) => a.position - b.position),
+        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      });
+    }
+
+    return enrichedOrders;
   },
 });
 
@@ -677,10 +1008,11 @@ export const getCustomerStats = query({
       totalAmount: number;
       orderType: string;
       itemsSummary: string;
+      items: Array<{ itemName: string; quantity: number }>;
     }> = [];
 
-    // Return only the single most recent order (last order)
-    for (const ord of sortedOrders.slice(0, 1)) {
+    // Return recent orders with item details
+    for (const ord of sortedOrders.slice(0, 15)) {
       const items = await ctx.db
         .query("orderItems")
         .withIndex("by_order", (q) => q.eq("orderId", ord._id))
@@ -696,6 +1028,7 @@ export const getCustomerStats = query({
         totalAmount: ord.totalAmount,
         orderType: ord.orderType,
         itemsSummary,
+        items: items.map((it) => ({ itemName: it.itemName, quantity: it.quantity })),
       });
     }
 
@@ -707,6 +1040,31 @@ export const getCustomerStats = query({
     };
   },
 });
+
+/**
+ * Cascading cleanup helper: deletes all survey attempts and answers associated with an order.
+ */
+export async function deleteOrderSurveys(
+  ctx: MutationCtx,
+  orderId: Id<"orders">
+) {
+  const attempts = await ctx.db
+    .query("surveyAttempts")
+    .withIndex("by_order_id", (q) => q.eq("orderId", orderId))
+    .collect();
+
+  for (const attempt of attempts) {
+    const answers = await ctx.db
+      .query("surveyAnswers")
+      .withIndex("by_attempt_id", (q) => q.eq("attemptId", attempt._id))
+      .collect();
+
+    for (const a of answers) {
+      await ctx.db.delete(a._id);
+    }
+    await ctx.db.delete(attempt._id);
+  }
+}
 
 // ==========================================
 // 3. ORDER STATUS ADVANCEMENT & KDS MUTATIONS
@@ -726,21 +1084,13 @@ export const updateOrderStatus = mutation({
 
     const now = Date.now();
 
-    // Appends entry in orderActivities
-    const existingActivities = await ctx.db
-      .query("orderActivities")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    const nextPosition = existingActivities.length + 1;
-
-    await ctx.db.insert("orderActivities", {
+    // Appends entry in orderActivities with duration calculation
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processId: process._id,
       processName: process.name,
-      position: nextPosition,
-      createdAt: now,
+      now,
     });
 
     await ctx.db.patch(order._id, {
@@ -792,6 +1142,7 @@ export const completeOrder = mutation({
   args: {
     orderId: v.id("orders"),
     paymentModeId: v.optional(v.id("paymentModes")),
+    paymentMode: v.optional(v.string()),
     transactionReference: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -800,19 +1151,28 @@ export const completeOrder = mutation({
 
     const now = Date.now();
 
-    // 1. Mark Order Completed & Paid
-    await ctx.db.patch(order._id, {
-      isCompleted: true,
-      paymentStatus: "Paid",
-      updatedAt: now,
-    });
+    // 0. Validate Payment Mode Availability
+    if (args.paymentModeId || args.paymentMode) {
+      await validateActivePaymentMode(ctx, order.organizationId, {
+        paymentModeId: args.paymentModeId,
+        paymentModeName: args.paymentMode,
+      });
+    }
 
     // 2. Record Payment Log
-    let payModeName = order.paymentMode;
+    let payModeName = args.paymentMode || order.paymentMode;
     if (args.paymentModeId) {
       const pm = await ctx.db.get(args.paymentModeId);
       if (pm) payModeName = pm.name;
     }
+
+    // 1. Mark Order Completed & Paid
+    await ctx.db.patch(order._id, {
+      isCompleted: true,
+      paymentStatus: "Paid",
+      ...(payModeName ? { paymentMode: payModeName } : {}),
+      updatedAt: now,
+    });
 
     await ctx.db.insert("orderPayments", {
       organizationId: order.organizationId,
@@ -823,6 +1183,17 @@ export const completeOrder = mutation({
       transactionReference: args.transactionReference,
       createdAt: now,
     });
+
+    // Close any open order activities on completion
+    const openActivities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+    for (const act of openActivities) {
+      if (act.completedAt === undefined && act.deletedAt === undefined) {
+        await ctx.db.patch(act._id, { completedAt: now, updatedAt: now });
+      }
+    }
 
     // 3. Clear Dine-In Table Occupancy & Complete Postpaid Order Request
     const orderTableId = order.tableId;
@@ -936,6 +1307,9 @@ export const completeOrder = mutation({
       }
     }
 
+    // 5. Automated Provider Payment Transfer Hook (Fail-safe marketplace payout routing)
+    await handleOrderCompletionTransfer(ctx, order._id);
+
     return {
       success: true,
       orderId: order._id,
@@ -966,7 +1340,15 @@ export const listOrders = query({
         v.literal("ScheduledDelivery")
       )
     ),
-    paymentStatus: v.optional(v.union(v.literal("Pending"), v.literal("Paid"), v.literal("Failed"))),
+    paymentStatus: v.optional(
+      v.union(
+        v.literal("Pending"),
+        v.literal("Paid"),
+        v.literal("Failed"),
+        v.literal("Refunded"),
+        v.literal("Partially Refunded")
+      )
+    ),
     minPrice: v.optional(v.number()),
     maxPrice: v.optional(v.number()),
     page: v.optional(v.number()),
@@ -1100,6 +1482,14 @@ export const addOrderPayment = mutation({
     const now = Date.now();
     const paymentModeId = args.paymentModeId ? ctx.db.normalizeId("paymentModes", args.paymentModeId) : undefined;
 
+    // 0. Validate Payment Mode Availability for payment settlement tenders
+    if (args.paymentType === "Credit") {
+      await validateActivePaymentMode(ctx, order.organizationId, {
+        paymentModeId: paymentModeId ?? undefined,
+        paymentModeName: args.paymentModeName,
+      });
+    }
+
     // 1. Insert transaction into orderPayments
     await ctx.db.insert("orderPayments", {
       organizationId: order.organizationId,
@@ -1131,10 +1521,36 @@ export const addOrderPayment = mutation({
     }
 
     const netPaid = totalCredit - totalDebit;
-    const isPaid = netPaid >= order.totalAmount;
+    let nextPaymentStatus: "Paid" | "Pending" | "Failed" | "Refunded" | "Partially Refunded" = "Pending";
+    let nextOrderStatusName = order.orderStatusName;
+    let isCompleted = order.isCompleted;
+    let isRejected = order.isRejected;
+
+    if (netPaid >= order.totalAmount) {
+      nextPaymentStatus = "Paid";
+      isCompleted = true;
+      isRejected = false;
+      if (nextOrderStatusName === "Cancelled / Refunded") {
+        nextOrderStatusName = "Accepted";
+      }
+    } else if (netPaid <= 0 && totalCredit > 0 && totalDebit >= totalCredit) {
+      nextPaymentStatus = "Refunded";
+      nextOrderStatusName = "Cancelled / Refunded";
+      isCompleted = false;
+      isRejected = true;
+    } else if (totalDebit > 0 && netPaid > 0 && netPaid < order.totalAmount) {
+      nextPaymentStatus = "Partially Refunded";
+      isCompleted = false;
+    } else {
+      nextPaymentStatus = "Pending";
+      isCompleted = false;
+    }
 
     await ctx.db.patch(order._id, {
-      paymentStatus: isPaid ? "Paid" : "Pending",
+      paymentStatus: nextPaymentStatus,
+      orderStatusName: nextOrderStatusName,
+      isCompleted,
+      isRejected,
       paymentMode: args.paymentModeName,
       updatedAt: now,
     });
@@ -1142,7 +1558,7 @@ export const addOrderPayment = mutation({
     return {
       success: true,
       netPaid: (netPaid / 100).toFixed(2),
-      paymentStatus: isPaid ? "Paid" : "Pending",
+      paymentStatus: nextPaymentStatus,
     };
   },
 });
@@ -1233,12 +1649,12 @@ export const deleteMultipleOrderItems = mutation({
     });
 
     // Log modification activity
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Removed ${args.orderItemIds.length} item(s)`,
       position: 50,
-      createdAt: now,
+      now,
     });
 
     return {
@@ -1282,13 +1698,13 @@ export const cancelOrder = mutation({
       }
     }
 
-    // Log activity
-    await ctx.db.insert("orderActivities", {
+    // Log cancellation activity
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: "Cancelled",
       position: 99,
-      createdAt: now,
+      now,
     });
 
     return { success: true };
@@ -1297,386 +1713,422 @@ export const cancelOrder = mutation({
 
 // ==========================================
 // 10. SEED SAMPLE / TEMPORARY ORDERS
+
+// ==========================================
+// 11. CAPTAIN ORDER MANAGEMENT MUTATIONS
 // ==========================================
 
-export const seedSampleOrders = mutation({
+/**
+ * Appends new items (KOT #2, KOT #3...) to an ongoing Dine-In order
+ */
+export const addItemsToExistingOrder = mutation({
   args: {
-    organizationId: v.optional(v.id("organizations")),
+    orderId: v.id("orders"),
+    items: v.array(
+      v.object({
+        itemId: v.id("items"),
+        quantity: v.number(),
+        isToGo: v.optional(v.boolean()),
+        customizations: v.optional(
+          v.array(
+            v.object({
+              customizationId: v.id("customizations"),
+              optionId: v.id("customizationItems"),
+            })
+          )
+        ),
+      })
+    ),
   },
   handler: async (ctx, args) => {
-    let orgs = [];
-    if (args.organizationId) {
-      const singleOrg = await ctx.db.get(args.organizationId);
-      if (!singleOrg) throw new Error("Organization not found");
-      orgs.push(singleOrg);
-    } else {
-      orgs = await ctx.db.query("organizations").collect();
-      if (!orgs.length) throw new Error("No organization found to seed orders");
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    if (order.isCompleted || order.isRejected) {
+      throw new Error("Cannot add items to a completed or cancelled order");
     }
 
-    let totalSeeded = 0;
+    const now = Date.now();
+    let additionalSubTotal = 0;
+    const lineItemConfigs: Array<any> = [];
 
-    for (const org of orgs) {
-      const orgId = org._id;
-      const now = Date.now();
+    for (const inputItem of args.items) {
+      const dbItem = await ctx.db.get(inputItem.itemId);
+      if (!dbItem) throw new Error("Item not found");
 
-    // 1. Ensure at least one Menu, Category & Items exist
-    let items = await ctx.db
-      .query("items")
-      .withIndex("by_org", (q) => q.eq("organizationId", orgId!))
+      let itemUnitPrice = dbItem.price;
+      const resolvedCustomizations: Array<any> = [];
+
+      if (inputItem.customizations) {
+        for (const custInput of inputItem.customizations) {
+          const custGroup = await ctx.db.get(custInput.customizationId);
+          const custOption = await ctx.db.get(custInput.optionId);
+          if (custGroup && custOption && custOption.deletedAt === undefined) {
+            itemUnitPrice += custOption.price;
+            resolvedCustomizations.push({
+              customizationId: custGroup._id,
+              customizationName: custGroup.name,
+              optionId: custOption._id,
+              optionName: custOption.name,
+              price: custOption.price,
+            });
+          }
+        }
+      }
+
+      const itemLineTotal = itemUnitPrice * inputItem.quantity;
+      additionalSubTotal += itemLineTotal;
+
+      lineItemConfigs.push({
+        itemId: dbItem._id,
+        itemName: dbItem.name,
+        itemPrice: itemUnitPrice,
+        quantity: inputItem.quantity,
+        totalPrice: itemLineTotal,
+        customizations: resolvedCustomizations,
+        isToGo: inputItem.isToGo ?? false,
+      });
+    }
+
+    // 1. Insert new order items
+    for (const line of lineItemConfigs) {
+      const stationId = await resolveOrderItemStation(
+        ctx,
+        order.organizationId,
+        line.itemId
+      );
+
+      await ctx.db.insert("orderItems", {
+        organizationId: order.organizationId,
+        orderId: order._id,
+        itemId: line.itemId,
+        itemName: line.itemName,
+        itemPrice: line.itemPrice,
+        quantity: line.quantity,
+        totalPrice: line.totalPrice,
+        customizations: line.customizations,
+        isReady: false,
+        isToGo: line.isToGo ?? false,
+        stationId,
+        createdAt: now,
+      });
+    }
+
+    // 2. Fetch all order items and recalculate
+    const allItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
       .collect();
 
-    if (items.length === 0) {
-      let menu = await ctx.db
-        .query("menus")
-        .withIndex("by_org", (q) => q.eq("organizationId", orgId!))
-        .first();
+    let newSubTotal = 0;
+    for (const it of allItems) {
+      newSubTotal += it.totalPrice;
+    }
 
-      if (!menu) {
-        const menuId = await ctx.db.insert("menus", {
-          organizationId: orgId,
-          name: "Main Dining Menu",
-          isDefault: true,
-          isActive: true,
-          position: 0,
-          createdAt: now,
+    const taxRatio = order.subTotal > 0 ? order.taxTotal / order.subTotal : 0.05;
+    const newTaxTotal = Math.round(newSubTotal * taxRatio);
+    const discount = order.discountAmount ?? 0;
+    const delivery = order.deliveryCharge ?? 0;
+    const newTotalAmount = Math.max(0, newSubTotal + newTaxTotal - discount + delivery);
+
+    await ctx.db.patch(order._id, {
+      subTotal: newSubTotal,
+      taxTotal: newTaxTotal,
+      totalAmount: newTotalAmount,
+      isModify: true,
+      updatedAt: now,
+    });
+
+    // 3. Log modification activity
+    await recordOrderActivity(ctx, {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      processName: `Added ${args.items.length} item(s) to table order`,
+      now,
+    });
+
+    return {
+      success: true,
+      orderId: order._id,
+      newTotalAmount: (newTotalAmount / 100).toFixed(2),
+      itemCount: allItems.length,
+    };
+  },
+});
+
+/**
+ * Updates item quantity on an open table order
+ */
+export const updateOrderItemQuantity = mutation({
+  args: {
+    orderItemId: v.id("orderItems"),
+    quantity: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const orderItem = await ctx.db.get(args.orderItemId);
+    if (!orderItem) throw new Error("Order item not found");
+
+    const order = await ctx.db.get(orderItem.orderId);
+    if (!order) throw new Error("Associated order not found");
+    if (order.isCompleted || order.isRejected) {
+      throw new Error("Cannot modify a completed or cancelled order");
+    }
+
+    const now = Date.now();
+
+    if (args.quantity <= 0) {
+      await ctx.db.delete(args.orderItemId);
+    } else {
+      await ctx.db.patch(args.orderItemId, {
+        quantity: args.quantity,
+        totalPrice: orderItem.itemPrice * args.quantity,
+      });
+    }
+
+    // Recalculate
+    const remainingItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+
+    let newSubTotal = 0;
+    for (const it of remainingItems) {
+      newSubTotal += it.totalPrice;
+    }
+
+    const taxRatio = order.subTotal > 0 ? order.taxTotal / order.subTotal : 0.05;
+    const newTaxTotal = Math.round(newSubTotal * taxRatio);
+    const discount = order.discountAmount ?? 0;
+    const delivery = order.deliveryCharge ?? 0;
+    const newTotalAmount = Math.max(0, newSubTotal + newTaxTotal - discount + delivery);
+
+    await ctx.db.patch(order._id, {
+      subTotal: newSubTotal,
+      taxTotal: newTaxTotal,
+      totalAmount: newTotalAmount,
+      isModify: true,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      newTotalAmount: (newTotalAmount / 100).toFixed(2),
+      remainingItemCount: remainingItems.length,
+    };
+  },
+});
+
+/**
+ * Transfers an active Dine-In order to another table
+ */
+export const moveOrderTable = mutation({
+  args: {
+    orderId: v.id("orders"),
+    newTableId: v.id("organizationTables"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+
+    const newTable = await ctx.db.get(args.newTableId);
+    if (!newTable || newTable.deletedAt !== undefined) {
+      throw new Error("Destination table not found");
+    }
+
+    if (
+      newTable.currentOrderId &&
+      newTable.currentOrderId !== order._id.toString()
+    ) {
+      throw new Error(`Table ${newTable.tableNumber} is already occupied by another order`);
+    }
+
+    const now = Date.now();
+
+    // 1. Release old table if any
+    if (order.tableId && order.tableId !== args.newTableId) {
+      const oldTable = await ctx.db.get(order.tableId);
+      if (oldTable && oldTable.currentOrderId === order._id.toString()) {
+        await ctx.db.patch(order.tableId, {
+          currentOrderId: undefined,
+          isRequested: false,
           updatedAt: now,
         });
-        menu = await ctx.db.get(menuId);
       }
+    }
 
-      let category = await ctx.db
-        .query("categories")
-        .withIndex("by_org", (q) => q.eq("organizationId", orgId!))
-        .first();
+    // 2. Bind new table
+    await ctx.db.patch(args.newTableId, {
+      currentOrderId: order._id.toString(),
+      isRequested: false,
+      updatedAt: now,
+    });
 
-      if (!category) {
-        const catId = await ctx.db.insert("categories", {
-          organizationId: orgId,
-          menuId: menu!._id,
-          name: "Signature Specialties",
-          published: true,
-          position: 0,
-          createdAt: now,
-          updatedAt: now,
-        });
-        category = await ctx.db.get(catId);
-      }
+    // 3. Update order tableId
+    await ctx.db.patch(order._id, {
+      tableId: args.newTableId,
+      updatedAt: now,
+    });
 
-      const sampleItemDefs = [
-        { name: "Truffle Butter Croissant", price: 35000 },
-        { name: "Signature Cold Brew", price: 28000 },
-        { name: "Margherita Sourdough Pizza", price: 65000 },
-        { name: "Avocado & Poached Egg Toast", price: 42000 },
-        { name: "Artisanal Tiramisu", price: 38000 },
-      ];
+    // 4. Log activity
+    await recordOrderActivity(ctx, {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      processName: `Moved order to Table #${newTable.tableNumber}`,
+      position: 60,
+      now,
+    });
 
-      for (const def of sampleItemDefs) {
-        const itemId = await ctx.db.insert("items", {
-          organizationId: orgId,
-          name: def.name,
-          price: def.price,
-          published: true,
-          isAvailable: true,
-          isGst: true,
-          isVeg: true,
-          isSpicy: false,
-          showQuantity: false,
-          markAsBestseller: false,
-          showCalorie: false,
-          createdAt: now,
-          updatedAt: now,
-        });
-        const createdItem = await ctx.db.get(itemId);
-        if (createdItem) items.push(createdItem);
+    return {
+      success: true,
+      newTableNumber: newTable.tableNumber,
+    };
+  },
+});
 
-        if (category) {
-          await ctx.db.insert("categoryItems", {
-            organizationId: orgId,
-            categoryId: category._id,
-            itemId,
-            published: true,
-            position: 0,
-            createdAt: now,
-          });
+// ==========================================
+// AUTHENTICATED CUSTOMER ORDERS QUERY
+// ==========================================
+
+export const listCustomerOrders = query({
+  args: {
+    organizationId: v.id("organizations"),
+    orderIds: v.optional(v.array(v.string())),
+    placedOrderIds: v.optional(v.array(v.string())),
+    customerPhone: v.optional(v.string()),
+    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
+    const placedSet = new Set(sessionOrderIds);
+
+    if (!identity && placedSet.size === 0) {
+      return [];
+    }
+
+    const clerkUserId = identity?.subject;
+    const userEmail = identity?.email?.toLowerCase().trim();
+    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
+
+    // Collect allowed email and phone identifiers for this user
+    const allowedEmails = new Set<string>();
+    if (userEmail) allowedEmails.add(userEmail);
+
+    const allowedPhoneDigits = new Set<string>();
+    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
+      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
+    }
+
+    if (clerkUserId) {
+      const userOrgRecords = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
+        )
+        .collect();
+
+      for (const u of userOrgRecords) {
+        if (u.deletedAt !== undefined) continue;
+        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
+        if (u.phone) {
+          const uDig = u.phone.replace(/\D/g, "");
+          if (uDig.length >= 7) {
+            allowedPhoneDigits.add(uDig.slice(-10));
+          }
         }
       }
     }
 
-    // 2. Ensure Sample Dine-In Tables exist & are linked to a Layout
-    let tables = await ctx.db.query("organizationTables").collect();
-
-    if (tables.length === 0) {
-      let defaultLayout = (await ctx.db.query("organizationLayouts").collect()).find(
-        (l) => l.deletedAt === undefined
-      );
-      if (!defaultLayout) {
-        const layoutId = await ctx.db.insert("organizationLayouts", {
-          name: "Indoor-DineIn",
-          createdAt: now,
-          updatedAt: now,
-        });
-        defaultLayout = await ctx.db.get(layoutId) || undefined;
-      }
-
-      const tableNumbers = ["01", "02", "04", "06", "10"];
-      for (let i = 0; i < tableNumbers.length; i++) {
-        const tNum = tableNumbers[i];
-        const col = i % 4;
-        const row = Math.floor(i / 4);
-        const tId = await ctx.db.insert("organizationTables", {
-          tableNumber: tNum,
-          seatingCapacity: 4,
-          layoutId: defaultLayout?._id,
-          xPosition: (100 + col * 180).toString(),
-          yPosition: (100 + row * 160).toString(),
-          createdAt: now,
-          updatedAt: now,
-        });
-        const tObj = await ctx.db.get(tId);
-        if (tObj) tables.push(tObj);
-      }
-    }
-
-    // 3. Clear existing orders for a clean state if any test orders exist
-    const existingOrders = await ctx.db
+    // Query orders for this store
+    const orgOrders = await ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", orgId!))
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
       .collect();
 
-    for (const eo of existingOrders) {
-      const itemsOfOrder = await ctx.db
+    // Strictly filter to orders belonging to this authenticated customer or placed in session
+    const filteredOrders = orgOrders.filter((order) => {
+      // Placed in current browser session
+      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      if (order.customerEmail) {
+        const oEmail = order.customerEmail.toLowerCase().trim();
+        if (allowedEmails.has(oEmail)) return true;
+      }
+
+      if (order.customerPhone) {
+        const oDigits = order.customerPhone.replace(/\D/g, "");
+        if (oDigits.length >= 7) {
+          const oLast10 = oDigits.slice(-10);
+          if (allowedPhoneDigits.has(oLast10)) return true;
+        }
+      }
+
+      return false;
+    });
+
+    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
+
+    const enrichedOrders: Array<any> = [];
+    for (const order of sorted) {
+      const items = await ctx.db
         .query("orderItems")
-        .withIndex("by_order", (q) => q.eq("orderId", eo._id))
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
         .collect();
-      for (const oi of itemsOfOrder) await ctx.db.delete(oi._id);
 
-      const paymentsOfOrder = await ctx.db
-        .query("orderPayments")
-        .withIndex("by_order", (q) => q.eq("orderId", eo._id))
-        .collect();
-      for (const op of paymentsOfOrder) await ctx.db.delete(op._id);
-
-      const activitiesOfOrder = await ctx.db
+      const activities = await ctx.db
         .query("orderActivities")
-        .withIndex("by_order", (q) => q.eq("orderId", eo._id))
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
         .collect();
-      for (const oa of activitiesOfOrder) await ctx.db.delete(oa._id);
 
-      await ctx.db.delete(eo._id);
+      let tableInfo: any = null;
+      if (order.tableId) {
+        try {
+          tableInfo = await ctx.db.get(order.tableId as Id<"organizationTables">);
+        } catch {
+          // Table doc format fallback
+        }
+      }
+
+      enrichedOrders.push({
+        ...order,
+        display_sub_total: (order.subTotal / 100).toFixed(2),
+        display_tax_total: (order.taxTotal / 100).toFixed(2),
+        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
+        display_total_amount: (order.totalAmount / 100).toFixed(2),
+        items: items.map((i) => ({
+          ...i,
+          display_item_price: (i.itemPrice / 100).toFixed(2),
+          display_total_price: (i.totalPrice / 100).toFixed(2),
+        })),
+        activities: activities.sort((a, b) => a.position - b.position),
+        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      });
     }
 
-    // 4. Resolve Order Processes for linking
-    const processes = await ctx.db
-      .query("organizationOrderProcesses")
+    return enrichedOrders;
+/**
+ * Lists all activity transitions and duration metrics for an order.
+ */
+export const listOrderActivities = query({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) {
+      return [];
+    }
+
+    const activities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
       .collect();
 
-    const processMap = new Map<string, any>();
-    for (const p of processes) {
-      processMap.set(p.name.toLowerCase(), p);
-    }
-
-    // 5. Create 6 Rich Temporary Orders matching defx-pos & defx-pos-frontend
-    const sampleOrdersData = [
-      {
-        orderNumber: "#ORD-1081",
-        tokenNumber: "01",
-        orderType: "DineIn" as const,
-        orderStatusName: "Accepted",
-        customerName: "Vikram Malhotra",
-        customerPhone: "+91 91234 56780",
-        table: tables[2] || tables[0],
-        paymentMode: "Cash",
-        paymentStatus: "Pending" as const,
-        specialNotes: "First time customer",
-        itemsToPick: [items[1] || items[0]],
-        timeOffsetMinutes: 5,
-      },
-      {
-        orderNumber: "#ORD-1082",
-        tokenNumber: "02",
-        orderType: "DineIn" as const,
-        orderStatusName: "In progress",
-        customerName: "Rahul Verma",
-        customerPhone: "+91 98765 43210",
-        table: tables[1] || tables[0],
-        paymentMode: "Cash",
-        paymentStatus: "Pending" as const,
-        specialNotes: "Extra spicy, serve starters first",
-        itemsToPick: [items[0], items[1], items[2]],
-        timeOffsetMinutes: 12,
-      },
-      {
-        orderNumber: "#ORD-1083",
-        tokenNumber: "03",
-        orderType: "TakeAway" as const,
-        orderStatusName: "In progress",
-        customerName: "Priya Sharma",
-        customerPhone: "+91 98234 56789",
-        table: undefined,
-        paymentMode: "UPI",
-        paymentStatus: "Paid" as const,
-        specialNotes: "Pack hot drinks separately",
-        itemsToPick: [items[1], items[3] || items[0]],
-        timeOffsetMinutes: 20,
-      },
-      {
-        orderNumber: "#ORD-1084",
-        tokenNumber: "04",
-        orderType: "Delivery" as const,
-        orderStatusName: "Ready to deliver",
-        customerName: "Amit Patel",
-        customerPhone: "+91 97123 45678",
-        table: undefined,
-        paymentMode: "Cash on Delivery",
-        paymentStatus: "Pending" as const,
-        specialNotes: "Ring doorbell twice, leave at reception if unavailable",
-        deliveryAddress: {
-          addressLine1: "Flat 402, Sunset Heights, Linking Road",
-          landmark: "Near City Center Mall",
-          city: "Mumbai",
-          zipCode: "400050",
-          addressType: "Home",
-        },
-        itemsToPick: [items[2], items[4] || items[0]],
-        timeOffsetMinutes: 35,
-      },
-      {
-        orderNumber: "#ORD-1085",
-        tokenNumber: "05",
-        orderType: "DineIn" as const,
-        orderStatusName: "Delivered",
-        customerName: "Sneha Rao",
-        customerPhone: "+91 99887 66554",
-        table: tables[0],
-        paymentMode: "Card",
-        paymentStatus: "Paid" as const,
-        specialNotes: "Table anniversary celebration",
-        itemsToPick: [items[0], items[2], items[3] || items[1], items[4] || items[0]],
-        timeOffsetMinutes: 55,
-      },
-      {
-        orderNumber: "#ORD-1086",
-        tokenNumber: "06",
-        orderType: "Delivery" as const,
-        orderStatusName: "Cancelled",
-        customerName: "Walk-in Customer",
-        customerPhone: "",
-        table: undefined,
-        paymentMode: "Cash",
-        paymentStatus: "Pending" as const,
-        isRejected: true,
-        specialNotes: "Cancelled: Customer requested cancellation before kitchen dispatch",
-        deliveryAddress: {
-          addressLine1: "12 Palm Grove, Sector 4",
-          city: "Mumbai",
-          zipCode: "400051",
-          addressType: "Office",
-        },
-        itemsToPick: [items[2] || items[0]],
-        timeOffsetMinutes: 90,
-      },
-    ];
-
-    const seededOrderIds = [];
-
-    for (const oData of sampleOrdersData) {
-      const orderCreatedAt = now - oData.timeOffsetMinutes * 60 * 1000;
-      let orderSubTotal = 0;
-
-      const validItems = oData.itemsToPick.filter(Boolean);
-      for (const it of validItems) {
-        orderSubTotal += it.price;
-      }
-
-      const taxTotal = Math.round(orderSubTotal * 0.05); // 5% GST
-      const totalAmount = orderSubTotal + taxTotal;
-
-      const matchedProcess =
-        processMap.get(oData.orderStatusName.toLowerCase()) ||
-        processMap.get(
-          oData.orderStatusName.includes("Kitchen")
-            ? "in progress"
-            : oData.orderStatusName.includes("Ready")
-            ? "ready to deliver"
-            : oData.orderStatusName.includes("Delivery")
-            ? "delivered"
-            : "accepted"
-        );
-
-      const orderId = await ctx.db.insert("orders", {
-        organizationId: orgId,
-        orderNumber: oData.orderNumber,
-        tokenNumber: oData.tokenNumber,
-        orderType: oData.orderType,
-        orderSource: "Prest-Cashier",
-        orderStatusId: matchedProcess?._id,
-        orderStatusName: oData.orderStatusName,
-        isCompleted: oData.orderStatusName === "Completed",
-        isRejected: oData.isRejected ?? false,
-        isModify: false,
-        tableId: oData.table?._id,
-        customerName: oData.customerName,
-        customerPhone: oData.customerPhone || undefined,
-        deliveryAddress: (oData as any).deliveryAddress,
-        specialNotes: oData.specialNotes,
-        subTotal: orderSubTotal,
-        taxTotal,
-        totalAmount,
-        paymentMode: oData.paymentMode,
-        paymentStatus: oData.paymentStatus,
-        createdAt: orderCreatedAt,
-        updatedAt: orderCreatedAt,
-      });
-
-      seededOrderIds.push(orderId);
-
-      // Insert Order Items
-      for (const it of validItems) {
-        await ctx.db.insert("orderItems", {
-          organizationId: orgId,
-          orderId,
-          itemId: it._id,
-          itemName: it.name,
-          itemPrice: it.price,
-          quantity: 1,
-          totalPrice: it.price,
-          isReady: oData.orderStatusName === "Completed" || oData.orderStatusName === "Food Ready",
-          createdAt: orderCreatedAt,
-        });
-      }
-
-      // Insert Order Activity audit trail
-      await ctx.db.insert("orderActivities", {
-        organizationId: orgId,
-        orderId,
-        processId: matchedProcess?._id,
-        processName: oData.orderStatusName,
-        position: matchedProcess?.position ?? 1,
-        createdAt: orderCreatedAt,
-      });
-
-      // Insert Payment if Paid
-      if (oData.paymentStatus === "Paid") {
-        await ctx.db.insert("orderPayments", {
-          organizationId: orgId,
-          orderId,
-          paymentModeName: oData.paymentMode,
-          paymentType: "Credit",
-          amount: totalAmount,
-          transactionReference: `TXN-${Date.now().toString().slice(-6)}`,
-          createdAt: orderCreatedAt,
-        });
-      }
-      totalSeeded += 1;
-    }
-  }
-
-    return {
-      success: true,
-      message: `Successfully seeded ${totalSeeded} realistic manual orders across all store organizations with full defx-pos parity.`,
-      orderCount: totalSeeded,
-    };
+    return activities
+      .filter((a) => a.deletedAt === undefined)
+      .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
   },
 });
 
