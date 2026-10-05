@@ -120,6 +120,7 @@ export function ItemLibraryView({
 
   const createItemMutation = useMutation(api.inventory.createInventoryItem);
   const updateItemMutation = useMutation(api.inventory.updateInventoryItem);
+  const adjustStockMutation = useMutation(api.inventory.adjustInventoryStock);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -358,13 +359,22 @@ export function ItemLibraryView({
       setIsSubmitting(true);
       try {
         if (editingItem) {
-          await updateItemMutation({
-            id: editingItem._id,
-            unitCost: Number(unitCost),
-            minimumStockRefillLevel: Number(
-              editingItem.minimumStockRefillLevel || 1
-            ),
+          const currentStock = Number(editingItem.availableStock || 0);
+          const newTotalStock = currentStock + qty;
+
+          await adjustStockMutation({
+            organizationId,
+            inventoryItemId: editingItem._id,
+            actualStockCount: newTotalStock,
+            reason: "Manual Stock Assignment",
           });
+
+          if (unitCost !== undefined && unitCost !== null && Number(unitCost) > 0) {
+            await updateItemMutation({
+              id: editingItem._id,
+              unitCost: Number(unitCost),
+            });
+          }
 
           // Add to local stock logs
           const supplierObj = suppliers?.find((s) => s._id === addStockSupplierId);
