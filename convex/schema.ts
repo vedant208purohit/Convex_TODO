@@ -486,6 +486,36 @@ export default defineSchema({
     deletedAt: v.optional(v.number()),
   }).index("by_customization", ["customizationId"]),
 
+  // Chef Prep Preferences Master Table
+  chefPrepPreferences: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
+    isActive: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_name", ["organizationId", "name"])
+    .index("by_org_deleted", ["organizationId", "deletedAt"]),
+
+  // Item to Chef Prep Preferences Junction Table (Normalized Multi-Relationship)
+  itemChefPrepPreferences: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    itemId: v.id("items"),
+    preferenceId: v.id("chefPrepPreferences"),
+    createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_item", ["itemId"])
+    .index("by_preference", ["preferenceId"])
+    .index("by_item_preference", ["itemId", "preferenceId"])
+    .index("by_org_preference", ["organizationId", "preferenceId"]),
+
   // Organization Languages Domain Table
   organizationLanguages: defineTable({
     legacyId: v.optional(v.string()),
@@ -1132,6 +1162,22 @@ postpaidOrderRequests: defineTable({
           optionId: v.id("customizationItems"),
           optionName: v.string(),
           price: v.number(),
+        })
+      )
+    ),
+    prepPreferences: v.optional(
+      v.array(
+        v.object({
+          preferenceId: v.optional(v.id("chefPrepPreferences")),
+          name: v.string(),
+        })
+      )
+    ),
+    chefPrepPreferences: v.optional(
+      v.array(
+        v.object({
+          preferenceId: v.optional(v.id("chefPrepPreferences")),
+          name: v.string(),
         })
       )
     ),

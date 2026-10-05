@@ -208,6 +208,11 @@ const navItems: NavItem[] = [
   },
 ];
 
+const menuSubItems = [
+  { label: "Items & Categories", path: "/menu" },
+  { label: "Chef Prep Preferences", path: "/menu/chef-prep-preferences" },
+];
+
 const inventorySubItems = [
   { label: "Purchase order", tab: "purchaseOrders", path: "/inventory/purchase-orders" },
   { label: "Supplier", tab: "suppliers", path: "/inventory/suppliers" },
@@ -228,6 +233,8 @@ function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: b
   const targetHref =
     href === "/inventory"
       ? "/inventory/purchase-orders"
+      : href === "/menu"
+      ? "/menu"
       : href === "/qr-codes" || href === "/settings"
       ? href
       : qs
@@ -276,9 +283,11 @@ export function PosShell({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isMenuPage = pathname.startsWith("/menu");
   const isInventoryPage = pathname.startsWith("/inventory");
   const currentTab = searchParams.get("tab") || "purchaseOrders";
 
+  const [isMenuExpanded, setIsMenuExpanded] = useState(isMenuPage);
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
@@ -296,6 +305,12 @@ export function PosShell({
       return next;
     });
   };
+
+  useEffect(() => {
+    if (isMenuPage) {
+      setIsMenuExpanded(true);
+    }
+  }, [isMenuPage]);
 
   useEffect(() => {
     if (isInventoryPage) {
@@ -356,6 +371,61 @@ export function PosShell({
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1.5">
           {navItems.map((item) => {
+            if (item.href === "/menu") {
+              return (
+                <div key={item.href} className="flex flex-col px-3 my-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsMenuExpanded((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isMenuPage
+                        ? "bg-[#f1edec] text-[#141010] font-bold"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                      }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 flex items-center justify-center">{item.icon}</span>
+                      <span className="font-medium text-[15px]">{item.label}</span>
+                    </div>
+                    <svg
+                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${isMenuExpanded ? "rotate-180" : ""
+                        }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isMenuExpanded && (
+                    <div className="ml-5 pl-3 my-1.5 border-l border-[#e7e5e4] flex flex-col gap-1">
+                      {menuSubItems.map((sub) => {
+                        const isSubActive =
+                          sub.path === "/menu"
+                            ? pathname === "/menu" || (pathname.startsWith("/menu") && !pathname.startsWith("/menu/chef-prep-preferences"))
+                            : pathname === sub.path || pathname.startsWith(sub.path);
+                        return (
+                          <Link
+                            key={sub.path}
+                            href={sub.path}
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
+                                ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
+                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
+                              }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
             if (item.href === "/inventory") {
               if (isCollapsed) {
                 return (

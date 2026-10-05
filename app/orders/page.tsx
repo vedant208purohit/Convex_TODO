@@ -1598,6 +1598,11 @@ export default function OrdersPage() {
                                           .join(", ")}
                                       </span>
                                     )}
+                                  {((item.prepPreferences && item.prepPreferences.length > 0) || (item.chefPrepPreferences && item.chefPrepPreferences.length > 0)) && (
+                                    <span className="text-xs text-[#0c0a09] font-medium block mt-0.5">
+                                      Chef Prep: {(item.prepPreferences || item.chefPrepPreferences).map((p: any) => p.name).join(", ")}
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
                                   {currencySymbol}{formatCurrencyAmount(item.display_item_price ?? ((item.itemPrice || 0) / 100), activeOrg?.country)}

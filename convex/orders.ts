@@ -141,6 +141,28 @@ export const createOrder = mutation({
             })
           )
         ),
+        prepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
+        chefPrepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
       })
     ),
   },
@@ -384,6 +406,20 @@ export const createOrder = mutation({
         }
       }
 
+      // Resolve Chef Prep Preferences
+      const rawPrepPrefs = (inputItem as any).prepPreferences || (inputItem as any).chefPrepPreferences || [];
+      const resolvedPrepPreferences: Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }> = [];
+      for (const pref of rawPrepPrefs) {
+        if (typeof pref === "string" && pref.trim()) {
+          resolvedPrepPreferences.push({ name: pref.trim() });
+        } else if (pref && typeof pref === "object" && pref.name) {
+          resolvedPrepPreferences.push({
+            preferenceId: pref.preferenceId,
+            name: pref.name.trim(),
+          });
+        }
+      }
+
       lineItemConfigs.push({
         itemId: dbItem._id,
         itemName: dbItem.name,
@@ -391,6 +427,8 @@ export const createOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        prepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
+        chefPrepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
         isToGo: inputItem.isToGo ?? false,
       });
     }
@@ -570,6 +608,8 @@ export const createOrder = mutation({
         quantity: line.quantity,
         totalPrice: line.totalPrice,
         customizations: line.customizations,
+        prepPreferences: line.prepPreferences,
+        chefPrepPreferences: line.chefPrepPreferences,
         isReady: false,
         isToGo: line.isToGo ?? false,
         stationId,
@@ -1749,6 +1789,28 @@ export const addItemsToExistingOrder = mutation({
             })
           )
         ),
+        prepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
+        chefPrepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
       })
     ),
   },
@@ -1787,6 +1849,20 @@ export const addItemsToExistingOrder = mutation({
         }
       }
 
+      // Resolve Chef Prep Preferences
+      const rawPrepPrefs = (inputItem as any).prepPreferences || (inputItem as any).chefPrepPreferences || [];
+      const resolvedPrepPreferences: Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }> = [];
+      for (const pref of rawPrepPrefs) {
+        if (typeof pref === "string" && pref.trim()) {
+          resolvedPrepPreferences.push({ name: pref.trim() });
+        } else if (pref && typeof pref === "object" && pref.name) {
+          resolvedPrepPreferences.push({
+            preferenceId: pref.preferenceId,
+            name: pref.name.trim(),
+          });
+        }
+      }
+
       const itemLineTotal = itemUnitPrice * inputItem.quantity;
       additionalSubTotal += itemLineTotal;
 
@@ -1797,6 +1873,8 @@ export const addItemsToExistingOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        prepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
+        chefPrepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
         isToGo: inputItem.isToGo ?? false,
       });
     }
@@ -1818,6 +1896,8 @@ export const addItemsToExistingOrder = mutation({
         quantity: line.quantity,
         totalPrice: line.totalPrice,
         customizations: line.customizations,
+        prepPreferences: line.prepPreferences,
+        chefPrepPreferences: line.chefPrepPreferences,
         isReady: false,
         isToGo: line.isToGo ?? false,
         stationId,
@@ -1995,6 +2075,8 @@ export const moveOrderTable = mutation({
     };
   },
 });
+
+
 
 /**
  * Lists all activity transitions and duration metrics for an order.

@@ -9,6 +9,7 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as chefPrepPreferences from "../chefPrepPreferences.js";
 import type * as customers from "../customers.js";
 import type * as deliveryProvider from "../deliveryProvider.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
@@ -66,6 +67,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  chefPrepPreferences: typeof chefPrepPreferences;
   customers: typeof customers;
   deliveryProvider: typeof deliveryProvider;
   digitalStoreImages: typeof digitalStoreImages;

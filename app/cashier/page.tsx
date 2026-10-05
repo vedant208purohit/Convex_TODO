@@ -61,6 +61,10 @@ interface CartItem {
     tax_mode?: "inclusive" | "exclusive";
     tax_info?: any;
   }>;
+  prepPreferences?: Array<{
+    preferenceId?: Id<"chefPrepPreferences">;
+    name: string;
+  }>;
 }
 
 interface CartTab {
@@ -239,6 +243,9 @@ function CashierPosContent() {
   const [selectedCustomizationOptions, setSelectedCustomizationOptions] = useState<
     Record<string, Array<{ id?: string; _id?: string; name: string; price: number; isGst?: boolean; items_item_types?: any[]; [key: string]: any }>>
   >({});
+  const [selectedPrepPreferences, setSelectedPrepPreferences] = useState<
+    Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }>
+  >([]);
 
   // Payment Step State
   const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>("Cash");
@@ -417,11 +424,21 @@ function CashierPosContent() {
 
   // Filtered Catalog Items based on Category & Search
   const filteredCatalogItems = useMemo(() => {
+    const seenItemIds = new Set<string>();
     return allCatalogItems.filter((entry) => {
       const matchCat =
         selectedCategory === "All Items" ||
         entry.categoryName === selectedCategory;
       if (!matchCat) return false;
+
+      // Deduplicate when viewing "All Items" so the same item is not rendered multiple times
+      if (selectedCategory === "All Items") {
+        const itemIdStr = String(entry.item?._id || entry.item?.id || "");
+        if (itemIdStr) {
+          if (seenItemIds.has(itemIdStr)) return false;
+          seenItemIds.add(itemIdStr);
+        }
+      }
 
       if (!searchQuery.trim()) return true;
       const q = searchQuery.toLowerCase().trim();
@@ -440,8 +457,14 @@ function CashierPosContent() {
   const autocompleteMatches = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
+    const seenItemIds = new Set<string>();
     return allCatalogItems
       .filter((entry) => {
+        const itemIdStr = String(entry.item?._id || entry.item?.id || "");
+        if (itemIdStr) {
+          if (seenItemIds.has(itemIdStr)) return false;
+          seenItemIds.add(itemIdStr);
+        }
         const itemName = entry.item.name?.toLowerCase() || "";
         const skuNumber = entry.item.skuNumber?.toLowerCase() || "";
         return itemName.includes(q) || skuNumber.includes(q);
@@ -888,7 +911,7 @@ function CashierPosContent() {
     [activeCartId, activeCart],
   );
 
-  // Catalog Item Click - Opens Customization Modal if published customizations exist
+  // Catalog Item Click - Opens Customization Modal if published customizations or chef prep preferences exist
   const handleCatalogItemClick = useCallback(
     (entry: { item: any; customizations?: any[] }, quantityToAdd: number = 1) => {
       if (!entry?.item) return;
@@ -901,10 +924,13 @@ function CashierPosContent() {
               c.customization_items.length > 0,
           )
         : [];
+      const rawPrepPrefs = entry.item?.chefPrepPreferences || [];
+      const hasPrepPrefs = Array.isArray(rawPrepPrefs) && rawPrepPrefs.length > 0;
 
-      if (activeCusts.length > 0) {
+      if (activeCusts.length > 0 || hasPrepPrefs) {
         setCustomizingCatalogEntry({ item: entry.item, customizations: activeCusts });
         setCustomizationQty(quantityToAdd);
+        setSelectedPrepPreferences([]);
         const initialMap: Record<string, any[]> = {};
         for (const group of activeCusts) {
           const availableItems = (group.customization_items || []).filter(
@@ -1018,10 +1044,15 @@ function CashierPosContent() {
     const types = item.items_item_types || item.itemTypes || item.itemsItemTypes || [];
     const primaryType = Array.isArray(types) && types.length > 0 ? types[0] : null;
 
-    const custKey = flatCustomizations
-      .map((c) => `${c.customizationId}_${c.optionId}`)
+    const prefKey = selectedPrepPreferences
+      .map((p) => p.name)
       .sort()
       .join("|");
+
+    const custKey = `${flatCustomizations
+      .map((c) => `${c.customizationId}_${c.optionId}`)
+      .sort()
+      .join("|")}_prep_${prefKey}`;
 
     const newItem: CartItem = {
       cartItemId: `${item._id || item.id}_${custKey}_${Date.now()}`,
@@ -1040,6 +1071,7 @@ function CashierPosContent() {
       taxGroupId: item.taxGroupId || item.tax_group_id,
       taxMode: item.taxMode || item.tax_mode,
       customizations: flatCustomizations,
+      prepPreferences: selectedPrepPreferences.length > 0 ? selectedPrepPreferences : undefined,
     };
 
     setCartTabs((prevTabs) =>
@@ -1048,10 +1080,13 @@ function CashierPosContent() {
         const existingIndex = cart.items.findIndex(
           (ci) =>
             (ci.itemId === item._id || ci.itemId === item.id) &&
-            (ci.customizations || [])
+            `${(ci.customizations || [])
               .map((c) => `${c.customizationId}_${c.optionId}`)
               .sort()
-              .join("|") === custKey,
+              .join("|")}_prep_${(ci.prepPreferences || [])
+              .map((p) => p.name)
+              .sort()
+              .join("|")}` === custKey,
         );
 
         if (existingIndex > -1) {
@@ -1066,7 +1101,8 @@ function CashierPosContent() {
 
     showToast(`Added ${customizationQty}x ${item.name} to ${activeCart.label}`);
     setCustomizingCatalogEntry(null);
-  }, [customizingCatalogEntry, selectedCustomizationOptions, customizationQty, activeCartId, activeCart]);
+    setSelectedPrepPreferences([]);
+  }, [customizingCatalogEntry, selectedCustomizationOptions, selectedPrepPreferences, customizationQty, activeCartId, activeCart]);
 
   // Modify Quantity
   const handleUpdateItemQuantity = (cartItemKey: string, newQty: number) => {
@@ -1416,6 +1452,13 @@ function CashierPosContent() {
       const itemsPayload = activeCart.items.map((ci) => ({
         itemId: ci.itemId,
         quantity: ci.quantity,
+        prepPreferences:
+          ci.prepPreferences && ci.prepPreferences.length > 0
+            ? ci.prepPreferences.map((p) => ({
+                preferenceId: p.preferenceId,
+                name: p.name,
+              }))
+            : undefined,
         customizations:
           ci.customizations && ci.customizations.length > 0
             ? ci.customizations.map((c) => ({
@@ -2008,6 +2051,19 @@ function CashierPosContent() {
                               ))}
                             </div>
                           )}
+                          {cartItem.prepPreferences && cartItem.prepPreferences.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {cartItem.prepPreferences.map((p, pIdx) => (
+                                <span
+                                  key={pIdx}
+                                  className="text-[10px] bg-[#faf2ee] text-[#78716c] border border-[#f4ece8] px-1.5 py-0.5 rounded font-medium flex items-center gap-1"
+                                >
+                                  <span className="material-symbols-outlined text-[12px]">soup_kitchen</span>
+                                  {p.name}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2336,7 +2392,7 @@ function CashierPosContent() {
 
                       return (
                         <div
-                          key={entry.item._id || entry.item.id}
+                          key={`ac_${entry.categoryId || entry.categoryName || "cat"}_${entry.item._id || entry.item.id}_${idx}`}
                           onClick={() => {
                             handleCatalogItemClick(entry, inputQty);
                             setIsAutocompleteOpen(false);
@@ -2425,7 +2481,7 @@ function CashierPosContent() {
                     : `No menu items found in ${selectedCategory}.`}
                 </div>
               ) : (
-                filteredCatalogItems.map((entry) => {
+                filteredCatalogItems.map((entry, entryIdx) => {
                   const it = entry.item;
                   const inCartItem = activeCart.items.find(
                     (ci) => ci.itemId === it._id || ci.itemId === it.id,
@@ -2435,10 +2491,11 @@ function CashierPosContent() {
                     it.price / 100,
                     activeOrg?.country,
                   );
+                  const itemKey = `cat_${entry.categoryId || entry.categoryName || "cat"}_${it._id || it.id}_${entryIdx}`;
 
                   return (
                     <div
-                      key={it._id || it.id}
+                      key={itemKey}
                       className="flex items-center justify-between py-3 hover:bg-[#fafaf9] transition-colors"
                     >
                       {/* Quantity Stepper */}
@@ -5184,6 +5241,67 @@ function CashierPosContent() {
                   </div>
                 );
               })}
+              {/* Chef Prep Preferences (If configured for this item) */}
+              {customizingCatalogEntry.item.chefPrepPreferences &&
+                customizingCatalogEntry.item.chefPrepPreferences.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-stone-200">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-stone-900 uppercase tracking-wider">
+                          Chef Prep Preferences
+                        </span>
+                        <span className="text-[11px] text-stone-500 font-normal">
+                          Choose your preparation instructions (Optional)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {customizingCatalogEntry.item.chefPrepPreferences.map((pref: any) => {
+                        const prefId = pref._id || pref.id || pref.preferenceId;
+                        const prefName = pref.name;
+                        const isSelected = selectedPrepPreferences.some(
+                          (p) => (p.preferenceId && p.preferenceId === prefId) || p.name === prefName
+                        );
+
+                        return (
+                          <button
+                            key={prefId || prefName}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedPrepPreferences((prev) =>
+                                  prev.filter(
+                                    (p) => (p.preferenceId && p.preferenceId !== prefId) || p.name !== prefName
+                                  )
+                                );
+                              } else {
+                                setSelectedPrepPreferences((prev) => [
+                                  ...prev,
+                                  { preferenceId: prefId, name: prefName },
+                                ]);
+                              }
+                            }}
+                            style={isSelected ? { color: "#ffffff", backgroundColor: "#0c0a09" } : undefined}
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                              isSelected
+                                ? "bg-[#0c0a09] !text-white shadow-xs"
+                                : "bg-stone-100 hover:bg-stone-200 text-stone-800"
+                            }`}
+                          >
+                            {isSelected && (
+                              <span className="material-symbols-outlined text-[14px]">check</span>
+                            )}
+                            <span>{prefName}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex items-center gap-2 text-[11px] text-[#78716c]">
+                      <span className="material-symbols-outlined text-[#7f7570] text-[16px] shrink-0">soup_kitchen</span>
+                      <span>Forwarded directly to the kitchen preparation display</span>
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* Bottom Actions */}

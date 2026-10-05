@@ -920,6 +920,18 @@ export default function MenuPage() {
   );
   const ensureItemTypesMutation = useMutation(api.menu.ensureDefaultItemTypes);
 
+  // Chef Prep Preferences Queries & Mutations
+  const masterChefPrepPreferences = useQuery(
+    api.chefPrepPreferences.list,
+    organization?._id ? { organizationId: organization._id } : "skip",
+  );
+  const updateItemPreferencesMutation = useMutation(
+    api.chefPrepPreferences.updateItemPreferences,
+  );
+  const createPreferenceMutation = useMutation(
+    api.chefPrepPreferences.create,
+  );
+
   useEffect(() => {
     if (
       organization?._id &&
@@ -1641,6 +1653,24 @@ export default function MenuPage() {
   >(null);
   const [childNutrientNameInput, setChildNutrientNameInput] = useState("");
 
+  // Chef Prep Preferences State for Item Setup
+  const [selectedChefPrepPrefIds, setSelectedChefPrepPrefIds] = useState<string[]>([]);
+  const [isQuickCreatePrefOpen, setIsQuickCreatePrefOpen] = useState(false);
+  const [quickCreatePrefName, setQuickCreatePrefName] = useState("");
+  const [isSubmittingQuickPref, setIsSubmittingQuickPref] = useState(false);
+
+  // Linked preferences query for active editing item
+  const linkedItemPrefs = useQuery(
+    api.chefPrepPreferences.getLinkedPreferencesForItem,
+    editingItem?._id ? { itemId: editingItem._id } : "skip",
+  );
+
+  useEffect(() => {
+    if (editingItem && linkedItemPrefs) {
+      setSelectedChefPrepPrefIds(linkedItemPrefs.map((p) => p._id));
+    }
+  }, [editingItem?._id, linkedItemPrefs]);
+
   const handleToggleAllergen = (allergenName: string) => {
     setItemSelectedAllergens((prev) =>
       prev.includes(allergenName)
@@ -2213,6 +2243,7 @@ export default function MenuPage() {
     setActiveNutrientMenuId(null);
     setEditingNutrientId(null);
     setAddingChildForNutrientId(null);
+    setSelectedChefPrepPrefIds([]);
     setItemError(null);
     setIsAddItemOpen(true);
     setIsAddItemDropdownOpen(false);
@@ -2290,6 +2321,10 @@ export default function MenuPage() {
     setActiveNutrientMenuId(null);
     setEditingNutrientId(null);
     setAddingChildForNutrientId(null);
+    const initialPrefIds = (item.chefPrepPreferences || [])
+      .map((p: any) => p._id || p.id || p.preferenceId)
+      .filter(Boolean);
+    setSelectedChefPrepPrefIds(initialPrefIds);
     setItemError(null);
     setIsAddItemOpen(true);
   };
@@ -2707,6 +2742,14 @@ export default function MenuPage() {
               ? (itemVideoAssetId as Id<"organization_assets">)
               : undefined,
         });
+
+        // Persist Chef Prep Preferences for editing item
+        await updateItemPreferencesMutation({
+          organizationId: organization._id,
+          itemId: editingItem._id,
+          preferenceIds: selectedChefPrepPrefIds as Id<"chefPrepPreferences">[],
+        });
+
         showToast(`Item "${trimmedItemName}" updated successfully`, "success");
       } else {
         const newItemId = await createItemMutation({
@@ -2765,6 +2808,15 @@ export default function MenuPage() {
           categoryId: targetCatId,
           itemId: newItemId,
         });
+
+        // Persist Chef Prep Preferences for new item
+        if (selectedChefPrepPrefIds.length > 0) {
+          await updateItemPreferencesMutation({
+            organizationId: organization._id,
+            itemId: newItemId,
+            preferenceIds: selectedChefPrepPrefIds as Id<"chefPrepPreferences">[],
+          });
+        }
 
         // Set active item to newly created item to view its customizations!
         setSelectedItemId(newItemId);
@@ -4884,6 +4936,112 @@ export default function MenuPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Card: Chef Prep Preferences Connection */}
+                    <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[#7f7570] text-[20px]">soup_kitchen</span>
+                            <h2 className="text-[20px] font-semibold text-[#0c0a09]">
+                              Chef Prep Preferences
+                            </h2>
+                          </div>
+                          <p className="text-sm text-[#78716c] mt-1">
+                            Select which preparation options are available to customers when ordering this item. Manage master preferences in{" "}
+                            <button
+                              type="button"
+                              onClick={() => router.push("/menu/chef-prep-preferences")}
+                              className="underline font-medium text-[#0c0a09] hover:text-[#44403c] cursor-pointer"
+                            >
+                              Menu → Chef Prep Preferences
+                            </button>
+                            .
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Preference Checklist */}
+                      {masterChefPrepPreferences === undefined ? (
+                        <div className="py-4 text-center text-sm text-[#78716c]">
+                          Loading preferences...
+                        </div>
+                      ) : masterChefPrepPreferences.length === 0 ? (
+                        <div className="p-4 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex flex-col items-center justify-center text-center gap-2">
+                          <p className="text-sm text-[#78716c]">
+                            No chef prep preferences created yet.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setIsQuickCreatePrefOpen(true)}
+                            className="text-xs font-semibold text-[#0c0a09] underline hover:text-[#44403c] cursor-pointer"
+                          >
+                            + Create first preference
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          {masterChefPrepPreferences.map((pref) => {
+                            const isChecked = selectedChefPrepPrefIds.includes(pref._id);
+                            return (
+                              <label
+                                key={pref._id}
+                                className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                                  isChecked
+                                    ? "bg-[#faf2ee] border-[#0c0a09]/20 shadow-xs"
+                                    : "bg-white border-[#e7e5e4] hover:bg-[#faf9f8] opacity-75"
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedChefPrepPrefIds((prev) => [...prev, pref._id]);
+                                      } else {
+                                        setSelectedChefPrepPrefIds((prev) =>
+                                          prev.filter((id) => id !== pref._id)
+                                        );
+                                      }
+                                    }}
+                                    className="w-4 h-4 accent-black rounded cursor-pointer"
+                                  />
+                                  <span className={`text-sm font-medium ${isChecked ? "text-[#0c0a09]" : "text-[#78716c]"}`}>
+                                    {pref.name}
+                                  </span>
+                                </div>
+                                <span
+                                  style={isChecked ? { color: "#ffffff", backgroundColor: "#0c0a09" } : undefined}
+                                  className={`text-[11px] font-semibold tracking-wider uppercase px-2.5 py-0.5 rounded-full ${
+                                    isChecked
+                                      ? "bg-[#0c0a09] !text-white"
+                                      : "bg-[#f5f5f4] text-[#a8a29e]"
+                                  }`}
+                                >
+                                  {isChecked ? "Active" : "Excluded"}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Master Link Alert Notice */}
+                      <div className="p-3.5 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs text-[#78716c]">
+                          <span className="material-symbols-outlined text-[#7f7570] text-[18px]">lightbulb</span>
+                          <span>Need a new preference? Add it first in Menu → Chef Prep Preferences.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickCreatePrefOpen(true)}
+                          className="text-xs font-semibold text-[#0c0a09] underline hover:text-[#44403c] shrink-0 cursor-pointer"
+                        >
+                          + Create new
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Right Column: Live Card Preview & AI Assistant */}
@@ -8568,6 +8726,84 @@ export default function MenuPage() {
                   className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-xs font-semibold transition cursor-pointer"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Create Preference Modal */}
+        {isQuickCreatePrefOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 flex flex-col gap-4 border border-[#e7e5e4]">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-[#0c0a09]">Add Chef Prep Preference</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickCreatePrefOpen(false);
+                    setQuickCreatePrefName("");
+                  }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[#78716c] hover:bg-[#f5f5f4]"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#0c0a09] uppercase tracking-wider mb-1.5">
+                  Preference Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={32}
+                  value={quickCreatePrefName}
+                  onChange={(e) => setQuickCreatePrefName(e.target.value)}
+                  placeholder="e.g. No Onion, Less Spicy"
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#e7e5e4] text-sm text-[#0c0a09] outline-none focus:border-black"
+                  autoFocus
+                />
+                <p className="text-xs text-[#78716c] mt-1.5">
+                  Instructs the kitchen prep station without altering inventory deductions or pricing.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickCreatePrefOpen(false);
+                    setQuickCreatePrefName("");
+                  }}
+                  className="px-4 py-2 rounded-full text-xs font-medium text-[#78716c] hover:bg-[#f5f5f4]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!quickCreatePrefName.trim() || isSubmittingQuickPref}
+                  onClick={async () => {
+                    if (!organization?._id || !quickCreatePrefName.trim()) return;
+                    setIsSubmittingQuickPref(true);
+                    try {
+                      const newPrefId = await createPreferenceMutation({
+                        organizationId: organization._id,
+                        name: quickCreatePrefName.trim(),
+                      });
+                      setSelectedChefPrepPrefIds((prev) => [...prev, newPrefId]);
+                      setQuickCreatePrefName("");
+                      setIsQuickCreatePrefOpen(false);
+                      showToast(`Preference "${quickCreatePrefName.trim()}" created`, "success");
+                    } catch (err: any) {
+                      showToast(err.message || "Failed to create preference", "error");
+                    } finally {
+                      setIsSubmittingQuickPref(false);
+                    }
+                  }}
+                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  className="px-5 py-2 rounded-full text-xs font-semibold bg-[#0c0a09] !text-white hover:bg-[#252626] disabled:opacity-50"
+                >
+                  <span className="!text-white" style={{ color: "#ffffff" }}>
+                    {isSubmittingQuickPref ? "Creating..." : "Create & Select"}
+                  </span>
                 </button>
               </div>
             </div>
