@@ -184,7 +184,7 @@ const inventorySubItems = [
   { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
 ];
 
-function NavLink({ href, label, icon }: NavItem) {
+function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: boolean }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active =
@@ -202,13 +202,30 @@ function NavLink({ href, label, icon }: NavItem) {
       ? `${href}?${qs}`
       : href;
 
+  if (isCollapsed) {
+    return (
+      <Link
+        href={targetHref}
+        title={label}
+        className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+          active
+            ? "bg-[#141010] text-white shadow-xs"
+            : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+        }`}
+      >
+        <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href={targetHref}
-      className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${active
+      className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${
+        active
           ? "text-[#141010] font-bold border-r-2 border-[#141010] bg-[#f1edec] opacity-100"
           : "text-[#5e5e5e] hover:bg-[#f1edec]"
-        }`}
+      }`}
     >
       <span className="w-5 text-center flex items-center justify-center">{icon}</span>
       <span className="font-medium text-[15px]">{label}</span>
@@ -231,6 +248,22 @@ export function PosShell({
   const currentTab = searchParams.get("tab") || "purchaseOrders";
 
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pos_main_sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pos_main_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (isInventoryPage) {
@@ -245,41 +278,89 @@ export function PosShell({
   return (
     <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full overflow-hidden">
-        {/* Logo */}
-        <div className="px-6 py-6 border-b border-[#e7e5e4] flex items-center gap-4 shrink-0">
-          <div className="w-10 h-10 rounded-full bg-[#f1edec] flex items-center justify-center overflow-hidden border border-[#e7e5e4] shrink-0 font-serif font-bold text-[#141010]">
-            P
+      <aside
+        className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full overflow-hidden transition-all duration-300 ease-in-out ${
+          isCollapsed ? "w-20" : "w-64"
+        }`}
+      >
+        {/* Logo Header */}
+        <div
+          className={`px-4 py-5 border-b border-[#e7e5e4] flex items-center justify-between shrink-0 ${
+            isCollapsed ? "flex-col gap-3 px-2 py-4" : "px-6 py-6"
+          }`}
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-[#f1edec] flex items-center justify-center overflow-hidden border border-[#e7e5e4] shrink-0 font-serif font-bold text-[#141010]">
+              P
+            </div>
+            {!isCollapsed && (
+              <div className="truncate">
+                <h1 className="font-garamond text-[24px] text-[#141010] font-normal leading-none">PREST</h1>
+                <p className="font-sans text-[10px] font-semibold text-[#5e5e5e] uppercase tracking-widest mt-1 truncate">
+                  Management Suite
+                </p>
+              </div>
+            )}
           </div>
-          <div>
-            <h1 className="font-garamond text-[24px] text-[#141010] font-normal leading-none">PREST</h1>
-            <p className="font-sans text-[10px] font-semibold text-[#5e5e5e] uppercase tracking-widest mt-1">
-              Management Suite
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer shrink-0"
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isCollapsed ? "rotate-180" : ""
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1">
+        <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1.5">
           {navItems.map((item) => {
             if (item.href === "/inventory") {
+              if (isCollapsed) {
+                return (
+                  <Link
+                    key={item.href}
+                    href="/inventory/purchase-orders"
+                    title="Inventory"
+                    className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+                      isInventoryPage
+                        ? "bg-[#141010] text-white shadow-xs"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+                    }`}
+                  >
+                    <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
+                  </Link>
+                );
+              }
+
               return (
                 <div key={item.href} className="flex flex-col px-3 my-0.5">
                   <button
                     type="button"
                     onClick={() => setIsInventoryExpanded((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isInventoryPage
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
+                      isInventoryPage
                         ? "bg-[#f1edec] text-[#141010] font-bold"
                         : "text-[#5e5e5e] hover:bg-[#f1edec]"
-                      }`}
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       <span className="w-5 flex items-center justify-center">{item.icon}</span>
                       <span className="font-medium text-[15px]">{item.label}</span>
                     </div>
                     <svg
-                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${isInventoryExpanded ? "rotate-180" : ""
-                        }`}
+                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${
+                        isInventoryExpanded ? "rotate-180" : ""
+                      }`}
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -299,10 +380,11 @@ export function PosShell({
                           <Link
                             key={sub.tab}
                             href={sub.path}
-                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${
+                              isSubActive
                                 ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
                                 : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
-                              }`}
+                            }`}
                           >
                             <span>{sub.label}</span>
                             {isSubActive && (
@@ -317,9 +399,37 @@ export function PosShell({
               );
             }
 
-            return <NavLink key={item.href} {...item} />;
+            return <NavLink key={item.href} {...item} isCollapsed={isCollapsed} />;
           })}
         </nav>
+
+        {/* Footer Toggle Bar */}
+        <div className="p-3 border-t border-[#e7e5e4] flex items-center justify-between shrink-0 bg-[#fdf8f7]">
+          {!isCollapsed && (
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#7a716b] px-2">
+              Sidebar View
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className={`p-2 rounded-xl bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${
+              isCollapsed ? "w-full flex justify-center" : ""
+            }`}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${
+                isCollapsed ? "rotate-180" : ""
+              }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Wrapper */}

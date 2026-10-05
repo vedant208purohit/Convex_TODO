@@ -1491,6 +1491,14 @@ function CashierPosContent() {
         customerName: resolvedCustomerName,
         customerPhone: resolvedCustomerPhone,
         customerEmail: activeCart.customerEmail || undefined,
+        scheduledPickupDate:
+          activeCart.orderType === "Scheduled" || resolvedOrderType === "ScheduledPickup"
+            ? activeCart.scheduledDate || undefined
+            : undefined,
+        scheduledPickupTime:
+          activeCart.orderType === "Scheduled" || resolvedOrderType === "ScheduledPickup"
+            ? activeCart.scheduledTime || undefined
+            : undefined,
         deliveryCharge:
           activeCart.orderType === "Delivery"
             ? 5800

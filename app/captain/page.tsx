@@ -1394,7 +1394,9 @@ export default function CaptainPage() {
                               isOver2Hours ? "text-amber-400 font-bold animate-pulse" : "text-stone-300"
                             }`}
                           >
-                            {elapsedHours}:{elapsedMins.toString().padStart(2, "0")}:{elapsedSecs.toString().padStart(2, "0")}
+                            {isOver2Hours
+                              ? "> 2 hrs"
+                              : `${elapsedHours}:${elapsedMins.toString().padStart(2, "0")}:${elapsedSecs.toString().padStart(2, "0")}`}
                           </span>
                         )}
                         {hasRequest && (

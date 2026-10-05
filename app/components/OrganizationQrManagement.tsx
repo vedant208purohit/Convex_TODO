@@ -555,6 +555,21 @@ export function OrganizationQrManagement() {
     activeOrg ? { outletId: activeOrg._id } : "skip",
   );
 
+  const todayStr = useMemo(() => {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, []);
+
+  const todayPerformance = useQuery(
+    api.organizationQrAnalytics.getOverallPerformance,
+    activeOrg ? { outletId: activeOrg._id, from: todayStr, to: todayStr } : "skip",
+  );
+
+  const todayTrafficSessions = todayPerformance?.summary?.sessions ?? 0;
+
   const enableMutation = useMutation(api.organizationQrCodes.enable);
   const disableMutation = useMutation(api.organizationQrCodes.disable);
   const softDeleteMutation = useMutation(api.organizationQrCodes.remove);
@@ -1240,7 +1255,7 @@ export function OrganizationQrManagement() {
                 </div>
                 <div className="flex items-baseline gap-2">
                   <span className="font-garamond text-3xl font-medium text-[#141010]">
-                    {totalScansToday}
+                    {todayTrafficSessions}
                   </span>
                   <span className="text-xs font-medium text-[#5e5e5e]">
                     Direct Sessions
