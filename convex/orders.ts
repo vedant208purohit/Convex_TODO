@@ -4,6 +4,74 @@ import { resolveNotificationsForOrderStatus } from "./processNotifications";
 import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
 import { validateActivePaymentMode } from "./paymentModes";
+import { resolveOrderItemStation } from "./stations";
+
+// ==========================================
+// ORDER ACTIVITY DURATION & LIFECYCLE HELPER
+// ==========================================
+
+/**
+ * Authoritative server-side helper to record order activity transitions and elapsed duration.
+ * Legacy behavior:
+ * - Position 1 / Initial step: totalDuration = 0.
+ * - Subsequent steps: totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000)) (integer seconds).
+ * - Closes previous active activity by setting completedAt = now.
+ */
+export async function recordOrderActivity(
+  ctx: MutationCtx,
+  args: {
+    organizationId: Id<"organizations">;
+    orderId: Id<"orders">;
+    processId?: Id<"organizationOrderProcesses">;
+    processName: string;
+    position?: number;
+    now?: number;
+  }
+) {
+  const now = args.now ?? Date.now();
+
+  const existingActivities = await ctx.db
+    .query("orderActivities")
+    .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+    .collect();
+
+  const activeActivities = existingActivities.filter((a) => a.deletedAt === undefined);
+
+  let totalDuration = 0;
+  if (activeActivities.length > 0) {
+    const sorted = [...activeActivities].sort(
+      (a, b) => a.position - b.position || a.createdAt - b.createdAt
+    );
+    const firstActivity = sorted[0];
+    const sinceFirstStep = firstActivity.startedAt ?? firstActivity.createdAt;
+    totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000));
+
+    // Close the previous active activity if not already completed
+    const lastActivity = sorted[sorted.length - 1];
+    if (lastActivity && lastActivity.completedAt === undefined) {
+      await ctx.db.patch(lastActivity._id, {
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  const nextPosition = args.position ?? activeActivities.length + 1;
+
+  const activityId = await ctx.db.insert("orderActivities", {
+    organizationId: args.organizationId,
+    orderId: args.orderId,
+    processId: args.processId,
+    processName: args.processName,
+    position: nextPosition,
+    totalDuration,
+    startedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  return { activityId, totalDuration, position: nextPosition };
+}
 
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
@@ -21,6 +89,7 @@ export const createOrder = mutation({
     ),
     orderSource: v.optional(v.string()), // "Prest-Cashier", "Prest-Captain", "Prest-Online"
     tableId: v.optional(v.id("organizationTables")),
+    qrId: v.optional(v.union(v.id("organizationQrCodes"), v.string())),
     waiterUserId: v.optional(v.string()),
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
@@ -51,6 +120,10 @@ export const createOrder = mutation({
       })
     ),
 
+    // Scheduled Delivery Timing
+    scheduledDeliveryDate: v.optional(v.string()),
+    scheduledDeliveryTime: v.optional(v.string()),
+
     paymentMode: v.optional(v.string()),
     specialNotes: v.optional(v.string()),
     items: v.array(
@@ -72,6 +145,15 @@ export const createOrder = mutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
+
+    // Validation for Scheduled Delivery timing fields
+    if (args.orderType === "ScheduledDelivery") {
+      if (!args.scheduledDeliveryDate || !args.scheduledDeliveryTime) {
+        throw new Error(
+          "Scheduled delivery requires scheduledDeliveryDate and scheduledDeliveryTime."
+        );
+      }
+    }
 
     // 0. Postpaid QR Verification Guard
     const reqTableId = args.tableId;
@@ -367,6 +449,58 @@ export const createOrder = mutation({
       });
     }
 
+    // Resolve QR Code reference for attribution
+    let autoQrId: Id<"organizationQrCodes"> | undefined = undefined;
+
+    if (args.qrId) {
+      try {
+        const directQr = await ctx.db.get(args.qrId as Id<"organizationQrCodes">);
+        if (directQr && directQr.deletedAt === undefined) {
+          autoQrId = directQr._id;
+        }
+      } catch {}
+    }
+
+    if (!autoQrId && args.tableId) {
+      const tableQrs = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_table", (q) => q.eq("tableId", args.tableId!.toString()))
+        .collect();
+      const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
+      if (activeQr) {
+        autoQrId = activeQr._id;
+      }
+    }
+
+    const isOnlineOrQrSource =
+      !args.orderSource ||
+      args.orderSource === "Prest-Online" ||
+      args.orderSource.toUpperCase().includes("QR");
+
+    if (!autoQrId && isOnlineOrQrSource) {
+      const isTakeawayType = args.orderType === "TakeAway" || args.orderType === "ScheduledPickup";
+      const isDeliveryType = args.orderType === "Delivery" || args.orderType === "ScheduledDelivery";
+
+      if (isTakeawayType || isDeliveryType) {
+        const orgQrs = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_organization", (q) => q.eq("organizationId", args.organizationId))
+          .collect();
+
+        const activeQr = orgQrs.find((q) => {
+          if (q.deletedAt !== undefined || q.status === "INACTIVE") return false;
+          const normalized = q.qrType ? q.qrType.toUpperCase().replace(/[-_\s]/g, "") : "";
+          if (isTakeawayType && (normalized === "TAKEAWAY" || q.qrType === "TakeAway")) return true;
+          if (isDeliveryType && (normalized === "DELIVERY" || q.qrType === "Delivery")) return true;
+          return false;
+        });
+
+        if (activeQr) {
+          autoQrId = activeQr._id;
+        }
+      }
+    }
+
     // 6. Insert Order Header
     const orderId = await ctx.db.insert("orders", {
       organizationId: args.organizationId,
@@ -380,6 +514,7 @@ export const createOrder = mutation({
       isRejected: false,
       isModify: false,
       tableId: args.tableId,
+      qrId: autoQrId,
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
@@ -393,6 +528,10 @@ export const createOrder = mutation({
       deliveryCharge: args.deliveryCharge,
       userAddressId: args.userAddressId,
       deliveryAddress: args.deliveryAddress,
+      scheduledDeliveryDate:
+        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryDate : undefined,
+      scheduledDeliveryTime:
+        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryTime : undefined,
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",
       paymentStatus: resolvedPaymentStatus,
@@ -404,6 +543,12 @@ export const createOrder = mutation({
 
     // 7. Insert Order Line Items
     for (const line of lineItemConfigs) {
+      const stationId = await resolveOrderItemStation(
+        ctx,
+        args.organizationId,
+        line.itemId
+      );
+
       await ctx.db.insert("orderItems", {
         organizationId: args.organizationId,
         orderId,
@@ -415,18 +560,19 @@ export const createOrder = mutation({
         customizations: line.customizations,
         isReady: false,
         isToGo: line.isToGo ?? false,
+        stationId,
         createdAt: now,
       });
     }
 
     // 8. Log Initial Activity Entry
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: args.organizationId,
       orderId,
       processId: initialStatus?._id,
       processName: initialStatus?.name ?? "Accepted",
       position: 1,
-      createdAt: now,
+      now,
     });
 
     // 8.5 Record Initial Order Credit Payment Entry (if settled)
@@ -699,6 +845,129 @@ export const getOrderDetails = query({
   },
 });
 
+// ==========================================
+// 2.5 AUTHENTICATED CUSTOMER ORDERS QUERY
+// ==========================================
+
+export const listCustomerOrders = query({
+  args: {
+    organizationId: v.id("organizations"),
+    orderIds: v.optional(v.array(v.string())),
+    placedOrderIds: v.optional(v.array(v.string())),
+    customerPhone: v.optional(v.string()),
+    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
+    const placedSet = new Set(sessionOrderIds);
+
+    if (!identity && placedSet.size === 0) {
+      return [];
+    }
+
+    const clerkUserId = identity?.subject;
+    const userEmail = identity?.email?.toLowerCase().trim();
+    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
+
+    // Collect allowed email and phone identifiers for this user
+    const allowedEmails = new Set<string>();
+    if (userEmail) allowedEmails.add(userEmail);
+
+    const allowedPhoneDigits = new Set<string>();
+    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
+      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
+    }
+
+    if (clerkUserId) {
+      const userOrgRecords = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
+        )
+        .collect();
+
+      for (const u of userOrgRecords) {
+        if (u.deletedAt !== undefined) continue;
+        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
+        if (u.phone) {
+          const uDig = u.phone.replace(/\D/g, "");
+          if (uDig.length >= 7) {
+            allowedPhoneDigits.add(uDig.slice(-10));
+          }
+        }
+      }
+    }
+
+    // Query orders for this store
+    const orgOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    // Strictly filter to orders belonging to this authenticated customer or placed in session
+    const filteredOrders = orgOrders.filter((order) => {
+      // Placed in current browser session
+      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      if (order.customerEmail) {
+        const oEmail = order.customerEmail.toLowerCase().trim();
+        if (allowedEmails.has(oEmail)) return true;
+      }
+
+      if (order.customerPhone) {
+        const oDigits = order.customerPhone.replace(/\D/g, "");
+        if (oDigits.length >= 7) {
+          const oLast10 = oDigits.slice(-10);
+          if (allowedPhoneDigits.has(oLast10)) return true;
+        }
+      }
+
+      return false;
+    });
+
+    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
+
+    const enrichedOrders: Array<any> = [];
+    for (const order of sorted) {
+      const items = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const activities = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      let tableInfo: any = null;
+      if (order.tableId) {
+        tableInfo = await ctx.db.get(order.tableId);
+      }
+
+      enrichedOrders.push({
+        ...order,
+        display_sub_total: (order.subTotal / 100).toFixed(2),
+        display_tax_total: (order.taxTotal / 100).toFixed(2),
+        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
+        display_total_amount: (order.totalAmount / 100).toFixed(2),
+        items: items.map((i) => ({
+          ...i,
+          display_item_price: (i.itemPrice / 100).toFixed(2),
+          display_total_price: (i.totalPrice / 100).toFixed(2),
+        })),
+        activities: activities.sort((a, b) => a.position - b.position),
+        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      });
+    }
+
+    return enrichedOrders;
+  },
+});
+
 export const getCustomerStats = query({
   args: {
     organizationId: v.id("organizations"),
@@ -815,21 +1084,13 @@ export const updateOrderStatus = mutation({
 
     const now = Date.now();
 
-    // Appends entry in orderActivities
-    const existingActivities = await ctx.db
-      .query("orderActivities")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    const nextPosition = existingActivities.length + 1;
-
-    await ctx.db.insert("orderActivities", {
+    // Appends entry in orderActivities with duration calculation
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processId: process._id,
       processName: process.name,
-      position: nextPosition,
-      createdAt: now,
+      now,
     });
 
     await ctx.db.patch(order._id, {
@@ -922,6 +1183,17 @@ export const completeOrder = mutation({
       transactionReference: args.transactionReference,
       createdAt: now,
     });
+
+    // Close any open order activities on completion
+    const openActivities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+    for (const act of openActivities) {
+      if (act.completedAt === undefined && act.deletedAt === undefined) {
+        await ctx.db.patch(act._id, { completedAt: now, updatedAt: now });
+      }
+    }
 
     // 3. Clear Dine-In Table Occupancy & Complete Postpaid Order Request
     const orderTableId = order.tableId;
@@ -1377,12 +1649,12 @@ export const deleteMultipleOrderItems = mutation({
     });
 
     // Log modification activity
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Removed ${args.orderItemIds.length} item(s)`,
       position: 50,
-      createdAt: now,
+      now,
     });
 
     return {
@@ -1426,13 +1698,13 @@ export const cancelOrder = mutation({
       }
     }
 
-    // Log activity
-    await ctx.db.insert("orderActivities", {
+    // Log cancellation activity
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: "Cancelled",
       position: 99,
-      createdAt: now,
+      now,
     });
 
     return { success: true };
@@ -1519,6 +1791,12 @@ export const addItemsToExistingOrder = mutation({
 
     // 1. Insert new order items
     for (const line of lineItemConfigs) {
+      const stationId = await resolveOrderItemStation(
+        ctx,
+        order.organizationId,
+        line.itemId
+      );
+
       await ctx.db.insert("orderItems", {
         organizationId: order.organizationId,
         orderId: order._id,
@@ -1530,6 +1808,7 @@ export const addItemsToExistingOrder = mutation({
         customizations: line.customizations,
         isReady: false,
         isToGo: line.isToGo ?? false,
+        stationId,
         createdAt: now,
       });
     }
@@ -1560,17 +1839,11 @@ export const addItemsToExistingOrder = mutation({
     });
 
     // 3. Log modification activity
-    const existingActivities = await ctx.db
-      .query("orderActivities")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Added ${args.items.length} item(s) to table order`,
-      position: existingActivities.length + 1,
-      createdAt: now,
+      now,
     });
 
     return {
@@ -1696,18 +1969,166 @@ export const moveOrderTable = mutation({
     });
 
     // 4. Log activity
-    await ctx.db.insert("orderActivities", {
+    await recordOrderActivity(ctx, {
       organizationId: order.organizationId,
       orderId: order._id,
       processName: `Moved order to Table #${newTable.tableNumber}`,
       position: 60,
-      createdAt: now,
+      now,
     });
 
     return {
       success: true,
       newTableNumber: newTable.tableNumber,
     };
+  },
+});
+
+// ==========================================
+// AUTHENTICATED CUSTOMER ORDERS QUERY
+// ==========================================
+
+export const listCustomerOrders = query({
+  args: {
+    organizationId: v.id("organizations"),
+    orderIds: v.optional(v.array(v.string())),
+    placedOrderIds: v.optional(v.array(v.string())),
+    customerPhone: v.optional(v.string()),
+    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
+    const placedSet = new Set(sessionOrderIds);
+
+    if (!identity && placedSet.size === 0) {
+      return [];
+    }
+
+    const clerkUserId = identity?.subject;
+    const userEmail = identity?.email?.toLowerCase().trim();
+    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
+
+    // Collect allowed email and phone identifiers for this user
+    const allowedEmails = new Set<string>();
+    if (userEmail) allowedEmails.add(userEmail);
+
+    const allowedPhoneDigits = new Set<string>();
+    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
+      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
+    }
+
+    if (clerkUserId) {
+      const userOrgRecords = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_user_and_org", (q) =>
+          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
+        )
+        .collect();
+
+      for (const u of userOrgRecords) {
+        if (u.deletedAt !== undefined) continue;
+        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
+        if (u.phone) {
+          const uDig = u.phone.replace(/\D/g, "");
+          if (uDig.length >= 7) {
+            allowedPhoneDigits.add(uDig.slice(-10));
+          }
+        }
+      }
+    }
+
+    // Query orders for this store
+    const orgOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .collect();
+
+    // Strictly filter to orders belonging to this authenticated customer or placed in session
+    const filteredOrders = orgOrders.filter((order) => {
+      // Placed in current browser session
+      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      if (order.customerEmail) {
+        const oEmail = order.customerEmail.toLowerCase().trim();
+        if (allowedEmails.has(oEmail)) return true;
+      }
+
+      if (order.customerPhone) {
+        const oDigits = order.customerPhone.replace(/\D/g, "");
+        if (oDigits.length >= 7) {
+          const oLast10 = oDigits.slice(-10);
+          if (allowedPhoneDigits.has(oLast10)) return true;
+        }
+      }
+
+      return false;
+    });
+
+    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
+
+    const enrichedOrders: Array<any> = [];
+    for (const order of sorted) {
+      const items = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const activities = await ctx.db
+        .query("orderActivities")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      let tableInfo: any = null;
+      if (order.tableId) {
+        try {
+          tableInfo = await ctx.db.get(order.tableId as Id<"organizationTables">);
+        } catch {
+          // Table doc format fallback
+        }
+      }
+
+      enrichedOrders.push({
+        ...order,
+        display_sub_total: (order.subTotal / 100).toFixed(2),
+        display_tax_total: (order.taxTotal / 100).toFixed(2),
+        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
+        display_total_amount: (order.totalAmount / 100).toFixed(2),
+        items: items.map((i) => ({
+          ...i,
+          display_item_price: (i.itemPrice / 100).toFixed(2),
+          display_total_price: (i.totalPrice / 100).toFixed(2),
+        })),
+        activities: activities.sort((a, b) => a.position - b.position),
+        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      });
+    }
+
+    return enrichedOrders;
+/**
+ * Lists all activity transitions and duration metrics for an order.
+ */
+export const listOrderActivities = query({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) {
+      return [];
+    }
+
+    const activities = await ctx.db
+      .query("orderActivities")
+      .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+      .collect();
+
+    return activities
+      .filter((a) => a.deletedAt === undefined)
+      .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
   },
 });
 

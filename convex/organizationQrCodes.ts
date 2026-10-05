@@ -39,29 +39,59 @@ export async function requireAdminOrCashier(
 }
 
 // ----------------------------------------------------
-// URL BUILDER UTILITY
+// TYPE & URL HELPERS
 // ----------------------------------------------------
+
+export function normalizeQrType(
+  rawType: string,
+): "DineIn" | "TakeAway" | "Delivery" | "Queue" {
+  if (!rawType || typeof rawType !== "string") return "DineIn";
+  const upper = rawType.toUpperCase().trim().replace(/[-_\s]/g, "");
+  if (upper === "DINEIN") return "DineIn";
+  if (upper === "TAKEAWAY") return "TakeAway";
+  if (upper === "DELIVERY") return "Delivery";
+  if (upper === "QUEUE") return "Queue";
+  if (
+    rawType === "DineIn" ||
+    rawType === "TakeAway" ||
+    rawType === "Delivery" ||
+    rawType === "Queue"
+  ) {
+    return rawType;
+  }
+  return "DineIn";
+}
+
+export function formatContractQrType(
+  qrType: "DineIn" | "TakeAway" | "Delivery" | "Queue" | string,
+): string {
+  if (qrType === "DineIn") return "DINE_IN";
+  if (qrType === "TakeAway") return "TAKEAWAY";
+  if (qrType === "Delivery") return "DELIVERY";
+  return qrType.toUpperCase();
+}
 
 /**
  * Builds canonical frontend deep-link QR URL strings.
  */
 export function buildQrUrl(
   qrId: string,
-  qrType: "DineIn" | "TakeAway" | "Queue",
+  qrType: "DineIn" | "TakeAway" | "Delivery" | "Queue",
   name: string,
   tableId?: string,
   storeSlug?: string,
 ): string {
-  const baseUrl = process.env.FRONT_END_URL || "https://pos.app";
   const encodedName = encodeURIComponent(name.trim());
   const storeParam = storeSlug ? `store=${encodeURIComponent(storeSlug)}&` : "";
 
   if (qrType === "DineIn") {
-    return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=DineIn&qr_name=${encodedName}&table_id=${tableId ?? ""}`;
+    return `/store?${storeParam}qr_id=${qrId}&type=DineIn&qr_name=${encodedName}&table_id=${tableId ?? ""}`;
   } else if (qrType === "Queue") {
-    return `${baseUrl}/queue?${storeParam}qr_id=${qrId}&type=Queue&qr_name=${encodedName}`;
+    return `/queue?${storeParam}qr_id=${qrId}&type=Queue&qr_name=${encodedName}`;
+  } else if (qrType === "Delivery") {
+    return `/delivery?${storeParam}qr_id=${qrId}&type=Delivery&qr_name=${encodedName}`;
   } else {
-    return `${baseUrl}/store?${storeParam}qr_id=${qrId}&type=TakeAway&qr_name=${encodedName}`;
+    return `/store?${storeParam}qr_id=${qrId}&type=TakeAway&qr_name=${encodedName}`;
   }
 }
 
@@ -98,11 +128,30 @@ async function validateUniqueQrName(
   }
 }
 
-function validateDineInTable(tableId?: string): string {
+async function validateDineInTable(
+  ctx: QueryCtx | MutationCtx,
+  tableId?: string,
+  orgId?: Id<"organizations">,
+): Promise<string> {
   if (!tableId || !tableId.trim()) {
     throw new Error("Dining table reference is required for DineIn QR codes.");
   }
-  return tableId.trim();
+  const cleanId = tableId.trim();
+
+  try {
+    const tableDoc = await ctx.db.get(cleanId as Id<"organizationTables">);
+    if (tableDoc) {
+      if (tableDoc.deletedAt !== undefined) {
+        throw new Error("TABLE_NOT_FOUND");
+      }
+    }
+  } catch (err: any) {
+    if (err.message === "TABLE_NOT_FOUND" || err.message === "TABLE_NOT_BELONG_TO_OUTLET") {
+      throw err;
+    }
+  }
+
+  return cleanId;
 }
 
 // ----------------------------------------------------
@@ -114,9 +163,8 @@ function validateDineInTable(tableId?: string): string {
  */
 export const list = query({
   args: {
-    qrType: v.optional(
-      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Queue")),
-    ),
+    qrType: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("ACTIVE"), v.literal("INACTIVE"))),
   },
   handler: async (ctx, args) => {
     await requireMember(ctx);
@@ -127,7 +175,12 @@ export const list = query({
     items = items.filter((i) => i.deletedAt === undefined);
 
     if (args.qrType !== undefined) {
-      items = items.filter((i) => i.qrType === args.qrType);
+      const normalized = normalizeQrType(args.qrType);
+      items = items.filter((i) => i.qrType === normalized || i.qrType === args.qrType);
+    }
+
+    if (args.status !== undefined) {
+      items = items.filter((i) => (i.status ?? "ACTIVE") === args.status);
     }
 
     return items.sort((a, b) => b.createdAt - a.createdAt);
@@ -147,7 +200,11 @@ export const get = query({
       return null;
     }
 
-    return qr;
+    return {
+      ...qr,
+      status: qr.status ?? "ACTIVE",
+      destination: qr.destination || qr.qrUrl,
+    };
   },
 });
 
@@ -157,20 +214,24 @@ export const get = query({
 export const getByTable = query({
   args: { tableId: v.string() },
   handler: async (ctx, args) => {
-    await requireMember(ctx);
-
     const items = await ctx.db
       .query("organizationQrCodes")
       .withIndex("by_table", (q) => q.eq("tableId", args.tableId))
       .collect();
 
     const active = items.find((i) => i.deletedAt === undefined);
-    return active ?? null;
+    if (!active) return null;
+
+    return {
+      ...active,
+      status: active.status ?? "ACTIVE",
+      destination: active.destination || active.qrUrl,
+    };
   },
 });
 
 /**
- * Public query for customer QR code resolution (accepts Convex ID, legacy UUID, or table ID).
+ * Public query for customer QR code resolution.
  */
 export const resolvePublic = query({
   args: {
@@ -218,22 +279,35 @@ export const resolvePublic = query({
       return null;
     }
 
+    const currentStatus = qr.status ?? "ACTIVE";
+
+    if (currentStatus === "INACTIVE") {
+      return {
+        code: "QR_INACTIVE",
+        message: "This QR code is currently inactive.",
+        status: "INACTIVE",
+      };
+    }
+
     return {
-      _id: qr._id,
+      qrId: qr._id,
       legacyId: qr.legacyId,
+      displayName: qr.name,
       name: qr.name,
+      type: formatContractQrType(qr.qrType),
       qrType: qr.qrType,
+      outletId: qr.organizationId,
+      destination: qr.destination || qr.qrUrl,
       qrUrl: qr.qrUrl,
       counter: qr.counter,
       tableNumber: qr.tableNumber,
+      tableName: qr.tableNumber || qr.name,
       tableId: qr.tableId,
+      status: "ACTIVE",
     };
   },
 });
 
-/**
- * Public query for resolving customer QR session and table info.
- */
 export const resolveCustomerSession = query({
   args: {
     identifier: v.optional(v.string()),
@@ -248,7 +322,6 @@ export const resolveCustomerSession = query({
 
     let qr: Doc<"organizationQrCodes"> | null = null;
 
-    // 1. Try lookup by legacyId
     const legacyMatches = await ctx.db
       .query("organizationQrCodes")
       .withIndex("by_legacy_id", (q) => q.eq("legacyId", rawId))
@@ -256,7 +329,6 @@ export const resolveCustomerSession = query({
 
     qr = legacyMatches.find((q) => q.deletedAt === undefined) ?? null;
 
-    // 2. Try direct Convex ID lookup if valid ID string
     if (!qr) {
       try {
         const doc = (await ctx.db.get(
@@ -266,11 +338,10 @@ export const resolveCustomerSession = query({
           qr = doc as Doc<"organizationQrCodes">;
         }
       } catch {
-        // Invalid ID format ignored
+        // Ignore invalid ID format
       }
     }
 
-    // 3. Try lookup by tableId
     if (!qr) {
       try {
         const tableQrs = await ctx.db
@@ -279,7 +350,7 @@ export const resolveCustomerSession = query({
           .collect();
         qr = tableQrs.find((q) => q.deletedAt === undefined) ?? null;
       } catch {
-        // Invalid table ID format ignored
+        // Ignore
       }
     }
 
@@ -289,13 +360,18 @@ export const resolveCustomerSession = query({
 
     return {
       _id: qr._id,
+      qrId: qr._id,
       legacyId: qr.legacyId,
       name: qr.name,
+      displayName: qr.name,
+      type: formatContractQrType(qr.qrType),
       qrType: qr.qrType,
+      destination: qr.destination || qr.qrUrl,
       qrUrl: qr.qrUrl,
       counter: qr.counter,
       tableNumber: qr.tableNumber,
       tableId: qr.tableId,
+      status: qr.status ?? "ACTIVE",
     };
   },
 });
@@ -309,82 +385,114 @@ export const resolveCustomerSession = query({
  */
 export const create = mutation({
   args: {
-    name: v.string(),
+    name: v.optional(v.string()),
+    displayName: v.optional(v.string()),
     description: v.optional(v.string()),
-    qrType: v.union(
-      v.literal("DineIn"),
-      v.literal("TakeAway"),
-      v.literal("Queue"),
-    ),
+    qrType: v.string(),
+    status: v.optional(v.union(v.literal("ACTIVE"), v.literal("INACTIVE"))),
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),
+    outletId: v.optional(v.id("organizations")),
+    organizationId: v.optional(v.id("organizations")),
     legacyId: v.optional(v.string()),
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const { org } = await requireAdminOrCashier(ctx);
+    const targetOrgId = args.outletId ?? args.organizationId;
+    const { org } = await requireAdminOrCashier(ctx, targetOrgId);
 
-    const trimmedName = normalizeQrName(args.name);
+    const rawName = args.displayName || args.name;
+    if (!rawName) {
+      throw new Error("QR code name or displayName is required.");
+    }
+    const trimmedName = normalizeQrName(rawName);
     await validateUniqueQrName(ctx, trimmedName);
+
+    const normalizedType = normalizeQrType(args.qrType);
 
     let effectiveTableId: string | undefined = undefined;
 
-    if (args.qrType === "DineIn") {
-      effectiveTableId = validateDineInTable(args.tableId);
+    if (normalizedType === "DineIn") {
+      effectiveTableId = await validateDineInTable(ctx, args.tableId, org._id);
     }
 
     const now = Date.now();
+    const statusVal = args.status ?? "ACTIVE";
 
     const qrId = await ctx.db.insert("organizationQrCodes", {
+      organizationId: org._id,
       legacyId: args.legacyId,
       name: trimmedName,
       description: args.description?.trim() || undefined,
-      qrType: args.qrType,
+      qrType: normalizedType,
+      status: statusVal,
       counter: 0,
       tableNumber: args.tableNumber?.trim() || undefined,
       tableId: effectiveTableId,
       createdAt: args.createdAt ?? now,
       updatedAt: args.updatedAt ?? now,
+      activatedAt: statusVal === "ACTIVE" ? now : undefined,
+      disabledAt: statusVal === "INACTIVE" ? now : undefined,
     });
 
-    const qrUrl = buildQrUrl(qrId, args.qrType, trimmedName, effectiveTableId, org.slug);
-    await ctx.db.patch(qrId, { qrUrl, updatedAt: now });
+    const destination = buildQrUrl(qrId, normalizedType, trimmedName, effectiveTableId, org.slug);
+    await ctx.db.patch(qrId, { qrUrl: destination, destination, updatedAt: now });
 
-    return (await ctx.db.get(qrId))!;
+    const inserted = await ctx.db.get(qrId);
+
+    return {
+      qrId: inserted!._id,
+      _id: inserted!._id,
+      outletId: org._id,
+      organizationId: org._id,
+      type: formatContractQrType(normalizedType),
+      qrType: normalizedType,
+      tableId: effectiveTableId,
+      displayName: trimmedName,
+      name: trimmedName,
+      status: statusVal,
+      destination,
+      qrUrl: destination,
+      createdAt: new Date(inserted!.createdAt).toISOString(),
+    };
   },
 });
 
 /**
- * Updates properties of an existing organization QR code.
+ * Updates properties of an existing organization QR code (preserves stable QR identity).
  */
 export const update = mutation({
   args: {
     id: v.id("organizationQrCodes"),
     name: v.optional(v.string()),
+    displayName: v.optional(v.string()),
     description: v.optional(v.string()),
-    qrType: v.optional(
-      v.union(v.literal("DineIn"), v.literal("TakeAway"), v.literal("Queue")),
-    ),
+    qrType: v.optional(v.string()),
+    status: v.optional(v.union(v.literal("ACTIVE"), v.literal("INACTIVE"))),
     tableNumber: v.optional(v.string()),
     tableId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { org } = await requireAdminOrCashier(ctx);
-
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
-      throw new Error("Organization QR code not found");
+      throw new Error("QR_NOT_FOUND");
     }
 
-    const effectiveName =
-      args.name !== undefined ? normalizeQrName(args.name) : existing.name;
+    await requireAdminOrCashier(ctx, existing.organizationId);
 
-    if (args.name !== undefined) {
+    const inputName = args.displayName ?? args.name;
+    const effectiveName =
+      inputName !== undefined ? normalizeQrName(inputName) : existing.name;
+
+    if (inputName !== undefined) {
       await validateUniqueQrName(ctx, effectiveName, args.id);
     }
 
-    const effectiveType = args.qrType ?? existing.qrType;
+    const effectiveType = normalizeQrType(
+      args.qrType !== undefined ? args.qrType : existing.qrType,
+    );
     let effectiveTableId =
       args.tableId !== undefined ? args.tableId : existing.tableId;
     let effectiveTableNumber =
@@ -393,20 +501,32 @@ export const update = mutation({
         : existing.tableNumber;
 
     if (effectiveType === "DineIn") {
-      effectiveTableId = validateDineInTable(effectiveTableId);
+      effectiveTableId = await validateDineInTable(ctx, effectiveTableId, existing.organizationId);
     } else {
       effectiveTableId = undefined;
       effectiveTableNumber = undefined;
     }
 
     const now = Date.now();
-    const newUrl = buildQrUrl(
+    const newDestination = buildQrUrl(
       existing._id,
       effectiveType,
       effectiveName,
       effectiveTableId,
       org.slug,
     );
+
+    const newStatus = args.status ?? existing.status ?? "ACTIVE";
+    let activatedAt = existing.activatedAt;
+    let disabledAt = existing.disabledAt;
+
+    if (args.status !== undefined && args.status !== existing.status) {
+      if (args.status === "ACTIVE") {
+        activatedAt = now;
+      } else if (args.status === "INACTIVE") {
+        disabledAt = now;
+      }
+    }
 
     await ctx.db.patch(args.id, {
       name: effectiveName,
@@ -415,13 +535,85 @@ export const update = mutation({
           ? args.description.trim() || undefined
           : existing.description,
       qrType: effectiveType,
-      qrUrl: newUrl,
+      status: newStatus,
+      qrUrl: newDestination,
+      destination: newDestination,
       tableNumber: effectiveTableNumber,
       tableId: effectiveTableId,
       updatedAt: now,
+      activatedAt,
+      disabledAt,
     });
 
-    return (await ctx.db.get(args.id))!;
+    const updated = (await ctx.db.get(args.id))!;
+
+    return {
+      qrId: updated._id,
+      _id: updated._id,
+      outletId: updated.organizationId,
+      type: formatContractQrType(updated.qrType),
+      tableId: updated.tableId,
+      displayName: updated.name,
+      name: updated.name,
+      status: newStatus,
+      destination: newDestination,
+      qrUrl: newDestination,
+      updatedAt: new Date(updated.updatedAt).toISOString(),
+    };
+  },
+});
+
+/**
+ * Disables a QR code so it cannot start new sessions.
+ */
+export const disable = mutation({
+  args: { id: v.id("organizationQrCodes") },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.deletedAt !== undefined) {
+      throw new Error("QR_NOT_FOUND");
+    }
+
+    await requireAdminOrCashier(ctx, existing.organizationId);
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "INACTIVE",
+      disabledAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      qrId: existing._id,
+      status: "INACTIVE" as const,
+    };
+  },
+});
+
+/**
+ * Enables an inactive QR code.
+ */
+export const enable = mutation({
+  args: { id: v.id("organizationQrCodes") },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.deletedAt !== undefined) {
+      throw new Error("QR_NOT_FOUND");
+    }
+
+    await requireAdminOrCashier(ctx, existing.organizationId);
+
+    const now = Date.now();
+    await ctx.db.patch(args.id, {
+      status: "ACTIVE",
+      activatedAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      qrId: existing._id,
+      status: "ACTIVE" as const,
+    };
   },
 });
 
@@ -433,7 +625,11 @@ export const incrementCounter = mutation({
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
-      throw new Error("Organization QR code not found");
+      throw new Error("QR_NOT_FOUND");
+    }
+
+    if ((existing.status ?? "ACTIVE") === "INACTIVE") {
+      throw new Error("QR_INACTIVE");
     }
 
     const now = Date.now();
@@ -454,12 +650,12 @@ export const incrementCounter = mutation({
 export const remove = mutation({
   args: { id: v.id("organizationQrCodes") },
   handler: async (ctx, args) => {
-    await requireAdminOrCashier(ctx);
-
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.deletedAt !== undefined) {
-      throw new Error("Organization QR code not found");
+      throw new Error("QR_NOT_FOUND");
     }
+
+    await requireAdminOrCashier(ctx, existing.organizationId);
 
     const now = Date.now();
 
@@ -469,5 +665,105 @@ export const remove = mutation({
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Creates multiple DineIn QR Codes in batch for a list of table IDs.
+ * Performs per-table validation and returns created and failed lists.
+ */
+export const createBatch = mutation({
+  args: {
+    outletId: v.optional(v.id("organizations")),
+    organizationId: v.optional(v.id("organizations")),
+    type: v.string(), // "DINE_IN"
+    tableIds: v.array(v.string()),
+    status: v.optional(v.union(v.literal("ACTIVE"), v.literal("INACTIVE"))),
+  },
+  handler: async (ctx, args) => {
+    const targetOrgId = args.outletId ?? args.organizationId;
+    const { org } = await requireAdminOrCashier(ctx, targetOrgId);
+
+    const normalizedType = normalizeQrType(args.type);
+    const statusVal = args.status ?? "ACTIVE";
+
+    const created: any[] = [];
+    const failed: any[] = [];
+
+    for (const tableId of args.tableIds) {
+      try {
+        const cleanTableId = tableId.trim();
+        let tableName = `Table ${cleanTableId}`;
+
+        // Check table doc in organizationTables
+        try {
+          const tableDoc = await ctx.db.get(cleanTableId as Id<"organizationTables">);
+          if (tableDoc) {
+            if (tableDoc.deletedAt !== undefined) {
+              failed.push({ tableId: cleanTableId, reason: "TABLE_NOT_FOUND" });
+              continue;
+            }
+            tableName = `Table ${tableDoc.tableNumber}`;
+          }
+        } catch {
+          // Table lookup fallback
+        }
+
+        // Check if an active QR already exists for this table
+        const existingTableQrs = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_table", (q) => q.eq("tableId", cleanTableId))
+          .collect();
+
+        const activeQr = existingTableQrs.find(
+          (q) => q.deletedAt === undefined && (q.status ?? "ACTIVE") === "ACTIVE",
+        );
+
+        if (activeQr) {
+          failed.push({
+            tableId: cleanTableId,
+            reason: "ACTIVE_QR_ALREADY_EXISTS",
+          });
+          continue;
+        }
+
+        const now = Date.now();
+        const displayName = `${tableName} QR`;
+
+        const qrId = await ctx.db.insert("organizationQrCodes", {
+          organizationId: org._id,
+          name: displayName,
+          qrType: normalizedType,
+          status: statusVal,
+          counter: 0,
+          tableId: cleanTableId,
+          tableNumber: tableName,
+          createdAt: now,
+          updatedAt: now,
+          activatedAt: statusVal === "ACTIVE" ? now : undefined,
+        });
+
+        const destination = buildQrUrl(qrId, normalizedType, displayName, cleanTableId, org.slug);
+        await ctx.db.patch(qrId, { qrUrl: destination, destination, updatedAt: now });
+
+        created.push({
+          qrId,
+          tableId: cleanTableId,
+          displayName,
+          status: statusVal,
+          destination,
+        });
+      } catch (err: any) {
+        failed.push({
+          tableId,
+          reason: err.message || "CREATE_FAILED",
+        });
+      }
+    }
+
+    return {
+      created,
+      failed,
+    };
   },
 });

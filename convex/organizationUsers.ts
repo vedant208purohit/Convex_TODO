@@ -439,6 +439,13 @@ export async function requireMember(
   };
 }
 
+export async function requireAdminOrCashier(
+  ctx: QueryCtx | MutationCtx,
+  explicitOrgId?: Id<"organizations">
+) {
+  return await requireMember(ctx, explicitOrgId);
+}
+
 // ----------------------------------------------------
 // QUERIES
 // ----------------------------------------------------

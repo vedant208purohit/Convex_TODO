@@ -167,11 +167,32 @@ export default defineSchema({
 
   // Phase 1 Seeded Support Entities
   stations: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     name: v.string(),
     isMain: v.boolean(),
     createdAt: v.number(),
-  }).index("by_org", ["organizationId"]),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_deleted", ["organizationId", "deletedAt"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  stationItems: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    stationId: v.id("stations"),
+    itemId: v.id("items"),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_station", ["organizationId", "stationId"])
+    .index("by_org_item", ["organizationId", "itemId"])
+    .index("by_station_item", ["stationId", "itemId"])
+    .index("by_legacy_id", ["legacyId"]),
 
   paymentModes: defineTable({
     legacyId: v.optional(v.string()),
@@ -746,6 +767,7 @@ postpaidOrderRequests: defineTable({
   // Organization QR Codes Domain Table
   organizationQrCodes: defineTable({
     legacyId: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
 
     name: v.string(),
     description: v.optional(v.string()),
@@ -753,10 +775,20 @@ postpaidOrderRequests: defineTable({
     qrType: v.union(
       v.literal("DineIn"),
       v.literal("TakeAway"),
-      v.literal("Queue")
+      v.literal("Delivery"),
+      v.literal("Queue"),
+      v.literal("DINE_IN"),
+      v.literal("TAKEAWAY"),
+      v.literal("DELIVERY")
+    ),
+
+    status: v.optional(
+      v.union(v.literal("ACTIVE"), v.literal("INACTIVE"))
     ),
 
     qrUrl: v.optional(v.string()),
+    destination: v.optional(v.string()),
+    publicToken: v.optional(v.string()),
     counter: v.number(),
 
     tableNumber: v.optional(v.string()),
@@ -764,12 +796,106 @@ postpaidOrderRequests: defineTable({
 
     createdAt: v.number(),
     updatedAt: v.number(),
+    activatedAt: v.optional(v.number()),
+    disabledAt: v.optional(v.number()),
     deletedAt: v.optional(v.number()),
   })
+    .index("by_organization", ["organizationId"])
     .index("by_name", ["name"])
     .index("by_table", ["tableId"])
     .index("by_qr_type", ["qrType"])
+    .index("by_status", ["status"])
+    .index("by_public_token", ["publicToken"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Organization QR Scans Telemetry Table
+  organizationQrScans: defineTable({
+    qrId: v.id("organizationQrCodes"),
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.string()),
+    sessionId: v.string(),
+    scannedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+    // Rich Telemetry Fields
+    ipAddress: v.optional(v.string()),
+    userAgent: v.optional(v.string()),
+    deviceType: v.optional(v.string()),
+    os: v.optional(v.string()),
+    browser: v.optional(v.string()),
+    city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    region: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    referrer: v.optional(v.string()),
+    screenResolution: v.optional(v.string()),
+    language: v.optional(v.string()),
+  })
+    .index("by_qr", ["qrId"])
+    .index("by_session", ["sessionId"])
+    .index("by_organization", ["organizationId"])
+    .index("by_scanned_at", ["scannedAt"]),
+
+  // Organization Ordering Sessions Domain Table
+  organizationOrderingSessions: defineTable({
+    sessionId: v.string(),
+    qrId: v.id("organizationQrCodes"),
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.string()),
+    status: v.union(
+      v.literal("ACTIVE"),
+      v.literal("EXPIRED"),
+      v.literal("COMPLETED")
+    ),
+    startedAt: v.number(),
+    firstScanAt: v.optional(v.number()),
+    lastActivityAt: v.number(),
+    cartItemCount: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_session_id", ["sessionId"])
+    .index("by_qr", ["qrId"])
+    .index("by_organization", ["organizationId"])
+    .index("by_started_at", ["startedAt"]),
+
+  // Organization Carts Domain Table
+  organizationCarts: defineTable({
+    cartId: v.string(),
+    sessionId: v.string(),
+    qrId: v.id("organizationQrCodes"),
+    organizationId: v.optional(v.id("organizations")),
+    tableId: v.optional(v.string()),
+    itemCount: v.number(),
+    hasItems: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_cart_id", ["cartId"])
+    .index("by_session", ["sessionId"])
+    .index("by_qr", ["qrId"])
+    .index("by_organization", ["organizationId"]),
+
+  // Organization Event Audit Logs Table (Subticket 06)
+  organizationEventLogs: defineTable({
+    eventId: v.string(),
+    eventType: v.string(),
+    entityId: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    processingStatus: v.union(
+      v.literal("RECEIVED"),
+      v.literal("PROCESSED"),
+      v.literal("FAILED")
+    ),
+    error: v.optional(v.string()),
+    payloadSnapshot: v.optional(v.any()),
+  })
+    .index("by_event_id", ["eventId"])
+    .index("by_event_type", ["eventType"])
+    .index("by_status", ["processingStatus"]),
 
   // Organization Queue Configurations Domain Table
   organizationQueueConfigurations: defineTable({
@@ -932,6 +1058,10 @@ postpaidOrderRequests: defineTable({
     cashierUserId: v.optional(v.string()),
     membersOnTable: v.optional(v.number()),
 
+    // QR & Session Attribution (Subticket 03)
+    qrId: v.optional(v.id("organizationQrCodes")),
+    sessionId: v.optional(v.string()),
+
     // Customer Relationship & Information (from Frontend POS / Online)
     customerId: v.optional(v.id("customers")),
     customerName: v.optional(v.string()),
@@ -958,6 +1088,10 @@ postpaidOrderRequests: defineTable({
       })
     ),
 
+    // Scheduled Delivery Timing (First-class schema fields for scheduled orders)
+    scheduledDeliveryDate: v.optional(v.string()),
+    scheduledDeliveryTime: v.optional(v.string()),
+
     paymentMode: v.string(),
     paymentStatus: v.union(
       v.literal("Pending"),
@@ -978,7 +1112,9 @@ postpaidOrderRequests: defineTable({
     .index("by_org_table", ["organizationId", "tableId"])
     .index("by_created_at", ["organizationId", "createdAt"])
     .index("by_customer", ["customerId"])
-    .index("by_user_address", ["userAddressId"]),
+    .index("by_user_address", ["userAddressId"])
+    .index("by_qr", ["qrId"])
+    .index("by_session", ["sessionId"]),
 
   orderItems: defineTable({
     organizationId: v.id("organizations"),
@@ -1005,16 +1141,28 @@ postpaidOrderRequests: defineTable({
     createdAt: v.number(),
   })
     .index("by_order", ["orderId"])
-    .index("by_org", ["organizationId"]),
+    .index("by_org", ["organizationId"])
+    .index("by_station", ["stationId"])
+    .index("by_org_station", ["organizationId", "stationId"]),
 
   orderActivities: defineTable({
+    legacyId: v.optional(v.string()),
     organizationId: v.id("organizations"),
     orderId: v.id("orders"),
     processId: v.optional(v.id("organizationOrderProcesses")),
     processName: v.string(),
     position: v.number(),
+    totalDuration: v.optional(v.number()), // Total duration in seconds elapsed since initial order step
+    startedAt: v.optional(v.number()), // Epoch timestamp in ms
+    completedAt: v.optional(v.number()), // Epoch timestamp in ms
     createdAt: v.number(),
-  }).index("by_order", ["orderId"]),
+    updatedAt: v.optional(v.number()),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_org", ["organizationId"])
+    .index("by_order_process", ["orderId", "processId"])
+    .index("by_legacy_id", ["legacyId"]),
 
   orderPayments: defineTable({
     organizationId: v.id("organizations"),

@@ -107,11 +107,39 @@ function CaptainIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function QueueNavIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect width="5" height="5" x="3" y="3" rx="1" />
+      <rect width="5" height="5" x="16" y="3" rx="1" />
+      <rect width="5" height="5" x="3" y="16" rx="1" />
+      <path d="M21 16h-3a2 2 0 0 0-2 2v3" />
+      <path d="M12 7v3a2 2 0 0 1-2 2H7" />
     </svg>
   );
 }
@@ -164,6 +192,11 @@ const navItems: NavItem[] = [
     icon: <KdsIcon className="w-4 h-4" />,
   },
   {
+    href: "/qr-codes",
+    label: "QR Codes",
+    icon: <QrCodesIcon className="w-4 h-4" />,
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: <SettingsIcon className="w-4 h-4" />,
@@ -186,9 +219,20 @@ const inventorySubItems = [
 function NavLink({ href, label, icon }: NavItem) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const active = pathname === href || pathname.startsWith(`${href}/`) || (href === "/settings" && pathname === "/organization");
+  const active =
+    pathname === href ||
+    pathname.startsWith(`${href}/`) ||
+    (href === "/settings" && pathname === "/organization") ||
+    (href === "/qr-codes" && pathname.startsWith("/qr"));
   const qs = searchParams.toString();
-  const targetHref = href === "/inventory" ? "/inventory/purchase-orders" : (qs ? `${href}?${qs}` : href);
+  const targetHref =
+    href === "/inventory"
+      ? "/inventory/purchase-orders"
+      : href === "/qr-codes" || href === "/settings"
+      ? href
+      : qs
+      ? `${href}?${qs}`
+      : href;
 
   return (
     <Link
