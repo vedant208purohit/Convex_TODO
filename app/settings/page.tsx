@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode, useCallback, useEffect, Suspense } from "react";
+import { ReactNode, useCallback, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
@@ -354,6 +354,23 @@ function SettingsContent() {
     [router, searchParams],
   );
 
+  const [isSettingsCollapsed, setIsSettingsCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pos_settings_sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSettingsSidebar = () => {
+    setIsSettingsCollapsed((prev: boolean) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pos_settings_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
+
   // If user navigates directly to ?tab=qrCodes, send them to the dedicated full-width /qr-codes page
   useEffect(() => {
     if (rawTab === "qrCodes") {
@@ -381,16 +398,61 @@ function SettingsContent() {
         {/* Settings Two-Panel Layout */}
         <div className="flex-1 flex flex-col lg:flex-row w-full p-5 lg:p-7 gap-5 min-h-0 overflow-hidden">
           {/* Left Panel: Settings Navigation */}
-          <div className="w-full lg:w-48 xl:w-56 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full">
-            <div className="p-3.5 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0">
-              <h2 className="font-sans text-[15px] font-semibold text-[#141010]">
-                Settings Menu
-              </h2>
+          <div
+            className={`shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full transition-all duration-300 ease-in-out ${
+              isSettingsCollapsed ? "w-full lg:w-20" : "w-full lg:w-48 xl:w-56"
+            }`}
+          >
+            <div className="p-3.5 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex items-center justify-between">
+              {!isSettingsCollapsed && (
+                <h2 className="font-sans text-[15px] font-semibold text-[#141010]">
+                  Settings Menu
+                </h2>
+              )}
+              <button
+                type="button"
+                onClick={toggleSettingsSidebar}
+                className={`p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${
+                  isSettingsCollapsed ? "mx-auto" : ""
+                }`}
+                title={isSettingsCollapsed ? "Expand Settings Menu" : "Collapse Settings Menu"}
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform duration-200 ${
+                    isSettingsCollapsed ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </button>
             </div>
 
             <nav className="flex-1 py-1.5 divide-y divide-[#e7e5e4]/50 overflow-y-auto">
               {SETTINGS_TABS.map((tab) => {
                 const isSelected = activeTab === tab.id;
+                if (isSettingsCollapsed) {
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setActiveTab(tab.id)}
+                      title={tab.label}
+                      className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all cursor-pointer select-none ${
+                        isSelected
+                          ? "bg-[#0c0a09] text-white shadow-xs"
+                          : "text-[#5e5e5e] hover:bg-white hover:text-[#141010]"
+                      }`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                        {tab.icon}
+                      </span>
+                    </button>
+                  );
+                }
+
                 return (
                   <button
                     key={tab.id}

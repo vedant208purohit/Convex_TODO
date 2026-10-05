@@ -33,6 +33,35 @@ function formatTableDisplay(tableNum?: string): string {
   return `Table ${clean}`;
 }
 
+function getOrderTableDisplay(order?: {
+  table?: { number?: string } | null;
+  orderType?: string;
+} | null): string {
+  if (order?.table && order.table.number) {
+    return formatTableDisplay(order.table.number);
+  }
+  const type = order?.orderType;
+  if (type === "DineIn") {
+    return "Direct Dine-In";
+  }
+  if (type === "Delivery" || type === "ScheduledDelivery") {
+    return "Delivery";
+  }
+  if (type === "TakeAway" || type === "ScheduledPickup") {
+    return "Counter / Takeaway";
+  }
+  return "N/A";
+}
+
+function formatOrderTypeLabel(type?: string): string {
+  if (!type) return "Dine-In";
+  if (type === "ScheduledPickup") return "Scheduled Pickup";
+  if (type === "ScheduledDelivery") return "Scheduled Delivery";
+  if (type === "TakeAway") return "Takeaway";
+  if (type === "DineIn") return "Dine-In";
+  return type.replace(/([A-Z])/g, " $1").trim();
+}
+
 // ==========================================
 // PIXEL-PERFECT SVG ICONS (PREST THEME)
 // ==========================================
@@ -1328,85 +1357,108 @@ export default function OrdersPage() {
             <div className="max-w-[1600px] mx-auto space-y-6">
               {/* BEGIN: MetadataStrip */}
               <section
-                className="bg-white border border-[#e7e5e4] rounded-xl p-4 lg:px-6 shadow-xs"
+                className="bg-white border border-[#e7e5e4] rounded-xl p-4 lg:px-6 shadow-xs overflow-x-auto pb-3 [scrollbar-width:thin] [scrollbar-color:#e7e5e4_transparent]"
                 data-purpose="order-metadata-strip"
               >
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-[#e7e5e4]">
-                  <div className="pt-2 sm:pt-0 sm:pr-4">
+                <div className="flex items-center justify-between min-w-max divide-x divide-[#e7e5e4] gap-2 pb-1">
+                  <div className="pr-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Order #
                     </span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">
+                    <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                       {order?.orderNumber || "-"}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:px-4">
+                  <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Token #
                     </span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">
+                    <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                       {order?.tokenNumber || "-"}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:px-4">
+                  <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Order Type
                     </span>
-                    <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded bg-[#f1edec] text-[#0c0a09]">
-                      {order?.orderType || "DineIn"}
+                    <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[#f1edec] text-[#0c0a09] whitespace-nowrap">
+                      {formatOrderTypeLabel(order?.orderType)}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:px-4">
+                  <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Order Status
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 whitespace-nowrap">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />{" "}
                       {order?.orderStatusName || "Accepted"}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:px-4">
+                  <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Date
                     </span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">
+                    <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                       {formattedOrderDate}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:px-4">
+                  <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Time
                     </span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">
+                    <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                       {formattedOrderTime}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:px-4">
+                  <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Source
                     </span>
-                    <span className="text-xs font-semibold text-[#0c0a09]">
+                    <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                       {order?.orderSource || "Prest Cashier"}
                     </span>
                   </div>
-                  <div className="pt-2 sm:pt-0 sm:pl-4">
+                  <div className="pl-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Table
                     </span>
                     <span
-                      className="text-xs font-semibold text-[#0c0a09] truncate block"
-                      title={
-                        order?.table ? formatTableDisplay(order.table.number) : "N/A"
-                      }
+                      className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap block"
+                      title={getOrderTableDisplay(order)}
                     >
-                      {order?.table
-                        ? formatTableDisplay(order.table.number)
-                        : "Counter / Takeaway"}
+                      {getOrderTableDisplay(order)}
                     </span>
                   </div>
                 </div>
               </section>
               {/* END: MetadataStrip */}
+
+              {/* Scheduled Order Timing Banner */}
+              {(order?.orderType === "ScheduledPickup" ||
+                order?.orderType === "ScheduledDelivery" ||
+                order?.scheduledDeliveryDate ||
+                order?.scheduledDeliveryTime) && (
+                <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-3.5 px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                      {order?.orderType === "ScheduledDelivery"
+                        ? "Scheduled Delivery Timing:"
+                        : "Scheduled Pickup Timing:"}
+                    </span>
+                    <span className="text-sm font-extrabold text-[#0c0a09] bg-white px-3 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                      {order?.scheduledDeliveryDate || formattedOrderDate}
+                      {" • "}
+                      {order?.scheduledDeliveryTime || formattedOrderTime}
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold text-amber-800">
+                    {order?.orderType === "ScheduledDelivery"
+                      ? "Requested Customer Delivery Slot"
+                      : "Requested Customer Pickup Slot"}
+                  </span>
+                </div>
+              )}
 
               {/* BEGIN: TwoColumnLayout */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1469,9 +1521,7 @@ export default function OrdersPage() {
                         <span className="font-medium">
                           {order?.deliveryAddress
                             ? `${order.deliveryAddress.addressLine1}, ${order.deliveryAddress.city || ""}`
-                            : order?.table
-                              ? `${formatTableDisplay(order.table.number)} (Ground Floor)`
-                              : "Standard Counter Pickup"}
+                            : getOrderTableDisplay(order)}
                         </span>
                       </div>
                       <div className="text-xs text-[#7a716b]">
@@ -1776,26 +1826,36 @@ export default function OrdersPage() {
                           {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
                         </span>
                       </div>
-                      <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                        <span>CGST (2.5%)</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          {currencySymbol}
-                          {formatCurrencyAmount(
-                            order?.subTotal ? ((order.subTotal * 0.025) / 100) : 0,
-                            activeOrg?.country
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                        <span>SGST (2.5%)</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          {currencySymbol}
-                          {formatCurrencyAmount(
-                            order?.subTotal ? ((order.subTotal * 0.025) / 100) : 0,
-                            activeOrg?.country
-                          )}
-                        </span>
-                      </div>
+                      {order?.taxInfoSnapshot?.components &&
+                      order.taxInfoSnapshot.components.length > 0 ? (
+                        order.taxInfoSnapshot.components.map(
+                          (c: any, i: number) => (
+                            <div
+                              key={i}
+                              className="flex justify-between items-center text-[#7a716b] text-xs"
+                            >
+                              <span>
+                                {c.name} ({c.rate}%)
+                              </span>
+                              <span className="font-semibold text-[#0c0a09]">
+                                +{currencySymbol}
+                                {formatCurrencyAmount(
+                                  ((order.subTotal || 0) * c.rate) / 10000,
+                                  activeOrg?.country
+                                )}
+                              </span>
+                            </div>
+                          ),
+                        )
+                      ) : (
+                        <div className="flex justify-between items-center text-[#7a716b] text-xs">
+                          <span>GST (Tax Total)</span>
+                          <span className="font-semibold text-[#0c0a09]">
+                            {currencySymbol}
+                            {formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
+                          </span>
+                        </div>
+                      )}
                       {parseFloat(order?.display_discount_amount || "0") >
                         0 && (
                         <div className="flex justify-between items-center text-emerald-700 text-xs">
@@ -3078,7 +3138,7 @@ export default function OrdersPage() {
                         {/* 4. Order Type */}
                         <td className="py-4 px-5">
                           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#f1edec] text-[#0c0a09] text-[11px] font-medium border border-[#e7e5e4]">
-                            <span>{order.orderType}</span>
+                            <span>{formatOrderTypeLabel(order.orderType)}</span>
                             {order.table && (
                               <>
                                 <span className="text-[#5e5e5e]">•</span>

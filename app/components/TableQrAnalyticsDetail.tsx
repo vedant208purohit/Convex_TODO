@@ -345,10 +345,10 @@ export function TableQrAnalyticsDetail({
       { label: "6A", hourStart: 6, hourEnd: 7 },
       { label: "8A", hourStart: 8, hourEnd: 9 },
       { label: "10A", hourStart: 10, hourEnd: 11 },
-      { label: "12P (Lunch)", hourStart: 12, hourEnd: 13 },
+      { label: "12P", hourStart: 12, hourEnd: 13 },
       { label: "2P", hourStart: 14, hourEnd: 15 },
       { label: "4P", hourStart: 16, hourEnd: 17 },
-      { label: "6P (Dinner)", hourStart: 18, hourEnd: 19 },
+      { label: "6P", hourStart: 18, hourEnd: 19 },
       { label: "8P", hourStart: 20, hourEnd: 21 },
       { label: "10P", hourStart: 22, hourEnd: 23 },
     ];

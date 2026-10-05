@@ -999,9 +999,9 @@ export function QrPerformanceDashboard({
               { hr: 0, label: "00:00" },
               { hr: 4, label: "04:00" },
               { hr: 8, label: "08:00" },
-              { hr: 12, label: "12:00 (Lunch)", bold: true },
+              { hr: 12, label: "12:00" },
               { hr: 16, label: "16:00" },
-              { hr: 18, label: "18:00 (Dinner)", bold: true },
+              { hr: 18, label: "18:00" },
               { hr: 20, label: "20:00" },
               { hr: 23, label: "23:00" },
             ].map((tick) => {
@@ -1009,7 +1009,7 @@ export function QrPerformanceDashboard({
               return (
                 <span
                   key={tick.hr}
-                  className={`absolute top-1 transform -translate-x-1/2 ${tick.bold ? "text-[#141010] font-bold" : ""}`}
+                  className="absolute top-1 transform -translate-x-1/2"
                   style={{ left: `${pct}%` }}
                 >
                   {tick.label}
@@ -1196,14 +1196,6 @@ export function QrPerformanceDashboard({
               placeholder="Filter by endpoint..."
               className="bg-white px-3.5 py-1.5 rounded-xl border border-[#e7e5e4] text-xs font-medium text-[#141010] placeholder:text-[#5e5e5e] focus:outline-none focus:border-[#141010] transition-colors"
             />
-            <button
-              type="button"
-              onClick={() => showToast("Refreshed table telemetry metrics!")}
-              className="p-2 rounded-xl bg-white border border-[#e7e5e4] text-[#141010] hover:bg-[#f1edec] transition-colors cursor-pointer"
-              title="Refresh Table"
-            >
-              <RefreshIcon className="w-4 h-4" />
-            </button>
             <button
               type="button"
               onClick={handleExportCsv}
