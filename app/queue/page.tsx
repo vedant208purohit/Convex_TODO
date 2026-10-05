@@ -47,6 +47,41 @@ function getElapsedMinutes(ts?: number): number {
   return Math.floor(diff / 60000);
 }
 
+// Live ticking stopwatch component for waitlist entries
+function LiveWaitlistStopwatch({ createdAt }: { createdAt?: number }) {
+  const [now, setNow] = useState<number>(() => Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  if (!createdAt) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[#645d58] bg-[#f4ece8] px-2.5 py-1 rounded-full font-semibold text-xs font-mono border border-[#e9e1dd]">
+        00m 00s
+      </span>
+    );
+  }
+
+  const diffMs = Math.max(0, now - createdAt);
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  const paddedMins = String(minutes).padStart(2, "0");
+  const paddedSecs = String(seconds).padStart(2, "0");
+
+  return (
+    <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-semibold text-xs font-mono border border-emerald-200">
+      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
+      {paddedMins}m {paddedSecs}s
+    </span>
+  );
+}
+
 // Helper to extract short ticket number e.g. "30-09-2026.QN001" -> "QN001"
 function formatShortTicketNumber(qNum?: string): string {
   if (!qNum) return "QN001";
@@ -91,6 +126,7 @@ export default function QueueDashboardPage() {
   const [activeTab, setActiveTab] = useState<
     "waitlist" | "reservations" | "table-view" | "completed" | "cancelled"
   >("waitlist");
+  const [reservationFilter, setReservationFilter] = useState<"all" | "pending" | "booked">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [isEmptyState, setIsEmptyState] = useState(false);
@@ -108,6 +144,7 @@ export default function QueueDashboardPage() {
   // Active Selected Item States for Drawers/Modals
   const [activeQueueItem, setActiveQueueItem] = useState<any | null>(null);
   const [selectedAssignTableId, setSelectedAssignTableId] = useState<Id<"organizationTables"> | null>(null);
+  const [dispatchLayoutId, setDispatchLayoutId] = useState<string>("all");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [customNotifyMessage, setCustomNotifyMessage] = useState(
@@ -115,7 +152,7 @@ export default function QueueDashboardPage() {
   );
 
   // Form Inputs for Add Walk-in Waitlist
-  const [waitlistPhone, setWaitlistPhone] = useState("57867-86786");
+  const [waitlistPhone, setWaitlistPhone] = useState("");
   const [waitlistFirstName, setWaitlistFirstName] = useState("");
   const [waitlistLastName, setWaitlistLastName] = useState("");
   const [waitlistGuests, setWaitlistGuests] = useState<number>(4);
@@ -127,7 +164,7 @@ export default function QueueDashboardPage() {
   const [waitlistNotes, setWaitlistNotes] = useState("");
 
   // Form Inputs for Add Advance Reservation
-  const [resPhone, setResPhone] = useState("57867-86786");
+  const [resPhone, setResPhone] = useState("");
   const [resFirstName, setResFirstName] = useState("");
   const [resLastName, setResLastName] = useState("");
   const [resDate, setResDate] = useState(getTodayDateString());
@@ -141,6 +178,7 @@ export default function QueueDashboardPage() {
 
   // Drawer Form Inputs for Running Late / Cancel Reason
   const [latePresetMins, setLatePresetMins] = useState<number>(10);
+  const [customLateMins, setCustomLateMins] = useState("");
   const [cancelReason, setCancelReason] = useState("Change of plans");
   const [cancelNotes, setCancelNotes] = useState("");
 
@@ -199,6 +237,12 @@ export default function QueueDashboardPage() {
     });
   }, [queueList, searchQuery]);
 
+  // Selected table helper for seating dispatch
+  const selectedAssignTable = useMemo(() => {
+    if (!selectedAssignTableId || !tableList) return null;
+    return tableList.find((t) => t._id === selectedAssignTableId) || null;
+  }, [selectedAssignTableId, tableList]);
+
   // Categorized Queue Lists
   const waitlistItems = useMemo(() => {
     return filteredQueues.filter(
@@ -221,6 +265,24 @@ export default function QueueDashboardPage() {
         q.queueStatus !== "rejected"
     );
   }, [filteredQueues]);
+
+  const pendingReservationCount = useMemo(() => {
+    return reservationItems.filter((q) => q.queueStatus === "pending").length;
+  }, [reservationItems]);
+
+  const bookedReservationCount = useMemo(() => {
+    return reservationItems.filter((q) => q.queueStatus !== "pending").length;
+  }, [reservationItems]);
+
+  const displayedReservationItems = useMemo(() => {
+    if (reservationFilter === "pending") {
+      return reservationItems.filter((q) => q.queueStatus === "pending");
+    }
+    if (reservationFilter === "booked") {
+      return reservationItems.filter((q) => q.queueStatus !== "pending");
+    }
+    return reservationItems;
+  }, [reservationItems, reservationFilter]);
 
   const completedItems = useMemo(() => {
     return filteredQueues.filter((q) => q.queueStatus === "completed");
@@ -300,6 +362,9 @@ export default function QueueDashboardPage() {
     setActiveQueueItem(queueItem);
     setStatusSubTab(defaultSubTab);
     setSelectedAssignTableId(queueItem.tableId || null);
+    setDispatchLayoutId(queueItem.layoutId || "all");
+    setLatePresetMins(10);
+    setCustomLateMins("");
     setIsChangeStatusOpen(true);
   }
 
@@ -326,6 +391,7 @@ export default function QueueDashboardPage() {
       });
       setIsAddWaitlistOpen(false);
       showToast("Guest added to waitlist sequence!");
+      setWaitlistPhone("");
       setWaitlistFirstName("");
       setWaitlistLastName("");
       setWaitlistNotes("");
@@ -360,6 +426,7 @@ export default function QueueDashboardPage() {
       });
       setIsAddReservationOpen(false);
       showToast("Table reservation created successfully!");
+      setResPhone("");
       setResFirstName("");
       setResLastName("");
       setResNotes("");
@@ -392,12 +459,13 @@ export default function QueueDashboardPage() {
           showToast(`Ticket status updated to Arrived!`);
         }
       } else if (statusSubTab === "late") {
+        const effectiveMins = customLateMins ? (parseInt(customLateMins, 10) || latePresetMins) : latePresetMins;
         await updateQueue({
           id: activeQueueItem._id,
           queueStatus: "running_late",
-          reason: `Guest running late (${latePresetMins} mins grace period applied)`,
+          reason: `Guest running late (${effectiveMins} mins grace period applied)`,
         });
-        showToast(`Running late grace period applied (${latePresetMins}m)`);
+        showToast(`Running late grace period applied (${effectiveMins}m)`);
       } else if (statusSubTab === "cancel") {
         await updateQueue({
           id: activeQueueItem._id,
@@ -423,6 +491,20 @@ export default function QueueDashboardPage() {
       showToast("Reservation approved & booked!");
     } catch (err: any) {
       showToast(`Failed to approve reservation: ${err.message}`);
+    }
+  }
+
+  // Handle Booking Rejection for Pending Reservations
+  async function handleRejectPendingReservation(queueId: Id<"organizationQueues">) {
+    try {
+      await updateQueue({
+        id: queueId,
+        queueStatus: "rejected",
+        reason: "Reservation request rejected by host",
+      });
+      showToast("Reservation request rejected.");
+    } catch (err: any) {
+      showToast(`Failed to reject reservation: ${err.message}`);
     }
   }
 
@@ -824,10 +906,7 @@ export default function QueueDashboardPage() {
                                     </div>
                                   </td>
                                   <td className="py-3 px-3 whitespace-nowrap">
-                                    <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-semibold text-xs font-mono border border-emerald-200">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
-                                      {elapsedMins} min{elapsedMins === 1 ? "" : "s"}
-                                    </span>
+                                    <LiveWaitlistStopwatch createdAt={item.createdAt} />
                                   </td>
                                   <td className="py-3 px-3 whitespace-nowrap">
                                     <span className="inline-flex items-center px-3 py-1 rounded-full bg-[#f4ece8] text-[#4d4541] font-medium text-xs">
@@ -934,6 +1013,74 @@ export default function QueueDashboardPage() {
               {/* TAB 2: RESERVATIONS VIEW */}
               {activeTab === "reservations" && (
                 <div className="flex flex-col gap-4">
+                  {/* Pending Requests Alert Banner */}
+                  {pendingReservationCount > 0 && (
+                    <div className="p-4 bg-purple-50 border border-purple-200 rounded-2xl flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-purple-200 text-purple-900 flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-[20px]">mark_email_unread</span>
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-semibold text-purple-950">
+                            {pendingReservationCount} Pending Reservation Request{pendingReservationCount > 1 ? "s" : ""}
+                          </h4>
+                          <p className="text-xs text-purple-800">
+                            Customer table booking requests requiring hostess review and approval.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReservationFilter("pending")}
+                        className="px-4 py-1.5 rounded-full bg-purple-900 text-white text-xs font-semibold hover:bg-purple-950 transition-colors shrink-0 shadow-xs"
+                      >
+                        View Pending ({pendingReservationCount})
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Sub-Filters */}
+                  <div className="flex items-center justify-between bg-white p-2.5 px-4 rounded-2xl shadow-xs border border-[#e9e1dd]">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setReservationFilter("all")}
+                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                          reservationFilter === "all"
+                            ? "bg-[#000000] text-white"
+                            : "bg-[#f4ece8] text-[#4d4541] hover:bg-[#e9e1dd]"
+                        }`}
+                      >
+                        All Reservations ({reservationItems.length})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReservationFilter("pending")}
+                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors flex items-center gap-1.5 ${
+                          reservationFilter === "pending"
+                            ? "bg-purple-900 text-white"
+                            : "bg-purple-50 text-purple-900 hover:bg-purple-100"
+                        }`}
+                      >
+                        <span>Pending Approval</span>
+                        <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-950 text-[10px] font-mono font-bold">
+                          {pendingReservationCount}
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReservationFilter("booked")}
+                        className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                          reservationFilter === "booked"
+                            ? "bg-[#000000] text-white"
+                            : "bg-[#f4ece8] text-[#4d4541] hover:bg-[#e9e1dd]"
+                        }`}
+                      >
+                        Approved / Booked ({bookedReservationCount})
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="bg-white rounded-2xl shadow-xs border border-[#e9e1dd] overflow-hidden">
                     <div className="overflow-x-auto no-scrollbar">
                       <table className="w-full text-left border-collapse">
@@ -951,14 +1098,16 @@ export default function QueueDashboardPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#eee7e3] text-sm text-[#1e1b19]">
-                          {reservationItems.length === 0 ? (
+                          {displayedReservationItems.length === 0 ? (
                             <tr>
                               <td colSpan={9} className="py-12 text-center text-[#645d58] italic font-serif">
-                                No upcoming table reservations scheduled for {formatDisplayDate(selectedDate)}.
+                                {reservationFilter === "pending"
+                                  ? "No pending reservation requests awaiting approval."
+                                  : `No table reservations scheduled for ${formatDisplayDate(selectedDate)}.`}
                               </td>
                             </tr>
                           ) : (
-                            reservationItems.map((item) => {
+                            displayedReservationItems.map((item) => {
                               const layoutName = item.layout?.name || "Indoor-DineIn";
                               const isPending = item.queueStatus === "pending";
                               const ticketCode = formatShortTicketNumber(item.queueNumber);
@@ -1047,14 +1196,26 @@ export default function QueueDashboardPage() {
                                   <td className="py-3.5 px-4 whitespace-nowrap text-right">
                                     <div className="inline-flex items-center gap-1 justify-end">
                                       {isPending ? (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleApprovePendingReservation(item._id)}
-                                          className="px-3 py-1 rounded-full bg-emerald-700 text-white text-xs font-medium hover:bg-emerald-800 flex items-center gap-1 shadow-xs"
-                                        >
-                                          <span className="material-symbols-outlined text-[16px]">check</span>
-                                          <span>Approve</span>
-                                        </button>
+                                        <>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleApprovePendingReservation(item._id)}
+                                            className="px-3 py-1 rounded-full bg-emerald-700 text-white text-xs font-medium hover:bg-emerald-800 flex items-center gap-1 shadow-xs"
+                                            title="Approve Reservation"
+                                          >
+                                            <span className="material-symbols-outlined text-[16px]">check</span>
+                                            <span>Approve</span>
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRejectPendingReservation(item._id)}
+                                            className="px-3 py-1 rounded-full bg-rose-700 text-white text-xs font-medium hover:bg-rose-800 flex items-center gap-1 shadow-xs"
+                                            title="Reject Reservation"
+                                          >
+                                            <span className="material-symbols-outlined text-[16px]">close</span>
+                                            <span>Reject</span>
+                                          </button>
+                                        </>
                                       ) : (
                                         <button
                                           type="button"
@@ -1093,6 +1254,7 @@ export default function QueueDashboardPage() {
                                         type="button"
                                         onClick={() => handleOpenStatusDrawer(item, "cancel")}
                                         className="w-8 h-8 rounded-full flex items-center justify-center text-[#645d58] hover:text-rose-700"
+                                        title="Cancel Booking"
                                       >
                                         <span className="material-symbols-outlined text-[18px]">close</span>
                                       </button>
@@ -1490,7 +1652,9 @@ export default function QueueDashboardPage() {
                         type="tel"
                         required
                         value={waitlistPhone}
-                        onChange={(e) => setWaitlistPhone(e.target.value)}
+                        onChange={(e) => setWaitlistPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        maxLength={10}
+                        inputMode="numeric"
                         placeholder="Enter phone number"
                         className="flex-1 bg-[#eee7e3] px-4 py-1.5 rounded-full text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
                       />
@@ -1604,18 +1768,23 @@ export default function QueueDashboardPage() {
                     <label className="text-xs font-semibold text-[#1e1b19] block">
                       Layout Preference
                     </label>
-                    <select
-                      value={waitlistLayoutId}
-                      onChange={(e) => setWaitlistLayoutId(e.target.value as any)}
-                      className="w-full bg-[#f4ece8] px-4 py-2 rounded-full text-sm text-[#1e1b19] focus:outline-none focus:bg-white border border-[#e9e1dd]"
-                    >
-                      <option value="">Indoor-DineIn</option>
-                      {layoutList?.map((l) => (
-                        <option key={l._id} value={l._id}>
-                          {l.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={waitlistLayoutId}
+                        onChange={(e) => setWaitlistLayoutId(e.target.value as any)}
+                        className="w-full appearance-none bg-[#f4ece8] pl-4 pr-10 py-2 rounded-full text-sm font-medium text-[#1e1b19] focus:outline-none focus:bg-white border border-[#e9e1dd] cursor-pointer shadow-xs"
+                      >
+                        <option value="">Indoor-DineIn</option>
+                        {layoutList?.map((l) => (
+                          <option key={l._id} value={l._id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#645d58] pointer-events-none">
+                        expand_more
+                      </span>
+                    </div>
                   </div>
 
                   {/* Estimated Wait Time (mins) */}
@@ -1723,7 +1892,10 @@ export default function QueueDashboardPage() {
                         type="tel"
                         required
                         value={resPhone}
-                        onChange={(e) => setResPhone(e.target.value)}
+                        onChange={(e) => setResPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                        maxLength={10}
+                        inputMode="numeric"
+                        placeholder="Enter phone number"
                         className="flex-1 bg-[#eee7e3] px-4 py-1.5 rounded-full text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
                       />
                     </div>
@@ -1776,22 +1948,39 @@ export default function QueueDashboardPage() {
                     </div>
                   </div>
 
+                  {/* Party Size Selector */}
                   <div className="space-y-1">
-                    <label className="text-xs font-semibold text-[#1e1b19] block">Total Guests</label>
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[#645d58]">group</span>
-                      <input
-                        type="number"
-                        min={1}
-                        max={30}
-                        value={resGuests}
-                        onChange={(e) => setResGuests(parseInt(e.target.value, 10) || 2)}
-                        className="w-24 text-center bg-[#eee7e3] py-1.5 rounded-full font-mono text-sm font-bold border border-[#e9e1dd]"
-                      />
-                      <span className="text-xs text-[#645d58]">Covers</span>
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-semibold text-[#1e1b19]">
+                        Total Guests <span className="text-rose-600">*</span>
+                      </label>
+                      <span className="font-mono text-xs font-bold text-[#1e1b19]">
+                        {resGuests} Guests
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[1, 2, 3, 4, 5, 6, 7, 8, "8+"].map((num) => {
+                        const val = typeof num === "number" ? num : 8;
+                        const isSelected = resGuests === val;
+                        return (
+                          <button
+                            key={num}
+                            type="button"
+                            onClick={() => setResGuests(val)}
+                            className={`w-9 h-9 rounded-full text-xs font-mono font-medium transition-colors ${
+                              isSelected
+                                ? "bg-[#000000] text-white shadow-xs"
+                                : "bg-[#f4ece8] text-[#1e1b19] hover:bg-[#e9e1dd]"
+                            }`}
+                          >
+                            {num}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
+                  {/* Special Requests */}
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-[#1e1b19] block">Special Requests</label>
                     <div className="space-y-2 bg-[#eee7e3] p-4 rounded-2xl text-xs">
@@ -1823,6 +2012,44 @@ export default function QueueDashboardPage() {
                         <span>Barbeque / Live Grill Table</span>
                       </label>
                     </div>
+                  </div>
+
+                  {/* Layout Preference */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-[#1e1b19] block">
+                      Layout Preference
+                    </label>
+                    <div className="relative">
+                      <select
+                        value={resLayoutId}
+                        onChange={(e) => setResLayoutId(e.target.value as any)}
+                        className="w-full appearance-none bg-[#f4ece8] pl-4 pr-10 py-2 rounded-full text-sm font-medium text-[#1e1b19] focus:outline-none focus:bg-white border border-[#e9e1dd] cursor-pointer shadow-xs"
+                      >
+                        <option value="">Indoor-DineIn</option>
+                        {layoutList?.map((l) => (
+                          <option key={l._id} value={l._id}>
+                            {l.name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#645d58] pointer-events-none">
+                        expand_more
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Notes & Special Requests */}
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-[#1e1b19] block">
+                      Notes & Dietary Requirements
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={resNotes}
+                      onChange={(e) => setResNotes(e.target.value)}
+                      placeholder="Anniversary table, window preferred, nut allergy..."
+                      className="w-full bg-[#f4ece8] p-3 rounded-2xl text-xs text-[#1e1b19] focus:outline-none focus:bg-white border border-[#e9e1dd]"
+                    />
                   </div>
 
                   <div className="pt-4 flex items-center justify-end gap-3 border-t border-[#eee7e3]">
@@ -1859,7 +2086,7 @@ export default function QueueDashboardPage() {
                 <div className="p-6 bg-[#eee7e3] shadow-xs space-y-3 border-b border-[#e9e1dd]">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-[#645d58] uppercase font-mono tracking-wider">
-                      SEATING & DISPATCH CONTROL
+                      SEATING & STATUS DISPATCH
                     </span>
                     <button
                       type="button"
@@ -1874,17 +2101,15 @@ export default function QueueDashboardPage() {
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="px-2.5 py-0.5 rounded-full bg-[#000000] text-white font-mono text-xs font-bold">
-                          {activeQueueItem.queueNumber || "QN001"}
+                          {formatShortTicketNumber(activeQueueItem.queueNumber)}
                         </span>
                         <h3 className="text-lg font-serif text-[#1e1b19] font-semibold">
-                          {activeQueueItem.notes
-                            ? activeQueueItem.notes.split("-")[0]
-                            : "Customer"}
+                          {parseCustomerInfo(activeQueueItem.notes, activeQueueItem.userId).name}
                         </h3>
                       </div>
-                      <span className="text-xs text-[#645d58] flex items-center gap-1 mt-1">
+                      <span className="text-xs text-[#645d58] flex items-center gap-1.5 mt-1">
                         <span className="material-symbols-outlined text-[14px]">table_restaurant</span>
-                        Party Size: {activeQueueItem.totalGuests || 2} Guests
+                        Layout: {layoutList?.find((l) => l._id === activeQueueItem.layoutId)?.name || activeQueueItem.layout?.name || "Indoor-DineIn"} ({activeQueueItem.totalGuests || 2} Guests)
                       </span>
                     </div>
                     <span className="inline-flex items-center px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 text-xs font-mono font-bold">
@@ -1933,12 +2158,43 @@ export default function QueueDashboardPage() {
                 {/* Sub Tab Content 1: Assign Table */}
                 {statusSubTab === "assign" && (
                   <div className="p-6 overflow-y-auto flex-1 space-y-4">
+                    {/* Target Layout Selection Dropdown */}
+                    <div className="flex items-center justify-between pb-1">
+                      <h3 className="text-sm font-semibold text-[#1e1b19]">Select Target Layout</h3>
+                      <div className="relative">
+                        <select
+                          value={dispatchLayoutId}
+                          onChange={(e) => setDispatchLayoutId(e.target.value)}
+                          className="appearance-none bg-[#f4ece8] pl-4 pr-9 py-1.5 rounded-full text-xs font-semibold text-[#1e1b19] border border-[#e9e1dd] focus:outline-none focus:bg-white cursor-pointer shadow-xs"
+                        >
+                          <option value="all">All Layouts</option>
+                          <option value="Indoor-DineIn">Indoor-DineIn</option>
+                          <option value="Terrace Lounge">Terrace Lounge</option>
+                          {layoutList?.map((l) => (
+                            <option key={l._id} value={l._id}>
+                              {l.name}
+                            </option>
+                          ))}
+                        </select>
+                        <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[16px] text-[#645d58] pointer-events-none">
+                          expand_more
+                        </span>
+                      </div>
+                    </div>
+
                     <span className="text-xs text-[#645d58] uppercase font-mono tracking-wider block">
-                      Available Floor Tables
+                      AVAILABLE SEATING OPTIONS
                     </span>
                     <div className="space-y-3">
                       {tableList
                         ?.filter((t) => !t.currentOrderId && !t.isBlock)
+                        ?.filter((t) => {
+                          if (dispatchLayoutId === "all" || !dispatchLayoutId) return true;
+                          if (t.layoutId === dispatchLayoutId) return true;
+                          const layoutName = layoutList?.find((l) => l._id === t.layoutId)?.name;
+                          if (layoutName === dispatchLayoutId) return true;
+                          return false;
+                        })
                         .map((table) => {
                           const isSelected = selectedAssignTableId === table._id;
                           return (
@@ -1950,8 +2206,8 @@ export default function QueueDashboardPage() {
                               }`}
                             >
                               <div className="flex items-center gap-4">
-                                <div className="w-12 h-12 rounded-xl bg-white flex flex-col items-center justify-center font-mono font-bold text-[#1e1b19] shadow-xs">
-                                  <span className="text-[10px] text-[#645d58] font-normal">TBL</span>
+                                <div className="w-12 h-12 rounded-2xl bg-white flex flex-col items-center justify-center font-mono font-bold text-[#1e1b19] shadow-xs">
+                                  <span className="text-[9px] text-[#645d58] font-normal">TBL</span>
                                   <span>{table.tableNumber}</span>
                                 </div>
                                 <div>
@@ -1966,7 +2222,7 @@ export default function QueueDashboardPage() {
                                 </div>
                               </div>
                               <span
-                                className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                className={`px-4 py-1.5 rounded-full text-xs font-semibold ${
                                   isSelected
                                     ? "bg-[#000000] text-white"
                                     : "bg-[#e9e1dd] text-[#1e1b19]"
@@ -1983,34 +2239,60 @@ export default function QueueDashboardPage() {
 
                 {/* Sub Tab Content 2: Running Late */}
                 {statusSubTab === "late" && (
-                  <div className="p-6 overflow-y-auto flex-1 space-y-4">
-                    <div className="p-4 rounded-2xl bg-amber-50 text-amber-900 border border-amber-200 space-y-1">
-                      <span className="font-semibold text-sm flex items-center gap-1">
+                  <div className="p-6 overflow-y-auto flex-1 space-y-5">
+                    <div className="p-4 rounded-2xl bg-[#fdf8f3] text-[#7c3a00] border border-[#f3e3d3] space-y-1">
+                      <span className="font-semibold text-sm flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-[18px]">schedule</span> Extend
                         Waitlist Grace Period
                       </span>
-                      <p className="text-xs">Pushes estimated seating time back and alerts floor captains.</p>
+                      <p className="text-xs text-[#8c4810]">
+                        Pushes the estimated seating time back and alerts floor captains to hold turn.
+                      </p>
                     </div>
+
                     <div className="space-y-2">
                       <label className="text-xs font-semibold text-[#1e1b19] block">
                         Quick Delay Preset
                       </label>
                       <div className="grid grid-cols-3 gap-2">
-                        {[10, 20, 30].map((mins) => (
-                          <button
-                            key={mins}
-                            type="button"
-                            onClick={() => setLatePresetMins(mins)}
-                            className={`py-2.5 rounded-full font-mono text-xs font-semibold ${
-                              latePresetMins === mins
-                                ? "bg-[#000000] text-white shadow-xs"
-                                : "bg-[#f4ece8] text-[#1e1b19] hover:bg-[#e9e1dd]"
-                            }`}
-                          >
-                            {mins} mins
-                          </button>
-                        ))}
+                        {[10, 20, 30].map((mins) => {
+                          const isSelected = !customLateMins && latePresetMins === mins;
+                          return (
+                            <button
+                              key={mins}
+                              type="button"
+                              onClick={() => {
+                                setLatePresetMins(mins);
+                                setCustomLateMins("");
+                              }}
+                              className={`py-2.5 rounded-full font-mono text-xs font-semibold transition-all ${
+                                isSelected
+                                  ? "bg-[#000000] text-white shadow-xs"
+                                  : "bg-[#f4ece8] text-[#1e1b19] hover:bg-[#e9e1dd]"
+                              }`}
+                            >
+                              {mins} mins
+                            </button>
+                          );
+                        })}
                       </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-xs font-semibold text-[#1e1b19] block">
+                        Custom Delay (mins)
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={customLateMins}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/\D/g, "");
+                          setCustomLateMins(val);
+                        }}
+                        placeholder="More than 30 minutes (e.g. 45)"
+                        className="w-full bg-[#f4ece8] px-4 py-2.5 rounded-full text-xs font-mono text-[#1e1b19] placeholder:text-[#99908a] focus:outline-none focus:bg-white border border-[#e9e1dd] shadow-xs"
+                      />
                     </div>
                   </div>
                 )}
@@ -2029,16 +2311,21 @@ export default function QueueDashboardPage() {
                       <label className="text-xs font-semibold text-[#1e1b19] block">
                         Cancellation Reason
                       </label>
-                      <select
-                        value={cancelReason}
-                        onChange={(e) => setCancelReason(e.target.value)}
-                        className="w-full bg-[#eee7e3] px-4 py-2 rounded-full text-sm focus:outline-none border border-[#e9e1dd]"
-                      >
-                        <option>Change of plans</option>
-                        <option>Customer no-show</option>
-                        <option>Wait time too long</option>
-                        <option>Other</option>
-                      </select>
+                      <div className="relative">
+                        <select
+                          value={cancelReason}
+                          onChange={(e) => setCancelReason(e.target.value)}
+                          className="w-full appearance-none bg-[#f4ece8] pl-4 pr-10 py-2 rounded-full text-xs font-semibold text-[#1e1b19] border border-[#e9e1dd] focus:outline-none focus:bg-white cursor-pointer shadow-xs"
+                        >
+                          <option>Change of plans</option>
+                          <option>Customer no-show</option>
+                          <option>Wait time too long</option>
+                          <option>Other</option>
+                        </select>
+                        <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[18px] text-[#645d58] pointer-events-none">
+                          expand_more
+                        </span>
+                      </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-xs font-semibold text-[#1e1b19] block">Internal Notes</label>
@@ -2054,22 +2341,46 @@ export default function QueueDashboardPage() {
                 )}
 
                 {/* Footer Actions */}
-                <div className="p-6 bg-[#eee7e3] flex items-center justify-between border-t border-[#e9e1dd]">
-                  <button
-                    type="button"
-                    onClick={() => setIsChangeStatusOpen(false)}
-                    className="text-xs font-semibold text-[#645d58] hover:text-rose-700"
-                  >
-                    Close
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExecuteStatusAction}
-                    className="px-6 py-2 rounded-full bg-[#000000] text-white text-sm font-medium shadow-md hover:bg-neutral-800 flex items-center gap-1.5"
-                  >
-                    <span className="material-symbols-outlined text-[18px]">check</span>
-                    <span>Confirm Action</span>
-                  </button>
+                <div className="p-6 bg-[#eee7e3] flex items-center justify-end border-t border-[#e9e1dd]">
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setIsChangeStatusOpen(false)}
+                      className="px-5 py-2 rounded-full bg-[#e9e1dd] text-[#1e1b19] text-xs font-semibold hover:bg-[#e4dad4]"
+                    >
+                      Cancel
+                    </button>
+                    {statusSubTab === "late" ? (
+                      <button
+                        type="button"
+                        onClick={handleExecuteStatusAction}
+                        className="px-6 py-2 rounded-full bg-[#8c3d00] text-white text-sm font-semibold shadow-md hover:bg-[#723200] flex items-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">schedule</span>
+                        <span>Confirm Delay</span>
+                      </button>
+                    ) : statusSubTab === "cancel" ? (
+                      <button
+                        type="button"
+                        onClick={handleExecuteStatusAction}
+                        className="px-6 py-2 rounded-full bg-rose-700 text-white text-sm font-semibold shadow-md hover:bg-rose-800 flex items-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">cancel</span>
+                        <span>Confirm Cancellation</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleExecuteStatusAction}
+                        className="px-6 py-2 rounded-full bg-[#000000] text-white text-sm font-semibold shadow-md hover:bg-neutral-800 flex items-center gap-2"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">restaurant</span>
+                        <span>
+                          {selectedAssignTable ? `Serve at Table ${selectedAssignTable.tableNumber}` : "Confirm Action"}
+                        </span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

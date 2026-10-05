@@ -287,8 +287,10 @@ export default function CustomerQueuePage() {
                 type="tel"
                 required
                 value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="+91 9825000000"
+                onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                maxLength={10}
+                inputMode="numeric"
+                placeholder="Enter 10-digit phone number"
                 className="w-full bg-[#f4ece8] px-4 py-2 rounded-full text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
               />
             </div>
@@ -516,8 +518,10 @@ export default function CustomerQueuePage() {
                 type="tel"
                 required
                 value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="+91 9825000000"
+                onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                maxLength={10}
+                inputMode="numeric"
+                placeholder="Enter 10-digit phone number"
                 className="w-full bg-[#f4ece8] px-4 py-2 rounded-full text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
               />
             </div>
