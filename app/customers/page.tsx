@@ -15,6 +15,8 @@ import {
   formatCurrencyAmount,
   formatStoreDateTime,
   getCurrencyForCountry,
+  getPhoneCodeForCountry,
+  getTimezoneForCountry,
 } from "../../lib/constants/countries";
 
 export interface CustomerRowData {
@@ -63,6 +65,10 @@ export default function CustomersPage() {
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
     (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+  const storeTimezone =
+    activeOrg?.organizationTimeZone ||
+    (activeOrg?.country ? getTimezoneForCountry(activeOrg.country) : "Asia/Kolkata");
+  const storePhoneCode = activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+91";
 
   // 1. Query Customers Table
   const activeSearchTerm = debouncedSearch || "a";
@@ -219,7 +225,7 @@ export default function CustomersPage() {
       // Latest order tracking
       if (!entry.lastOrderDate || ord.createdAt > entry.lastOrderDate) {
         entry.lastOrderDate = ord.createdAt;
-        entry.lastOrderDisplay = formatStoreDateTime(ord.createdAt, activeOrg?.country, activeOrg?.timezone);
+        entry.lastOrderDisplay = formatStoreDateTime(ord.createdAt, activeOrg?.country, storeTimezone);
         entry.lastOrderNumber = `ORD-${(ord._id || "").slice(-4).toUpperCase()}`;
       }
 
@@ -597,7 +603,7 @@ export default function CustomersPage() {
                     paginatedCustomers.map((cust) => {
                       const initials = getInitials(cust.name);
                       const formattedPhone = cust.phone
-                        ? formatPhoneNumberWithCountryCode(cust.phone, cust.countryCode || activeOrg?.phoneCode || "+91")
+                        ? formatPhoneNumberWithCountryCode(cust.phone, cust.countryCode || storePhoneCode)
                         : "—";
 
                       const cleanPhone = cust.phone ? cust.phone.replace(/\D/g, "") : "";

@@ -17,6 +17,8 @@ import {
   formatStoreDateTime,
   formatStoreDate,
   getCurrencyForCountry,
+  getPhoneCodeForCountry,
+  getTimezoneForCountry,
 } from "../../../lib/constants/countries";
 
 export default function CustomerProfilePage() {
@@ -47,6 +49,10 @@ export default function CustomerProfilePage() {
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
     (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+  const storeTimezone =
+    activeOrg?.organizationTimeZone ||
+    (activeOrg?.country ? getTimezoneForCountry(activeOrg.country) : "Asia/Kolkata");
+  const storePhoneCode = activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+91";
 
   // 2. Query Customer Document by ID or by Phone
   const customerById = useQuery(
@@ -185,7 +191,7 @@ export default function CustomerProfilePage() {
 
   const rawPhone = customerDoc?.phone || phoneParam || firstOrderWithPhone?.customerPhone || "";
   const formattedPhone = rawPhone
-    ? formatPhoneNumberWithCountryCode(rawPhone, customerDoc?.countryCode || activeOrg?.phoneCode || "+91")
+    ? formatPhoneNumberWithCountryCode(rawPhone, customerDoc?.countryCode || storePhoneCode)
     : "—";
 
   const emailDisplay = customerDoc?.email || firstOrderWithEmail?.customerEmail?.trim() || "";
@@ -510,7 +516,7 @@ export default function CustomerProfilePage() {
                   First Visited
                 </span>
                 <span className="text-sm text-stone-900 mt-1">
-                  {formatStoreDate(earliestVisitDate, activeOrg?.country, activeOrg?.timezone)}
+                  {formatStoreDate(earliestVisitDate, activeOrg?.country, storeTimezone)}
                 </span>
               </div>
 
@@ -519,7 +525,7 @@ export default function CustomerProfilePage() {
                   Customer Since
                 </span>
                 <span className="text-sm text-stone-900 mt-1">
-                  {formatStoreDate(earliestVisitDate, activeOrg?.country, activeOrg?.timezone)}
+                  {formatStoreDate(earliestVisitDate, activeOrg?.country, storeTimezone)}
                 </span>
               </div>
             </div>
@@ -631,7 +637,7 @@ export default function CustomerProfilePage() {
                               #ORD-{(ord._id || "").slice(-4).toUpperCase()}
                             </td>
                             <td className="py-3.5 px-4 text-stone-600">
-                              {formatStoreDateTime(ord.createdAt, activeOrg?.country, activeOrg?.timezone)}
+                              {formatStoreDateTime(ord.createdAt, activeOrg?.country, storeTimezone)}
                             </td>
                             <td className="py-3.5 px-4">
                               <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 font-medium border border-stone-200">
@@ -721,7 +727,7 @@ export default function CustomerProfilePage() {
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-stone-600">
-                              {formatStoreDateTime(q.reservationTime || q.createdAt, activeOrg?.country, activeOrg?.timezone)}
+                              {formatStoreDateTime(q.reservationTime || q.createdAt, activeOrg?.country, storeTimezone)}
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="flex flex-col gap-0.5">
