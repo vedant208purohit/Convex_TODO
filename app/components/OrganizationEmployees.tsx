@@ -4,6 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id, Doc } from "../../convex/_generated/dataModel";
+import { Toast, ToastMessage } from "./Toast";
 
 // ====================================================
 // SVG ICONS & VISUAL ASSETS (Pixel-Perfect Match)
@@ -594,6 +595,7 @@ export function OrganizationEmployees() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState("all");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // Drawer & Modal States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -884,15 +886,35 @@ export function OrganizationEmployees() {
       errors.push("Email Address is missing");
       pending.email = true;
     } else if (!isValidEmail(emailVal)) {
-      errors.push("Valid Email Address format is required (e.g. name@domain.com)");
+      errors.push(
+        "Valid Email Address format is required (e.g. name@domain.com)",
+      );
       pending.email = true;
+    } else if (emailVal && employees) {
+      const normalizedInputEmail = emailVal.trim().toLowerCase();
+      const isDuplicate = employees.some((emp) => {
+        if (emp.deletedAt) return false;
+        if (drawerMode === "edit" && editingId && emp._id === editingId) return false;
+        const empEmail = (emp.email || "").trim().toLowerCase();
+        const empUserId = (emp.userId || "").trim().toLowerCase();
+        return empEmail === normalizedInputEmail || empUserId === normalizedInputEmail;
+      });
+
+      if (isDuplicate) {
+        errors.push(
+          `User ID / Email address "${emailVal}" already exists in this organization. Please use a different email.`,
+        );
+        pending.email = true;
+      }
     }
 
     const hasStaffRole = formRoles.some((r) =>
       STAFF_ROLE_CARDS.some((card) => card.key === r),
     );
     if (!hasStaffRole) {
-      errors.push("Staff Role is missing (select Cashier, Captain, Waiter, Chef, Worker, or Admin)");
+      errors.push(
+        "Staff Role is missing (select Cashier, Captain, Waiter, Chef, Worker, or Admin)",
+      );
       pending.staffRoles = true;
     }
 
@@ -900,7 +922,9 @@ export function OrganizationEmployees() {
       MODULE_ACCESS_CARDS.some((card) => card.key === m),
     );
     if (!hasModuleAccess) {
-      errors.push("Access Module is missing (select at least one module under 'What can this employee access?')");
+      errors.push(
+        "Access Module is missing (select at least one module under 'What can this employee access?')",
+      );
       pending.moduleAccess = true;
     }
 
@@ -912,17 +936,32 @@ export function OrganizationEmployees() {
       // Auto-scroll drawer and focus the first pending field
       if (pending.firstName) {
         firstNameInputRef.current?.focus();
-        firstNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstNameInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.lastName) {
         lastNameInputRef.current?.focus();
-        lastNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        lastNameInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.email) {
         emailInputRef.current?.focus();
-        emailInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        emailInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.staffRoles) {
-        staffRolesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        staffRolesSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.moduleAccess) {
-        moduleAccessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        moduleAccessSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       }
       return;
     }
@@ -939,36 +978,53 @@ export function OrganizationEmployees() {
           ? customPermissions
           : undefined;
 
-           if (drawerMode === "add") {
+      if (drawerMode === "add") {
         const primaryRole =
           formRoles.find((r) => STAFF_ROLE_CARDS.some((c) => c.key === r)) ||
           formRoles[0] ||
           "cashier";
 
-        const res = await fetch("/api/staff/create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        let createdViaApi = false;
+        try {
+          const res = await fetch("/api/staff/create", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              firstName: formFirstName.trim(),
+              lastName: formLastName.trim(),
+              email: effectiveUserId,
+              role: primaryRole,
+              userType: formRoles,
+              userPermission: permissionPayload,
+            }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            createdViaApi = true;
+          }
+        } catch {
+          createdViaApi = false;
+        }
+
+        if (!createdViaApi) {
+          // Fallback direct store creation via Convex mutation
+          await createEmployeeMutation({
             firstName: formFirstName.trim(),
             lastName: formLastName.trim(),
             email: effectiveUserId,
-            role: primaryRole,
+            userId: effectiveUserId,
             userType: formRoles,
             userPermission: permissionPayload,
-          }),
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "Failed to create employee.");
+          });
         }
 
-        setSuccessMessage(
-          `Employee "${formFirstName.trim()} ${formLastName.trim()}" created successfully. An invitation has been sent!`,
-        );
+        setToast({
+          message: `Employee "${formFirstName.trim()} ${formLastName.trim()}" created successfully.`,
+          type: "success",
+        });
       } else if (editingId) {
         await updateEmployeeMutation({
           id: editingId,
@@ -977,14 +1033,26 @@ export function OrganizationEmployees() {
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
-        setSuccessMessage(`Employee updated successfully!`);
+        setToast({ message: "Employee updated successfully!", type: "success" });
       }
 
-
       handleCloseDrawer();
-      setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to save employee record.");
+      const errMsg = err?.message || "";
+      if (
+        errMsg.toLowerCase().includes("already") ||
+        errMsg.toLowerCase().includes("duplicate") ||
+        errMsg.toLowerCase().includes("exists") ||
+        errMsg.toLowerCase().includes("conflict")
+      ) {
+        const customErr = `User ID / Email address "${emailVal}" already exists in this organization.`;
+        setDrawerPendingErrors([customErr]);
+        setPendingFields({ email: true });
+        setToast({ message: customErr, type: "error" });
+        emailInputRef.current?.focus();
+      } else {
+        setToast({ message: errMsg || "Failed to save employee record.", type: "error" });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -993,16 +1061,14 @@ export function OrganizationEmployees() {
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
 
-    setErrorMessage(null);
     setIsDeleting(true);
 
     try {
       await removeEmployeeMutation({ id: deleteTarget.id });
-      setSuccessMessage(`Employee removed successfully.`);
+      setToast({ message: "Employee removed successfully.", type: "success" });
       setDeleteTarget(null);
-      setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to remove employee.");
+      setToast({ message: err?.message || "Failed to remove employee.", type: "error" });
       setDeleteTarget(null);
     } finally {
       setIsDeleting(false);
@@ -1031,50 +1097,16 @@ export function OrganizationEmployees() {
   );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full space-y-4">
-      {/* Toast Feedback Alerts */}
-      {successMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-3 text-xs text-emerald-800 shadow-sm animate-fade-in shrink-0">
-          <div className="flex items-center gap-2">
-            <span>✓</span>
-            <span className="font-medium">{successMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccessMessage(null)}
-            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {errorMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-5 py-3 text-xs text-red-800 shadow-sm animate-fade-in shrink-0">
-          <div className="flex items-center gap-2">
-            <span>⚠️</span>
-            <span className="font-medium">{errorMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-red-600 hover:text-red-900 cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
+    <div className="flex flex-col flex-1 min-h-0 h-full space-y-4 font-sans">
       {/* TOP HEADER SECTION */}
       <div className="space-y-4 shrink-0">
         {/* Title & Subtitle */}
         <div className="border-b border-[#e7e5e4] pb-4">
-          <h2 className="font-garamond text-2xl lg:text-3xl text-[#141010] font-normal leading-tight">
+          <h2 className="text-2xl lg:text-3xl text-[#1f1a17] font-semibold tracking-tight font-sans">
             Employees
           </h2>
-          <p className="text-xs text-[#78716c] mt-1">
-            Manage store staff, assign branch roles, and configure system
-            permissions.
+          <p className="text-xs text-[#6f655e] mt-1 font-sans">
+            Manage store staff, assign branch roles, and configure system permissions.
           </p>
         </div>
 
@@ -1138,10 +1170,9 @@ export function OrganizationEmployees() {
                   setSelectedStatusFilter(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="appearance-none rounded-xl border border-[#e7e5e4] bg-white pl-3.5 pr-8 py-2 text-xs font-semibold text-[#1c1917] shadow-xs cursor-pointer hover:border-[#a8a29e] focus:border-[#141010] focus:outline-none transition shrink-0"
+                className="appearance-none rounded-xl border border-[#e7e5e4] bg-[#fdf8f7] pl-3.5 pr-8 py-2 text-xs font-semibold text-[#1c1917] shadow-xs cursor-pointer hover:border-[#a8a29e] focus:border-[#141010] focus:outline-none transition shrink-0"
               >
                 <option value="all">Active</option>
-                <option value="active">Active Status</option>
                 <option value="inactive">Inactive</option>
               </select>
               <svg
@@ -1235,12 +1266,6 @@ export function OrganizationEmployees() {
                                 </span>
                               )}
                             </div>
-                            <div
-                              className="text-[11px] text-[#78716c] mt-0.5 truncate"
-                              title={emp.userId}
-                            >
-                              {emp.userId}
-                            </div>
                           </div>
                         </div>
                       </td>
@@ -1293,23 +1318,23 @@ export function OrganizationEmployees() {
 
                       {/* ACTION COLUMN */}
                       <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center justify-end gap-2">
                           <button
                             type="button"
                             onClick={() => setViewingTarget(emp)}
-                            className="p-1.5 text-[#78716c] hover:text-[#1c1917] hover:bg-[#f5f5f4] rounded-lg transition-colors cursor-pointer"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
                             title="View Employee Details"
                           >
-                            <EyeIcon className="w-4 h-4" />
+                            <EyeIcon className="w-3.5 h-3.5" />
                           </button>
 
                           <button
                             type="button"
                             onClick={() => handleOpenEditDrawer(emp)}
-                            className="p-1.5 text-[#78716c] hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
                             title="Edit Employee Roles & Permissions"
                           >
-                            <EditIcon className="w-4 h-4" />
+                            <EditIcon className="w-3.5 h-3.5" />
                           </button>
 
                           <button
@@ -1321,14 +1346,14 @@ export function OrganizationEmployees() {
                                 userId: emp.userId,
                               })
                             }
-                            className="p-1.5 text-[#78716c] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                             title={
                               isCurrentCaller
                                 ? "You cannot remove yourself"
                                 : "Remove Employee"
                             }
                           >
-                            <TrashIcon className="w-4 h-4" />
+                            <TrashIcon className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       </td>
@@ -1786,7 +1811,10 @@ export function OrganizationEmployees() {
             </div>
 
             {/* Drawer Scrollable Body */}
-            <div ref={drawerBodyRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+            <div
+              ref={drawerBodyRef}
+              className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+            >
               {/* TOP DRAWER PENDING ERRORS POPUP */}
               {drawerPendingErrors.length > 0 && (
                 <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-md text-xs text-rose-900 space-y-2.5 animate-fade-in shrink-0">
@@ -1795,7 +1823,10 @@ export function OrganizationEmployees() {
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white text-xs font-black shadow-xs">
                         !
                       </span>
-                      <span>Action Required: {drawerPendingErrors.length} pending item{drawerPendingErrors.length > 1 ? "s" : ""}</span>
+                      <span>
+                        Action Required: {drawerPendingErrors.length} pending
+                        item{drawerPendingErrors.length > 1 ? "s" : ""}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -1806,7 +1837,8 @@ export function OrganizationEmployees() {
                     </button>
                   </div>
                   <p className="text-[11px] text-rose-700 font-medium">
-                    Please complete the missing details highlighted below to save this employee profile:
+                    Please complete the missing details highlighted below to
+                    save this employee profile:
                   </p>
                   <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-rose-800">
                     {drawerPendingErrors.map((err, idx) => (
@@ -1848,7 +1880,10 @@ export function OrganizationEmployees() {
                       onChange={(e) => {
                         setFormFirstName(e.target.value);
                         if (pendingFields.firstName && e.target.value.trim()) {
-                          setPendingFields((prev) => ({ ...prev, firstName: false }));
+                          setPendingFields((prev) => ({
+                            ...prev,
+                            firstName: false,
+                          }));
                         }
                       }}
                       placeholder="e.g. John"
@@ -1879,7 +1914,10 @@ export function OrganizationEmployees() {
                       onChange={(e) => {
                         setFormLastName(e.target.value);
                         if (pendingFields.lastName && e.target.value.trim()) {
-                          setPendingFields((prev) => ({ ...prev, lastName: false }));
+                          setPendingFields((prev) => ({
+                            ...prev,
+                            lastName: false,
+                          }));
                         }
                       }}
                       placeholder="e.g. Doe"
@@ -1907,7 +1945,9 @@ export function OrganizationEmployees() {
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
-                      <EnvelopeIcon className={`w-4 h-4 ${pendingFields.email ? "text-rose-500" : "text-neutral-400"}`} />
+                      <EnvelopeIcon
+                        className={`w-4 h-4 ${pendingFields.email ? "text-rose-500" : "text-neutral-400"}`}
+                      />
                     </div>
                     <input
                       ref={emailInputRef}
@@ -1916,8 +1956,14 @@ export function OrganizationEmployees() {
                       value={formUserIdentifier}
                       onChange={(e) => {
                         setFormUserIdentifier(e.target.value);
-                        if (pendingFields.email && isValidEmail(e.target.value.trim())) {
-                          setPendingFields((prev) => ({ ...prev, email: false }));
+                        if (
+                          pendingFields.email &&
+                          isValidEmail(e.target.value.trim())
+                        ) {
+                          setPendingFields((prev) => ({
+                            ...prev,
+                            email: false,
+                          }));
                         }
                       }}
                       placeholder="e.g. john@gmail.com"
@@ -1930,7 +1976,10 @@ export function OrganizationEmployees() {
                   </div>
                   {pendingFields.email ? (
                     <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
-                      <span>⚠️</span> {formUserIdentifier.trim() ? "Please enter a valid email address (e.g. name@domain.com)." : "Email Address is required."}
+                      <span>⚠️</span>{" "}
+                      {formUserIdentifier.trim()
+                        ? "Please enter a valid email address (e.g. name@domain.com)."
+                        : "Email Address is required."}
                     </p>
                   ) : (
                     <p className="text-[12px] text-neutral-500">
@@ -1953,7 +2002,9 @@ export function OrganizationEmployees() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className={`text-xs font-bold uppercase tracking-wider ${pendingFields.staffRoles ? "text-rose-700" : "text-neutral-600"}`}>
+                    <h3
+                      className={`text-xs font-bold uppercase tracking-wider ${pendingFields.staffRoles ? "text-rose-700" : "text-neutral-600"}`}
+                    >
                       STAFF ROLES <span className="text-rose-500">*</span>
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
@@ -1978,7 +2029,10 @@ export function OrganizationEmployees() {
                         onClick={() => {
                           handleSelectRole(card.key);
                           if (pendingFields.staffRoles) {
-                            setPendingFields((prev) => ({ ...prev, staffRoles: false }));
+                            setPendingFields((prev) => ({
+                              ...prev,
+                              staffRoles: false,
+                            }));
                           }
                         }}
                         className={`flex flex-col justify-between p-3 rounded-lg cursor-pointer select-none transition ${
@@ -2039,8 +2093,11 @@ export function OrganizationEmployees() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className={`text-xs font-bold uppercase tracking-wider ${pendingFields.moduleAccess ? "text-rose-700" : "text-neutral-600"}`}>
-                      What can this employee access? <span className="text-rose-500">*</span>
+                    <h3
+                      className={`text-xs font-bold uppercase tracking-wider ${pendingFields.moduleAccess ? "text-rose-700" : "text-neutral-600"}`}
+                    >
+                      What can this employee access?{" "}
+                      <span className="text-rose-500">*</span>
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
                       Select the areas this employee needs to use.
@@ -2063,7 +2120,10 @@ export function OrganizationEmployees() {
                         onClick={() => {
                           handleToggleModule(mod.key);
                           if (pendingFields.moduleAccess) {
-                            setPendingFields((prev) => ({ ...prev, moduleAccess: false }));
+                            setPendingFields((prev) => ({
+                              ...prev,
+                              moduleAccess: false,
+                            }));
                           }
                         }}
                         className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer select-none transition ${
@@ -2343,27 +2403,31 @@ export function OrganizationEmployees() {
             className="fixed inset-0 bg-black/40 backdrop-blur-xs animate-fade-in"
           />
 
-          <div className="relative w-full max-w-md rounded-xl border border-[#e7e5e4] bg-white p-6 shadow-2xl space-y-4 animate-scale-up z-10">
-            <div className="flex items-center gap-3 text-red-600">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-xl border border-red-200">
-                🗑️
+          <div className="relative w-full max-w-md rounded-2xl border border-[#eadfd6] bg-white p-6 shadow-2xl space-y-4 animate-scale-up z-10 font-sans">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600 border border-red-200 shrink-0">
+                <TrashIcon className="w-5 h-5 text-red-600" />
               </div>
-              <h3 className="font-garamond text-xl font-normal text-[#1c1917]">
-                Remove Employee
-              </h3>
+              <div>
+                <h3 className="text-base font-semibold text-[#1f1a17]">
+                  Remove Employee
+                </h3>
+                <p className="text-xs text-[#6f655e]">
+                  This action will revoke store portal access.
+                </p>
+              </div>
             </div>
 
-            <p className="text-xs text-[#78716c]">
+            <p className="text-xs text-[#6f655e] leading-relaxed">
               Are you sure you want to remove staff member{" "}
-              <strong className="text-[#1c1917]">{deleteTarget.userId}</strong>?
-              They will lose access to the store portal.
+              <strong className="text-[#1f1a17] font-semibold">{deleteTarget.userId}</strong>?
             </p>
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="h-9 rounded-xl border border-[#e7e5e4] bg-white px-4 text-xs font-medium text-[#1c1917] transition hover:bg-[#f5f5f4] cursor-pointer"
+                className="h-9 rounded-full border border-[#eadfd6] bg-white px-4 text-xs font-semibold text-[#1f1a17] shadow-2xs transition hover:bg-[#f3eeea] active:scale-95 cursor-pointer"
               >
                 Cancel
               </button>
@@ -2371,14 +2435,17 @@ export function OrganizationEmployees() {
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="h-9 rounded-xl bg-red-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-red-700 disabled:opacity-40 cursor-pointer"
+                className="flex h-9 items-center justify-center rounded-full bg-red-600 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-red-700 active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                {isDeleting ? "Removing..." : "Confirm Delete"}
+                {isDeleting ? "Removing..." : "Remove Employee"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Standard Floating Toast Notification Component (Matching Menu Page) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

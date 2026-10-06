@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from "react";
+import {
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+  useCallback,
+  Suspense,
+} from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
@@ -136,7 +143,10 @@ function CashierPosContent() {
       ? {
           organizationId: activeOrg._id,
           allMenus: selectedMenuId === "all",
-          menuId: selectedMenuId !== "all" ? (selectedMenuId as Id<"menus">) : undefined,
+          menuId:
+            selectedMenuId !== "all"
+              ? (selectedMenuId as Id<"menus">)
+              : undefined,
         }
       : "skip",
   );
@@ -157,7 +167,9 @@ function CashierPosContent() {
 
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : undefined) ||
+    (activeOrg?.country
+      ? getCurrencyForCountry(activeOrg.country).symbol
+      : undefined) ||
     storeTaxSettings?.currencySymbol ||
     "$";
 
@@ -169,7 +181,9 @@ function CashierPosContent() {
   );
   const customersList = useQuery(
     api.organizationUsers.list,
-    activeOrg ? { organizationId: activeOrg._id, includeCustomers: true } : "skip",
+    activeOrg
+      ? { organizationId: activeOrg._id, includeCustomers: true }
+      : "skip",
   );
   const paymentModesList = useQuery(
     api.paymentModes.list,
@@ -240,15 +254,28 @@ function CashierPosContent() {
     customizations: any[];
   } | null>(null);
   const [customizationQty, setCustomizationQty] = useState<number>(1);
-  const [selectedCustomizationOptions, setSelectedCustomizationOptions] = useState<
-    Record<string, Array<{ id?: string; _id?: string; name: string; price: number; isGst?: boolean; items_item_types?: any[]; [key: string]: any }>>
-  >({});
+  const [selectedCustomizationOptions, setSelectedCustomizationOptions] =
+    useState<
+      Record<
+        string,
+        Array<{
+          id?: string;
+          _id?: string;
+          name: string;
+          price: number;
+          isGst?: boolean;
+          items_item_types?: any[];
+          [key: string]: any;
+        }>
+      >
+    >({});
   const [selectedPrepPreferences, setSelectedPrepPreferences] = useState<
     Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }>
   >([]);
 
   // Payment Step State
-  const [selectedPaymentMode, setSelectedPaymentMode] = useState<string>("Cash");
+  const [selectedPaymentMode, setSelectedPaymentMode] =
+    useState<string>("Cash");
   const [tenderCashGiven, setTenderCashGiven] = useState<string>("");
   const [tenderCardGiven, setTenderCardGiven] = useState<string>("");
   const [tenderUpiGiven, setTenderUpiGiven] = useState<string>("");
@@ -262,7 +289,9 @@ function CashierPosContent() {
   const [splitPart2Mode, setSplitPart2Mode] = useState<string>("UPI QR");
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [completedOrderData, setCompletedOrderData] = useState<any>(null);
-  const [notificationToast, setNotificationToast] = useState<string | null>(null);
+  const [notificationToast, setNotificationToast] = useState<string | null>(
+    null,
+  );
 
   // Live Printer Connection Probing
   const [printerStatus, setPrinterStatus] = useState<
@@ -304,33 +333,39 @@ function CashierPosContent() {
   }, []);
 
   // Synchronize Step & URL query parameter seamlessly
-  const goToStep = useCallback((step: 1 | 2 | 3, targetCartId?: string) => {
-    setCurrentStep(step);
-    const cId = targetCartId || activeCartId;
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (step === 1) {
-        url.searchParams.delete("step");
-        url.searchParams.delete("cart");
-      } else {
-        url.searchParams.set("step", step.toString());
-        url.searchParams.set("cart", cId);
+  const goToStep = useCallback(
+    (step: 1 | 2 | 3, targetCartId?: string) => {
+      setCurrentStep(step);
+      const cId = targetCartId || activeCartId;
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (step === 1) {
+          url.searchParams.delete("step");
+          url.searchParams.delete("cart");
+        } else {
+          url.searchParams.set("step", step.toString());
+          url.searchParams.set("cart", cId);
+        }
+        window.history.replaceState(null, "", url.toString());
       }
-      window.history.replaceState(null, "", url.toString());
-    }
-  }, [activeCartId]);
+    },
+    [activeCartId],
+  );
 
-  const switchActiveCart = useCallback((newCartId: string) => {
-    setActiveCartId(newCartId);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (currentStep > 1) {
-        url.searchParams.set("cart", newCartId);
-        url.searchParams.set("step", currentStep.toString());
+  const switchActiveCart = useCallback(
+    (newCartId: string) => {
+      setActiveCartId(newCartId);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        if (currentStep > 1) {
+          url.searchParams.set("cart", newCartId);
+          url.searchParams.set("step", currentStep.toString());
+        }
+        window.history.replaceState(null, "", url.toString());
       }
-      window.history.replaceState(null, "", url.toString());
-    }
-  }, [currentStep]);
+    },
+    [currentStep],
+  );
 
   // Active Cart Reference
   const activeCart = useMemo(() => {
@@ -339,7 +374,8 @@ function CashierPosContent() {
 
   // Customer History & Stats for Cashier Details (Only queried when full 10-digit phone is entered)
   const hasCustomerPhone = Boolean(
-    activeCart?.customerPhone && activeCart.customerPhone.trim().replace(/\D/g, "").length >= 10
+    activeCart?.customerPhone &&
+    activeCart.customerPhone.trim().replace(/\D/g, "").length >= 10,
   );
   const customerStats = useQuery(
     api.orders.getCustomerStats,
@@ -377,9 +413,12 @@ function CashierPosContent() {
           const actualItem = rawIt?.item || rawIt;
           const itemImageUrl =
             rawIt?.item_image_url?.original ||
-            (typeof rawIt?.item_image_url === "string" ? rawIt.item_image_url : undefined) ||
+            (typeof rawIt?.item_image_url === "string"
+              ? rawIt.item_image_url
+              : undefined) ||
             actualItem?.imageUrl;
-          const customizations = rawIt?.customizations || actualItem?.customizations || [];
+          const customizations =
+            rawIt?.customizations || actualItem?.customizations || [];
 
           // Exclude unpublished and unavailable items matching defx-pos behavior
           if (
@@ -391,7 +430,10 @@ function CashierPosContent() {
             continue;
           }
 
-          if (actualItem && (actualItem.name || actualItem._id || actualItem.id)) {
+          if (
+            actualItem &&
+            (actualItem.name || actualItem._id || actualItem.id)
+          ) {
             itemsList.push({
               categoryName,
               categoryId,
@@ -446,9 +488,7 @@ function CashierPosContent() {
       const skuNumber = entry.item.skuNumber?.toLowerCase() || "";
       const catName = entry.categoryName?.toLowerCase() || "";
       return (
-        itemName.includes(q) ||
-        skuNumber.includes(q) ||
-        catName.includes(q)
+        itemName.includes(q) || skuNumber.includes(q) || catName.includes(q)
       );
     });
   }, [allCatalogItems, selectedCategory, searchQuery]);
@@ -512,7 +552,13 @@ function CashierPosContent() {
     let taxInclusivePaise = 0;
     const compAccumulator = new Map<
       string,
-      { name: string; rate: number; code?: string; taxAmountPaise: number; isInclusive: boolean }
+      {
+        name: string;
+        rate: number;
+        code?: string;
+        taxAmountPaise: number;
+        isInclusive: boolean;
+      }
     >();
 
     for (const item of activeCart.items) {
@@ -521,50 +567,76 @@ function CashierPosContent() {
 
       // Look up current catalog item to ensure latest taxMode & taxGroupId are used
       const catalogEntry = allCatalogItems.find(
-        (ci) => ci.item?._id === item.itemId || ci.item?.id === item.itemId
+        (ci) => ci.item?._id === item.itemId || ci.item?.id === item.itemId,
       );
       const liveItem = catalogEntry?.item;
 
       // 1. Base item tax calculation
-      const addonsUnitPrice = (item.customizations || []).reduce((sum, c) => sum + (c.price || 0), 0);
+      const addonsUnitPrice = (item.customizations || []).reduce(
+        (sum, c) => sum + (c.price || 0),
+        0,
+      );
       const baseItemUnitPrice = Math.max(
         0,
-        liveItem?.price !== undefined ? liveItem.price : item.price - addonsUnitPrice
+        liveItem?.price !== undefined
+          ? liveItem.price
+          : item.price - addonsUnitPrice,
       );
       const baseLineTotalPaise = baseItemUnitPrice * item.quantity;
 
-      const itemTaxGroupId = liveItem?.taxGroupId || liveItem?.tax_group_id || item.taxGroupId;
-      const itemTaxMode = liveItem?.taxMode || liveItem?.tax_mode || item.taxMode;
+      const itemTaxGroupId =
+        liveItem?.taxGroupId || liveItem?.tax_group_id || item.taxGroupId;
+      const itemTaxMode =
+        liveItem?.taxMode || liveItem?.tax_mode || item.taxMode;
       const isGst = liveItem?.isGst ?? liveItem?.is_gst ?? item.isGst ?? false;
 
       if (isGst && baseLineTotalPaise > 0) {
-        let groupComps: Array<{ name: string; rate: number; code?: string }> = [];
+        let groupComps: Array<{ name: string; rate: number; code?: string }> =
+          [];
         let groupTotalRate = 0;
         let mode: "inclusive" | "exclusive" = "inclusive";
 
-        if (liveItem?.tax_info?.components && liveItem.tax_info.components.length > 0) {
+        if (
+          liveItem?.tax_info?.components &&
+          liveItem.tax_info.components.length > 0
+        ) {
           groupComps = liveItem.tax_info.components.map((c: any) => ({
             name: c.name,
             rate: c.rate,
             code: c.code || c.name,
           }));
-          groupTotalRate = liveItem.tax_info.total_tax_rate || groupComps.reduce((acc: number, c: any) => acc + c.rate, 0);
-          mode = (liveItem.taxMode || liveItem.tax_mode || liveItem.tax_info.tax_mode || "inclusive") as "inclusive" | "exclusive";
+          groupTotalRate =
+            liveItem.tax_info.total_tax_rate ||
+            groupComps.reduce((acc: number, c: any) => acc + c.rate, 0);
+          mode = (liveItem.taxMode ||
+            liveItem.tax_mode ||
+            liveItem.tax_info.tax_mode ||
+            "inclusive") as "inclusive" | "exclusive";
         } else {
           let targetGroup = null;
           if (itemTaxGroupId && taxGroups) {
-            targetGroup = taxGroups.find((g) => g._id === itemTaxGroupId) || null;
+            targetGroup =
+              taxGroups.find((g) => g._id === itemTaxGroupId) || null;
           }
           if (!targetGroup) {
             targetGroup = defaultTaxGroup;
           }
 
-          if (targetGroup && targetGroup.componentIds && targetGroup.componentIds.length > 0) {
-            mode = (itemTaxMode || targetGroup.taxMode || "inclusive") as "inclusive" | "exclusive";
+          if (
+            targetGroup &&
+            targetGroup.componentIds &&
+            targetGroup.componentIds.length > 0
+          ) {
+            mode = (itemTaxMode || targetGroup.taxMode || "inclusive") as
+              "inclusive" | "exclusive";
             for (const cid of targetGroup.componentIds) {
               const comp = compMap.get(cid);
               if (comp) {
-                groupComps.push({ name: comp.name, rate: comp.rate, code: comp.code });
+                groupComps.push({
+                  name: comp.name,
+                  rate: comp.rate,
+                  code: comp.code,
+                });
                 groupTotalRate += comp.rate;
               }
             }
@@ -574,14 +646,19 @@ function CashierPosContent() {
         if (groupTotalRate > 0 && groupComps.length > 0) {
           let lineTaxPaise = 0;
           if (mode === "inclusive") {
-            lineTaxPaise = Math.round(baseLineTotalPaise * (groupTotalRate / (100 + groupTotalRate)));
+            lineTaxPaise = Math.round(
+              baseLineTotalPaise * (groupTotalRate / (100 + groupTotalRate)),
+            );
             taxInclusivePaise += lineTaxPaise;
           } else {
-            lineTaxPaise = Math.round(baseLineTotalPaise * (groupTotalRate / 100));
+            lineTaxPaise = Math.round(
+              baseLineTotalPaise * (groupTotalRate / 100),
+            );
             taxExclusivePaise += lineTaxPaise;
 
             for (const comp of groupComps) {
-              const compShare = groupTotalRate > 0 ? comp.rate / groupTotalRate : 0;
+              const compShare =
+                groupTotalRate > 0 ? comp.rate / groupTotalRate : 0;
               const compTaxPaise = Math.round(lineTaxPaise * compShare);
               const key = `${comp.name}_${comp.rate}`;
               const existing = compAccumulator.get(key);
@@ -617,12 +694,17 @@ function CashierPosContent() {
           if (catalogEntry?.customizations) {
             for (const cg of catalogEntry.customizations) {
               const foundCi = (cg.customization_items || []).find(
-                (ci: any) => (ci.id || ci._id) === (cust.optionId || (cust as any).id || (cust as any)._id)
+                (ci: any) =>
+                  (ci.id || ci._id) ===
+                  (cust.optionId || (cust as any).id || (cust as any)._id),
               );
               if (foundCi) {
-                if (custIsGst === undefined) custIsGst = foundCi.is_gst ?? foundCi.isGst;
-                if (!custTaxGroupId) custTaxGroupId = foundCi.tax_group_id ?? foundCi.taxGroupId;
-                if (!custTaxMode) custTaxMode = foundCi.tax_mode ?? foundCi.taxMode;
+                if (custIsGst === undefined)
+                  custIsGst = foundCi.is_gst ?? foundCi.isGst;
+                if (!custTaxGroupId)
+                  custTaxGroupId = foundCi.tax_group_id ?? foundCi.taxGroupId;
+                if (!custTaxMode)
+                  custTaxMode = foundCi.tax_mode ?? foundCi.taxMode;
                 if (!custTaxInfo) custTaxInfo = foundCi.tax_info;
                 break;
               }
@@ -631,7 +713,8 @@ function CashierPosContent() {
 
           if (!custIsGst) continue; // Customization item is tax exempt
 
-          let custComps: Array<{ name: string; rate: number; code?: string }> = [];
+          let custComps: Array<{ name: string; rate: number; code?: string }> =
+            [];
           let custTotalRate = 0;
           let mode: "inclusive" | "exclusive" = "inclusive";
 
@@ -641,23 +724,36 @@ function CashierPosContent() {
               rate: c.rate,
               code: c.code || c.name,
             }));
-            custTotalRate = custTaxInfo.total_tax_rate || custComps.reduce((acc: number, c: any) => acc + c.rate, 0);
-            mode = (custTaxMode || custTaxInfo.tax_mode || "inclusive") as "inclusive" | "exclusive";
+            custTotalRate =
+              custTaxInfo.total_tax_rate ||
+              custComps.reduce((acc: number, c: any) => acc + c.rate, 0);
+            mode = (custTaxMode || custTaxInfo.tax_mode || "inclusive") as
+              "inclusive" | "exclusive";
           } else {
             let targetGroup = null;
             if (custTaxGroupId && taxGroups) {
-              targetGroup = taxGroups.find((g) => g._id === custTaxGroupId) || null;
+              targetGroup =
+                taxGroups.find((g) => g._id === custTaxGroupId) || null;
             }
             if (!targetGroup) {
               targetGroup = defaultTaxGroup;
             }
 
-            if (targetGroup && targetGroup.componentIds && targetGroup.componentIds.length > 0) {
-              mode = (custTaxMode || targetGroup.taxMode || "inclusive") as "inclusive" | "exclusive";
+            if (
+              targetGroup &&
+              targetGroup.componentIds &&
+              targetGroup.componentIds.length > 0
+            ) {
+              mode = (custTaxMode || targetGroup.taxMode || "inclusive") as
+                "inclusive" | "exclusive";
               for (const cid of targetGroup.componentIds) {
                 const comp = compMap.get(cid);
                 if (comp) {
-                  custComps.push({ name: comp.name, rate: comp.rate, code: comp.code });
+                  custComps.push({
+                    name: comp.name,
+                    rate: comp.rate,
+                    code: comp.code,
+                  });
                   custTotalRate += comp.rate;
                 }
               }
@@ -667,14 +763,19 @@ function CashierPosContent() {
           if (custTotalRate > 0 && custComps.length > 0) {
             let lineTaxPaise = 0;
             if (mode === "inclusive") {
-              lineTaxPaise = Math.round(custLineTotalPaise * (custTotalRate / (100 + custTotalRate)));
+              lineTaxPaise = Math.round(
+                custLineTotalPaise * (custTotalRate / (100 + custTotalRate)),
+              );
               taxInclusivePaise += lineTaxPaise;
             } else {
-              lineTaxPaise = Math.round(custLineTotalPaise * (custTotalRate / 100));
+              lineTaxPaise = Math.round(
+                custLineTotalPaise * (custTotalRate / 100),
+              );
               taxExclusivePaise += lineTaxPaise;
 
               for (const comp of custComps) {
-                const compShare = custTotalRate > 0 ? comp.rate / custTotalRate : 0;
+                const compShare =
+                  custTotalRate > 0 ? comp.rate / custTotalRate : 0;
                 const compTaxPaise = Math.round(lineTaxPaise * compShare);
                 const key = `${comp.name}_${comp.rate}`;
                 const existing = compAccumulator.get(key);
@@ -699,7 +800,8 @@ function CashierPosContent() {
     const deliveryFeePaise = activeCart.orderType === "Delivery" ? 5800 : 0;
     // For inclusive taxes: subtotalPaise already includes tax, so payable is subtotal + deliveryFee
     // For exclusive taxes: taxExclusivePaise is added on top of subtotal
-    const totalPayablePaise = subtotalPaise + taxExclusivePaise + deliveryFeePaise;
+    const totalPayablePaise =
+      subtotalPaise + taxExclusivePaise + deliveryFeePaise;
     const totalTaxPaise = taxInclusivePaise + taxExclusivePaise;
 
     return {
@@ -725,45 +827,114 @@ function CashierPosContent() {
   const activePaymentChannels = useMemo(() => {
     if (paymentModesList !== undefined) {
       const activeModes = paymentModesList.filter(
-        (m: any) => m.active !== false && m.deletedAt === undefined
+        (m: any) => m.active !== false && m.deletedAt === undefined,
       );
       const channels = activeModes.map((m: any) => {
         const name = m.name;
         const lower = name.toLowerCase();
         let icon = (
-          <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          <svg
+            className="w-4 h-4 shrink-0"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+            />
           </svg>
         );
 
-        if (lower.includes("credit") || (lower.includes("card") && !lower.includes("debit"))) {
+        if (
+          lower.includes("credit") ||
+          (lower.includes("card") && !lower.includes("debit"))
+        ) {
           icon = (
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           );
         } else if (lower.includes("debit")) {
           icon = (
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           );
-        } else if (lower.includes("upi") || lower.includes("qr") || lower.includes("gpay") || lower.includes("phonepe") || lower.includes("paytm")) {
+        } else if (
+          lower.includes("upi") ||
+          lower.includes("qr") ||
+          lower.includes("gpay") ||
+          lower.includes("phonepe") ||
+          lower.includes("paytm")
+        ) {
           icon = (
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           );
         } else if (lower.includes("split")) {
           icon = (
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           );
         } else {
           icon = (
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           );
         }
@@ -775,13 +946,26 @@ function CashierPosContent() {
         };
       });
 
-      if (channels.length > 0 && !channels.some((m: any) => m.name.toLowerCase().includes("split"))) {
+      if (
+        channels.length > 0 &&
+        !channels.some((m: any) => m.name.toLowerCase().includes("split"))
+      ) {
         channels.push({
           id: "split-payment",
           name: "Split Payment",
           icon: (
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-4 h-4 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           ),
         });
@@ -796,7 +980,9 @@ function CashierPosContent() {
   // Ensure selectedPaymentMode is valid for current store's active payment modes
   useEffect(() => {
     if (activePaymentChannels.length > 0) {
-      const exists = activePaymentChannels.some((m: any) => m.name === selectedPaymentMode);
+      const exists = activePaymentChannels.some(
+        (m: any) => m.name === selectedPaymentMode,
+      );
       if (!exists) {
         setSelectedPaymentMode(activePaymentChannels[0].name);
       }
@@ -808,26 +994,43 @@ function CashierPosContent() {
     if (currentStep === 3) {
       const required = (totalPayablePaise / 100).toFixed(2);
       const half1 = (Math.floor(totalPayablePaise / 2) / 100).toFixed(2);
-      const half2 = ((totalPayablePaise - Math.floor(totalPayablePaise / 2)) / 100).toFixed(2);
+      const half2 = (
+        (totalPayablePaise - Math.floor(totalPayablePaise / 2)) /
+        100
+      ).toFixed(2);
       const lower = selectedPaymentMode.toLowerCase();
 
       if (lower.includes("cash")) {
         setTenderCashGiven((prev) => {
           const parsed = parseFloat(prev || "0");
-          if (!prev.trim() || isNaN(parsed) || Math.round(parsed * 100) < totalPayablePaise) {
+          if (
+            !prev.trim() ||
+            isNaN(parsed) ||
+            Math.round(parsed * 100) < totalPayablePaise
+          ) {
             return required;
           }
           return prev;
         });
       } else if (lower.includes("card")) {
-        setTenderCardGiven((prev) => (!prev.trim() || prev === "0" ? required : prev));
+        setTenderCardGiven((prev) =>
+          !prev.trim() || prev === "0" ? required : prev,
+        );
       } else if (lower.includes("upi") || lower.includes("qr")) {
-        setTenderUpiGiven((prev) => (!prev.trim() || prev === "0" ? required : prev));
+        setTenderUpiGiven((prev) =>
+          !prev.trim() || prev === "0" ? required : prev,
+        );
       } else if (lower.includes("split")) {
-        setSplitPart1Amount((prev) => (!prev.trim() || prev === "0" ? half1 : prev));
-        setSplitPart2Amount((prev) => (!prev.trim() || prev === "0" ? half2 : prev));
+        setSplitPart1Amount((prev) =>
+          !prev.trim() || prev === "0" ? half1 : prev,
+        );
+        setSplitPart2Amount((prev) =>
+          !prev.trim() || prev === "0" ? half2 : prev,
+        );
       } else {
-        setCustomTenderGiven((prev) => (!prev.trim() || prev === "0" ? required : prev));
+        setCustomTenderGiven((prev) =>
+          !prev.trim() || prev === "0" ? required : prev,
+        );
       }
     }
   }, [currentStep, selectedPaymentMode, totalPayablePaise]);
@@ -844,13 +1047,21 @@ function CashierPosContent() {
     const list: Array<{ id: string; name: string; roleDisplay: string }> = [];
 
     for (const emp of employeesList) {
-      const roles = Array.isArray(emp.userType) ? emp.userType.map((r: string) => r.toLowerCase()) : [];
-      const isWaiter = roles.includes("waiter") || roles.includes("captain") || roles.includes("server");
+      const roles = Array.isArray(emp.userType)
+        ? emp.userType.map((r: string) => r.toLowerCase())
+        : [];
+      const isWaiter =
+        roles.includes("waiter") ||
+        roles.includes("captain") ||
+        roles.includes("server");
 
       // Strictly include staff who have the Waiter/Captain role
       if (!isWaiter) continue;
 
-      const fullName = `${emp.firstName || ""} ${emp.lastName || ""}`.trim() || emp.email || emp.userId;
+      const fullName =
+        `${emp.firstName || ""} ${emp.lastName || ""}`.trim() ||
+        emp.email ||
+        emp.userId;
       const roleStr = roles.includes("captain") ? "Captain" : "Waiter";
 
       list.push({
@@ -875,15 +1086,22 @@ function CashierPosContent() {
         prevTabs.map((cart) => {
           if (cart.id !== activeCartId) return cart;
           const existingIndex = cart.items.findIndex(
-            (ci) => (ci.itemId === item._id || ci.itemId === item.id) && (!ci.customizations || ci.customizations.length === 0),
+            (ci) =>
+              (ci.itemId === item._id || ci.itemId === item.id) &&
+              (!ci.customizations || ci.customizations.length === 0),
           );
           if (existingIndex > -1) {
             const updatedItems = [...cart.items];
             updatedItems[existingIndex].quantity += quantityToAdd;
             return { ...cart, items: updatedItems };
           } else {
-            const types = item.items_item_types || item.itemTypes || item.itemsItemTypes || [];
-            const primaryType = Array.isArray(types) && types.length > 0 ? types[0] : null;
+            const types =
+              item.items_item_types ||
+              item.itemTypes ||
+              item.itemsItemTypes ||
+              [];
+            const primaryType =
+              Array.isArray(types) && types.length > 0 ? types[0] : null;
 
             const newItem: CartItem = {
               cartItemId: `${item._id || item.id}_standard_${Date.now()}`,
@@ -896,7 +1114,9 @@ function CashierPosContent() {
               dietaryIcon: primaryType?.icon,
               dietaryName: primaryType?.name,
               items_item_types: types,
-              unit: item.quantityUnit || (item.servingSize ? `${item.servingSize}` : "1 pc"),
+              unit:
+                item.quantityUnit ||
+                (item.servingSize ? `${item.servingSize}` : "1 pc"),
               description: item.description,
               isGst: item.isGst ?? item.is_gst ?? true,
               taxGroupId: item.taxGroupId || item.tax_group_id,
@@ -913,7 +1133,10 @@ function CashierPosContent() {
 
   // Catalog Item Click - Opens Customization Modal if published customizations or chef prep preferences exist
   const handleCatalogItemClick = useCallback(
-    (entry: { item: any; customizations?: any[] }, quantityToAdd: number = 1) => {
+    (
+      entry: { item: any; customizations?: any[] },
+      quantityToAdd: number = 1,
+    ) => {
       if (!entry?.item) return;
       const rawCusts = entry.customizations || entry.item?.customizations || [];
       const activeCusts = Array.isArray(rawCusts)
@@ -925,10 +1148,14 @@ function CashierPosContent() {
           )
         : [];
       const rawPrepPrefs = entry.item?.chefPrepPreferences || [];
-      const hasPrepPrefs = Array.isArray(rawPrepPrefs) && rawPrepPrefs.length > 0;
+      const hasPrepPrefs =
+        Array.isArray(rawPrepPrefs) && rawPrepPrefs.length > 0;
 
       if (activeCusts.length > 0 || hasPrepPrefs) {
-        setCustomizingCatalogEntry({ item: entry.item, customizations: activeCusts });
+        setCustomizingCatalogEntry({
+          item: entry.item,
+          customizations: activeCusts,
+        });
         setCustomizationQty(quantityToAdd);
         setSelectedPrepPreferences([]);
         const initialMap: Record<string, any[]> = {};
@@ -980,11 +1207,16 @@ function CashierPosContent() {
       if (isAlreadySelected) {
         setSelectedCustomizationOptions((prev) => ({
           ...prev,
-          [gid]: prev[gid]?.filter((o) => (o.id || o._id) !== (option.id || option._id)) || [],
+          [gid]:
+            prev[gid]?.filter(
+              (o) => (o.id || o._id) !== (option.id || option._id),
+            ) || [],
         }));
       } else {
         if (currentSelections.length >= maxSelected) {
-          showToast(`You can select at most ${maxSelected} option${maxSelected > 1 ? "s" : ""}`);
+          showToast(
+            `You can select at most ${maxSelected} option${maxSelected > 1 ? "s" : ""}`,
+          );
           return;
         }
         setSelectedCustomizationOptions((prev) => ({
@@ -1024,7 +1256,9 @@ function CashierPosContent() {
     }> = [];
 
     let totalAddonPaise = 0;
-    for (const [groupId, options] of Object.entries(selectedCustomizationOptions)) {
+    for (const [groupId, options] of Object.entries(
+      selectedCustomizationOptions,
+    )) {
       for (const opt of options) {
         flatCustomizations.push({
           customizationId: groupId as Id<"customizations">,
@@ -1041,8 +1275,10 @@ function CashierPosContent() {
     }
 
     const finalUnitPrice = item.price + totalAddonPaise;
-    const types = item.items_item_types || item.itemTypes || item.itemsItemTypes || [];
-    const primaryType = Array.isArray(types) && types.length > 0 ? types[0] : null;
+    const types =
+      item.items_item_types || item.itemTypes || item.itemsItemTypes || [];
+    const primaryType =
+      Array.isArray(types) && types.length > 0 ? types[0] : null;
 
     const prefKey = selectedPrepPreferences
       .map((p) => p.name)
@@ -1065,13 +1301,18 @@ function CashierPosContent() {
       dietaryIcon: primaryType?.icon,
       dietaryName: primaryType?.name,
       items_item_types: types,
-      unit: item.quantityUnit || (item.servingSize ? `${item.servingSize}` : "1 pc"),
+      unit:
+        item.quantityUnit ||
+        (item.servingSize ? `${item.servingSize}` : "1 pc"),
       description: item.description,
       isGst: item.isGst ?? item.is_gst ?? true,
       taxGroupId: item.taxGroupId || item.tax_group_id,
       taxMode: item.taxMode || item.tax_mode,
       customizations: flatCustomizations,
-      prepPreferences: selectedPrepPreferences.length > 0 ? selectedPrepPreferences : undefined,
+      prepPreferences:
+        selectedPrepPreferences.length > 0
+          ? selectedPrepPreferences
+          : undefined,
     };
 
     setCartTabs((prevTabs) =>
@@ -1102,7 +1343,14 @@ function CashierPosContent() {
     showToast(`Added ${customizationQty}x ${item.name} to ${activeCart.label}`);
     setCustomizingCatalogEntry(null);
     setSelectedPrepPreferences([]);
-  }, [customizingCatalogEntry, selectedCustomizationOptions, selectedPrepPreferences, customizationQty, activeCartId, activeCart]);
+  }, [
+    customizingCatalogEntry,
+    selectedCustomizationOptions,
+    selectedPrepPreferences,
+    customizationQty,
+    activeCartId,
+    activeCart,
+  ]);
 
   // Modify Quantity
   const handleUpdateItemQuantity = (cartItemKey: string, newQty: number) => {
@@ -1113,14 +1361,17 @@ function CashierPosContent() {
           return {
             ...cart,
             items: cart.items.filter(
-              (ci) => ci.cartItemId !== cartItemKey && (ci.itemId as unknown as string) !== cartItemKey,
+              (ci) =>
+                ci.cartItemId !== cartItemKey &&
+                (ci.itemId as unknown as string) !== cartItemKey,
             ),
           };
         }
         return {
           ...cart,
           items: cart.items.map((ci) =>
-            ci.cartItemId === cartItemKey || (ci.itemId as unknown as string) === cartItemKey
+            ci.cartItemId === cartItemKey ||
+            (ci.itemId as unknown as string) === cartItemKey
               ? { ...ci, quantity: newQty }
               : ci,
           ),
@@ -1137,7 +1388,9 @@ function CashierPosContent() {
         return {
           ...cart,
           items: cart.items.filter(
-            (ci) => ci.cartItemId !== cartItemKey && (ci.itemId as unknown as string) !== cartItemKey,
+            (ci) =>
+              ci.cartItemId !== cartItemKey &&
+              (ci.itemId as unknown as string) !== cartItemKey,
           ),
         };
       }),
@@ -1201,7 +1454,9 @@ function CashierPosContent() {
     return (
       customersList.find((u) => {
         const uPhone = (u.phone || "").replace(/\D/g, "");
-        return uPhone && (uPhone.endsWith(cleanPhone) || cleanPhone.endsWith(uPhone));
+        return (
+          uPhone && (uPhone.endsWith(cleanPhone) || cleanPhone.endsWith(uPhone))
+        );
       }) || null
     );
   }, [customersList, activeCart?.customerPhone]);
@@ -1225,14 +1480,18 @@ function CashierPosContent() {
       cleanDigits.length >= 10 && customersList
         ? customersList.find((u) => {
             const uPhone = (u.phone || "").replace(/\D/g, "");
-            return uPhone && (uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone));
+            return (
+              uPhone &&
+              (uPhone.endsWith(cleanDigits) || cleanDigits.endsWith(uPhone))
+            );
           })
         : null;
 
     setCartTabs((prev) =>
       prev.map((c) => {
         if (c.id !== activeCartId) return c;
-        const currentCode = updatedCode || c.customerCountryCode || defaultOrgCountryCode;
+        const currentCode =
+          updatedCode || c.customerCountryCode || defaultOrgCountryCode;
         if (match) {
           const first = match.firstName || c.customerFirstName || "";
           const last = match.lastName || c.customerLastName || "";
@@ -1329,7 +1588,9 @@ function CashierPosContent() {
           try {
             const devices = await (navigator as any).usb.getDevices();
             if (isMounted) {
-              setPrinterStatus(devices.length > 0 ? "connected" : "disconnected");
+              setPrinterStatus(
+                devices.length > 0 ? "connected" : "disconnected",
+              );
             }
             return;
           } catch {
@@ -1396,7 +1657,8 @@ function CashierPosContent() {
 
     const lowerMode = selectedPaymentMode.toLowerCase();
     if (lowerMode.includes("cash")) {
-      const cashStr = tenderCashGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const cashStr =
+        tenderCashGiven.trim() || (totalPayablePaise / 100).toFixed(2);
       const given = parseFloat(cashStr);
       const required = totalPayablePaise / 100;
       if (isNaN(given) || given <= 0) {
@@ -1405,19 +1667,21 @@ function CashierPosContent() {
       }
       if (Math.round(given * 100) < totalPayablePaise) {
         showToast(
-          `Insufficient cash tendered (${taxCalculation.currencySymbol}${given.toFixed(2)}). Total payable is ${taxCalculation.currencySymbol}${required.toFixed(2)}.`
+          `Insufficient cash tendered (${taxCalculation.currencySymbol}${given.toFixed(2)}). Total payable is ${taxCalculation.currencySymbol}${required.toFixed(2)}.`,
         );
         return;
       }
     } else if (lowerMode.includes("card")) {
-      const cardStr = tenderCardGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const cardStr =
+        tenderCardGiven.trim() || (totalPayablePaise / 100).toFixed(2);
       const given = parseFloat(cardStr);
       if (isNaN(given) || given <= 0) {
         showToast("Please enter a valid card charge amount.");
         return;
       }
     } else if (lowerMode.includes("upi") || lowerMode.includes("qr")) {
-      const upiStr = tenderUpiGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const upiStr =
+        tenderUpiGiven.trim() || (totalPayablePaise / 100).toFixed(2);
       const given = parseFloat(upiStr);
       if (isNaN(given) || given <= 0) {
         showToast("Please enter a valid UPI amount.");
@@ -1433,12 +1697,13 @@ function CashierPosContent() {
       const totalSplitPaise = Math.round((p1 + p2) * 100);
       if (totalSplitPaise !== totalPayablePaise) {
         showToast(
-          `Split amounts total (${taxCalculation.currencySymbol}${(totalSplitPaise / 100).toFixed(2)}) must equal payable total (${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}).`
+          `Split amounts total (${taxCalculation.currencySymbol}${(totalSplitPaise / 100).toFixed(2)}) must equal payable total (${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}).`,
         );
         return;
       }
     } else {
-      const customStr = customTenderGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+      const customStr =
+        customTenderGiven.trim() || (totalPayablePaise / 100).toFixed(2);
       const given = parseFloat(customStr);
       if (isNaN(given) || given <= 0) {
         showToast(`Please enter a valid amount for ${selectedPaymentMode}.`);
@@ -1513,20 +1778,25 @@ function CashierPosContent() {
 
       // Build full international phone number with dynamic country dial code
       // Auto-generate unique non-repeating 10-digit series starting with 90 if customer phone is not provided
-      const currentDial = activeCart.customerCountryCode || defaultOrgCountryCode || "+91";
+      const currentDial =
+        activeCart.customerCountryCode || defaultOrgCountryCode || "+91";
       let rawPhone = activeCart.customerPhone?.trim();
       if (!rawPhone) {
         const timeSlice = (Date.now() % 1000000).toString().padStart(6, "0");
         const randomSeed = Math.floor(10 + Math.random() * 90).toString();
         rawPhone = `90${timeSlice}${randomSeed}`;
       }
-      const resolvedCustomerPhone = formatPhoneNumberWithCountryCode(rawPhone, currentDial);
+      const resolvedCustomerPhone = formatPhoneNumberWithCountryCode(
+        rawPhone,
+        currentDial,
+      );
 
       const res = await createOrderMutation({
         organizationId: activeOrg._id,
         orderType: resolvedOrderType,
         tableId:
-          activeCart.orderType === "DineIn" && activeCart.isTableRequired !== false
+          activeCart.orderType === "DineIn" &&
+          activeCart.isTableRequired !== false
             ? (activeCart.tableId as any)
             : undefined,
         waiterUserId: activeCart.waiterId,
@@ -1535,21 +1805,21 @@ function CashierPosContent() {
         customerPhone: resolvedCustomerPhone,
         customerEmail: activeCart.customerEmail || undefined,
         scheduledPickupDate:
-          activeCart.orderType === "Scheduled" || resolvedOrderType === "ScheduledPickup"
+          activeCart.orderType === "Scheduled" ||
+          resolvedOrderType === "ScheduledPickup"
             ? activeCart.scheduledDate || undefined
             : undefined,
         scheduledPickupTime:
-          activeCart.orderType === "Scheduled" || resolvedOrderType === "ScheduledPickup"
+          activeCart.orderType === "Scheduled" ||
+          resolvedOrderType === "ScheduledPickup"
             ? activeCart.scheduledTime || undefined
             : undefined,
-        deliveryCharge:
-          activeCart.orderType === "Delivery"
-            ? 5800
-            : undefined,
+        deliveryCharge: activeCart.orderType === "Delivery" ? 5800 : undefined,
         deliveryAddress:
           activeCart.orderType === "Delivery"
             ? activeCart.deliveryAddress || {
-                addressLine1: "34, Example Street, Near Sunshine Heights, Bandra West",
+                addressLine1:
+                  "34, Example Street, Near Sunshine Heights, Bandra West",
                 landmark: "Opposite Lotus Park",
                 city: "Mumbai",
                 zipCode: "400001",
@@ -1607,7 +1877,8 @@ function CashierPosContent() {
         display_discount_amount: "0.00",
         display_total_amount: (totalPayablePaise / 100).toFixed(2),
         taxInfoSnapshot: {
-          tax_mode: taxCalculation.taxExclusivePaise > 0 ? "exclusive" : "inclusive",
+          tax_mode:
+            taxCalculation.taxExclusivePaise > 0 ? "exclusive" : "inclusive",
           tax_amount: (taxGstPaise / 100).toFixed(2),
           components: taxCalculation.componentBreakdown.map((c) => ({
             name: c.name,
@@ -1679,7 +1950,14 @@ function CashierPosContent() {
     } else if (currentStep === 3) {
       handleCompleteOrder();
     }
-  }, [currentStep, activeCart.items.length, completedOrderData, handleCompleteOrder, handleResetToNewOrder, goToStep]);
+  }, [
+    currentStep,
+    activeCart.items.length,
+    completedOrderData,
+    handleCompleteOrder,
+    handleResetToNewOrder,
+    goToStep,
+  ]);
 
   // ==========================================
   // KEYBOARD SHORTCUTS HANDLER (F1: Search, F3: Clear, F5: Order/Checkout, Esc: Blur)
@@ -1746,12 +2024,24 @@ function CashierPosContent() {
             className="p-1.5 -ml-1.5 text-stone-700 hover:text-stone-950 transition-colors rounded-full hover:bg-stone-100 cursor-pointer"
             type="button"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path d="M10 19l-7-7m0 0l7-7m-7 7h18" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
             </svg>
           </button>
           <div className="flex items-baseline space-x-2.5">
-            <h1 className="font-serif text-2xl tracking-tight text-stone-900 font-medium">Cashier</h1>
+            <h1 className="font-serif text-2xl tracking-tight text-stone-900 font-medium">
+              Cashier
+            </h1>
             <div className="flex items-center text-xs font-normal text-stone-500 space-x-1.5">
               <span>{activeOrg?.name || "Skyz Restaurant & Banquet"}</span>
               <span className="inline-block w-1 h-1 rounded-full bg-stone-300" />
@@ -1773,13 +2063,22 @@ function CashierPosContent() {
               currentStep === 1
                 ? "bg-stone-950 text-white shadow-sm"
                 : currentStep > 1
-                ? "text-emerald-700 hover:bg-stone-200/60"
-                : "text-stone-400 hover:text-stone-600"
+                  ? "text-emerald-700 hover:bg-stone-200/60"
+                  : "text-stone-400 hover:text-stone-600"
             }`}
           >
             {currentStep > 1 ? (
-              <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+              <svg
+                className="w-3.5 h-3.5 stroke-[2.5]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M5 13l4 4L19 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             ) : (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
@@ -1787,8 +2086,18 @@ function CashierPosContent() {
             <span>01 Build Order</span>
           </button>
 
-          <svg className="w-3 h-3 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          <svg
+            className="w-3 h-3 text-stone-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M9 5l7 7-7 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+            />
           </svg>
 
           {/* Step 2 */}
@@ -1802,15 +2111,24 @@ function CashierPosContent() {
               currentStep === 2
                 ? "bg-stone-950 text-white shadow-sm"
                 : currentStep > 2
-                ? "text-emerald-700 hover:bg-stone-200/60"
-                : "text-stone-400 hover:text-stone-600"
+                  ? "text-emerald-700 hover:bg-stone-200/60"
+                  : "text-stone-400 hover:text-stone-600"
             }`}
           >
             {currentStep === 2 ? (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
             ) : currentStep > 2 ? (
-              <svg className="w-3.5 h-3.5 stroke-[2.5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+              <svg
+                className="w-3.5 h-3.5 stroke-[2.5]"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M5 13l4 4L19 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             ) : (
               <span className="w-1.5 h-1.5 rounded-full border border-stone-400" />
@@ -1818,8 +2136,18 @@ function CashierPosContent() {
             <span>02 Order Details</span>
           </button>
 
-          <svg className="w-3 h-3 text-stone-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+          <svg
+            className="w-3 h-3 text-stone-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              d="M9 5l7 7-7 7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+            />
           </svg>
 
           {/* Step 3 */}
@@ -1848,7 +2176,9 @@ function CashierPosContent() {
         <div className="flex items-center space-x-3">
           {/* Printer status pill */}
           <div className="hidden lg:flex items-center gap-1.5 text-xs text-stone-500 border-r border-stone-200 pr-3">
-            <span className="text-[11px] font-medium text-stone-400">Printer:</span>
+            <span className="text-[11px] font-medium text-stone-400">
+              Printer:
+            </span>
             {printerStatus === "connected" ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
@@ -1871,7 +2201,9 @@ function CashierPosContent() {
             <div className="text-sm font-medium text-stone-900 leading-tight">
               Mahendra Suthar
             </div>
-            <div className="text-[11px] text-stone-500 leading-tight">Admin POS terminal</div>
+            <div className="text-[11px] text-stone-500 leading-tight">
+              Admin POS terminal
+            </div>
           </div>
           <div className="w-9 h-9 rounded-full bg-stone-950 text-white font-medium text-xs flex items-center justify-center tracking-wider">
             MS
@@ -1903,7 +2235,10 @@ function CashierPosContent() {
                     0,
                   );
                   return (
-                    <div key={c.id} className="relative group/tab flex items-center">
+                    <div
+                      key={c.id}
+                      className="relative group/tab flex items-center"
+                    >
                       <button
                         type="button"
                         onClick={() => switchActiveCart(c.id)}
@@ -2038,38 +2373,45 @@ function CashierPosContent() {
                           <span className="text-[11px] text-[#8a7e75] font-light">
                             {cartItem.unit}
                           </span>
-                          {cartItem.customizations && cartItem.customizations.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {cartItem.customizations.map((c, cIdx) => (
-                                <span
-                                  key={cIdx}
-                                  className="text-[10px] bg-[#f1edec] text-[#141010] px-1.5 py-0.5 rounded font-normal"
-                                >
-                                  + {c.name || "Add-on"}{" "}
-                                  {c.price ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {cartItem.prepPreferences && cartItem.prepPreferences.length > 0 && (
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {cartItem.prepPreferences.map((p, pIdx) => (
-                                <span
-                                  key={pIdx}
-                                  className="text-[10px] bg-[#faf2ee] text-[#78716c] border border-[#f4ece8] px-1.5 py-0.5 rounded font-medium flex items-center gap-1"
-                                >
-                                  <span className="material-symbols-outlined text-[12px]">soup_kitchen</span>
-                                  {p.name}
-                                </span>
-                              ))}
-                            </div>
-                          )}
+                          {cartItem.customizations &&
+                            cartItem.customizations.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {cartItem.customizations.map((c, cIdx) => (
+                                  <span
+                                    key={cIdx}
+                                    className="text-[10px] bg-[#f1edec] text-[#141010] px-1.5 py-0.5 rounded font-normal"
+                                  >
+                                    + {c.name || "Add-on"}{" "}
+                                    {c.price
+                                      ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})`
+                                      : ""}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          {cartItem.prepPreferences &&
+                            cartItem.prepPreferences.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {cartItem.prepPreferences.map((p, pIdx) => (
+                                  <span
+                                    key={pIdx}
+                                    className="text-[10px] bg-[#faf2ee] text-[#78716c] border border-[#f4ece8] px-1.5 py-0.5 rounded font-medium flex items-center gap-1"
+                                  >
+                                    <span className="material-symbols-outlined text-[12px]">
+                                      soup_kitchen
+                                    </span>
+                                    {p.name}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                         </div>
                       </div>
 
                       {/* Unit Price */}
                       <div className="col-span-2 text-right text-xs text-[#5e5e5e] font-mono">
-                        {taxCalculation.currencySymbol}{unitPrice}
+                        {taxCalculation.currencySymbol}
+                        {unitPrice}
                       </div>
 
                       {/* Quantity Stepper [- qty +] */}
@@ -2108,11 +2450,16 @@ function CashierPosContent() {
                       {/* Line Subtotal & Delete Button */}
                       <div className="col-span-2 text-right flex items-center justify-end space-x-1.5">
                         <span className="text-xs font-semibold text-[#141010] font-mono">
-                          {taxCalculation.currencySymbol}{lineTotal}
+                          {taxCalculation.currencySymbol}
+                          {lineTotal}
                         </span>
                         <button
                           type="button"
-                          onClick={() => handleRemoveItem(cartItem.cartItemId || cartItem.itemId)}
+                          onClick={() =>
+                            handleRemoveItem(
+                              cartItem.cartItemId || cartItem.itemId,
+                            )
+                          }
                           className="text-[#e7e5e4] hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer p-0.5"
                           title="Remove item"
                         >
@@ -2143,7 +2490,11 @@ function CashierPosContent() {
                 <div className="flex justify-between">
                   <span>Subtotal</span>
                   <span className="font-mono text-[#141010]">
-                    {taxCalculation.currencySymbol}{formatCurrencyAmount(cartSubtotalPaise / 100, activeOrg?.country)}
+                    {taxCalculation.currencySymbol}
+                    {formatCurrencyAmount(
+                      cartSubtotalPaise / 100,
+                      activeOrg?.country,
+                    )}
                   </span>
                 </div>
 
@@ -2157,7 +2508,11 @@ function CashierPosContent() {
                       {comp.name} ({comp.rate}%)
                     </span>
                     <span className="font-mono text-stone-700">
-                      {taxCalculation.currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
+                      {taxCalculation.currencySymbol}
+                      {formatCurrencyAmount(
+                        comp.taxAmountPaise / 100,
+                        activeOrg?.country,
+                      )}
                     </span>
                   </div>
                 ))}
@@ -2168,7 +2523,11 @@ function CashierPosContent() {
                     Total Payable
                   </div>
                   <div className="font-serif text-2xl font-semibold text-[#141010] leading-none mt-0.5">
-                    {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                    {taxCalculation.currencySymbol}
+                    {formatCurrencyAmount(
+                      totalPayablePaise / 100,
+                      activeOrg?.country,
+                    )}
                   </div>
                 </div>
 
@@ -2252,9 +2611,29 @@ function CashierPosContent() {
                 {/* Search Input with Clear Button and Dropdown Icon */}
                 <div className="relative flex-1">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[#8a7e75]">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <circle cx="11" cy="11" r="7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      <line x1="21" y1="21" x2="16.65" y2="16.65" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <svg
+                      className="w-3.5 h-3.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle
+                        cx="11"
+                        cy="11"
+                        r="7"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <line
+                        x1="21"
+                        y1="21"
+                        x2="16.65"
+                        y2="16.65"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
                   </div>
                   <input
@@ -2272,16 +2651,23 @@ function CashierPosContent() {
                       if (searchQuery.trim()) setIsAutocompleteOpen(true);
                     }}
                     onKeyDown={(e) => {
-                      if (isAutocompleteOpen && autocompleteMatches.length > 0) {
+                      if (
+                        isAutocompleteOpen &&
+                        autocompleteMatches.length > 0
+                      ) {
                         if (e.key === "ArrowDown") {
                           e.preventDefault();
                           setHighlightedIndex((prev) =>
-                            prev < autocompleteMatches.length - 1 ? prev + 1 : 0,
+                            prev < autocompleteMatches.length - 1
+                              ? prev + 1
+                              : 0,
                           );
                         } else if (e.key === "ArrowUp") {
                           e.preventDefault();
                           setHighlightedIndex((prev) =>
-                            prev > 0 ? prev - 1 : autocompleteMatches.length - 1,
+                            prev > 0
+                              ? prev - 1
+                              : autocompleteMatches.length - 1,
                           );
                         } else if (e.key === "Enter") {
                           e.preventDefault();
@@ -2333,7 +2719,9 @@ function CashierPosContent() {
 
                 {/* Quantity Control */}
                 <div className="flex items-center border border-[#141010] rounded-lg bg-white px-2.5 py-1.5 space-x-1">
-                  <span className="text-xs text-[#141010] font-medium">Qty:</span>
+                  <span className="text-xs text-[#141010] font-medium">
+                    Qty:
+                  </span>
                   <input
                     className="w-8 text-center text-xs font-bold text-[#141010] border-0 bg-transparent p-0 focus:ring-0 focus:outline-none"
                     min="1"
@@ -2357,10 +2745,7 @@ function CashierPosContent() {
                       setSearchQuery("");
                       setIsAutocompleteOpen(false);
                     } else if (filteredCatalogItems.length > 0) {
-                      handleCatalogItemClick(
-                        filteredCatalogItems[0],
-                        inputQty,
-                      );
+                      handleCatalogItemClick(filteredCatalogItems[0], inputQty);
                       setSearchQuery("");
                     }
                   }}
@@ -2415,18 +2800,22 @@ function CashierPosContent() {
                             >
                               {entry.item.name}
                             </span>
-                            {entry.menuName && selectedMenuId === "all" && menusList && menusList.length > 1 && (
-                              <span className="text-[10px] bg-stone-100 text-stone-600 border border-[#e7e5e4] px-1.5 py-0.5 rounded font-normal">
-                                {entry.menuName}
-                              </span>
-                            )}
+                            {entry.menuName &&
+                              selectedMenuId === "all" &&
+                              menusList &&
+                              menusList.length > 1 && (
+                                <span className="text-[10px] bg-stone-100 text-stone-600 border border-[#e7e5e4] px-1.5 py-0.5 rounded font-normal">
+                                  {entry.menuName}
+                                </span>
+                              )}
                             <span className="text-[10px] bg-white border border-[#e7e5e4] px-1.5 py-0.5 rounded text-[#5e5e5e]">
                               {entry.categoryName}
                             </span>
                           </div>
                           <div className="flex items-center space-x-3">
                             <span className="font-mono font-semibold text-[#141010]">
-                              {taxCalculation.currencySymbol}{priceFormatted}
+                              {taxCalculation.currencySymbol}
+                              {priceFormatted}
                             </span>
                             <span className="text-[10px] text-[#8a7e75] font-mono">
                               ↵ Add
@@ -2535,11 +2924,14 @@ function CashierPosContent() {
                         <span className="text-xs font-medium text-[#141010]">
                           {it.name}
                         </span>
-                        {entry.menuName && selectedMenuId === "all" && menusList && menusList.length > 1 && (
-                          <span className="text-[10px] text-stone-500 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded font-normal">
-                            {entry.menuName}
-                          </span>
-                        )}
+                        {entry.menuName &&
+                          selectedMenuId === "all" &&
+                          menusList &&
+                          menusList.length > 1 && (
+                            <span className="text-[10px] text-stone-500 bg-stone-100 border border-stone-200 px-1.5 py-0.5 rounded font-normal">
+                              {entry.menuName}
+                            </span>
+                          )}
                         {it.quantityUnit && (
                           <span className="text-[11px] text-[#8a7e75]">
                             ({it.quantityUnit})
@@ -2565,7 +2957,8 @@ function CashierPosContent() {
 
                       {/* Price */}
                       <div className="w-20 text-right text-xs font-semibold text-[#141010]">
-                        {taxCalculation.currencySymbol}{priceFormatted}
+                        {taxCalculation.currencySymbol}
+                        {priceFormatted}
                       </div>
                     </div>
                   );
@@ -2629,7 +3022,9 @@ function CashierPosContent() {
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={() => setIsCartSwitcherOpen(!isCartSwitcherOpen)}
+                          onClick={() =>
+                            setIsCartSwitcherOpen(!isCartSwitcherOpen)
+                          }
                           className="inline-flex items-center gap-1.5 bg-[#0c0a09] hover:bg-stone-850 text-white text-[11px] font-semibold pl-3 pr-2.5 py-1 rounded-full shadow-xs border border-stone-800 transition-all cursor-pointer select-none"
                         >
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
@@ -2642,7 +3037,12 @@ function CashierPosContent() {
                             stroke="currentColor"
                             viewBox="0 0 24 24"
                           >
-                            <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                            <path
+                              d="M19 9l-7 7-7-7"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                            />
                           </svg>
                         </button>
 
@@ -2663,8 +3063,14 @@ function CashierPosContent() {
                               <div className="space-y-1 mt-1 max-h-48 overflow-y-auto">
                                 {cartTabs.map((ct) => {
                                   const isSelected = ct.id === activeCartId;
-                                  const count = ct.items.reduce((sum, it) => sum + it.quantity, 0);
-                                  const total = ct.items.reduce((sum, it) => sum + it.price * it.quantity, 0);
+                                  const count = ct.items.reduce(
+                                    (sum, it) => sum + it.quantity,
+                                    0,
+                                  );
+                                  const total = ct.items.reduce(
+                                    (sum, it) => sum + it.price * it.quantity,
+                                    0,
+                                  );
                                   return (
                                     <button
                                       key={ct.id}
@@ -2682,17 +3088,28 @@ function CashierPosContent() {
                                       <div className="flex items-center gap-2">
                                         <span
                                           className={`w-1.5 h-1.5 rounded-full ${
-                                            isSelected ? "bg-emerald-400" : "bg-stone-400"
+                                            isSelected
+                                              ? "bg-emerald-400"
+                                              : "bg-stone-400"
                                           }`}
                                         />
-                                        <span className="font-semibold">{ct.label}</span>
+                                        <span className="font-semibold">
+                                          {ct.label}
+                                        </span>
                                       </div>
                                       <span
                                         className={`text-[11px] ${
-                                          isSelected ? "text-stone-300" : "text-stone-500"
+                                          isSelected
+                                            ? "text-stone-300"
+                                            : "text-stone-500"
                                         }`}
                                       >
-                                        {count} items • {taxCalculation.currencySymbol}{formatCurrencyAmount(total / 100, activeOrg?.country)}
+                                        {count} items •{" "}
+                                        {taxCalculation.currencySymbol}
+                                        {formatCurrencyAmount(
+                                          total / 100,
+                                          activeOrg?.country,
+                                        )}
                                       </span>
                                     </button>
                                   );
@@ -2714,7 +3131,9 @@ function CashierPosContent() {
                           </>
                         )}
                       </div>
-                      <h2 className="font-serif text-xl font-medium text-stone-900">Order Summary</h2>
+                      <h2 className="font-serif text-xl font-medium text-stone-900">
+                        Order Summary
+                      </h2>
                     </div>
                     <button
                       onClick={() => setCurrentStep(1)}
@@ -2728,42 +3147,65 @@ function CashierPosContent() {
                   {/* Items Counter */}
                   <div className="pt-3 pb-4 text-xs text-stone-400 font-medium">
                     {activeCart.items.length} items •{" "}
-                    {activeCart.items.reduce((sum, item) => sum + item.quantity, 0)} pcs
+                    {activeCart.items.reduce(
+                      (sum, item) => sum + item.quantity,
+                      0,
+                    )}{" "}
+                    pcs
                   </div>
 
                   {/* Line Items List */}
                   <ul className="space-y-4 text-sm pb-5 border-b border-stone-100 max-h-80 overflow-y-auto pr-1">
                     {activeCart.items.map((item, idx) => (
-                      <li key={(item.cartItemId || item.itemId) + "_" + idx} className="flex items-start justify-between">
+                      <li
+                        key={(item.cartItemId || item.itemId) + "_" + idx}
+                        className="flex items-start justify-between"
+                      >
                         <div className="flex items-start space-x-2.5">
                           {renderDietaryMark(item)}
                           <div>
-                            <div className="font-medium text-stone-900 leading-tight">{item.name}</div>
-                            {item.customizations && item.customizations.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {item.customizations.map((c, cIdx) => (
-                                  <span
-                                    key={cIdx}
-                                    className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
-                                  >
-                                    + {c.name || "Add-on"}{" "}
-                                    {c.price ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                            <div className="font-medium text-stone-900 leading-tight">
+                              {item.name}
+                            </div>
+                            {item.customizations &&
+                              item.customizations.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {item.customizations.map((c, cIdx) => (
+                                    <span
+                                      key={cIdx}
+                                      className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
+                                    >
+                                      + {c.name || "Add-on"}{" "}
+                                      {c.price
+                                        ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})`
+                                        : ""}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             <div className="text-xs text-stone-400 mt-0.5">
-                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{formatCurrencyAmount(item.price / 100, activeOrg?.country)}
+                              Qty: {item.quantity} ×{" "}
+                              {taxCalculation.currencySymbol}
+                              {formatCurrencyAmount(
+                                item.price / 100,
+                                activeOrg?.country,
+                              )}
                             </div>
                           </div>
                         </div>
                         <span className="font-medium text-stone-900 shrink-0">
-                          {taxCalculation.currencySymbol}{formatCurrencyAmount((item.price * item.quantity) / 100, activeOrg?.country)}
+                          {taxCalculation.currencySymbol}
+                          {formatCurrencyAmount(
+                            (item.price * item.quantity) / 100,
+                            activeOrg?.country,
+                          )}
                         </span>
                       </li>
                     ))}
                     {activeCart.items.length === 0 && (
-                      <li className="text-xs text-stone-400 italic py-4 text-center">Cart is empty</li>
+                      <li className="text-xs text-stone-400 italic py-4 text-center">
+                        Cart is empty
+                      </li>
                     )}
                   </ul>
 
@@ -2772,7 +3214,11 @@ function CashierPosContent() {
                     <div className="flex justify-between">
                       <span>Subtotal</span>
                       <span className="font-medium text-stone-900">
-                        {taxCalculation.currencySymbol}{formatCurrencyAmount(cartSubtotalPaise / 100, activeOrg?.country)}
+                        {taxCalculation.currencySymbol}
+                        {formatCurrencyAmount(
+                          cartSubtotalPaise / 100,
+                          activeOrg?.country,
+                        )}
                       </span>
                     </div>
 
@@ -2786,7 +3232,11 @@ function CashierPosContent() {
                           {comp.name} ({comp.rate}%)
                         </span>
                         <span className="font-medium text-stone-900">
-                          {taxCalculation.currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
+                          {taxCalculation.currencySymbol}
+                          {formatCurrencyAmount(
+                            comp.taxAmountPaise / 100,
+                            activeOrg?.country,
+                          )}
                         </span>
                       </div>
                     ))}
@@ -2799,7 +3249,10 @@ function CashierPosContent() {
                             Zone 1
                           </span>
                         </span>
-                        <span className="text-stone-900">{taxCalculation.currencySymbol}{formatCurrencyAmount(58, activeOrg?.country)}</span>
+                        <span className="text-stone-900">
+                          {taxCalculation.currencySymbol}
+                          {formatCurrencyAmount(58, activeOrg?.country)}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -2818,7 +3271,11 @@ function CashierPosContent() {
                         </span>
                       </div>
                       <div className="font-serif text-2xl font-bold text-stone-950 tracking-tight">
-                        {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                        {taxCalculation.currencySymbol}
+                        {formatCurrencyAmount(
+                          totalPayablePaise / 100,
+                          activeOrg?.country,
+                        )}
                       </div>
                     </div>
                   </div>
@@ -2832,7 +3289,8 @@ function CashierPosContent() {
                           Scheduled for {activeCart.scheduledDate || "Tomorrow"}
                         </span>
                         <span className="text-[11px] text-amber-800">
-                          Slot: {activeCart.scheduledTime || "01:30 PM - 02:00 PM"}
+                          Slot:{" "}
+                          {activeCart.scheduledTime || "01:30 PM - 02:00 PM"}
                         </span>
                       </div>
                     </div>
@@ -2845,7 +3303,12 @@ function CashierPosContent() {
                       className="inline-flex items-center text-xs font-medium text-stone-600 hover:text-stone-950 transition-colors cursor-pointer"
                       type="button"
                     >
-                      <svg className="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <svg
+                        className="w-3.5 h-3.5 mr-1.5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
                         <path
                           d="M10 19l-7-7m0 0l7-7m-7 7h18"
                           strokeLinecap="round"
@@ -2865,9 +3328,12 @@ function CashierPosContent() {
                 {/* 1. Customer Information Card */}
                 <div className="bg-white border border-[#e7e5e4] rounded-2xl p-7 md:p-8 shadow-sm">
                   <div>
-                    <h3 className="font-serif text-2xl text-stone-900 font-normal">Customer Information</h3>
+                    <h3 className="font-serif text-2xl text-stone-900 font-normal">
+                      Customer Information
+                    </h3>
                     <p className="text-xs text-stone-500 mt-1">
-                      Look up returning guest by phone number or enter new contact information
+                      Look up returning guest by phone number or enter new
+                      contact information
                     </p>
                   </div>
 
@@ -2876,7 +3342,9 @@ function CashierPosContent() {
                     <div className="flex items-center space-x-2.5 text-xs text-stone-800">
                       <span
                         className={`w-2 h-2 rounded-full ${
-                          matchedCustomer ? "bg-emerald-500 animate-pulse" : "bg-blue-500"
+                          matchedCustomer
+                            ? "bg-emerald-500 animate-pulse"
+                            : "bg-blue-500"
                         } shrink-0`}
                       />
                       <span className="font-semibold text-stone-900">
@@ -2884,11 +3352,12 @@ function CashierPosContent() {
                           ? `Returning VIP Guest: ${matchedCustomer.firstName || ""} ${
                               matchedCustomer.lastName || ""
                             }`
-                          : activeCart.customerFirstName || activeCart.customerPhone
-                          ? `Guest: ${activeCart.customerFirstName || "Patron"} ${
-                              activeCart.customerLastName || ""
-                            }`
-                          : "Walk-in Guest Patron"}
+                          : activeCart.customerFirstName ||
+                              activeCart.customerPhone
+                            ? `Guest: ${activeCart.customerFirstName || "Patron"} ${
+                                activeCart.customerLastName || ""
+                              }`
+                            : "Walk-in Guest Patron"}
                       </span>
                       <span className="text-stone-500 hidden sm:inline">
                         {matchedCustomer
@@ -2911,8 +3380,14 @@ function CashierPosContent() {
                   <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-5">
                     {/* First Name */}
                     <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="first-name">
-                        FIRST NAME <span className="font-normal text-stone-400">(OPTIONAL)</span>
+                      <label
+                        className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5"
+                        htmlFor="first-name"
+                      >
+                        FIRST NAME{" "}
+                        <span className="font-normal text-stone-400">
+                          (OPTIONAL)
+                        </span>
                       </label>
                       <input
                         id="first-name"
@@ -2928,7 +3403,8 @@ function CashierPosContent() {
                                 ? {
                                     ...c,
                                     customerFirstName: first,
-                                    customerName: `${first} ${c.customerLastName || ""}`.trim(),
+                                    customerName:
+                                      `${first} ${c.customerLastName || ""}`.trim(),
                                   }
                                 : c,
                             ),
@@ -2939,8 +3415,14 @@ function CashierPosContent() {
 
                     {/* Last Name */}
                     <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="last-name">
-                        LAST NAME <span className="font-normal text-stone-400">(OPTIONAL)</span>
+                      <label
+                        className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5"
+                        htmlFor="last-name"
+                      >
+                        LAST NAME{" "}
+                        <span className="font-normal text-stone-400">
+                          (OPTIONAL)
+                        </span>
                       </label>
                       <input
                         id="last-name"
@@ -2956,7 +3438,8 @@ function CashierPosContent() {
                                 ? {
                                     ...c,
                                     customerLastName: last,
-                                    customerName: `${c.customerFirstName || ""} ${last}`.trim(),
+                                    customerName:
+                                      `${c.customerFirstName || ""} ${last}`.trim(),
                                   }
                                 : c,
                             ),
@@ -2967,33 +3450,58 @@ function CashierPosContent() {
 
                     {/* Phone Number */}
                     <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="phone-number">
-                        PHONE NUMBER <span className="font-normal text-stone-400">(OPTIONAL)</span>
+                      <label
+                        className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5"
+                        htmlFor="phone-number"
+                      >
+                        PHONE NUMBER{" "}
+                        <span className="font-normal text-stone-400">
+                          (OPTIONAL)
+                        </span>
                       </label>
                       <div className="flex rounded-lg shadow-sm border border-stone-200 overflow-hidden focus-within:ring-1 focus-within:ring-stone-900 focus-within:border-stone-900 bg-white">
                         {/* Dynamic Country Selector */}
                         <div className="relative flex items-center bg-stone-50 border-r border-stone-200">
                           <select
-                            value={activeCart.customerCountryCode || defaultOrgCountryCode}
+                            value={
+                              activeCart.customerCountryCode ||
+                              defaultOrgCountryCode
+                            }
                             onChange={(e) => {
                               const newCode = e.target.value;
                               setCartTabs((prev) =>
                                 prev.map((c) =>
-                                  c.id === activeCartId ? { ...c, customerCountryCode: newCode } : c
-                                )
+                                  c.id === activeCartId
+                                    ? { ...c, customerCountryCode: newCode }
+                                    : c,
+                                ),
                               );
                             }}
                             className="appearance-none bg-transparent h-full pl-3 pr-7 py-2.5 text-xs font-semibold text-stone-800 focus:outline-none cursor-pointer flex items-center"
                           >
                             {COUNTRY_DIAL_OPTIONS.map((opt) => (
-                              <option key={opt.code} value={opt.code} className="text-stone-900">
+                              <option
+                                key={opt.code}
+                                value={opt.code}
+                                className="text-stone-900"
+                              >
                                 {opt.iso} {opt.code}
                               </option>
                             ))}
                           </select>
                           <div className="pointer-events-none absolute right-2 flex items-center text-stone-400">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M19 9l-7 7-7-7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                              />
                             </svg>
                           </div>
                         </div>
@@ -3003,15 +3511,23 @@ function CashierPosContent() {
                           type="tel"
                           placeholder="Enter 10-digit mobile number..."
                           value={activeCart.customerPhone || ""}
-                          onChange={(e) => handleCustomerPhoneChange(e.target.value)}
+                          onChange={(e) =>
+                            handleCustomerPhoneChange(e.target.value)
+                          }
                         />
                       </div>
                     </div>
 
                     {/* Email Address */}
                     <div>
-                      <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5" htmlFor="email-address">
-                        EMAIL ADDRESS <span className="font-normal text-stone-400">(OPTIONAL)</span>
+                      <label
+                        className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5"
+                        htmlFor="email-address"
+                      >
+                        EMAIL ADDRESS{" "}
+                        <span className="font-normal text-stone-400">
+                          (OPTIONAL)
+                        </span>
                       </label>
                       <input
                         id="email-address"
@@ -3022,7 +3538,9 @@ function CashierPosContent() {
                         onChange={(e) =>
                           setCartTabs((prev) =>
                             prev.map((c) =>
-                              c.id === activeCartId ? { ...c, customerEmail: e.target.value } : c,
+                              c.id === activeCartId
+                                ? { ...c, customerEmail: e.target.value }
+                                : c,
                             ),
                           )
                         }
@@ -3034,8 +3552,12 @@ function CashierPosContent() {
                 {/* 2. Order Type & Fulfillment Section */}
                 <div className="bg-white border border-[#e7e5e4] rounded-2xl p-7 md:p-8 shadow-sm">
                   <div>
-                    <h3 className="font-serif text-2xl text-stone-900 font-normal">Order Type &amp; Fulfillment</h3>
-                    <p className="text-xs text-stone-500 mt-1">Specify how this order should be prepared and fulfilled.</p>
+                    <h3 className="font-serif text-2xl text-stone-900 font-normal">
+                      Order Type &amp; Fulfillment
+                    </h3>
+                    <p className="text-xs text-stone-500 mt-1">
+                      Specify how this order should be prepared and fulfilled.
+                    </p>
                   </div>
 
                   {/* Service Mode Selector (Tabs with Explicit High Contrast) */}
@@ -3048,7 +3570,11 @@ function CashierPosContent() {
                       <button
                         onClick={() =>
                           setCartTabs((prev) =>
-                            prev.map((c) => (c.id === activeCartId ? { ...c, orderType: "DineIn" } : c)),
+                            prev.map((c) =>
+                              c.id === activeCartId
+                                ? { ...c, orderType: "DineIn" }
+                                : c,
+                            ),
                           )
                         }
                         className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
@@ -3060,7 +3586,9 @@ function CashierPosContent() {
                       >
                         <svg
                           className={`w-4 h-4 ${
-                            activeCart.orderType === "DineIn" ? "text-white stroke-[2.5]" : "text-stone-700"
+                            activeCart.orderType === "DineIn"
+                              ? "text-white stroke-[2.5]"
+                              : "text-stone-700"
                           }`}
                           fill="none"
                           stroke="currentColor"
@@ -3088,7 +3616,11 @@ function CashierPosContent() {
                       <button
                         onClick={() =>
                           setCartTabs((prev) =>
-                            prev.map((c) => (c.id === activeCartId ? { ...c, orderType: "TakeAway" } : c)),
+                            prev.map((c) =>
+                              c.id === activeCartId
+                                ? { ...c, orderType: "TakeAway" }
+                                : c,
+                            ),
                           )
                         }
                         className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
@@ -3100,7 +3632,9 @@ function CashierPosContent() {
                       >
                         <svg
                           className={`w-4 h-4 ${
-                            activeCart.orderType === "TakeAway" ? "text-white stroke-[2.5]" : "text-stone-700"
+                            activeCart.orderType === "TakeAway"
+                              ? "text-white stroke-[2.5]"
+                              : "text-stone-700"
                           }`}
                           fill="none"
                           stroke="currentColor"
@@ -3144,7 +3678,9 @@ function CashierPosContent() {
                             strokeWidth="2"
                           />
                         </svg>
-                        <span className="text-stone-500 font-medium">Delivery</span>
+                        <span className="text-stone-500 font-medium">
+                          Delivery
+                        </span>
                         <span className="text-[9px] font-semibold uppercase tracking-wider bg-stone-200/80 text-stone-500 px-1.5 py-0.5 rounded-full ml-1 border border-stone-300/60 shrink-0">
                           Soon
                         </span>
@@ -3154,7 +3690,11 @@ function CashierPosContent() {
                       <button
                         onClick={() =>
                           setCartTabs((prev) =>
-                            prev.map((c) => (c.id === activeCartId ? { ...c, orderType: "Scheduled" } : c)),
+                            prev.map((c) =>
+                              c.id === activeCartId
+                                ? { ...c, orderType: "Scheduled" }
+                                : c,
+                            ),
                           )
                         }
                         className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
@@ -3166,7 +3706,9 @@ function CashierPosContent() {
                       >
                         <svg
                           className={`w-4 h-4 ${
-                            activeCart.orderType === "Scheduled" ? "text-white stroke-[2.5]" : "text-stone-700"
+                            activeCart.orderType === "Scheduled"
+                              ? "text-white stroke-[2.5]"
+                              : "text-stone-700"
                           }`}
                           fill="none"
                           stroke="currentColor"
@@ -3207,7 +3749,9 @@ function CashierPosContent() {
                             onClick={() =>
                               setCartTabs((prev) =>
                                 prev.map((c) =>
-                                  c.id === activeCartId ? { ...c, isTableRequired: true } : c,
+                                  c.id === activeCartId
+                                    ? { ...c, isTableRequired: true }
+                                    : c,
                                 ),
                               )
                             }
@@ -3224,10 +3768,20 @@ function CashierPosContent() {
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
                               >
-                                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                <path
+                                  d="M5 13l4 4L19 7"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
                               </svg>
                             )}
-                            <span className={activeCart.isTableRequired === true ? "text-white font-semibold" : "text-stone-700 font-medium"}>
+                            <span
+                              className={
+                                activeCart.isTableRequired === true
+                                  ? "text-white font-semibold"
+                                  : "text-stone-700 font-medium"
+                              }
+                            >
                               Yes, assign a table
                             </span>
                           </button>
@@ -3262,10 +3816,20 @@ function CashierPosContent() {
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
                               >
-                                <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                <path
+                                  d="M5 13l4 4L19 7"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                />
                               </svg>
                             )}
-                            <span className={activeCart.isTableRequired !== true ? "text-white font-semibold" : "text-stone-700 font-medium"}>
+                            <span
+                              className={
+                                activeCart.isTableRequired !== true
+                                  ? "text-white font-semibold"
+                                  : "text-stone-700 font-medium"
+                              }
+                            >
                               No table
                             </span>
                           </button>
@@ -3278,7 +3842,9 @@ function CashierPosContent() {
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-100">
                             <div>
                               <div className="flex items-center space-x-2">
-                                <h4 className="text-sm font-semibold text-stone-900">Dine-In without table</h4>
+                                <h4 className="text-sm font-semibold text-stone-900">
+                                  Dine-In without table
+                                </h4>
                                 <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                                   <svg
                                     className="w-3 h-3 stroke-[2.5]"
@@ -3286,13 +3852,19 @@ function CashierPosContent() {
                                     stroke="currentColor"
                                     viewBox="0 0 24 24"
                                   >
-                                    <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
                                   </svg>
                                   <span>Direct-to-Counter / Open Dining</span>
                                 </span>
                               </div>
                               <p className="text-xs text-stone-500 mt-1 max-w-xl">
-                                This order can continue without assigning a table. Suitable for waiting guests, standing bar, or when table assignment will happen later.
+                                This order can continue without assigning a
+                                table. Suitable for waiting guests, standing
+                                bar, or when table assignment will happen later.
                               </p>
                             </div>
                           </div>
@@ -3312,15 +3884,21 @@ function CashierPosContent() {
                                 <select
                                   value={activeCart.tableId || ""}
                                   onChange={(e) => {
-                                    const selectedTbl = tables?.find((t) => t._id === e.target.value);
+                                    const selectedTbl = tables?.find(
+                                      (t) => t._id === e.target.value,
+                                    );
                                     setCartTabs((prev) =>
                                       prev.map((c) =>
                                         c.id === activeCartId
                                           ? {
                                               ...c,
                                               tableId: e.target.value,
-                                              tableName: selectedTbl?.tableNumber,
-                                              guestCount: selectedTbl?.seatingCapacity || c.guestCount || 2,
+                                              tableName:
+                                                selectedTbl?.tableNumber,
+                                              guestCount:
+                                                selectedTbl?.seatingCapacity ||
+                                                c.guestCount ||
+                                                2,
                                             }
                                           : c,
                                       ),
@@ -3332,16 +3910,29 @@ function CashierPosContent() {
                                   {tables && tables.length > 0 ? (
                                     tables.map((tbl) => (
                                       <option key={tbl._id} value={tbl._id}>
-                                        {tbl.tableNumber} ({tbl.seatingCapacity} Seater)
+                                        {tbl.tableNumber} ({tbl.seatingCapacity}{" "}
+                                        Seater)
                                       </option>
                                     ))
                                   ) : (
-                                    <option value="" disabled>No tables configured in settings</option>
+                                    <option value="" disabled>
+                                      No tables configured in settings
+                                    </option>
                                   )}
                                 </select>
                                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-stone-500">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      d="M19 9l-7 7-7-7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                    />
                                   </svg>
                                 </div>
                               </div>
@@ -3360,14 +3951,19 @@ function CashierPosContent() {
                                 <select
                                   value={activeCart.waiterId || ""}
                                   onChange={(e) => {
-                                    const selectedStaff = availableWaitersAndStaff.find((w) => w.id === e.target.value);
+                                    const selectedStaff =
+                                      availableWaitersAndStaff.find(
+                                        (w) => w.id === e.target.value,
+                                      );
                                     setCartTabs((prev) =>
                                       prev.map((c) =>
                                         c.id === activeCartId
                                           ? {
                                               ...c,
                                               waiterId: e.target.value,
-                                              waiterName: selectedStaff ? selectedStaff.name : undefined,
+                                              waiterName: selectedStaff
+                                                ? selectedStaff.name
+                                                : undefined,
                                             }
                                           : c,
                                       ),
@@ -3375,7 +3971,9 @@ function CashierPosContent() {
                                   }}
                                   className="w-full text-xs border border-stone-200 rounded-lg px-3 py-2.5 text-stone-900 font-medium appearance-none pr-8 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white cursor-pointer"
                                 >
-                                  <option value="">Select Waiter / Captain</option>
+                                  <option value="">
+                                    Select Waiter / Captain
+                                  </option>
                                   {availableWaitersAndStaff.length > 0 ? (
                                     availableWaitersAndStaff.map((w) => (
                                       <option key={w.id} value={w.id}>
@@ -3383,16 +3981,30 @@ function CashierPosContent() {
                                       </option>
                                     ))
                                   ) : (
-                                    <option value="" disabled>No staff configured</option>
+                                    <option value="" disabled>
+                                      No staff configured
+                                    </option>
                                   )}
                                 </select>
                                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-stone-500">
-                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                                  <svg
+                                    className="w-4 h-4"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      d="M19 9l-7 7-7-7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                    />
                                   </svg>
                                 </div>
                               </div>
-                              <p className="mt-2 text-[11px] text-stone-500">Duty Shift: Floor Station A</p>
+                              <p className="mt-2 text-[11px] text-stone-500">
+                                Duty Shift: Floor Station A
+                              </p>
                             </div>
 
                             {/* Guest Count (PAX) */}
@@ -3408,15 +4020,27 @@ function CashierPosContent() {
                                     if (current > 1) {
                                       setCartTabs((prev) =>
                                         prev.map((c) =>
-                                          c.id === activeCartId ? { ...c, guestCount: current - 1 } : c,
+                                          c.id === activeCartId
+                                            ? { ...c, guestCount: current - 1 }
+                                            : c,
                                         ),
                                       );
                                     }
                                   }}
                                   className="px-3 py-2 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
                                 >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path d="M20 12H4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                                  <svg
+                                    className="w-3.5 h-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      d="M20 12H4"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                    />
                                   </svg>
                                 </button>
                                 <div className="flex-1 text-center text-xs font-semibold text-stone-900 py-2">
@@ -3428,19 +4052,34 @@ function CashierPosContent() {
                                     const current = activeCart.guestCount || 2;
                                     setCartTabs((prev) =>
                                       prev.map((c) =>
-                                        c.id === activeCartId ? { ...c, guestCount: current + 1 } : c,
+                                        c.id === activeCartId
+                                          ? { ...c, guestCount: current + 1 }
+                                          : c,
                                       ),
                                     );
                                   }}
                                   className="px-3 py-2 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
                                 >
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path d="M12 4v16m8-8H4" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                                  <svg
+                                    className="w-3.5 h-3.5"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      d="M12 4v16m8-8H4"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                    />
                                   </svg>
                                 </button>
                               </div>
                               <p className="mt-2 text-[11px] text-stone-500">
-                                {activeCart.tableId && tables?.find((t) => t._id === activeCart.tableId)
+                                {activeCart.tableId &&
+                                tables?.find(
+                                  (t) => t._id === activeCart.tableId,
+                                )
                                   ? `Table capacity: ${tables.find((t) => t._id === activeCart.tableId)?.seatingCapacity} Pax`
                                   : "Seating capacity"}
                               </p>
@@ -3449,7 +4088,12 @@ function CashierPosContent() {
 
                           {/* Routing Banner Notice */}
                           <div className="pt-2 border-t border-stone-100 flex items-center space-x-2 text-xs text-stone-600">
-                            <svg className="w-4 h-4 text-stone-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <svg
+                              className="w-4 h-4 text-stone-400 shrink-0"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
                               <path
                                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                                 strokeLinecap="round"
@@ -3461,12 +4105,15 @@ function CashierPosContent() {
                               Kitchen Order Ticket (KOT) will route{" "}
                               <strong>
                                 {activeCart.tableName
-                                  ? (/^table\b/i.test(activeCart.tableName.trim())
-                                      ? activeCart.tableName.trim()
-                                      : `Table ${activeCart.tableName.trim()}`)
+                                  ? /^table\b/i.test(
+                                      activeCart.tableName.trim(),
+                                    )
+                                    ? activeCart.tableName.trim()
+                                    : `Table ${activeCart.tableName.trim()}`
                                   : "assigned table"}
                               </strong>{" "}
-                              straight to the <strong>Main Kitchen KDS Display</strong>.
+                              straight to the{" "}
+                              <strong>Main Kitchen KDS Display</strong>.
                             </span>
                           </div>
                         </div>
@@ -3474,11 +4121,12 @@ function CashierPosContent() {
                     </>
                   )}
 
-
-
                   {/* STATE C: DELIVERY DETAILS CONTAINER */}
                   {activeCart.orderType === "Delivery" && (
-                    <div className="mt-6 bg-[#fdf8f7] border border-[#eadfd6] rounded-xl p-6 space-y-5" data-purpose="delivery-details-card">
+                    <div
+                      className="mt-6 bg-[#fdf8f7] border border-[#eadfd6] rounded-xl p-6 space-y-5"
+                      data-purpose="delivery-details-card"
+                    >
                       {/* Delivery Details Section Title */}
                       <div className="flex items-center justify-between">
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-600">
@@ -3499,7 +4147,9 @@ function CashierPosContent() {
                           <button
                             type="button"
                             onClick={() => {
-                              const newAddr = prompt("Enter new delivery address:");
+                              const newAddr = prompt(
+                                "Enter new delivery address:",
+                              );
                               if (newAddr) {
                                 setCartTabs((prev) =>
                                   prev.map((c) =>
@@ -3542,12 +4192,17 @@ function CashierPosContent() {
                             </div>
                             <p className="text-xs text-stone-500 mt-1.5 flex items-center gap-2 flex-wrap">
                               <span>
-                                <strong className="font-medium text-stone-700">Landmark:</strong>{" "}
-                                {activeCart.deliveryAddress?.landmark || "Opposite Lotus Park"}
+                                <strong className="font-medium text-stone-700">
+                                  Landmark:
+                                </strong>{" "}
+                                {activeCart.deliveryAddress?.landmark ||
+                                  "Opposite Lotus Park"}
                               </span>
                               <span>•</span>
                               <span>
-                                <strong className="font-medium text-stone-700">Contact on delivery:</strong>{" "}
+                                <strong className="font-medium text-stone-700">
+                                  Contact on delivery:
+                                </strong>{" "}
                                 {activeCart.customerPhone
                                   ? `${activeCart.customerCountryCode || defaultOrgCountryCode} ${activeCart.customerPhone}`
                                   : "Not provided"}
@@ -3565,9 +4220,13 @@ function CashierPosContent() {
                             Expected Delivery
                           </span>
                           <div className="mt-1 flex items-baseline gap-1.5">
-                            <span className="font-serif text-xl font-bold text-stone-950">38 mins</span>
+                            <span className="font-serif text-xl font-bold text-stone-950">
+                              38 mins
+                            </span>
                           </div>
-                          <p className="text-[11px] text-stone-500 mt-0.5">Estimated dispatch in 18 min</p>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            Estimated dispatch in 18 min
+                          </p>
                         </div>
 
                         {/* 2. Delivery Charge */}
@@ -3576,9 +4235,13 @@ function CashierPosContent() {
                             Delivery Charge
                           </span>
                           <div className="mt-1 flex items-baseline gap-1.5">
-                            <span className="font-serif text-xl font-bold text-stone-950">{currencySymbol}58.00</span>
+                            <span className="font-serif text-xl font-bold text-stone-950">
+                              {currencySymbol}58.00
+                            </span>
                           </div>
-                          <p className="text-[11px] text-stone-500 mt-0.5">Standard zone (within 4.5 km)</p>
+                          <p className="text-[11px] text-stone-500 mt-0.5">
+                            Standard zone (within 4.5 km)
+                          </p>
                         </div>
 
                         {/* 3. Delivery Partner / Rider */}
@@ -3587,11 +4250,14 @@ function CashierPosContent() {
                             Delivery Partner / Rider
                           </span>
                           <div className="mt-1 flex items-center justify-between">
-                            <span className="font-serif text-lg font-bold text-stone-950">PORTER Express</span>
+                            <span className="font-serif text-lg font-bold text-stone-950">
+                              PORTER Express
+                            </span>
                           </div>
                           <div className="mt-1 flex items-center justify-between text-[11px]">
                             <span className="bg-stone-100 text-stone-800 font-medium px-1.5 py-0.5 rounded border border-stone-200 text-[10px]">
-                              Assigned: {activeCart.deliveryRider || "Rajesh K."}
+                              Assigned:{" "}
+                              {activeCart.deliveryRider || "Rajesh K."}
                             </span>
                             <span className="text-stone-400">#PTR-9942</span>
                           </div>
@@ -3616,7 +4282,10 @@ function CashierPosContent() {
                             setCartTabs((prev) =>
                               prev.map((c) =>
                                 c.id === activeCartId
-                                  ? { ...c, deliveryInstructions: e.target.value }
+                                  ? {
+                                      ...c,
+                                      deliveryInstructions: e.target.value,
+                                    }
                                   : c,
                               ),
                             )
@@ -3628,7 +4297,10 @@ function CashierPosContent() {
 
                   {/* STATE D: SCHEDULED PICKUP CONTAINER */}
                   {activeCart.orderType === "Scheduled" && (
-                    <div className="mt-6 border border-stone-200 rounded-xl p-5 bg-white space-y-4" data-purpose="scheduled-pickup-config">
+                    <div
+                      className="mt-6 border border-stone-200 rounded-xl p-5 bg-white space-y-4"
+                      data-purpose="scheduled-pickup-config"
+                    >
                       <div>
                         <label className="block text-xs font-semibold text-stone-900 mb-2">
                           Set pickup date &amp; time
@@ -3657,9 +4329,18 @@ function CashierPosContent() {
                                   idx === 0
                                     ? `Today (${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
                                     : idx === 1
-                                    ? `Tomorrow (${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
-                                    : d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-                                const val = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+                                      ? `Tomorrow (${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })})`
+                                      : d.toLocaleDateString("en-US", {
+                                          weekday: "short",
+                                          month: "short",
+                                          day: "numeric",
+                                        });
+                                const val = d.toLocaleDateString("en-US", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                });
                                 return (
                                   <option key={val} value={val}>
                                     {label}
@@ -3668,8 +4349,18 @@ function CashierPosContent() {
                               })}
                             </select>
                             <div className="pointer-events-none absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M19 9l-7 7-7-7"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                />
                               </svg>
                             </div>
                           </div>
@@ -3690,27 +4381,71 @@ function CashierPosContent() {
                               className="w-full bg-white border border-stone-300 hover:border-stone-400 rounded-md px-3.5 py-2.5 text-xs text-stone-900 font-medium focus:border-stone-900 focus:ring-1 focus:ring-stone-900 focus:outline-none appearance-none cursor-pointer pr-10"
                             >
                               <option value="">Select time</option>
-                              <option value="10:00 AM - 10:30 AM">10:00 AM - 10:30 AM</option>
-                              <option value="10:30 AM - 11:00 AM">10:30 AM - 11:00 AM</option>
-                              <option value="11:00 AM - 11:30 AM">11:00 AM - 11:30 AM</option>
-                              <option value="11:30 AM - 12:00 PM">11:30 AM - 12:00 PM</option>
-                              <option value="12:00 PM - 12:30 PM">12:00 PM - 12:30 PM</option>
-                              <option value="12:30 PM - 01:00 PM">12:30 PM - 01:00 PM</option>
-                              <option value="01:00 PM - 01:30 PM">01:00 PM - 01:30 PM</option>
-                              <option value="01:30 PM - 02:00 PM">01:30 PM - 02:00 PM</option>
-                              <option value="02:00 PM - 02:30 PM">02:00 PM - 02:30 PM</option>
-                              <option value="02:30 PM - 03:00 PM">02:30 PM - 03:00 PM</option>
-                              <option value="06:30 PM - 07:00 PM">06:30 PM - 07:00 PM</option>
-                              <option value="07:00 PM - 07:30 PM">07:00 PM - 07:30 PM</option>
-                              <option value="07:30 PM - 08:00 PM">07:30 PM - 08:00 PM</option>
-                              <option value="08:00 PM - 08:30 PM">08:00 PM - 08:30 PM</option>
-                              <option value="08:30 PM - 09:00 PM">08:30 PM - 09:00 PM</option>
-                              <option value="09:00 PM - 09:30 PM">09:00 PM - 09:30 PM</option>
-                              <option value="09:30 PM - 10:00 PM">09:30 PM - 10:00 PM</option>
+                              <option value="10:00 AM - 10:30 AM">
+                                10:00 AM - 10:30 AM
+                              </option>
+                              <option value="10:30 AM - 11:00 AM">
+                                10:30 AM - 11:00 AM
+                              </option>
+                              <option value="11:00 AM - 11:30 AM">
+                                11:00 AM - 11:30 AM
+                              </option>
+                              <option value="11:30 AM - 12:00 PM">
+                                11:30 AM - 12:00 PM
+                              </option>
+                              <option value="12:00 PM - 12:30 PM">
+                                12:00 PM - 12:30 PM
+                              </option>
+                              <option value="12:30 PM - 01:00 PM">
+                                12:30 PM - 01:00 PM
+                              </option>
+                              <option value="01:00 PM - 01:30 PM">
+                                01:00 PM - 01:30 PM
+                              </option>
+                              <option value="01:30 PM - 02:00 PM">
+                                01:30 PM - 02:00 PM
+                              </option>
+                              <option value="02:00 PM - 02:30 PM">
+                                02:00 PM - 02:30 PM
+                              </option>
+                              <option value="02:30 PM - 03:00 PM">
+                                02:30 PM - 03:00 PM
+                              </option>
+                              <option value="06:30 PM - 07:00 PM">
+                                06:30 PM - 07:00 PM
+                              </option>
+                              <option value="07:00 PM - 07:30 PM">
+                                07:00 PM - 07:30 PM
+                              </option>
+                              <option value="07:30 PM - 08:00 PM">
+                                07:30 PM - 08:00 PM
+                              </option>
+                              <option value="08:00 PM - 08:30 PM">
+                                08:00 PM - 08:30 PM
+                              </option>
+                              <option value="08:30 PM - 09:00 PM">
+                                08:30 PM - 09:00 PM
+                              </option>
+                              <option value="09:00 PM - 09:30 PM">
+                                09:00 PM - 09:30 PM
+                              </option>
+                              <option value="09:30 PM - 10:00 PM">
+                                09:30 PM - 10:00 PM
+                              </option>
                             </select>
                             <div className="pointer-events-none absolute inset-y-0 right-0 pr-3.5 flex items-center text-stone-400">
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M19 9l-7 7-7-7"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                />
                               </svg>
                             </div>
                           </div>
@@ -3723,7 +4458,9 @@ function CashierPosContent() {
                   <div className="mt-6 border border-stone-200 rounded-md overflow-hidden bg-stone-50/50">
                     <button
                       type="button"
-                      onClick={() => setIsScheduleStatsOpen(!isScheduleStatsOpen)}
+                      onClick={() =>
+                        setIsScheduleStatsOpen(!isScheduleStatsOpen)
+                      }
                       className="w-full flex items-center space-x-2 px-4 py-3 text-xs font-semibold text-stone-900 hover:bg-stone-100/70 transition cursor-pointer"
                     >
                       <svg
@@ -3732,7 +4469,12 @@ function CashierPosContent() {
                         stroke="currentColor"
                         viewBox="0 0 24 24"
                       >
-                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                        <path
+                          d="M19 9l-7 7-7-7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                        />
                       </svg>
                       <span>Stats</span>
                     </button>
@@ -3741,19 +4483,29 @@ function CashierPosContent() {
                         {/* Customer Metrics Summary Card */}
                         <div className="border border-stone-200 rounded-lg p-5 bg-white grid grid-cols-3 text-center">
                           <div>
-                            <span className="text-xs font-medium text-stone-700 block">Dine in orders</span>
+                            <span className="text-xs font-medium text-stone-700 block">
+                              Dine in orders
+                            </span>
                             <span className="text-base font-bold text-stone-950 mt-1.5 block">
-                              {customerStats?.dineInCount !== undefined ? customerStats.dineInCount : 0}
+                              {customerStats?.dineInCount !== undefined
+                                ? customerStats.dineInCount
+                                : 0}
                             </span>
                           </div>
                           <div>
-                            <span className="text-xs font-medium text-stone-700 block">Take away orders</span>
+                            <span className="text-xs font-medium text-stone-700 block">
+                              Take away orders
+                            </span>
                             <span className="text-base font-bold text-stone-950 mt-1.5 block">
-                              {customerStats?.takeawayCount !== undefined ? customerStats.takeawayCount : 0}
+                              {customerStats?.takeawayCount !== undefined
+                                ? customerStats.takeawayCount
+                                : 0}
                             </span>
                           </div>
                           <div>
-                            <span className="text-xs font-medium text-stone-700 block">Total spends</span>
+                            <span className="text-xs font-medium text-stone-700 block">
+                              Total spends
+                            </span>
                             <span className="text-base font-bold text-stone-950 mt-1.5 block">
                               {customerStats
                                 ? `${taxCalculation.currencySymbol}${(customerStats.totalSpends / 100).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -3763,11 +4515,17 @@ function CashierPosContent() {
                         </div>
 
                         {/* Customer Recent Orders List */}
-                        {customerStats?.recentOrders && customerStats.recentOrders.length > 0 ? (
+                        {customerStats?.recentOrders &&
+                        customerStats.recentOrders.length > 0 ? (
                           customerStats.recentOrders.map((ord, idx) => (
-                            <div key={ord._id || idx} className="border border-stone-200 rounded-lg p-4 bg-white">
+                            <div
+                              key={ord._id || idx}
+                              className="border border-stone-200 rounded-lg p-4 bg-white"
+                            >
                               <div className="flex items-center justify-between">
-                                <span className="text-[11px] text-stone-500 font-medium">Created date</span>
+                                <span className="text-[11px] text-stone-500 font-medium">
+                                  Created date
+                                </span>
                                 <Link
                                   href={`/orders/${ord.orderNumber || ord._id}`}
                                   className="text-xs font-semibold text-stone-900 hover:underline"
@@ -3777,7 +4535,7 @@ function CashierPosContent() {
                                 </Link>
                               </div>
                               <span className="text-xs text-stone-700 font-normal block mt-0.5">
-                                {`${new Date(ord.createdAt).toLocaleDateString("en-GB")} ${new Date(ord.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}`}
+                                {`${new Date(ord.createdAt).toLocaleDateString("en-GB")} ${new Date(ord.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false })}`}
                               </span>
                               <p className="text-xs font-semibold text-stone-950 mt-2">
                                 {ord.itemsSummary}
@@ -3806,7 +4564,9 @@ function CashierPosContent() {
                       onChange={(e) =>
                         setCartTabs((prev) =>
                           prev.map((c) =>
-                            c.id === activeCartId ? { ...c, specialNotes: e.target.value } : c,
+                            c.id === activeCartId
+                              ? { ...c, specialNotes: e.target.value }
+                              : c,
                           ),
                         )
                       }
@@ -3827,8 +4587,18 @@ function CashierPosContent() {
                 className="inline-flex items-center px-6 py-2.5 rounded-full border border-stone-300 bg-white text-xs font-semibold text-stone-800 hover:bg-stone-50 transition shadow-sm cursor-pointer"
                 type="button"
               >
-                <svg className="w-3.5 h-3.5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M10 19l-7-7m0 0l7-7m-7 7h18" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                <svg
+                  className="w-3.5 h-3.5 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
                 </svg>
                 Back to Order Catalog
               </button>
@@ -3840,7 +4610,8 @@ function CashierPosContent() {
                     Total to Collect
                   </span>
                   <span className="font-serif text-2xl font-bold text-stone-950 tracking-tight leading-tight">
-                    {taxCalculation.currencySymbol}{(totalPayablePaise / 100).toFixed(2)}
+                    {taxCalculation.currencySymbol}
+                    {(totalPayablePaise / 100).toFixed(2)}
                   </span>
                 </div>
                 <button
@@ -3858,7 +4629,12 @@ function CashierPosContent() {
                     stroke="currentColor"
                     viewBox="0 0 24 24"
                   >
-                    <path d="M14 5l7 7m0 0l-7 7m7-7H3" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                    <path
+                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="2"
+                    />
                   </svg>
                 </button>
               </div>
@@ -3876,7 +4652,10 @@ function CashierPosContent() {
           <main className="flex-1 overflow-y-auto w-full px-6 lg:px-8 py-6 sm:py-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
               {/* LEFT PANEL: Financial Summary & Ticket Recap (lg:col-span-5) */}
-              <section className="lg:col-span-5 bg-white border border-[#e7e5e4] rounded-2xl p-6 lg:p-7 shadow-sm transition-all" data-purpose="order-summary-panel">
+              <section
+                className="lg:col-span-5 bg-white border border-[#e7e5e4] rounded-2xl p-6 lg:p-7 shadow-sm transition-all"
+                data-purpose="order-summary-panel"
+              >
                 {/* Header & Cart Tag */}
                 <div className="flex items-center justify-between pb-4 border-b border-[#e7e5e4]">
                   <div className="flex items-center space-x-2.5">
@@ -3884,7 +4663,9 @@ function CashierPosContent() {
                       <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
                       <span>{activeCart.label}</span>
                     </span>
-                    <h2 className="font-serif text-2xl text-[#141010] font-normal">Order Summary</h2>
+                    <h2 className="font-serif text-2xl text-[#141010] font-normal">
+                      Order Summary
+                    </h2>
                   </div>
                   <button
                     onClick={() => goToStep(1)}
@@ -3898,8 +4679,18 @@ function CashierPosContent() {
                 {/* Guest & Routing Context Card */}
                 <div className="mt-4 p-3 bg-[#f1edec]/60 rounded-xl border border-[#eadfd6] flex items-center space-x-3">
                   <div className="w-8 h-8 rounded-lg bg-white border border-stone-200 flex items-center justify-center text-stone-600 shrink-0">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                      />
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
@@ -3912,10 +4703,10 @@ function CashierPosContent() {
                           ? ` • Table: ${activeCart.tableName || "Assigned"} (${activeCart.guestCount || 1} Pax)`
                           : ` • Dine-In (Direct Counter / No Table)`
                         : activeCart.orderType === "TakeAway"
-                        ? ` • Takeaway`
-                        : activeCart.orderType === "Delivery"
-                        ? ` • Delivery (Porter)`
-                        : ` • Scheduled (${activeCart.scheduledDate || "Tomorrow"})`}
+                          ? ` • Takeaway`
+                          : activeCart.orderType === "Delivery"
+                            ? ` • Delivery (Porter)`
+                            : ` • Scheduled (${activeCart.scheduledDate || "Tomorrow"})`}
                     </p>
                     <p className="text-[11px] text-[#8a7e75] truncate">
                       {activeCart.orderType === "DineIn"
@@ -3923,54 +4714,77 @@ function CashierPosContent() {
                           ? `Assigned: ${activeCart.waiterName || "Staff assigned"}`
                           : "Direct-to-Counter • Open Dining"
                         : activeCart.orderType === "TakeAway"
-                        ? `Pickup: ${activeCart.pickupLocation || "Main Counter (Front Desk)"}`
-                        : activeCart.orderType === "Delivery"
-                        ? `Rider: ${activeCart.deliveryRider || "Porter Rider"}`
-                        : `Slot: ${activeCart.scheduledTime || "01:30 PM - 02:00 PM"}`}
+                          ? `Pickup: ${activeCart.pickupLocation || "Main Counter (Front Desk)"}`
+                          : activeCart.orderType === "Delivery"
+                            ? `Rider: ${activeCart.deliveryRider || "Porter Rider"}`
+                            : `Slot: ${activeCart.scheduledTime || "01:30 PM - 02:00 PM"}`}
                     </p>
                   </div>
                 </div>
 
                 {/* Itemized Ticket Lines */}
-                <div className="mt-5 space-y-3.5" data-purpose="ticket-items-list">
+                <div
+                  className="mt-5 space-y-3.5"
+                  data-purpose="ticket-items-list"
+                >
                   <div className="text-[11px] uppercase tracking-wider font-semibold text-[#8a7e75]">
                     {activeCart.items.length} Items •{" "}
-                    {activeCart.items.reduce((sum, it) => sum + it.quantity, 0)} Portions
+                    {activeCart.items.reduce((sum, it) => sum + it.quantity, 0)}{" "}
+                    Portions
                   </div>
 
                   <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
                     {activeCart.items.map((item, idx) => (
-                      <div key={(item.cartItemId || item.itemId) + "_" + idx} className="flex items-start justify-between text-sm pt-1">
+                      <div
+                        key={(item.cartItemId || item.itemId) + "_" + idx}
+                        className="flex items-start justify-between text-sm pt-1"
+                      >
                         <div className="flex items-start space-x-2.5">
                           {renderDietaryMark(item)}
                           <div>
-                            <p className="font-medium text-[#1c1b1b] leading-tight">{item.name}</p>
-                            {item.customizations && item.customizations.length > 0 && (
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {item.customizations.map((c, cIdx) => (
-                                  <span
-                                    key={cIdx}
-                                    className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
-                                  >
-                                    + {c.name || "Add-on"}{" "}
-                                    {c.price ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})` : ""}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
+                            <p className="font-medium text-[#1c1b1b] leading-tight">
+                              {item.name}
+                            </p>
+                            {item.customizations &&
+                              item.customizations.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {item.customizations.map((c, cIdx) => (
+                                    <span
+                                      key={cIdx}
+                                      className="text-[10px] bg-stone-100 text-stone-700 px-1.5 py-0.5 rounded font-normal"
+                                    >
+                                      + {c.name || "Add-on"}{" "}
+                                      {c.price
+                                        ? `(+${taxCalculation.currencySymbol}${formatCurrencyAmount(c.price / 100, activeOrg?.country)})`
+                                        : ""}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             <p className="text-xs text-[#8a7e75] mt-0.5">
-                              Qty: {item.quantity} × {taxCalculation.currencySymbol}{formatCurrencyAmount(item.price / 100, activeOrg?.country)}
+                              Qty: {item.quantity} ×{" "}
+                              {taxCalculation.currencySymbol}
+                              {formatCurrencyAmount(
+                                item.price / 100,
+                                activeOrg?.country,
+                              )}
                             </p>
                           </div>
                         </div>
                         <span className="font-medium text-[#1c1b1b] shrink-0">
-                          {taxCalculation.currencySymbol}{formatCurrencyAmount((item.price * item.quantity) / 100, activeOrg?.country)}
+                          {taxCalculation.currencySymbol}
+                          {formatCurrencyAmount(
+                            (item.price * item.quantity) / 100,
+                            activeOrg?.country,
+                          )}
                         </span>
                       </div>
                     ))}
 
                     {activeCart.items.length === 0 && (
-                      <p className="text-xs text-stone-400 italic py-4 text-center">Cart is empty</p>
+                      <p className="text-xs text-stone-400 italic py-4 text-center">
+                        Cart is empty
+                      </p>
                     )}
                   </div>
                 </div>
@@ -3980,7 +4794,11 @@ function CashierPosContent() {
                   <div className="flex justify-between text-[#5e5e5e]">
                     <span>Subtotal</span>
                     <span className="font-medium text-[#1c1b1b]">
-                      {taxCalculation.currencySymbol}{formatCurrencyAmount(cartSubtotalPaise / 100, activeOrg?.country)}
+                      {taxCalculation.currencySymbol}
+                      {formatCurrencyAmount(
+                        cartSubtotalPaise / 100,
+                        activeOrg?.country,
+                      )}
                     </span>
                   </div>
 
@@ -3994,7 +4812,11 @@ function CashierPosContent() {
                         {comp.name} ({comp.rate}%)
                       </span>
                       <span className="font-medium text-[#1c1b1b]">
-                        {taxCalculation.currencySymbol}{formatCurrencyAmount(comp.taxAmountPaise / 100, activeOrg?.country)}
+                        {taxCalculation.currencySymbol}
+                        {formatCurrencyAmount(
+                          comp.taxAmountPaise / 100,
+                          activeOrg?.country,
+                        )}
                       </span>
                     </div>
                   ))}
@@ -4002,7 +4824,10 @@ function CashierPosContent() {
                   {activeCart.orderType === "Delivery" && (
                     <div className="flex justify-between text-[#5e5e5e]">
                       <span>Delivery Fee (Zone 1)</span>
-                      <span className="font-medium text-[#1c1b1b]">{taxCalculation.currencySymbol}{formatCurrencyAmount(58, activeOrg?.country)}</span>
+                      <span className="font-medium text-[#1c1b1b]">
+                        {taxCalculation.currencySymbol}
+                        {formatCurrencyAmount(58, activeOrg?.country)}
+                      </span>
                     </div>
                   )}
                 </div>
@@ -4011,7 +4836,9 @@ function CashierPosContent() {
                 <div className="mt-6 pt-5 border-t-2 border-dashed border-stone-200">
                   <div className="flex items-baseline justify-between">
                     <div>
-                      <p className="text-[11px] tracking-wider uppercase font-semibold text-[#8a7e75]">Total Payable</p>
+                      <p className="text-[11px] tracking-wider uppercase font-semibold text-[#8a7e75]">
+                        Total Payable
+                      </p>
                       <p className="text-[11px] text-[#8a7e75]">
                         {taxCalculation.taxExclusivePaise > 0
                           ? "(incl. subtotal & taxes)"
@@ -4020,7 +4847,11 @@ function CashierPosContent() {
                     </div>
                     <div className="text-right">
                       <span className="font-serif text-4xl sm:text-5xl font-normal tracking-tight text-[#141010]">
-                        {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                        {taxCalculation.currencySymbol}
+                        {formatCurrencyAmount(
+                          totalPayablePaise / 100,
+                          activeOrg?.country,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -4028,12 +4859,19 @@ function CashierPosContent() {
               </section>
 
               {/* RIGHT PANEL: Settlement Workspace (lg:col-span-7) */}
-              <section className="lg:col-span-7 space-y-6" data-purpose="payment-workspace">
+              <section
+                className="lg:col-span-7 space-y-6"
+                data-purpose="payment-workspace"
+              >
                 <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 sm:p-8 shadow-sm">
                   {/* Section Heading */}
                   <div className="mb-6">
-                    <h2 className="font-serif text-2xl sm:text-3xl text-[#141010] font-normal">Select Payment Method</h2>
-                    <p className="text-xs sm:text-sm text-[#5e5e5e] mt-1">Choose the settlement channel for this ticket</p>
+                    <h2 className="font-serif text-2xl sm:text-3xl text-[#141010] font-normal">
+                      Select Payment Method
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#5e5e5e] mt-1">
+                      Choose the settlement channel for this ticket
+                    </p>
                   </div>
 
                   {/* Payment Channel Filter / Mode Pills */}
@@ -4052,13 +4890,22 @@ function CashierPosContent() {
                           aria-selected={isSelected}
                           onClick={() => {
                             setSelectedPaymentMode(mode.name);
-                            const required = (totalPayablePaise / 100).toFixed(2);
+                            const required = (totalPayablePaise / 100).toFixed(
+                              2,
+                            );
                             const lower = mode.name.toLowerCase();
-                            if (lower.includes("cash") && (!tenderCashGiven.trim() || tenderCashGiven === "0")) {
+                            if (
+                              lower.includes("cash") &&
+                              (!tenderCashGiven.trim() ||
+                                tenderCashGiven === "0")
+                            ) {
                               setTenderCashGiven(required);
                             } else if (
-                              (lower.includes("card") || lower.includes("credit") || lower.includes("debit")) &&
-                              (!tenderCardGiven.trim() || tenderCardGiven === "0")
+                              (lower.includes("card") ||
+                                lower.includes("credit") ||
+                                lower.includes("debit")) &&
+                              (!tenderCardGiven.trim() ||
+                                tenderCardGiven === "0")
                             ) {
                               setTenderCardGiven(required);
                             } else if (
@@ -4071,12 +4918,23 @@ function CashierPosContent() {
                             ) {
                               setTenderUpiGiven(required);
                             } else if (lower.includes("split")) {
-                              const half1 = (Math.floor(totalPayablePaise / 2) / 100).toFixed(2);
-                              const half2 = ((totalPayablePaise - Math.floor(totalPayablePaise / 2)) / 100).toFixed(2);
-                              if (!splitPart1Amount.trim()) setSplitPart1Amount(half1);
-                              if (!splitPart2Amount.trim()) setSplitPart2Amount(half2);
+                              const half1 = (
+                                Math.floor(totalPayablePaise / 2) / 100
+                              ).toFixed(2);
+                              const half2 = (
+                                (totalPayablePaise -
+                                  Math.floor(totalPayablePaise / 2)) /
+                                100
+                              ).toFixed(2);
+                              if (!splitPart1Amount.trim())
+                                setSplitPart1Amount(half1);
+                              if (!splitPart2Amount.trim())
+                                setSplitPart2Amount(half2);
                             } else {
-                              if (!customTenderGiven.trim() || customTenderGiven === "0") {
+                              if (
+                                !customTenderGiven.trim() ||
+                                customTenderGiven === "0"
+                              ) {
                                 setCustomTenderGiven(required);
                               }
                             }
@@ -4087,10 +4945,20 @@ function CashierPosContent() {
                               : "bg-white hover:bg-stone-50 text-stone-700 hover:text-stone-950 border border-stone-200/80 hover:border-stone-300 shadow-2xs"
                           }`}
                         >
-                          <span className={isSelected ? "text-white" : "text-stone-500"}>
+                          <span
+                            className={
+                              isSelected ? "text-white" : "text-stone-500"
+                            }
+                          >
                             {mode.icon}
                           </span>
-                          <span className={isSelected ? "text-white font-semibold" : "text-stone-700 font-medium"}>
+                          <span
+                            className={
+                              isSelected
+                                ? "text-white font-semibold"
+                                : "text-stone-700 font-medium"
+                            }
+                          >
                             {mode.name}
                           </span>
                         </button>
@@ -4100,16 +4968,27 @@ function CashierPosContent() {
 
                   {/* TAB 1: CASH SETTLEMENT FLOW */}
                   {selectedPaymentMode.toLowerCase().includes("cash") && (
-                    <div className="mt-6 space-y-6" data-purpose="cash-settlement-flow">
+                    <div
+                      className="mt-6 space-y-6"
+                      data-purpose="cash-settlement-flow"
+                    >
                       {/* Target Payable Display Card */}
                       <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                         <div>
-                          <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                          <span className="text-xs text-[#8a7e75]">Ticket: {activeCart.label} • {activeCart.orderType}</span>
+                          <span className="text-xs text-[#5e5e5e] font-medium block">
+                            Total Payable Net Amount
+                          </span>
+                          <span className="text-xs text-[#8a7e75]">
+                            Ticket: {activeCart.label} • {activeCart.orderType}
+                          </span>
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
-                            {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                            {taxCalculation.currencySymbol}
+                            {formatCurrencyAmount(
+                              totalPayablePaise / 100,
+                              activeOrg?.country,
+                            )}
                           </span>
                         </div>
                       </div>
@@ -4117,8 +4996,12 @@ function CashierPosContent() {
                       {/* Cash Tender Input Field */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="cash-tendered-input">
-                            Cash Tendered / Received <span className="text-rose-500">*</span>
+                          <label
+                            className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]"
+                            htmlFor="cash-tendered-input"
+                          >
+                            Cash Tendered / Received{" "}
+                            <span className="text-rose-500">*</span>
                           </label>
                           {!tenderCashGiven.trim() && (
                             <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -4127,9 +5010,13 @@ function CashierPosContent() {
                           )}
                         </div>
                         <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
-                          <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
-                            tenderCashGiven.trim() ? "text-[#141010]" : "text-stone-400"
-                          }`}>
+                          <span
+                            className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                              tenderCashGiven.trim()
+                                ? "text-[#141010]"
+                                : "text-stone-400"
+                            }`}
+                          >
                             {taxCalculation.currencySymbol}
                           </span>
                           <input
@@ -4150,26 +5037,44 @@ function CashierPosContent() {
                           <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
                             Fast Tender Shortcuts
                           </span>
-                          <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                          <span className="text-[11px] text-stone-400">
+                            Click to auto-fill tender amount
+                          </span>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                           {/* Exact Button */}
                           <button
                             type="button"
-                            onClick={() => setTenderCashGiven((totalPayablePaise / 100).toFixed(2))}
+                            onClick={() =>
+                              setTenderCashGiven(
+                                (totalPayablePaise / 100).toFixed(2),
+                              )
+                            }
                             className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                              tenderCashGiven.trim() && parseFloat(tenderCashGiven) === totalPayablePaise / 100
+                              tenderCashGiven.trim() &&
+                              parseFloat(tenderCashGiven) ===
+                                totalPayablePaise / 100
                                 ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                 : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                             }`}
                           >
-                            <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                              tenderCashGiven.trim() && parseFloat(tenderCashGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
-                            }`}>
+                            <span
+                              className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                tenderCashGiven.trim() &&
+                                parseFloat(tenderCashGiven) ===
+                                  totalPayablePaise / 100
+                                  ? "text-stone-300"
+                                  : "text-stone-400"
+                              }`}
+                            >
                               Exact Total
                             </span>
                             <span className="text-sm font-serif font-bold">
-                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                              {taxCalculation.currencySymbol}
+                              {formatCurrencyAmount(
+                                totalPayablePaise / 100,
+                                activeOrg?.country,
+                              )}
                             </span>
                           </button>
 
@@ -4179,7 +5084,8 @@ function CashierPosContent() {
                             const d1 = Math.ceil(exactVal / 100) * 100;
                             const d2 = Math.ceil(exactVal / 500) * 500;
                             const d3 = Math.ceil((exactVal + 500) / 500) * 500;
-                            const d4 = Math.ceil((exactVal + 1000) / 1000) * 1000;
+                            const d4 =
+                              Math.ceil((exactVal + 1000) / 1000) * 1000;
 
                             const uniqueShortcuts = Array.from(
                               new Set([
@@ -4187,29 +5093,43 @@ function CashierPosContent() {
                                 d2 > exactVal ? d2 : d2 + 500,
                                 d3,
                                 d4 > d3 ? d4 : d3 + 1000,
-                              ])
+                              ]),
                             ).slice(0, 4);
 
                             return uniqueShortcuts.map((amt) => {
-                              const isSelected = tenderCashGiven.trim() && parseFloat(tenderCashGiven) === amt;
+                              const isSelected =
+                                tenderCashGiven.trim() &&
+                                parseFloat(tenderCashGiven) === amt;
                               return (
                                 <button
                                   key={amt}
                                   type="button"
-                                  onClick={() => setTenderCashGiven(amt.toFixed(2))}
+                                  onClick={() =>
+                                    setTenderCashGiven(amt.toFixed(2))
+                                  }
                                   className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
                                     isSelected
                                       ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                       : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                                   }`}
                                 >
-                                  <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                    isSelected ? "text-stone-300" : "text-stone-400"
-                                  }`}>
+                                  <span
+                                    className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                      isSelected
+                                        ? "text-stone-300"
+                                        : "text-stone-400"
+                                    }`}
+                                  >
                                     Cash Note
                                   </span>
                                   <span className="text-sm font-serif font-bold">
-                                    {taxCalculation.currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
+                                    {taxCalculation.currencySymbol}
+                                    {formatCurrencyAmount(
+                                      amt,
+                                      activeOrg?.country,
+                                      0,
+                                      0,
+                                    )}
                                   </span>
                                 </button>
                               );
@@ -4230,7 +5150,10 @@ function CashierPosContent() {
                             <div className="p-4 rounded-xl bg-stone-50 border border-stone-200 flex items-center justify-between">
                               <div className="flex items-center space-x-2 text-stone-500 text-xs">
                                 <span className="text-base">ℹ️</span>
-                                <span>Enter cash tendered amount or click a quick shortcut above to calculate return change.</span>
+                                <span>
+                                  Enter cash tendered amount or click a quick
+                                  shortcut above to calculate return change.
+                                </span>
                               </div>
                             </div>
                           );
@@ -4244,15 +5167,30 @@ function CashierPosContent() {
                                   Change / Return Due
                                 </span>
                                 <p className="text-xs text-emerald-700 flex items-center space-x-1.5">
-                                  <svg className="w-4 h-4 text-emerald-600 inline shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                    <path clipRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" fillRule="evenodd" />
+                                  <svg
+                                    className="w-4 h-4 text-emerald-600 inline shrink-0"
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path
+                                      clipRule="evenodd"
+                                      d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                                      fillRule="evenodd"
+                                    />
                                   </svg>
-                                  <span>Tender satisfied &amp; ready to print receipt</span>
+                                  <span>
+                                    Tender satisfied &amp; ready to print
+                                    receipt
+                                  </span>
                                 </p>
                               </div>
                               <div className="text-left sm:text-right">
                                 <span className="font-serif text-3xl sm:text-4xl font-semibold text-emerald-800 tracking-tight">
-                                  {taxCalculation.currencySymbol}{formatCurrencyAmount(changeVal, activeOrg?.country)}
+                                  {taxCalculation.currencySymbol}
+                                  {formatCurrencyAmount(
+                                    changeVal,
+                                    activeOrg?.country,
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -4270,7 +5208,11 @@ function CashierPosContent() {
                               </div>
                               <div className="text-left sm:text-right">
                                 <span className="font-serif text-3xl sm:text-4xl font-semibold text-amber-900 tracking-tight">
-                                  {taxCalculation.currencySymbol}{formatCurrencyAmount(Math.abs(changeVal), activeOrg?.country)}
+                                  {taxCalculation.currencySymbol}
+                                  {formatCurrencyAmount(
+                                    Math.abs(changeVal),
+                                    activeOrg?.country,
+                                  )}
                                 </span>
                               </div>
                             </div>
@@ -4285,16 +5227,28 @@ function CashierPosContent() {
                     selectedPaymentMode.toLowerCase().includes("credit") ||
                     selectedPaymentMode.toLowerCase().includes("debit")) &&
                     !selectedPaymentMode.toLowerCase().includes("split") && (
-                      <div className="mt-6 space-y-6" data-purpose="card-settlement-flow">
+                      <div
+                        className="mt-6 space-y-6"
+                        data-purpose="card-settlement-flow"
+                      >
                         {/* Target Payable Display Card */}
                         <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
-                            <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode} • {activeCart.label}</span>
+                            <span className="text-xs text-[#5e5e5e] font-medium block">
+                              Total Payable Net Amount
+                            </span>
+                            <span className="text-xs text-[#8a7e75]">
+                              Settling via {selectedPaymentMode} •{" "}
+                              {activeCart.label}
+                            </span>
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
-                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                              {taxCalculation.currencySymbol}
+                              {formatCurrencyAmount(
+                                totalPayablePaise / 100,
+                                activeOrg?.country,
+                              )}
                             </span>
                           </div>
                         </div>
@@ -4302,8 +5256,12 @@ function CashierPosContent() {
                         {/* Card Tender Input Field */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="card-tendered-input">
-                              {selectedPaymentMode} Amount to Charge <span className="text-rose-500">*</span>
+                            <label
+                              className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]"
+                              htmlFor="card-tendered-input"
+                            >
+                              {selectedPaymentMode} Amount to Charge{" "}
+                              <span className="text-rose-500">*</span>
                             </label>
                             {!tenderCardGiven.trim() && (
                               <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -4312,9 +5270,13 @@ function CashierPosContent() {
                             )}
                           </div>
                           <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
-                            <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
-                              tenderCardGiven.trim() ? "text-[#141010]" : "text-stone-400"
-                            }`}>
+                            <span
+                              className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                                tenderCardGiven.trim()
+                                  ? "text-[#141010]"
+                                  : "text-stone-400"
+                              }`}
+                            >
                               {taxCalculation.currencySymbol}
                             </span>
                             <input
@@ -4323,7 +5285,9 @@ function CashierPosContent() {
                               type="text"
                               placeholder="0.00"
                               value={tenderCardGiven}
-                              onChange={(e) => setTenderCardGiven(e.target.value)}
+                              onChange={(e) =>
+                                setTenderCardGiven(e.target.value)
+                              }
                               className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
                           </div>
@@ -4335,26 +5299,44 @@ function CashierPosContent() {
                             <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
                               Fast Tender Shortcuts
                             </span>
-                            <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                            <span className="text-[11px] text-stone-400">
+                              Click to auto-fill tender amount
+                            </span>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                             {/* Exact Button */}
                             <button
                               type="button"
-                              onClick={() => setTenderCardGiven((totalPayablePaise / 100).toFixed(2))}
+                              onClick={() =>
+                                setTenderCardGiven(
+                                  (totalPayablePaise / 100).toFixed(2),
+                                )
+                              }
                               className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                tenderCardGiven.trim() && parseFloat(tenderCardGiven) === totalPayablePaise / 100
+                                tenderCardGiven.trim() &&
+                                parseFloat(tenderCardGiven) ===
+                                  totalPayablePaise / 100
                                   ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                   : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                               }`}
                             >
-                              <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                tenderCardGiven.trim() && parseFloat(tenderCardGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
-                              }`}>
+                              <span
+                                className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                  tenderCardGiven.trim() &&
+                                  parseFloat(tenderCardGiven) ===
+                                    totalPayablePaise / 100
+                                    ? "text-stone-300"
+                                    : "text-stone-400"
+                                }`}
+                              >
                                 Exact Total
                               </span>
                               <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                                {taxCalculation.currencySymbol}
+                                {formatCurrencyAmount(
+                                  totalPayablePaise / 100,
+                                  activeOrg?.country,
+                                )}
                               </span>
                             </button>
 
@@ -4363,8 +5345,10 @@ function CashierPosContent() {
                               const exactVal = totalPayablePaise / 100;
                               const d1 = Math.ceil(exactVal / 100) * 100;
                               const d2 = Math.ceil(exactVal / 500) * 500;
-                              const d3 = Math.ceil((exactVal + 500) / 500) * 500;
-                              const d4 = Math.ceil((exactVal + 1000) / 1000) * 1000;
+                              const d3 =
+                                Math.ceil((exactVal + 500) / 500) * 500;
+                              const d4 =
+                                Math.ceil((exactVal + 1000) / 1000) * 1000;
 
                               const uniqueShortcuts = Array.from(
                                 new Set([
@@ -4372,29 +5356,43 @@ function CashierPosContent() {
                                   d2 > exactVal ? d2 : d2 + 500,
                                   d3,
                                   d4 > d3 ? d4 : d3 + 1000,
-                                ])
+                                ]),
                               ).slice(0, 4);
 
                               return uniqueShortcuts.map((amt) => {
-                                const isSelected = tenderCardGiven.trim() && parseFloat(tenderCardGiven) === amt;
+                                const isSelected =
+                                  tenderCardGiven.trim() &&
+                                  parseFloat(tenderCardGiven) === amt;
                                 return (
                                   <button
                                     key={amt}
                                     type="button"
-                                    onClick={() => setTenderCardGiven(amt.toFixed(2))}
+                                    onClick={() =>
+                                      setTenderCardGiven(amt.toFixed(2))
+                                    }
                                     className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
                                       isSelected
                                         ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                         : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                                     }`}
                                   >
-                                    <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                      isSelected ? "text-stone-300" : "text-stone-400"
-                                    }`}>
+                                    <span
+                                      className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                        isSelected
+                                          ? "text-stone-300"
+                                          : "text-stone-400"
+                                      }`}
+                                    >
                                       Note
                                     </span>
                                     <span className="text-sm font-serif font-bold">
-                                      {taxCalculation.currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
+                                      {taxCalculation.currencySymbol}
+                                      {formatCurrencyAmount(
+                                        amt,
+                                        activeOrg?.country,
+                                        0,
+                                        0,
+                                      )}
                                     </span>
                                   </button>
                                 );
@@ -4405,7 +5403,10 @@ function CashierPosContent() {
 
                         {/* Optional Auth / Transaction Ref Code */}
                         <div>
-                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5" htmlFor="card-ref-code">
+                          <label
+                            className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5"
+                            htmlFor="card-ref-code"
+                          >
                             Optional Auth / Transaction Ref Code (RRN)
                           </label>
                           <input
@@ -4427,16 +5428,28 @@ function CashierPosContent() {
                     selectedPaymentMode.toLowerCase().includes("phonepe") ||
                     selectedPaymentMode.toLowerCase().includes("paytm")) &&
                     !selectedPaymentMode.toLowerCase().includes("split") && (
-                      <div className="mt-6 space-y-6" data-purpose="upi-settlement-flow">
+                      <div
+                        className="mt-6 space-y-6"
+                        data-purpose="upi-settlement-flow"
+                      >
                         {/* Target Payable Display Card */}
                         <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
-                            <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode} • {activeCart.label}</span>
+                            <span className="text-xs text-[#5e5e5e] font-medium block">
+                              Total Payable Net Amount
+                            </span>
+                            <span className="text-xs text-[#8a7e75]">
+                              Settling via {selectedPaymentMode} •{" "}
+                              {activeCart.label}
+                            </span>
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
-                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                              {taxCalculation.currencySymbol}
+                              {formatCurrencyAmount(
+                                totalPayablePaise / 100,
+                                activeOrg?.country,
+                              )}
                             </span>
                           </div>
                         </div>
@@ -4444,8 +5457,12 @@ function CashierPosContent() {
                         {/* UPI Tender Input Field */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="upi-tendered-input">
-                              UPI Settlement Amount <span className="text-rose-500">*</span>
+                            <label
+                              className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]"
+                              htmlFor="upi-tendered-input"
+                            >
+                              UPI Settlement Amount{" "}
+                              <span className="text-rose-500">*</span>
                             </label>
                             {!tenderUpiGiven.trim() && (
                               <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -4454,9 +5471,13 @@ function CashierPosContent() {
                             )}
                           </div>
                           <div className="flex rounded-xl border border-stone-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09] shadow-xs transition">
-                            <span className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
-                              tenderUpiGiven.trim() ? "text-[#141010]" : "text-stone-400"
-                            }`}>
+                            <span
+                              className={`inline-flex items-center px-4 bg-stone-50 border-r border-stone-200 font-semibold text-base whitespace-nowrap transition-colors ${
+                                tenderUpiGiven.trim()
+                                  ? "text-[#141010]"
+                                  : "text-stone-400"
+                              }`}
+                            >
                               {taxCalculation.currencySymbol}
                             </span>
                             <input
@@ -4465,7 +5486,9 @@ function CashierPosContent() {
                               type="text"
                               placeholder="0.00"
                               value={tenderUpiGiven}
-                              onChange={(e) => setTenderUpiGiven(e.target.value)}
+                              onChange={(e) =>
+                                setTenderUpiGiven(e.target.value)
+                              }
                               className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
                           </div>
@@ -4477,26 +5500,44 @@ function CashierPosContent() {
                             <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
                               Fast Tender Shortcuts
                             </span>
-                            <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                            <span className="text-[11px] text-stone-400">
+                              Click to auto-fill tender amount
+                            </span>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
                             {/* Exact Button */}
                             <button
                               type="button"
-                              onClick={() => setTenderUpiGiven((totalPayablePaise / 100).toFixed(2))}
+                              onClick={() =>
+                                setTenderUpiGiven(
+                                  (totalPayablePaise / 100).toFixed(2),
+                                )
+                              }
                               className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                tenderUpiGiven.trim() && parseFloat(tenderUpiGiven) === totalPayablePaise / 100
+                                tenderUpiGiven.trim() &&
+                                parseFloat(tenderUpiGiven) ===
+                                  totalPayablePaise / 100
                                   ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                   : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                               }`}
                             >
-                              <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                tenderUpiGiven.trim() && parseFloat(tenderUpiGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
-                              }`}>
+                              <span
+                                className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                  tenderUpiGiven.trim() &&
+                                  parseFloat(tenderUpiGiven) ===
+                                    totalPayablePaise / 100
+                                    ? "text-stone-300"
+                                    : "text-stone-400"
+                                }`}
+                              >
                                 Exact Total
                               </span>
                               <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                                {taxCalculation.currencySymbol}
+                                {formatCurrencyAmount(
+                                  totalPayablePaise / 100,
+                                  activeOrg?.country,
+                                )}
                               </span>
                             </button>
 
@@ -4505,8 +5546,10 @@ function CashierPosContent() {
                               const exactVal = totalPayablePaise / 100;
                               const d1 = Math.ceil(exactVal / 100) * 100;
                               const d2 = Math.ceil(exactVal / 500) * 500;
-                              const d3 = Math.ceil((exactVal + 500) / 500) * 500;
-                              const d4 = Math.ceil((exactVal + 1000) / 1000) * 1000;
+                              const d3 =
+                                Math.ceil((exactVal + 500) / 500) * 500;
+                              const d4 =
+                                Math.ceil((exactVal + 1000) / 1000) * 1000;
 
                               const uniqueShortcuts = Array.from(
                                 new Set([
@@ -4514,29 +5557,43 @@ function CashierPosContent() {
                                   d2 > exactVal ? d2 : d2 + 500,
                                   d3,
                                   d4 > d3 ? d4 : d3 + 1000,
-                                ])
+                                ]),
                               ).slice(0, 4);
 
                               return uniqueShortcuts.map((amt) => {
-                                const isSelected = tenderUpiGiven.trim() && parseFloat(tenderUpiGiven) === amt;
+                                const isSelected =
+                                  tenderUpiGiven.trim() &&
+                                  parseFloat(tenderUpiGiven) === amt;
                                 return (
                                   <button
                                     key={amt}
                                     type="button"
-                                    onClick={() => setTenderUpiGiven(amt.toFixed(2))}
+                                    onClick={() =>
+                                      setTenderUpiGiven(amt.toFixed(2))
+                                    }
                                     className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
                                       isSelected
                                         ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                         : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                                     }`}
                                   >
-                                    <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                      isSelected ? "text-stone-300" : "text-stone-400"
-                                    }`}>
+                                    <span
+                                      className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                        isSelected
+                                          ? "text-stone-300"
+                                          : "text-stone-400"
+                                      }`}
+                                    >
                                       Note
                                     </span>
                                     <span className="text-sm font-serif font-bold">
-                                      {taxCalculation.currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
+                                      {taxCalculation.currencySymbol}
+                                      {formatCurrencyAmount(
+                                        amt,
+                                        activeOrg?.country,
+                                        0,
+                                        0,
+                                      )}
                                     </span>
                                   </button>
                                 );
@@ -4547,7 +5604,10 @@ function CashierPosContent() {
 
                         {/* Optional UTR / Reference Input */}
                         <div>
-                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5" htmlFor="upi-ref-code">
+                          <label
+                            className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5"
+                            htmlFor="upi-ref-code"
+                          >
                             Optional UPI UTR / Transaction ID
                           </label>
                           <input
@@ -4564,16 +5624,27 @@ function CashierPosContent() {
 
                   {/* TAB 4: SPLIT PAYMENT SETTLEMENT */}
                   {selectedPaymentMode.toLowerCase().includes("split") && (
-                    <div className="mt-6 space-y-6" data-purpose="split-settlement-flow">
+                    <div
+                      className="mt-6 space-y-6"
+                      data-purpose="split-settlement-flow"
+                    >
                       {/* Target Payable Display Card */}
                       <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                         <div>
-                          <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                          <span className="text-xs text-[#8a7e75]">Ticket: {activeCart.label} • {activeCart.orderType}</span>
+                          <span className="text-xs text-[#5e5e5e] font-medium block">
+                            Total Payable Net Amount
+                          </span>
+                          <span className="text-xs text-[#8a7e75]">
+                            Ticket: {activeCart.label} • {activeCart.orderType}
+                          </span>
                         </div>
                         <div className="text-right">
                           <span className="text-xl font-bold text-[#141010]">
-                            {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                            {taxCalculation.currencySymbol}
+                            {formatCurrencyAmount(
+                              totalPayablePaise / 100,
+                              activeOrg?.country,
+                            )}
                           </span>
                         </div>
                       </div>
@@ -4589,7 +5660,10 @@ function CashierPosContent() {
                             onClick={() => {
                               const p1 = parseFloat(splitPart1Amount || "0");
                               const p1Paise = Math.round(p1 * 100);
-                              const remPaise = Math.max(0, totalPayablePaise - p1Paise);
+                              const remPaise = Math.max(
+                                0,
+                                totalPayablePaise - p1Paise,
+                              );
                               setSplitPart2Amount((remPaise / 100).toFixed(2));
                             }}
                             className="text-xs font-semibold text-stone-900 hover:text-black underline underline-offset-4 cursor-pointer"
@@ -4607,13 +5681,21 @@ function CashierPosContent() {
                               </span>
                               <select
                                 value={splitPart1Mode}
-                                onChange={(e) => setSplitPart1Mode(e.target.value)}
+                                onChange={(e) =>
+                                  setSplitPart1Mode(e.target.value)
+                                }
                                 className="text-xs font-semibold bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1 text-stone-800 focus:outline-none cursor-pointer"
                               >
                                 {activePaymentChannels
-                                  .filter((m: any) => !m.name.toLowerCase().includes("split"))
+                                  .filter(
+                                    (m: any) =>
+                                      !m.name.toLowerCase().includes("split"),
+                                  )
                                   .map((m: any) => (
-                                    <option key={`split1_${m.name}`} value={m.name}>
+                                    <option
+                                      key={`split1_${m.name}`}
+                                      value={m.name}
+                                    >
                                       {m.name}
                                     </option>
                                   ))}
@@ -4626,7 +5708,9 @@ function CashierPosContent() {
                               <input
                                 type="text"
                                 value={splitPart1Amount}
-                                onChange={(e) => setSplitPart1Amount(e.target.value)}
+                                onChange={(e) =>
+                                  setSplitPart1Amount(e.target.value)
+                                }
                                 placeholder="0.00"
                                 className="block w-full px-3 py-2.5 bg-transparent text-lg font-bold text-stone-900 focus:outline-none"
                               />
@@ -4641,13 +5725,21 @@ function CashierPosContent() {
                               </span>
                               <select
                                 value={splitPart2Mode}
-                                onChange={(e) => setSplitPart2Mode(e.target.value)}
+                                onChange={(e) =>
+                                  setSplitPart2Mode(e.target.value)
+                                }
                                 className="text-xs font-semibold bg-stone-100 border border-stone-200 rounded-lg px-2.5 py-1 text-stone-800 focus:outline-none cursor-pointer"
                               >
                                 {activePaymentChannels
-                                  .filter((m: any) => !m.name.toLowerCase().includes("split"))
+                                  .filter(
+                                    (m: any) =>
+                                      !m.name.toLowerCase().includes("split"),
+                                  )
                                   .map((m: any) => (
-                                    <option key={`split2_${m.name}`} value={m.name}>
+                                    <option
+                                      key={`split2_${m.name}`}
+                                      value={m.name}
+                                    >
                                       {m.name}
                                     </option>
                                   ))}
@@ -4660,7 +5752,9 @@ function CashierPosContent() {
                               <input
                                 type="text"
                                 value={splitPart2Amount}
-                                onChange={(e) => setSplitPart2Amount(e.target.value)}
+                                onChange={(e) =>
+                                  setSplitPart2Amount(e.target.value)
+                                }
                                 placeholder="0.00"
                                 className="block w-full px-3 py-2.5 bg-transparent text-lg font-bold text-stone-900 focus:outline-none"
                               />
@@ -4681,10 +5775,17 @@ function CashierPosContent() {
                             <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs text-emerald-800 font-medium">
                               <div className="flex items-center space-x-2">
                                 <span className="text-base">✓</span>
-                                <span>100% Balanced &amp; Allocated across split channels</span>
+                                <span>
+                                  100% Balanced &amp; Allocated across split
+                                  channels
+                                </span>
                               </div>
                               <span className="font-bold text-sm">
-                                {taxCalculation.currencySymbol}{formatCurrencyAmount(allocatedPaise / 100, activeOrg?.country)}
+                                {taxCalculation.currencySymbol}
+                                {formatCurrencyAmount(
+                                  allocatedPaise / 100,
+                                  activeOrg?.country,
+                                )}
                               </span>
                             </div>
                           );
@@ -4694,15 +5795,27 @@ function CashierPosContent() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-base">⚠️</span>
                                 <span>
-                                  Remaining {taxCalculation.currencySymbol}{formatCurrencyAmount(Math.abs(diffPaise) / 100, activeOrg?.country)} unallocated
+                                  Remaining {taxCalculation.currencySymbol}
+                                  {formatCurrencyAmount(
+                                    Math.abs(diffPaise) / 100,
+                                    activeOrg?.country,
+                                  )}{" "}
+                                  unallocated
                                 </span>
                               </div>
                               <button
                                 type="button"
                                 onClick={() => {
-                                  const p1Val = parseFloat(splitPart1Amount || "0");
-                                  const remPaise = Math.max(0, totalPayablePaise - Math.round(p1Val * 100));
-                                  setSplitPart2Amount((remPaise / 100).toFixed(2));
+                                  const p1Val = parseFloat(
+                                    splitPart1Amount || "0",
+                                  );
+                                  const remPaise = Math.max(
+                                    0,
+                                    totalPayablePaise - Math.round(p1Val * 100),
+                                  );
+                                  setSplitPart2Amount(
+                                    (remPaise / 100).toFixed(2),
+                                  );
                                 }}
                                 className="text-xs bg-amber-900 text-white px-2.5 py-1 rounded-lg font-semibold hover:bg-amber-950 transition cursor-pointer"
                               >
@@ -4716,11 +5829,25 @@ function CashierPosContent() {
                               <div className="flex items-center space-x-2">
                                 <span className="text-base">⚠️</span>
                                 <span>
-                                  Split exceeds total by {taxCalculation.currencySymbol}{formatCurrencyAmount(diffPaise / 100, activeOrg?.country)}
+                                  Split exceeds total by{" "}
+                                  {taxCalculation.currencySymbol}
+                                  {formatCurrencyAmount(
+                                    diffPaise / 100,
+                                    activeOrg?.country,
+                                  )}
                                 </span>
                               </div>
                               <span className="font-bold">
-                                {taxCalculation.currencySymbol}{formatCurrencyAmount(allocatedPaise / 100, activeOrg?.country)} / {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                                {taxCalculation.currencySymbol}
+                                {formatCurrencyAmount(
+                                  allocatedPaise / 100,
+                                  activeOrg?.country,
+                                )}{" "}
+                                / {taxCalculation.currencySymbol}
+                                {formatCurrencyAmount(
+                                  totalPayablePaise / 100,
+                                  activeOrg?.country,
+                                )}
                               </span>
                             </div>
                           );
@@ -4740,16 +5867,28 @@ function CashierPosContent() {
                     !selectedPaymentMode.toLowerCase().includes("phonepe") &&
                     !selectedPaymentMode.toLowerCase().includes("paytm") &&
                     !selectedPaymentMode.toLowerCase().includes("split") && (
-                      <div className="mt-6 space-y-6" data-purpose="custom-settlement-flow">
+                      <div
+                        className="mt-6 space-y-6"
+                        data-purpose="custom-settlement-flow"
+                      >
                         {/* Target Payable Display Card */}
                         <div className="p-4 bg-[#f1edec]/50 rounded-xl border border-stone-200/80 flex items-center justify-between">
                           <div>
-                            <span className="text-xs text-[#5e5e5e] font-medium block">Total Payable Net Amount</span>
-                            <span className="text-xs text-[#8a7e75]">Settling via {selectedPaymentMode} • {activeCart.label}</span>
+                            <span className="text-xs text-[#5e5e5e] font-medium block">
+                              Total Payable Net Amount
+                            </span>
+                            <span className="text-xs text-[#8a7e75]">
+                              Settling via {selectedPaymentMode} •{" "}
+                              {activeCart.label}
+                            </span>
                           </div>
                           <div className="text-right">
                             <span className="text-xl font-bold text-[#141010]">
-                              {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                              {taxCalculation.currencySymbol}
+                              {formatCurrencyAmount(
+                                totalPayablePaise / 100,
+                                activeOrg?.country,
+                              )}
                             </span>
                           </div>
                         </div>
@@ -4757,8 +5896,12 @@ function CashierPosContent() {
                         {/* Custom Tender Input Field */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <label className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]" htmlFor="custom-tendered-input">
-                              {selectedPaymentMode} Amount <span className="text-rose-500">*</span>
+                            <label
+                              className="block text-xs font-semibold uppercase tracking-wider text-[#5e5e5e]"
+                              htmlFor="custom-tendered-input"
+                            >
+                              {selectedPaymentMode} Amount{" "}
+                              <span className="text-rose-500">*</span>
                             </label>
                             {!customTenderGiven.trim() && (
                               <span className="text-[11px] font-medium text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -4768,9 +5911,13 @@ function CashierPosContent() {
                           </div>
                           <div className="relative rounded-xl shadow-xs">
                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                              <span className={`font-medium text-lg transition-colors ${
-                                customTenderGiven.trim() ? "text-[#141010]" : "text-stone-300"
-                              }`}>
+                              <span
+                                className={`font-medium text-lg transition-colors ${
+                                  customTenderGiven.trim()
+                                    ? "text-[#141010]"
+                                    : "text-stone-300"
+                                }`}
+                              >
                                 {taxCalculation.currencySymbol}
                               </span>
                             </div>
@@ -4780,7 +5927,9 @@ function CashierPosContent() {
                               type="text"
                               placeholder="0.00"
                               value={customTenderGiven}
-                              onChange={(e) => setCustomTenderGiven(e.target.value)}
+                              onChange={(e) =>
+                                setCustomTenderGiven(e.target.value)
+                              }
                               className="block w-full pl-9 pr-4 py-3.5 bg-white border border-stone-300 rounded-xl text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:ring-2 focus:ring-[#0c0a09] focus:border-[#0c0a09] transition focus:outline-none"
                             />
                           </div>
@@ -4792,25 +5941,43 @@ function CashierPosContent() {
                             <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
                               Fast Tender Shortcuts
                             </span>
-                            <span className="text-[11px] text-stone-400">Click to auto-fill tender amount</span>
+                            <span className="text-[11px] text-stone-400">
+                              Click to auto-fill tender amount
+                            </span>
                           </div>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                             <button
                               type="button"
-                              onClick={() => setCustomTenderGiven((totalPayablePaise / 100).toFixed(2))}
+                              onClick={() =>
+                                setCustomTenderGiven(
+                                  (totalPayablePaise / 100).toFixed(2),
+                                )
+                              }
                               className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                customTenderGiven.trim() && parseFloat(customTenderGiven) === totalPayablePaise / 100
+                                customTenderGiven.trim() &&
+                                parseFloat(customTenderGiven) ===
+                                  totalPayablePaise / 100
                                   ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
                                   : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
                               }`}
                             >
-                              <span className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                customTenderGiven.trim() && parseFloat(customTenderGiven) === totalPayablePaise / 100 ? "text-stone-300" : "text-stone-400"
-                              }`}>
+                              <span
+                                className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
+                                  customTenderGiven.trim() &&
+                                  parseFloat(customTenderGiven) ===
+                                    totalPayablePaise / 100
+                                    ? "text-stone-300"
+                                    : "text-stone-400"
+                                }`}
+                              >
                                 Exact Total
                               </span>
                               <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}{formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}
+                                {taxCalculation.currencySymbol}
+                                {formatCurrencyAmount(
+                                  totalPayablePaise / 100,
+                                  activeOrg?.country,
+                                )}
                               </span>
                             </button>
                           </div>
@@ -4818,8 +5985,12 @@ function CashierPosContent() {
 
                         {/* Optional Reference / Voucher / Note Input */}
                         <div>
-                          <label className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5" htmlFor="custom-ref-code">
-                            Optional {selectedPaymentMode} Reference / Note / Voucher #
+                          <label
+                            className="block text-[11px] font-semibold text-stone-600 uppercase tracking-wider mb-1.5"
+                            htmlFor="custom-ref-code"
+                          >
+                            Optional {selectedPaymentMode} Reference / Note /
+                            Voucher #
                           </label>
                           <input
                             id="custom-ref-code"
@@ -4838,7 +6009,10 @@ function CashierPosContent() {
           </main>
 
           {/* BEGIN: BottomActionFooter */}
-          <footer className="bg-white border-t border-[#e7e5e4] sticky bottom-0 z-30 px-6 py-4 transition-all" data-purpose="checkout-navigation-footer">
+          <footer
+            className="bg-white border-t border-[#e7e5e4] sticky bottom-0 z-30 px-6 py-4 transition-all"
+            data-purpose="checkout-navigation-footer"
+          >
             <div className="w-full flex flex-col sm:flex-row items-center justify-between gap-4">
               {/* Back Link */}
               <button
@@ -4846,8 +6020,18 @@ function CashierPosContent() {
                 className="inline-flex items-center px-4 py-2.5 rounded-full border border-[#e7e5e4] hover:bg-stone-50 text-xs sm:text-sm font-medium text-[#141010] transition cursor-pointer"
                 type="button"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M10 19l-7-7m0 0l7-7m-7 7h18" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                <svg
+                  className="w-4 h-4 mr-2"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    d="M10 19l-7-7m0 0l7-7m-7 7h18"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                  />
                 </svg>
                 Back to Order Details
               </button>
@@ -4855,34 +6039,43 @@ function CashierPosContent() {
               {/* Settlement Status and Final CTA */}
               <div className="flex items-center space-x-5 w-full sm:w-auto justify-between sm:justify-end">
                 <div className="text-right">
-                  <span className="text-[11px] text-[#8a7e75] uppercase tracking-wider block">Total Received</span>
+                  <span className="text-[11px] text-[#8a7e75] uppercase tracking-wider block">
+                    Total Received
+                  </span>
                   <span className="text-base font-semibold text-[#141010]">
                     {selectedPaymentMode.toLowerCase().includes("cash")
                       ? tenderCashGiven.trim()
                         ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderCashGiven), activeOrg?.country)}`
                         : `${taxCalculation.currencySymbol}0.00`
                       : selectedPaymentMode.toLowerCase().includes("card") ||
-                        selectedPaymentMode.toLowerCase().includes("credit") ||
-                        selectedPaymentMode.toLowerCase().includes("debit")
-                      ? tenderCardGiven.trim()
-                        ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderCardGiven), activeOrg?.country)}`
-                        : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`
-                      : selectedPaymentMode.toLowerCase().includes("upi") ||
-                        selectedPaymentMode.toLowerCase().includes("qr") ||
-                        selectedPaymentMode.toLowerCase().includes("gpay") ||
-                        selectedPaymentMode.toLowerCase().includes("phonepe") ||
-                        selectedPaymentMode.toLowerCase().includes("paytm")
-                      ? tenderUpiGiven.trim()
-                        ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderUpiGiven), activeOrg?.country)}`
-                        : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`
-                      : selectedPaymentMode.toLowerCase().includes("split")
-                      ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(
-                          parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0"),
-                          activeOrg?.country
-                        )}`
-                      : customTenderGiven.trim()
-                      ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(customTenderGiven), activeOrg?.country)}`
-                      : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`}
+                          selectedPaymentMode
+                            .toLowerCase()
+                            .includes("credit") ||
+                          selectedPaymentMode.toLowerCase().includes("debit")
+                        ? tenderCardGiven.trim()
+                          ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderCardGiven), activeOrg?.country)}`
+                          : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`
+                        : selectedPaymentMode.toLowerCase().includes("upi") ||
+                            selectedPaymentMode.toLowerCase().includes("qr") ||
+                            selectedPaymentMode
+                              .toLowerCase()
+                              .includes("gpay") ||
+                            selectedPaymentMode
+                              .toLowerCase()
+                              .includes("phonepe") ||
+                            selectedPaymentMode.toLowerCase().includes("paytm")
+                          ? tenderUpiGiven.trim()
+                            ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(tenderUpiGiven), activeOrg?.country)}`
+                            : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`
+                          : selectedPaymentMode.toLowerCase().includes("split")
+                            ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(
+                                parseFloat(splitPart1Amount || "0") +
+                                  parseFloat(splitPart2Amount || "0"),
+                                activeOrg?.country,
+                              )}`
+                            : customTenderGiven.trim()
+                              ? `${taxCalculation.currencySymbol}${formatCurrencyAmount(parseFloat(customTenderGiven), activeOrg?.country)}`
+                              : `${taxCalculation.currencySymbol}${formatCurrencyAmount(totalPayablePaise / 100, activeOrg?.country)}`}
                   </span>
                 </div>
 
@@ -4893,7 +6086,8 @@ function CashierPosContent() {
                     (selectedPaymentMode.toLowerCase().includes("cash") &&
                       (!tenderCashGiven.trim() ||
                         isNaN(parseFloat(tenderCashGiven)) ||
-                        Math.round(parseFloat(tenderCashGiven) * 100) < totalPayablePaise)) ||
+                        Math.round(parseFloat(tenderCashGiven) * 100) <
+                          totalPayablePaise)) ||
                     ((selectedPaymentMode.toLowerCase().includes("card") ||
                       selectedPaymentMode.toLowerCase().includes("credit") ||
                       selectedPaymentMode.toLowerCase().includes("debit")) &&
@@ -4910,7 +6104,9 @@ function CashierPosContent() {
                         parseFloat(tenderUpiGiven) <= 0)) ||
                     (selectedPaymentMode.toLowerCase().includes("split") &&
                       Math.round(
-                        (parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0")) * 100
+                        (parseFloat(splitPart1Amount || "0") +
+                          parseFloat(splitPart2Amount || "0")) *
+                          100,
                       ) !== totalPayablePaise) ||
                     (!selectedPaymentMode.toLowerCase().includes("cash") &&
                       !selectedPaymentMode.toLowerCase().includes("card") &&
@@ -4932,7 +6128,8 @@ function CashierPosContent() {
                     (selectedPaymentMode.toLowerCase().includes("cash") &&
                       (!tenderCashGiven.trim() ||
                         isNaN(parseFloat(tenderCashGiven)) ||
-                        Math.round(parseFloat(tenderCashGiven) * 100) < totalPayablePaise)) ||
+                        Math.round(parseFloat(tenderCashGiven) * 100) <
+                          totalPayablePaise)) ||
                     ((selectedPaymentMode.toLowerCase().includes("card") ||
                       selectedPaymentMode.toLowerCase().includes("credit") ||
                       selectedPaymentMode.toLowerCase().includes("debit")) &&
@@ -4949,7 +6146,9 @@ function CashierPosContent() {
                         parseFloat(tenderUpiGiven) <= 0)) ||
                     (selectedPaymentMode.toLowerCase().includes("split") &&
                       Math.round(
-                        (parseFloat(splitPart1Amount || "0") + parseFloat(splitPart2Amount || "0")) * 100
+                        (parseFloat(splitPart1Amount || "0") +
+                          parseFloat(splitPart2Amount || "0")) *
+                          100,
                       ) !== totalPayablePaise) ||
                     (!selectedPaymentMode.toLowerCase().includes("cash") &&
                       !selectedPaymentMode.toLowerCase().includes("card") &&
@@ -4976,8 +6175,18 @@ function CashierPosContent() {
                       <span className="text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded font-mono font-medium">
                         F5
                       </span>
-                      <svg className="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" />
+                      <svg
+                        className="w-4 h-4 text-emerald-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          d="M5 13l4 4L19 7"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2.5"
+                        />
                       </svg>
                     </>
                   )}
@@ -5000,9 +6209,12 @@ function CashierPosContent() {
             </div>
 
             <div>
-              <h3 className="text-xl font-bold font-serif text-[#141010]">Order Settled &amp; Confirmed!</h3>
+              <h3 className="text-xl font-bold font-serif text-[#141010]">
+                Order Settled &amp; Confirmed!
+              </h3>
               <p className="text-xs text-[#7a716b] mt-1">
-                {completedOrderData.orderNumber} • Token {completedOrderData.tokenNumber}
+                {completedOrderData.orderNumber} • Token{" "}
+                {completedOrderData.tokenNumber}
               </p>
             </div>
 
@@ -5015,17 +6227,21 @@ function CashierPosContent() {
                     completedOrderData.display_total_amount
                       ? parseFloat(completedOrderData.display_total_amount)
                       : completedOrderData.totalAmount / 100,
-                    activeOrg?.country
+                    activeOrg?.country,
                   )}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#7a716b]">Payment Mode:</span>
-                <span className="font-semibold text-[#141010]">{completedOrderData.paymentMode}</span>
+                <span className="font-semibold text-[#141010]">
+                  {completedOrderData.paymentMode}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-[#7a716b]">Invoice / Token:</span>
-                <span className="font-mono text-emerald-700 font-bold">{completedOrderData.tokenNumber}</span>
+                <span className="font-mono text-emerald-700 font-bold">
+                  {completedOrderData.tokenNumber}
+                </span>
               </div>
             </div>
 
@@ -5077,7 +6293,9 @@ function CashierPosContent() {
               <div className="inline-flex items-center border border-stone-800 rounded-lg bg-white overflow-hidden shrink-0">
                 <button
                   type="button"
-                  onClick={() => setCustomizationQty((prev) => Math.max(1, prev - 1))}
+                  onClick={() =>
+                    setCustomizationQty((prev) => Math.max(1, prev - 1))
+                  }
                   className="w-8 h-8 flex items-center justify-center text-sm font-bold text-stone-900 hover:bg-stone-100 border-r border-stone-800/20 cursor-pointer"
                 >
                   -
@@ -5128,10 +6346,14 @@ function CashierPosContent() {
             <div className="flex-1 overflow-y-auto space-y-5 pr-1 max-h-[50vh]">
               {customizingCatalogEntry.customizations.map((group) => {
                 const gid = group.id || group._id;
-                const isSingleChoice = (group.max_selected ?? (group.required ? 1 : 99)) === 1;
+                const isSingleChoice =
+                  (group.max_selected ?? (group.required ? 1 : 99)) === 1;
                 const selectedInGroup = selectedCustomizationOptions[gid] || [];
-                const availableOptions = (group.customization_items || []).filter(
-                  (ci: any) => ci.is_available !== false && ci.isAvailable !== false
+                const availableOptions = (
+                  group.customization_items || []
+                ).filter(
+                  (ci: any) =>
+                    ci.is_available !== false && ci.isAvailable !== false,
                 );
 
                 return (
@@ -5146,8 +6368,8 @@ function CashierPosContent() {
                           {isSingleChoice
                             ? "Select any 1"
                             : group.required
-                            ? `Select up to ${group.max_selected || 1} (Required)`
-                            : `Select up to ${group.max_selected || "any"} (Optional)`}
+                              ? `Select up to ${group.max_selected || 1} (Required)`
+                              : `Select up to ${group.max_selected || "any"} (Optional)`}
                         </span>
                       </div>
                     </div>
@@ -5156,7 +6378,9 @@ function CashierPosContent() {
                     <div className="space-y-2">
                       {availableOptions.map((option: any) => {
                         const oid = option.id || option._id;
-                        const isSelected = selectedInGroup.some((o) => (o.id || o._id) === oid);
+                        const isSelected = selectedInGroup.some(
+                          (o) => (o.id || o._id) === oid,
+                        );
                         const optPrice = option.price || 0;
                         const optPriceFormatted = formatCurrencyAmount(
                           optPrice / 100,
@@ -5166,7 +6390,9 @@ function CashierPosContent() {
                         return (
                           <div
                             key={oid}
-                            onClick={() => handleToggleCustomizationOption(group, option)}
+                            onClick={() =>
+                              handleToggleCustomizationOption(group, option)
+                            }
                             className={`w-full border rounded-xl p-3 flex items-center justify-between transition-all cursor-pointer select-none ${
                               isSelected
                                 ? "border-stone-900 bg-stone-50/70 shadow-2xs"
@@ -5179,7 +6405,9 @@ function CashierPosContent() {
                               <div className="min-w-0">
                                 <span
                                   className={`text-xs block truncate ${
-                                    isSelected ? "font-bold text-stone-950" : "font-medium text-stone-800"
+                                    isSelected
+                                      ? "font-bold text-stone-950"
+                                      : "font-medium text-stone-800"
                                   }`}
                                 >
                                   {option.name}
@@ -5195,13 +6423,17 @@ function CashierPosContent() {
                             {/* Right: Extra Price + Check/Radio Box */}
                             <div className="flex items-center space-x-3 shrink-0">
                               <span className="text-xs font-semibold text-stone-900">
-                                {optPrice > 0 ? `${taxCalculation.currencySymbol}${optPriceFormatted}` : "Free"}
+                                {optPrice > 0
+                                  ? `${taxCalculation.currencySymbol}${optPriceFormatted}`
+                                  : "Free"}
                               </span>
 
                               {isSingleChoice ? (
                                 <div
                                   className={`w-4 h-4 rounded-full border flex items-center justify-center transition-colors ${
-                                    isSelected ? "border-stone-900 bg-stone-900" : "border-stone-300 bg-white"
+                                    isSelected
+                                      ? "border-stone-900 bg-stone-900"
+                                      : "border-stone-300 bg-white"
                                   }`}
                                 >
                                   <div
@@ -5213,7 +6445,9 @@ function CashierPosContent() {
                               ) : (
                                 <div
                                   className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                                    isSelected ? "border-stone-900 bg-stone-900 text-white" : "border-stone-300 bg-white"
+                                    isSelected
+                                      ? "border-stone-900 bg-stone-900 text-white"
+                                      : "border-stone-300 bg-white"
                                   }`}
                                 >
                                   {isSelected && (
@@ -5256,49 +6490,70 @@ function CashierPosContent() {
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-2 pt-1">
-                      {customizingCatalogEntry.item.chefPrepPreferences.map((pref: any) => {
-                        const prefId = pref._id || pref.id || pref.preferenceId;
-                        const prefName = pref.name;
-                        const isSelected = selectedPrepPreferences.some(
-                          (p) => (p.preferenceId && p.preferenceId === prefId) || p.name === prefName
-                        );
+                      {customizingCatalogEntry.item.chefPrepPreferences.map(
+                        (pref: any) => {
+                          const prefId =
+                            pref._id || pref.id || pref.preferenceId;
+                          const prefName = pref.name;
+                          const isSelected = selectedPrepPreferences.some(
+                            (p) =>
+                              (p.preferenceId && p.preferenceId === prefId) ||
+                              p.name === prefName,
+                          );
 
-                        return (
-                          <button
-                            key={prefId || prefName}
-                            type="button"
-                            onClick={() => {
-                              if (isSelected) {
-                                setSelectedPrepPreferences((prev) =>
-                                  prev.filter(
-                                    (p) => (p.preferenceId && p.preferenceId !== prefId) || p.name !== prefName
-                                  )
-                                );
-                              } else {
-                                setSelectedPrepPreferences((prev) => [
-                                  ...prev,
-                                  { preferenceId: prefId, name: prefName },
-                                ]);
+                          return (
+                            <button
+                              key={prefId || prefName}
+                              type="button"
+                              onClick={() => {
+                                if (isSelected) {
+                                  setSelectedPrepPreferences((prev) =>
+                                    prev.filter(
+                                      (p) =>
+                                        (p.preferenceId &&
+                                          p.preferenceId !== prefId) ||
+                                        p.name !== prefName,
+                                    ),
+                                  );
+                                } else {
+                                  setSelectedPrepPreferences((prev) => [
+                                    ...prev,
+                                    { preferenceId: prefId, name: prefName },
+                                  ]);
+                                }
+                              }}
+                              style={
+                                isSelected
+                                  ? {
+                                      color: "#ffffff",
+                                      backgroundColor: "#0c0a09",
+                                    }
+                                  : undefined
                               }
-                            }}
-                            style={isSelected ? { color: "#ffffff", backgroundColor: "#0c0a09" } : undefined}
-                            className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer select-none ${
-                              isSelected
-                                ? "bg-[#0c0a09] !text-white shadow-xs"
-                                : "bg-stone-100 hover:bg-stone-200 text-stone-800"
-                            }`}
-                          >
-                            {isSelected && (
-                              <span className="material-symbols-outlined text-[14px]">check</span>
-                            )}
-                            <span>{prefName}</span>
-                          </button>
-                        );
-                      })}
+                              className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                                isSelected
+                                  ? "bg-[#0c0a09] !text-white shadow-xs"
+                                  : "bg-stone-100 hover:bg-stone-200 text-stone-800"
+                              }`}
+                            >
+                              {isSelected && (
+                                <span className="material-symbols-outlined text-[14px]">
+                                  check
+                                </span>
+                              )}
+                              <span>{prefName}</span>
+                            </button>
+                          );
+                        },
+                      )}
                     </div>
                     <div className="p-2.5 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex items-center gap-2 text-[11px] text-[#78716c]">
-                      <span className="material-symbols-outlined text-[#7f7570] text-[16px] shrink-0">soup_kitchen</span>
-                      <span>Forwarded directly to the kitchen preparation display</span>
+                      <span className="material-symbols-outlined text-[#7f7570] text-[16px] shrink-0">
+                        soup_kitchen
+                      </span>
+                      <span>
+                        Forwarded directly to the kitchen preparation display
+                      </span>
                     </div>
                   </div>
                 )}
@@ -5315,10 +6570,14 @@ function CashierPosContent() {
               </button>
 
               {(() => {
-                const totalAddonPaise = Object.values(selectedCustomizationOptions)
+                const totalAddonPaise = Object.values(
+                  selectedCustomizationOptions,
+                )
                   .flat()
                   .reduce((acc, curr) => acc + (curr.price || 0), 0);
-                const modalTotalPaise = (customizingCatalogEntry.item.price + totalAddonPaise) * customizationQty;
+                const modalTotalPaise =
+                  (customizingCatalogEntry.item.price + totalAddonPaise) *
+                  customizationQty;
                 const modalTotalFormatted = formatCurrencyAmount(
                   modalTotalPaise / 100,
                   activeOrg?.country,
@@ -5330,7 +6589,10 @@ function CashierPosContent() {
                     onClick={handleConfirmCustomizationModal}
                     className="px-6 py-2.5 bg-[#0c0a09] hover:bg-stone-800 active:scale-98 text-white rounded-lg text-xs font-semibold shadow-md transition cursor-pointer flex items-center gap-1.5"
                   >
-                    <span>Add to cart | {taxCalculation.currencySymbol}{modalTotalFormatted}</span>
+                    <span>
+                      Add to cart | {taxCalculation.currencySymbol}
+                      {modalTotalFormatted}
+                    </span>
                   </button>
                 );
               })()}
@@ -5359,4 +6621,3 @@ export default function CashierPosPage() {
     </Suspense>
   );
 }
-

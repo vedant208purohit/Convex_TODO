@@ -264,7 +264,7 @@ type SettingsTab =
   | "printers"
   | "features"
   | "staff"
-  | "waiters"
+  // | "waiters"
   | "orderProcesses"
   | "payment"
   | "tables"
@@ -301,7 +301,7 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <FeaturesIcon className="w-4 h-4" />,
   },
   { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
-  { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
+  // { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
   {
     id: "orderProcesses",
     label: "Order Status",
@@ -342,7 +342,9 @@ function SettingsContent() {
   const rawTab = searchParams.get("tab");
   const validTabIds = SETTINGS_TABS.map((t) => t.id as string);
   const activeTab: SettingsTab =
-    rawTab && validTabIds.includes(rawTab) ? (rawTab as SettingsTab) : "organization";
+    rawTab && validTabIds.includes(rawTab)
+      ? (rawTab as SettingsTab)
+      : "organization";
 
   // Update URL when tab changes
   const setActiveTab = useCallback(
@@ -354,12 +356,16 @@ function SettingsContent() {
     [router, searchParams],
   );
 
-  const [isSettingsCollapsed, setIsSettingsCollapsed] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("pos_settings_sidebar_collapsed") === "true";
-    }
-    return false;
-  });
+  const [isSettingsCollapsed, setIsSettingsCollapsed] = useState<boolean>(
+    () => {
+      if (typeof window !== "undefined") {
+        return (
+          localStorage.getItem("pos_settings_sidebar_collapsed") === "true"
+        );
+      }
+      return false;
+    },
+  );
 
   const toggleSettingsSidebar = () => {
     setIsSettingsCollapsed((prev: boolean) => {
@@ -415,7 +421,11 @@ function SettingsContent() {
                 className={`p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${
                   isSettingsCollapsed ? "mx-auto" : ""
                 }`}
-                title={isSettingsCollapsed ? "Expand Settings Menu" : "Collapse Settings Menu"}
+                title={
+                  isSettingsCollapsed
+                    ? "Expand Settings Menu"
+                    : "Collapse Settings Menu"
+                }
               >
                 <svg
                   className={`w-4 h-4 transition-transform duration-200 ${
@@ -425,7 +435,12 @@ function SettingsContent() {
                   stroke="currentColor"
                   viewBox="0 0 24 24"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                  />
                 </svg>
               </button>
             </div>
@@ -475,13 +490,13 @@ function SettingsContent() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-4 lg:p-6 flex flex-col h-full min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-4 lg:p-5 flex flex-col h-full min-h-0 overflow-y-auto">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
             {/* {activeTab === "printers" && <OrganizationPrinters />} */}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
-            {activeTab === "waiters" && <OrganizationWaiters />}
+            {/* {activeTab === "waiters" && <OrganizationWaiters />} */}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
             {activeTab === "payment" && <OrganizationPaymentModes />}
             {activeTab === "tables" && <OrganizationTablesSettings />}
@@ -493,7 +508,7 @@ function SettingsContent() {
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
-              activeTab !== "waiters" &&
+              // activeTab !== "waiters" &&
               activeTab !== "payment" &&
               activeTab !== "tables" &&
               activeTab !== "digitalStore" &&
