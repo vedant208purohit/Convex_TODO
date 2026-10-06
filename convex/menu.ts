@@ -796,6 +796,26 @@ export const getOrganizationMenu = query({
 
         const serializedCustomizations: Array<any> = [];
 
+        // Fetch Chef Prep Preferences for Item
+        const prepJunctions = await ctx.db
+          .query("itemChefPrepPreferences")
+          .withIndex("by_item", (q) => q.eq("itemId", item._id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+
+        const serializedChefPrepPreferences: Array<any> = [];
+        for (const pj of prepJunctions) {
+          const pref = await ctx.db.get(pj.preferenceId);
+          if (pref && pref.deletedAt === undefined) {
+            serializedChefPrepPreferences.push({
+              id: pref._id,
+              _id: pref._id,
+              name: pref.name,
+            });
+          }
+        }
+        serializedChefPrepPreferences.sort((a, b) => a.name.localeCompare(b.name));
+
         for (const cust of activeCustomizations) {
           const custItems = await ctx.db
             .query("customizationItems")
@@ -1062,7 +1082,11 @@ export const getOrganizationMenu = query({
             calories_per_serving: item.caloriesPerServing,
             items_item_types: resolvedItemTypes,
             tax_info: taxInfo,
+            chefPrepPreferences: serializedChefPrepPreferences,
+            chef_prep_preferences: serializedChefPrepPreferences,
           },
+          chefPrepPreferences: serializedChefPrepPreferences,
+          chef_prep_preferences: serializedChefPrepPreferences,
           customizations: serializedCustomizations,
           item_image_url: imageUrl,
           item_3d_image_url: threeDModelUrl,
@@ -1684,6 +1708,15 @@ export const deleteItem = mutation({
           }
           await ctx.db.patch(cust._id, { deletedAt: now });
         }
+        // Clean up Chef Prep Preference junctions
+        const prepJunctions = await ctx.db
+          .query("itemChefPrepPreferences")
+          .withIndex("by_item", (q) => q.eq("itemId", args.id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+        for (const pj of prepJunctions) {
+          await ctx.db.patch(pj._id, { deletedAt: now });
+        }
         await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
       }
     } else {
@@ -1723,6 +1756,15 @@ export const deleteItem = mutation({
           await ctx.db.patch(ci._id, { deletedAt: now });
         }
         await ctx.db.patch(cust._id, { deletedAt: now });
+      }
+      // Clean up Chef Prep Preference junctions
+      const prepJunctions = await ctx.db
+        .query("itemChefPrepPreferences")
+        .withIndex("by_item", (q) => q.eq("itemId", args.id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+      for (const pj of prepJunctions) {
+        await ctx.db.patch(pj._id, { deletedAt: now });
       }
       await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
     }

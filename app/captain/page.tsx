@@ -18,6 +18,7 @@ interface CartLineItem {
   taxMode?: "inclusive" | "exclusive";
   customizationOptions?: any[];
   customizations?: any[];
+  prepPreferences?: any[];
 }
 
 import {
@@ -341,6 +342,9 @@ export default function CaptainPage() {
   const [selectedCustomizationOptions, setSelectedCustomizationOptions] = useState<
     Record<string, Array<{ id?: string; _id?: string; name: string; price: number; [key: string]: any }>>
   >({});
+  const [selectedPrepPreferences, setSelectedPrepPreferences] = useState<
+    Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }>
+  >([]);
 
   // Extract Flat Menu Items for Search & Catalog matching Cashier logic
   const allCatalogItems = useMemo(() => {
@@ -415,12 +419,21 @@ export default function CaptainPage() {
 
   // Filtered Catalog Items based on Category & Search
   const filteredCatalogItems = useMemo(() => {
+    const seenItemIds = new Set<string>();
     return allCatalogItems.filter((entry) => {
       const matchCat =
         selectedCategory === "All Items" ||
         selectedCategory === "All" ||
         entry.categoryName === selectedCategory;
       if (!matchCat) return false;
+
+      if (selectedCategory === "All Items" || selectedCategory === "All") {
+        const itemIdStr = String(entry.item?._id || entry.item?.id || "");
+        if (itemIdStr) {
+          if (seenItemIds.has(itemIdStr)) return false;
+          seenItemIds.add(itemIdStr);
+        }
+      }
 
       if (!menuSearch.trim()) return true;
       const q = menuSearch.toLowerCase().trim();
@@ -870,25 +883,31 @@ export default function CaptainPage() {
   };
 
   const handleCatalogItemClick = (entry: any, qty: number = 1) => {
-    if (entry.customizations && entry.customizations.length > 0) {
+    const rawPrepPrefs = entry.item?.chefPrepPreferences || [];
+    const hasPrepPrefs = Array.isArray(rawPrepPrefs) && rawPrepPrefs.length > 0;
+
+    if ((entry.customizations && entry.customizations.length > 0) || hasPrepPrefs) {
       const initialSelected: Record<string, any[]> = {};
-      for (const group of entry.customizations) {
-        const gid = group.id || group._id;
-        const isRequired = Boolean(
-          group.required ??
-          group.is_required ??
-          group.isRequired ??
-          (group.min_selected && group.min_selected > 0)
-        );
-        const isSingleChoice = (group.max_selected ?? (isRequired ? 1 : 99)) === 1;
-        const avail = (group.customization_items || []).filter(
-          (ci: any) => ci.is_available !== false && ci.isAvailable !== false
-        );
-        if (isSingleChoice && isRequired && avail.length > 0) {
-          initialSelected[gid] = [avail[0]];
+      if (entry.customizations) {
+        for (const group of entry.customizations) {
+          const gid = group.id || group._id;
+          const isRequired = Boolean(
+            group.required ??
+            group.is_required ??
+            group.isRequired ??
+            (group.min_selected && group.min_selected > 0)
+          );
+          const isSingleChoice = (group.max_selected ?? (isRequired ? 1 : 99)) === 1;
+          const avail = (group.customization_items || []).filter(
+            (ci: any) => ci.is_available !== false && ci.isAvailable !== false
+          );
+          if (isSingleChoice && isRequired && avail.length > 0) {
+            initialSelected[gid] = [avail[0]];
+          }
         }
       }
       setSelectedCustomizationOptions(initialSelected);
+      setSelectedPrepPreferences([]);
       setCustomizationQty(qty);
       setCustomizingCatalogEntry(entry);
     } else {
@@ -999,11 +1018,16 @@ export default function CaptainPage() {
     const unitPrice = item.price + extraPrice;
     const itemId = item._id || item.id;
 
+    const prefKey = selectedPrepPreferences
+      .map((p) => p.name)
+      .sort()
+      .join("|");
+
     setRunningCart((prev) => {
-      const optionsKey = selectedOptionsList.map((o) => o.id).sort().join(",");
+      const optionsKey = `${selectedOptionsList.map((o) => o.id).sort().join(",")}_prep_${prefKey}`;
       const existingIdx = prev.findIndex((ci) => {
         if (ci.itemId !== itemId) return false;
-        const ciOptsKey = ((ci as any).customizationOptions || []).map((o: any) => o.id || o._id).sort().join(",");
+        const ciOptsKey = `${((ci as any).customizationOptions || []).map((o: any) => o.id || o._id).sort().join(",")}_prep_${((ci as any).prepPreferences || []).map((p: any) => p.name).sort().join("|")}`;
         return ciOptsKey === optionsKey;
       });
 
@@ -1021,12 +1045,14 @@ export default function CaptainPage() {
           price: unitPrice,
           quantity: customizationQty,
           customizationOptions: selectedOptionsList,
+          prepPreferences: selectedPrepPreferences.length > 0 ? selectedPrepPreferences : undefined,
         } as any,
       ];
     });
 
     setCustomizingCatalogEntry(null);
     setSelectedCustomizationOptions({});
+    setSelectedPrepPreferences([]);
     setCustomizationQty(1);
     showToast(`Added ${customizingCatalogEntry.item.name} (Customized)`);
   };
@@ -1091,11 +1117,13 @@ export default function CaptainPage() {
             customizationId: (opt.customizationId || opt.groupId) as Id<"customizations">,
             optionId: (opt.optionId || opt.id) as Id<"customizationItems">,
           }));
+        const prepPrefs = i.prepPreferences || (i as any).chefPrepPreferences || [];
 
         return {
           itemId: i.itemId,
           quantity: i.quantity,
           isToGo: Boolean(i.isToGo),
+          ...(prepPrefs.length > 0 ? { prepPreferences: prepPrefs } : {}),
           ...(custPayload.length > 0 ? { customizations: custPayload } : {}),
         };
       });
@@ -1394,7 +1422,9 @@ export default function CaptainPage() {
                               isOver2Hours ? "text-amber-400 font-bold animate-pulse" : "text-stone-300"
                             }`}
                           >
-                            {elapsedHours}:{elapsedMins.toString().padStart(2, "0")}:{elapsedSecs.toString().padStart(2, "0")}
+                            {isOver2Hours
+                              ? "> 2 hrs"
+                              : `${elapsedHours}:${elapsedMins.toString().padStart(2, "0")}:${elapsedSecs.toString().padStart(2, "0")}`}
                           </span>
                         )}
                         {hasRequest && (
@@ -1886,7 +1916,7 @@ export default function CaptainPage() {
                           : `No menu items found in ${selectedCategory}.`}
                       </div>
                     ) : (
-                      filteredCatalogItems.map((entry) => {
+                      filteredCatalogItems.map((entry, entryIdx) => {
                         const it = entry.item;
                         const itemId = it._id || it.id;
                         const inCartItem = runningCart.find((ci) => ci.itemId === itemId);
@@ -1896,10 +1926,11 @@ export default function CaptainPage() {
                           activeOrg?.country,
                         );
                         const hasCustomizations = Boolean(entry.customizations && entry.customizations.length > 0);
+                        const itemKey = `cpt_${entry.categoryId || entry.categoryName || "cat"}_${itemId}_${entryIdx}`;
 
                         return (
                           <div
-                            key={itemId}
+                            key={itemKey}
                             className="flex items-center justify-between py-2.5 hover:bg-[#fafaf9] transition-colors"
                           >
                             {/* Quantity Stepper */}
@@ -2590,6 +2621,67 @@ export default function CaptainPage() {
                   </div>
                 );
               })}
+              {/* Chef Prep Preferences (If configured for this item) */}
+              {customizingCatalogEntry.item.chefPrepPreferences &&
+                customizingCatalogEntry.item.chefPrepPreferences.length > 0 && (
+                  <div className="space-y-2 pt-2 border-t border-stone-200">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-xs text-stone-900 uppercase tracking-wider">
+                          Chef Prep Preferences
+                        </span>
+                        <span className="text-[11px] text-stone-500 font-normal">
+                          Choose preparation instructions (Optional)
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {customizingCatalogEntry.item.chefPrepPreferences.map((pref: any) => {
+                        const prefId = pref._id || pref.id || pref.preferenceId;
+                        const prefName = pref.name;
+                        const isSelected = selectedPrepPreferences.some(
+                          (p) => (p.preferenceId && p.preferenceId === prefId) || p.name === prefName
+                        );
+
+                        return (
+                          <button
+                            key={prefId || prefName}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedPrepPreferences((prev) =>
+                                  prev.filter(
+                                    (p) => (p.preferenceId && p.preferenceId !== prefId) || p.name !== prefName
+                                  )
+                                );
+                              } else {
+                                setSelectedPrepPreferences((prev) => [
+                                  ...prev,
+                                  { preferenceId: prefId, name: prefName },
+                                ]);
+                              }
+                            }}
+                            style={isSelected ? { color: "#ffffff", backgroundColor: "#0c0a09" } : undefined}
+                            className={`px-3.5 py-1.5 rounded-full text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                              isSelected
+                                ? "bg-[#0c0a09] !text-white shadow-xs"
+                                : "bg-stone-100 hover:bg-stone-200 text-stone-800"
+                            }`}
+                          >
+                            {isSelected && (
+                              <span className="material-symbols-outlined text-[14px]">check</span>
+                            )}
+                            <span>{prefName}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex items-center gap-2 text-[11px] text-[#78716c]">
+                      <span className="material-symbols-outlined text-[#7f7570] text-[16px] shrink-0">soup_kitchen</span>
+                      <span>Directly forwarded to kitchen prep station display</span>
+                    </div>
+                  </div>
+                )}
             </div>
 
             {/* Modal Bottom CTA */}

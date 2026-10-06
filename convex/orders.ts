@@ -120,9 +120,11 @@ export const createOrder = mutation({
       })
     ),
 
-    // Scheduled Delivery Timing
+    // Scheduled Delivery & Pickup Timing
     scheduledDeliveryDate: v.optional(v.string()),
     scheduledDeliveryTime: v.optional(v.string()),
+    scheduledPickupDate: v.optional(v.string()),
+    scheduledPickupTime: v.optional(v.string()),
 
     paymentMode: v.optional(v.string()),
     specialNotes: v.optional(v.string()),
@@ -139,12 +141,37 @@ export const createOrder = mutation({
             })
           )
         ),
+        prepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
+        chefPrepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
       })
     ),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
+
+    const org = await ctx.db.get(args.organizationId);
+    const orgTimeZone = org?.organizationTimeZone || "Asia/Kolkata";
 
     // Validation for Scheduled Delivery timing fields
     if (args.orderType === "ScheduledDelivery") {
@@ -158,7 +185,6 @@ export const createOrder = mutation({
     // 0. Postpaid QR Verification Guard
     const reqTableId = args.tableId;
     if (reqTableId && !args.cashierUserId && !args.waiterUserId) {
-      const org = await ctx.db.get(args.organizationId);
       if (org && org.dineinPospaid) {
         const identity = await ctx.auth.getUserIdentity();
         if (identity) {
@@ -380,6 +406,20 @@ export const createOrder = mutation({
         }
       }
 
+      // Resolve Chef Prep Preferences
+      const rawPrepPrefs = (inputItem as any).prepPreferences || (inputItem as any).chefPrepPreferences || [];
+      const resolvedPrepPreferences: Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }> = [];
+      for (const pref of rawPrepPrefs) {
+        if (typeof pref === "string" && pref.trim()) {
+          resolvedPrepPreferences.push({ name: pref.trim() });
+        } else if (pref && typeof pref === "object" && pref.name) {
+          resolvedPrepPreferences.push({
+            preferenceId: pref.preferenceId,
+            name: pref.name.trim(),
+          });
+        }
+      }
+
       lineItemConfigs.push({
         itemId: dbItem._id,
         itemName: dbItem.name,
@@ -387,6 +427,8 @@ export const createOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        prepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
+        chefPrepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
         isToGo: inputItem.isToGo ?? false,
       });
     }
@@ -529,9 +571,17 @@ export const createOrder = mutation({
       userAddressId: args.userAddressId,
       deliveryAddress: args.deliveryAddress,
       scheduledDeliveryDate:
-        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryDate : undefined,
+        args.scheduledDeliveryDate ||
+        args.scheduledPickupDate ||
+        (args.orderType === "ScheduledDelivery" || args.orderType === "ScheduledPickup"
+          ? new Date(now).toLocaleDateString("en-GB", { timeZone: orgTimeZone })
+          : undefined),
       scheduledDeliveryTime:
-        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryTime : undefined,
+        args.scheduledDeliveryTime ||
+        args.scheduledPickupTime ||
+        (args.orderType === "ScheduledDelivery" || args.orderType === "ScheduledPickup"
+          ? new Date(now).toLocaleTimeString("en-US", { timeZone: orgTimeZone, hour: "numeric", minute: "2-digit", hour12: true })
+          : undefined),
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",
       paymentStatus: resolvedPaymentStatus,
@@ -558,6 +608,8 @@ export const createOrder = mutation({
         quantity: line.quantity,
         totalPrice: line.totalPrice,
         customizations: line.customizations,
+        prepPreferences: line.prepPreferences,
+        chefPrepPreferences: line.chefPrepPreferences,
         isReady: false,
         isToGo: line.isToGo ?? false,
         stationId,
@@ -1737,6 +1789,28 @@ export const addItemsToExistingOrder = mutation({
             })
           )
         ),
+        prepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
+        chefPrepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
       })
     ),
   },
@@ -1775,6 +1849,20 @@ export const addItemsToExistingOrder = mutation({
         }
       }
 
+      // Resolve Chef Prep Preferences
+      const rawPrepPrefs = (inputItem as any).prepPreferences || (inputItem as any).chefPrepPreferences || [];
+      const resolvedPrepPreferences: Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }> = [];
+      for (const pref of rawPrepPrefs) {
+        if (typeof pref === "string" && pref.trim()) {
+          resolvedPrepPreferences.push({ name: pref.trim() });
+        } else if (pref && typeof pref === "object" && pref.name) {
+          resolvedPrepPreferences.push({
+            preferenceId: pref.preferenceId,
+            name: pref.name.trim(),
+          });
+        }
+      }
+
       const itemLineTotal = itemUnitPrice * inputItem.quantity;
       additionalSubTotal += itemLineTotal;
 
@@ -1785,6 +1873,8 @@ export const addItemsToExistingOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        prepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
+        chefPrepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
         isToGo: inputItem.isToGo ?? false,
       });
     }
@@ -1806,6 +1896,8 @@ export const addItemsToExistingOrder = mutation({
         quantity: line.quantity,
         totalPrice: line.totalPrice,
         customizations: line.customizations,
+        prepPreferences: line.prepPreferences,
+        chefPrepPreferences: line.chefPrepPreferences,
         isReady: false,
         isToGo: line.isToGo ?? false,
         stationId,
@@ -1984,130 +2076,8 @@ export const moveOrderTable = mutation({
   },
 });
 
-// ==========================================
-// AUTHENTICATED CUSTOMER ORDERS QUERY
-// ==========================================
 
-export const listCustomerOrders = query({
-  args: {
-    organizationId: v.id("organizations"),
-    orderIds: v.optional(v.array(v.string())),
-    placedOrderIds: v.optional(v.array(v.string())),
-    customerPhone: v.optional(v.string()),
-    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
-  },
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
-    const placedSet = new Set(sessionOrderIds);
 
-    if (!identity && placedSet.size === 0) {
-      return [];
-    }
-
-    const clerkUserId = identity?.subject;
-    const userEmail = identity?.email?.toLowerCase().trim();
-    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
-    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
-
-    // Collect allowed email and phone identifiers for this user
-    const allowedEmails = new Set<string>();
-    if (userEmail) allowedEmails.add(userEmail);
-
-    const allowedPhoneDigits = new Set<string>();
-    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
-      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
-    }
-
-    if (clerkUserId) {
-      const userOrgRecords = await ctx.db
-        .query("organizationUsers")
-        .withIndex("by_user_and_org", (q) =>
-          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
-        )
-        .collect();
-
-      for (const u of userOrgRecords) {
-        if (u.deletedAt !== undefined) continue;
-        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
-        if (u.phone) {
-          const uDig = u.phone.replace(/\D/g, "");
-          if (uDig.length >= 7) {
-            allowedPhoneDigits.add(uDig.slice(-10));
-          }
-        }
-      }
-    }
-
-    // Query orders for this store
-    const orgOrders = await ctx.db
-      .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-
-    // Strictly filter to orders belonging to this authenticated customer or placed in session
-    const filteredOrders = orgOrders.filter((order) => {
-      // Placed in current browser session
-      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
-        return true;
-      }
-
-      if (order.customerEmail) {
-        const oEmail = order.customerEmail.toLowerCase().trim();
-        if (allowedEmails.has(oEmail)) return true;
-      }
-
-      if (order.customerPhone) {
-        const oDigits = order.customerPhone.replace(/\D/g, "");
-        if (oDigits.length >= 7) {
-          const oLast10 = oDigits.slice(-10);
-          if (allowedPhoneDigits.has(oLast10)) return true;
-        }
-      }
-
-      return false;
-    });
-
-    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
-
-    const enrichedOrders: Array<any> = [];
-    for (const order of sorted) {
-      const items = await ctx.db
-        .query("orderItems")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
-
-      const activities = await ctx.db
-        .query("orderActivities")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
-
-      let tableInfo: any = null;
-      if (order.tableId) {
-        try {
-          tableInfo = await ctx.db.get(order.tableId as Id<"organizationTables">);
-        } catch {
-          // Table doc format fallback
-        }
-      }
-
-      enrichedOrders.push({
-        ...order,
-        display_sub_total: (order.subTotal / 100).toFixed(2),
-        display_tax_total: (order.taxTotal / 100).toFixed(2),
-        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
-        display_total_amount: (order.totalAmount / 100).toFixed(2),
-        items: items.map((i) => ({
-          ...i,
-          display_item_price: (i.itemPrice / 100).toFixed(2),
-          display_total_price: (i.totalPrice / 100).toFixed(2),
-        })),
-        activities: activities.sort((a, b) => a.position - b.position),
-        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
-      });
-    }
-
-    return enrichedOrders;
 /**
  * Lists all activity transitions and duration metrics for an order.
  */
