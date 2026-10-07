@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
 export function OrganizationBranding() {
   const organizations = useQuery(api.organizations.list);
@@ -220,7 +221,8 @@ export function OrganizationBranding() {
     "https://lh3.googleusercontent.com/aida-public/AB6AXuA2QJm69FJ3ZCyWkGoWAxImbRevIt0dqLd_Et_knlNsglK39LYM0RR7dZ5cNAvN0sKZspUjH3zkvutxeo8W9DA1TZmsEswGP6c0pZWpPTW6KQZu-9eLKstZ374rRJDQzuEYRrwQHArC48ouoWp3BYj7BHRMdOoGOkNNHUJ9Rm2goGg3x2bVwyQaUUj0Ai4TY08UdkVMZggGJXRPqkISCfZlm1vGvSlytl7f40rq_I7aogNrXvkZcyZBc1-mQQ_ekI4UxA";
 
   return (
-    <div className="space-y-8 select-none">
+    <ComingSoonOverlay title="Branding Settings">
+      <div className="space-y-8 select-none">
       {/* Hidden File Inputs */}
       <input
         type="file"
@@ -738,5 +740,6 @@ export function OrganizationBranding() {
         </div>
       </div>
     </div>
+    </ComingSoonOverlay>
   );
 }

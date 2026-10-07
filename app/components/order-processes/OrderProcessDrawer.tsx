@@ -92,7 +92,7 @@ function DrawerForm({
         <div className="flex items-center justify-between mb-8">
           <h2
             id="drawer-title"
-            className="font-garamond text-2xl md:text-3xl text-[#141010] font-normal leading-tight tracking-tight"
+            className="text-xl font-semibold text-[#141010] font-sans tracking-tight"
           >
             {mode === "edit" ? "Edit Order Status" : "Add Order Status"}
           </h2>

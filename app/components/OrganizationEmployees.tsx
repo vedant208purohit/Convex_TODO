@@ -592,7 +592,6 @@ export function OrganizationEmployees() {
   // Local State
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState("all");
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState("all");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -653,6 +652,7 @@ export function OrganizationEmployees() {
   const [deleteTarget, setDeleteTarget] = useState<{
     id: Id<"organizationUsers">;
     userId: string;
+    name?: string;
   } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -746,13 +746,9 @@ export function OrganizationEmployees() {
         selectedRoleFilter === "all" ||
         emp.userType.includes(selectedRoleFilter);
 
-      const matchesStatus =
-        selectedStatusFilter === "all" ||
-        (selectedStatusFilter === "active" ? true : false);
-
-      return matchesSearch && matchesRole && matchesStatus;
+      return matchesSearch && matchesRole;
     });
-  }, [employees, searchTerm, selectedRoleFilter, selectedStatusFilter]);
+  }, [employees, searchTerm, selectedRoleFilter]);
 
   // Paginated employees
   const totalPages = Math.ceil((filteredEmployees.length || 1) / itemsPerPage);
@@ -1097,19 +1093,19 @@ export function OrganizationEmployees() {
   );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full space-y-4 font-sans">
-      {/* TOP HEADER SECTION */}
-      <div className="space-y-4 shrink-0">
-        {/* Title & Subtitle */}
-        <div className="border-b border-[#e7e5e4] pb-4">
-          <h2 className="text-2xl lg:text-3xl text-[#1f1a17] font-semibold tracking-tight font-sans">
-            Employees
-          </h2>
-          <p className="text-xs text-[#6f655e] mt-1 font-sans">
-            Manage store staff, assign branch roles, and configure system permissions.
-          </p>
-        </div>
+    <div className="flex flex-col flex-1 h-full min-h-0 font-sans">
+      {/* FIXED TOP HEADER SECTION */}
+      <div className="shrink-0 border-b border-[#e7e5e4] pb-3 mb-3">
+        <h2 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
+          Employees
+        </h2>
+        <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
+          Manage store staff, assign branch roles, and configure system permissions.
+        </p>
+      </div>
 
+      {/* SCROLLABLE CONTENT AREA BELOW FIXED HEADER */}
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 pb-6 custom-scrollbar">
         {/* Control Bar (Search, Dropdowns & Add Employee Button) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#faf8f7] p-3 rounded-xl border border-[#e7e5e4]">
           {/* Left Controls: Search + Filters */}
@@ -1161,27 +1157,6 @@ export function OrganizationEmployees() {
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </div>
-
-            {/* Status Filter */}
-            <div className="relative inline-flex items-center shrink-0">
-              <select
-                value={selectedStatusFilter}
-                onChange={(e) => {
-                  setSelectedStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="appearance-none rounded-xl border border-[#e7e5e4] bg-[#fdf8f7] pl-3.5 pr-8 py-2 text-xs font-semibold text-[#1c1917] shadow-xs cursor-pointer hover:border-[#a8a29e] focus:border-[#141010] focus:outline-none transition shrink-0"
-              >
-                <option value="all">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
-              <svg
-                className="w-3.5 h-3.5 text-[#78716c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 fill-none stroke-current stroke-2"
-                viewBox="0 0 24 24"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </div>
           </div>
 
           {/* Add Employee Button */}
@@ -1196,170 +1171,190 @@ export function OrganizationEmployees() {
             </span>
           </button>
         </div>
-      </div>
 
-      {/* MAIN EMPLOYEE TABLE CARD */}
-      <div className="flex-1 flex flex-col min-h-[400px] rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
-        {/* Inner Scrollable Box with Sticky Table Header */}
-        <div className="flex-1 w-full overflow-x-auto overflow-y-auto custom-scrollbar min-h-0">
-          <table className="w-full min-w-[640px] text-left border-collapse table-fixed">
-            <colgroup>
-              <col className="w-[30%]" />
-              <col className="w-[24%]" />
-              <col className="w-[16%]" />
-              <col className="w-[14%]" />
-              <col className="w-[16%]" />
-            </colgroup>
+        {/* MAIN EMPLOYEE TABLE CARD */}
+        <div className="w-full rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
+          {/* Horizontal Scroll Box for table */}
+          <div className="w-full overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 z-10 bg-[#faf8f7] border-b border-[#e7e5e4] shadow-xs">
               <tr>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   EMPLOYEE
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   ROLES
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   JOINED
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   STATUS
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] text-right truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] text-right bg-[#faf8f7] align-middle">
                   ACTION
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f3efe]">
+            <tbody className="divide-y divide-[#e7e5e4]">
               {filteredEmployees.length > 0 ? (
-                filteredEmployees.map((emp) => {
-                  const isCurrentCaller =
-                    currentMembership?.userId === emp.userId;
-                  const meta = getEmployeeDisplayMeta(emp);
+                <>
+                  {filteredEmployees.map((emp) => {
+                    const callerEmail = (currentMembership as any)?.email;
+                    const empEmail = (emp as any)?.email;
+                    const isCurrentCaller = Boolean(
+                      (currentMembership?.userId &&
+                        currentMembership.userId === emp.userId) ||
+                      (currentMembership?._id &&
+                        currentMembership._id === emp._id) ||
+                      (callerEmail &&
+                        empEmail &&
+                        String(callerEmail).trim().toLowerCase() ===
+                          String(empEmail).trim().toLowerCase()),
+                    );
+                    const meta = getEmployeeDisplayMeta(emp);
 
-                  const formattedJoined = emp.createdAt
-                    ? new Date(emp.createdAt).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : "12 Aug 2024";
+                    const formattedJoined = emp.createdAt
+                      ? new Date(emp.createdAt).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "12 Aug 2024";
 
-                  return (
-                    <tr
-                      key={emp._id}
-                      className="transition-colors hover:bg-[#fdfbfb]"
-                    >
-                      {/* EMPLOYEE COLUMN */}
-                      <td className="py-3.5 px-3.5 min-w-0">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1c1917] text-xs font-bold text-white border border-[#e7e5e4] shadow-xs">
-                            {meta.initials}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-semibold text-xs text-[#1c1917] tracking-wide truncate">
-                                {meta.name}
-                              </span>
-                              {isCurrentCaller && (
-                                <span className="rounded bg-[#e7e5e4] px-1.5 py-0.2 text-[9px] font-semibold text-[#44403c] shrink-0">
-                                  You
+                    return (
+                      <tr
+                        key={emp._id}
+                        className="transition-colors hover:bg-[#fdfbfb] align-middle"
+                      >
+                        {/* EMPLOYEE COLUMN */}
+                        <td className="py-3.5 px-3.5 align-middle">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1c1917] text-xs font-bold text-white border border-[#e7e5e4] shadow-xs">
+                              {meta.initials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-xs text-[#1c1917] tracking-wide whitespace-nowrap">
+                                  {meta.name}
                                 </span>
-                              )}
+                                {isCurrentCaller && (
+                                  <span className="rounded bg-[#e7e5e4] px-1.5 py-0.2 text-[9px] font-semibold text-[#44403c] shrink-0">
+                                    You
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* ROLES COLUMN */}
-                      <td className="py-3.5 px-3.5">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {emp.userType.map((type) => {
-                            const matchRole = STAFF_ROLE_CARDS.find(
-                              (r) => r.key === type,
-                            );
-                            const matchMod = MODULE_ACCESS_CARDS.find(
-                              (m) => m.key === type,
-                            );
-                            const label =
-                              matchRole?.label || matchMod?.label || type;
-                            const isAdmin = type === "admin";
+                        {/* ROLES COLUMN */}
+                        <td className="py-3.5 px-3.5 align-middle">
+                          <div className="flex flex-wrap items-center gap-1 max-w-[320px] py-1">
+                            {emp.userType.map((type) => {
+                              const matchRole = STAFF_ROLE_CARDS.find(
+                                (r) => r.key === type,
+                              );
+                              const matchMod = MODULE_ACCESS_CARDS.find(
+                                (m) => m.key === type,
+                              );
+                              const label =
+                                matchRole?.label || matchMod?.label || type;
+                              const isAdmin = type === "admin";
 
-                            return (
-                              <span
-                                key={type}
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                                  isAdmin
-                                    ? "bg-[#1c1917] text-white shadow-xs"
-                                    : "bg-[#f5f5f4] border border-[#e7e5e4] text-[#44403c]"
-                                }`}
-                              >
-                                {isAdmin && (
-                                  <ShieldAdminIcon className="w-3 h-3 text-white" />
-                                )}
-                                {label}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
+                              return (
+                                <span
+                                  key={type}
+                                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium shrink-0 ${
+                                    isAdmin
+                                      ? "bg-[#1c1917] text-white shadow-xs"
+                                      : "bg-[#f5f5f4] border border-[#e7e5e4] text-[#44403c]"
+                                  }`}
+                                >
+                                  {isAdmin && (
+                                    <ShieldAdminIcon className="w-3 h-3 text-white" />
+                                  )}
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
 
-                      {/* JOINED COLUMN */}
-                      <td className="py-3.5 px-3.5 text-xs text-[#57534e] whitespace-nowrap">
-                        {formattedJoined}
-                      </td>
+                        {/* JOINED COLUMN */}
+                        <td className="py-3.5 px-3.5 text-xs text-[#57534e] whitespace-nowrap align-middle">
+                          {formattedJoined}
+                        </td>
 
-                      {/* STATUS COLUMN */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                          Active
-                        </span>
-                      </td>
+                        {/* STATUS COLUMN */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap align-middle">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                            Active
+                          </span>
+                        </td>
 
-                      {/* ACTION COLUMN */}
-                      <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setViewingTarget(emp)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
-                            title="View Employee Details"
-                          >
-                            <EyeIcon className="w-3.5 h-3.5" />
-                          </button>
+                        {/* ACTION COLUMN */}
+                        <td className="py-3.5 px-3.5 text-right whitespace-nowrap align-middle">
+                          <div className="flex items-center justify-end gap-1.5 py-0.5">
+                            {/* VIEW BUTTON - ALWAYS ENABLED */}
+                            <button
+                              type="button"
+                              onClick={() => setViewingTarget(emp)}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#e7e5e4] bg-[#faf8f7] text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
+                              title="View Employee Details"
+                            >
+                              <EyeIcon className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditDrawer(emp)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
-                            title="Edit Employee Roles & Permissions"
-                          >
-                            <EditIcon className="w-3.5 h-3.5" />
-                          </button>
+                            {/* EDIT BUTTON - DISABLED FOR LOGGED IN ACCOUNT */}
+                            <button
+                              type="button"
+                              disabled={isCurrentCaller}
+                              onClick={() =>
+                                !isCurrentCaller && handleOpenEditDrawer(emp)
+                              }
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#e7e5e4] bg-[#faf8f7] text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                              title={
+                                isCurrentCaller
+                                  ? "You cannot edit your own account"
+                                  : "Edit Employee Roles & Permissions"
+                              }
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            type="button"
-                            disabled={isCurrentCaller}
-                            onClick={() =>
-                              setDeleteTarget({
-                                id: emp._id,
-                                userId: emp.userId,
-                              })
-                            }
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                            title={
-                              isCurrentCaller
-                                ? "You cannot remove yourself"
-                                : "Remove Employee"
-                            }
-                          >
-                            <TrashIcon className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                            {/* DELETE BUTTON - DISABLED FOR LOGGED IN ACCOUNT */}
+                            <button
+                              type="button"
+                              disabled={isCurrentCaller}
+                              onClick={() =>
+                                !isCurrentCaller &&
+                                setDeleteTarget({
+                                  id: emp._id,
+                                  userId: emp.userId,
+                                  name: meta.name,
+                                })
+                              }
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200/80 bg-rose-50/50 text-rose-600 hover:bg-rose-100/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                              title={
+                                isCurrentCaller
+                                  ? "You cannot remove yourself"
+                                  : "Remove Employee"
+                              }
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Bottom spacer row to prevent last row clipping in scroll container */}
+                  <tr className="h-3 bg-transparent pointer-events-none">
+                    <td colSpan={5} className="p-0 border-0 h-3"></td>
+                  </tr>
+                </>
               ) : (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-[#78716c]">
@@ -1390,6 +1385,7 @@ export function OrganizationEmployees() {
           </div>
         </div>
       </div>
+    </div>
 
       {/* ==================================================== */}
       {/* VIEW EMPLOYEE SLIDE-OVER DRAWER (Matches Design Mockup) */}
@@ -1696,55 +1692,85 @@ export function OrganizationEmployees() {
             </div>
 
             {/* Drawer Sticky Footer */}
-            <div className="border-t border-neutral-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
-              <button
-                type="button"
-                disabled={Boolean(
-                  currentMembership?._id === activeViewingDoc._id,
-                )}
-                onClick={() => {
-                  const docToDel = activeViewingDoc;
-                  setViewingTarget(null);
-                  setDeleteTarget({
-                    id: docToDel._id,
-                    userId: docToDel.userId,
-                  });
-                }}
-                className="px-3.5 py-2 text-xs font-medium text-rose-400 hover:text-rose-500 bg-white hover:bg-rose-50/60 rounded-xl border border-rose-200 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-2xs"
-              >
-                <TrashIcon className="w-3.5 h-3.5 text-rose-400" />
-                <span>Deactivate employee</span>
-              </button>
+            {(() => {
+              const viewingCallerEmail = (currentMembership as any)?.email;
+              const viewingDocEmail = (activeViewingDoc as any)?.email;
+              const isViewingCurrentCaller = Boolean(
+                (currentMembership?.userId &&
+                  currentMembership.userId === activeViewingDoc.userId) ||
+                (currentMembership?._id &&
+                  currentMembership._id === activeViewingDoc._id) ||
+                (viewingCallerEmail &&
+                  viewingDocEmail &&
+                  String(viewingCallerEmail).trim().toLowerCase() ===
+                    String(viewingDocEmail).trim().toLowerCase()),
+              );
 
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setViewingTarget(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition focus:outline-none cursor-pointer shadow-2xs"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const docToEdit = activeViewingDoc;
-                    setViewingTarget(null);
-                    handleOpenEditDrawer(docToEdit);
-                  }}
-                  className="px-4.5 py-2 text-xs font-bold text-white bg-black hover:bg-neutral-800 active:scale-95 rounded-xl transition-all shadow-sm focus:outline-none cursor-pointer flex items-center gap-2 border border-black"
-                >
-                  <svg
-                    className="w-3.5 h-3.5 text-amber-400 fill-current shrink-0"
-                    viewBox="0 0 24 24"
+              return (
+                <div className="border-t border-neutral-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
+                  <button
+                    type="button"
+                    disabled={isViewingCurrentCaller}
+                    onClick={() => {
+                      if (isViewingCurrentCaller) return;
+                      const docToDel = activeViewingDoc;
+                      const viewMeta = getEmployeeDisplayMeta(docToDel);
+                      setViewingTarget(null);
+                      setDeleteTarget({
+                        id: docToDel._id,
+                        userId: docToDel.userId,
+                        name: viewMeta.name,
+                      });
+                    }}
+                    title={
+                      isViewingCurrentCaller
+                        ? "You cannot deactivate your own account"
+                        : "Deactivate employee"
+                    }
+                    className="px-3.5 py-2 text-xs font-medium text-rose-400 hover:text-rose-500 bg-white hover:bg-rose-50/60 rounded-xl border border-rose-200 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-2xs"
                   >
-                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-                  </svg>
-                  <span className="text-white font-bold text-xs tracking-wide">
-                    Edit employee
-                  </span>
-                </button>
-              </div>
-            </div>
+                    <TrashIcon className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Deactivate employee</span>
+                  </button>
+
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewingTarget(null)}
+                      className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition focus:outline-none cursor-pointer shadow-2xs"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isViewingCurrentCaller}
+                      onClick={() => {
+                        if (isViewingCurrentCaller) return;
+                        const docToEdit = activeViewingDoc;
+                        setViewingTarget(null);
+                        handleOpenEditDrawer(docToEdit);
+                      }}
+                      title={
+                        isViewingCurrentCaller
+                          ? "You cannot edit your own account"
+                          : "Edit employee"
+                      }
+                      className="px-4.5 py-2 text-xs font-bold text-white bg-black hover:bg-neutral-800 rounded-xl transition-all shadow-sm focus:outline-none cursor-pointer flex items-center gap-2 border border-black disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-neutral-600 disabled:border-neutral-600"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-amber-400 fill-current shrink-0"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                      </svg>
+                      <span className="text-white font-bold text-xs tracking-wide">
+                        Edit employee
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </aside>
         </div>
       )}
@@ -1953,8 +1979,10 @@ export function OrganizationEmployees() {
                       ref={emailInputRef}
                       id="user-identifier"
                       type="email"
+                      disabled={drawerMode === "edit"}
                       value={formUserIdentifier}
                       onChange={(e) => {
+                        if (drawerMode === "edit") return;
                         setFormUserIdentifier(e.target.value);
                         if (
                           pendingFields.email &&
@@ -1968,7 +1996,9 @@ export function OrganizationEmployees() {
                       }}
                       placeholder="e.g. john@gmail.com"
                       className={`w-full text-sm rounded-md border pl-9 pr-3 py-2 text-neutral-800 focus:outline-none transition ${
-                        pendingFields.email
+                        drawerMode === "edit"
+                          ? "bg-neutral-100 text-neutral-500 cursor-not-allowed border-neutral-300"
+                          : pendingFields.email
                           ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
                           : "border-neutral-300 bg-white focus:border-black focus:ring-1 focus:ring-black"
                       }`}
@@ -2343,6 +2373,9 @@ export function OrganizationEmployees() {
                           setDeleteTarget({
                             id: editingId,
                             userId: formUserIdentifier,
+                            name:
+                              `${formFirstName} ${formLastName}`.trim() ||
+                              formUserIdentifier,
                           });
                           handleCloseDrawer();
                         }
@@ -2395,39 +2428,46 @@ export function OrganizationEmployees() {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION MODAL (Matching Menu Category Delete Dialog) */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setDeleteTarget(null)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs animate-fade-in"
-          />
-
-          <div className="relative w-full max-w-md rounded-2xl border border-[#eadfd6] bg-white p-6 shadow-2xl space-y-4 animate-scale-up z-10 font-sans">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600 border border-red-200 shrink-0">
-                <TrashIcon className="w-5 h-5 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-base font-semibold text-[#1f1a17]">
-                  Remove Employee
-                </h3>
-                <p className="text-xs text-[#6f655e]">
-                  This action will revoke store portal access.
-                </p>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-[440px] w-full p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative text-[#101828] font-sans border border-slate-100">
+            {/* Red Soft Circular Alert Badge */}
+            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4 border border-rose-100/60">
+              <svg
+                className="w-6 h-6 text-rose-600 stroke-[2.2]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
             </div>
 
-            <p className="text-xs text-[#6f655e] leading-relaxed">
-              Are you sure you want to remove staff member{" "}
-              <strong className="text-[#1f1a17] font-semibold">{deleteTarget.userId}</strong>?
+            {/* Modal Heading */}
+            <h3 className="text-xl font-bold text-[#101828] tracking-tight">
+              Delete employee?
+            </h3>
+
+            {/* Modal Message */}
+            <p className="text-sm text-[#475467] leading-relaxed mt-2.5">
+              Are you sure you want to delete{" "}
+              <strong className="font-bold text-[#101828]">
+                {deleteTarget.name || deleteTarget.userId}
+              </strong>
+              ? This action will remove this staff member and revoke their access to this store. This action cannot be undone.
             </p>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            {/* Action Buttons Footer */}
+            <div className="flex items-center justify-end gap-3 mt-6 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="h-9 rounded-full border border-[#eadfd6] bg-white px-4 text-xs font-semibold text-[#1f1a17] shadow-2xs transition hover:bg-[#f3eeea] active:scale-95 cursor-pointer"
+                className="px-4.5 py-2.5 rounded-xl border border-[#D0D5DD] bg-white text-sm font-semibold text-[#344054] hover:bg-slate-50 transition cursor-pointer shadow-2xs"
               >
                 Cancel
               </button>
@@ -2435,9 +2475,9 @@ export function OrganizationEmployees() {
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="flex h-9 items-center justify-center rounded-full bg-red-600 px-4 text-xs font-semibold text-white shadow-xs transition hover:bg-red-700 active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-[#D92D20] hover:bg-[#B42318] active:bg-[#912018] text-white text-sm font-semibold transition cursor-pointer disabled:opacity-50 border-0 shadow-2xs"
               >
-                {isDeleting ? "Removing..." : "Remove Employee"}
+                {isDeleting ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>

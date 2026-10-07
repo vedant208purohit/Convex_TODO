@@ -560,25 +560,15 @@ export function OrganizationTablesSettings() {
   }
 
   return (
-    <div className="flex flex-col flex-1 min-w-0 bg-[#fdf8f7]">
-      {/* ------------------------------------------
-          HEADER & BREADCRUMB
-      ------------------------------------------ */}
-      <div className="px-6 lg:px-8 pt-6 pb-4 bg-transparent shrink-0">
-        <nav aria-label="Breadcrumb" className="flex items-center space-x-2 text-[11px] uppercase tracking-widest text-[#5e5e5e] font-medium">
-          <span>SETTINGS</span>
-          <span className="text-[#b8b3b0]">/</span>
-          <span>STORE CONFIGURATION</span>
-          <span className="text-[#b8b3b0]">/</span>
-          <span className="text-[#0c0a09] font-semibold">TABLES & LAYOUTS</span>
-        </nav>
-
-        <div className="mt-4 flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+    <div className="flex flex-col h-full overflow-hidden font-sans">
+      {/* Sticky / Fixed Top Header (Title + Subtitle + Sub-Nav Tabs) */}
+      <div className="shrink-0 space-y-2 bg-[#fdf8f7] pb-1 border-b border-[#e7e5e4]">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
           <div>
-            <h1 className="font-garamond text-3xl md:text-[32px] font-normal tracking-tight text-[#0c0a09] leading-tight">
+            <h1 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
               {activeMainTab === "layouts" ? "Tables & Layouts" : "Tables"}
             </h1>
-            <p className="text-sm text-[#5e5e5e] mt-1 font-normal">
+            <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
               Set up your dining areas and manage the tables assigned to each area.
             </p>
           </div>
@@ -595,45 +585,43 @@ export function OrganizationTablesSettings() {
           ) : null}
         </div>
 
-        {/* ------------------------------------------
-            NAVIGATION TABS: Layout Setup vs Tables
-        ------------------------------------------ */}
-        <div className="mt-6 border-b border-[#e7e5e4] flex space-x-8" role="tablist">
+        {/* Sub-Navigation Tabs */}
+        <nav className="mt-2.5 flex font-sans" role="tablist">
           <button
+            type="button"
             onClick={() => setActiveMainTab("layouts")}
             aria-selected={activeMainTab === "layouts"}
-            className={`pb-3 text-sm font-medium transition-all flex items-center space-x-2 cursor-pointer ${
+            className={`pb-2 text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
               activeMainTab === "layouts"
-                ? "text-[#0c0a09] border-b-2 border-[#0c0a09]"
-                : "text-[#5e5e5e] hover:text-[#0c0a09] border-b-2 border-transparent"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
             role="tab"
           >
             <span>Layout Setup</span>
-            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#f1edec] text-[#0c0a09]">
+            <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-[#f1edec] text-[#141010]">
               {activeLayoutsList.length}
             </span>
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveMainTab("tables")}
             aria-selected={activeMainTab === "tables"}
-            className={`pb-3 text-sm font-medium transition-all cursor-pointer ${
+            className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeMainTab === "tables"
-                ? "text-[#0c0a09] border-b-2 border-[#0c0a09]"
-                : "text-[#5e5e5e] hover:text-[#0c0a09] border-b-2 border-transparent"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
             role="tab"
           >
             <span>Tables</span>
           </button>
-        </div>
+        </nav>
       </div>
 
-      {/* ------------------------------------------
-          MAIN CONTENT AREA
-      ------------------------------------------ */}
-      <div className="px-6 lg:px-8 py-6 max-w-7xl flex-1 flex flex-col min-h-0">
+      {/* Scrollable Form & Content Area */}
+      <div className="flex-1 overflow-y-auto pt-3 space-y-4 pr-1 pb-2">
         {/* ==========================================
             TAB 1: LAYOUT SETUP
         ========================================== */}
