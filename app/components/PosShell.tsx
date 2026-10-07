@@ -267,17 +267,23 @@ function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: b
 
   if (isCollapsed) {
     return (
-      <Link
-        href={targetHref}
-        title={label}
-        className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
-          active
-            ? "bg-[#141010] text-white shadow-xs"
-            : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
-        }`}
-      >
-        <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
-      </Link>
+      <div className="relative group flex items-center justify-center my-0.5">
+        <Link
+          href={targetHref}
+          className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+            active
+              ? "bg-[#141010] text-white shadow-xs"
+              : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+          }`}
+        >
+          <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+        </Link>
+        <div className="absolute left-full top-1/2 -translate-y-1/2 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-none">
+          <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
+            {label}
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -350,8 +356,8 @@ export function PosShell({
     <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
       <aside
-        className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full overflow-hidden transition-all duration-300 ease-in-out ${
-          isCollapsed ? "w-20" : "w-64"
+        className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full transition-all duration-300 ease-in-out ${
+          isCollapsed ? "w-20 overflow-visible z-40" : "w-64 overflow-hidden"
         }`}
       >
         {/* Logo Header */}
@@ -393,9 +399,57 @@ export function PosShell({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1.5">
+        <nav className={`flex-1 py-4 flex flex-col gap-1.5 ${isCollapsed ? "overflow-visible" : "overflow-y-auto"}`}>
           {navItems.map((item) => {
             if (item.href === "/menu") {
+              if (isCollapsed) {
+                return (
+                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
+                    <Link
+                      href="/menu"
+                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+                        isMenuPage
+                          ? "bg-[#141010] text-white shadow-xs"
+                          : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+                      }`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
+                    </Link>
+
+                    {/* Flyout Hover Menu Popover Card */}
+                    <div className="absolute left-full top-0 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-auto">
+                      <div className="w-56 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
+                          Menu
+                        </div>
+                        {menuSubItems.map((sub) => {
+                          const isSubActive =
+                            sub.path === "/menu"
+                              ? pathname === "/menu" || (pathname.startsWith("/menu") && !pathname.startsWith("/menu/chef-prep-preferences"))
+                              : pathname === sub.path || pathname.startsWith(sub.path);
+                          return (
+                            <Link
+                              key={sub.path}
+                              href={sub.path}
+                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${
+                                isSubActive
+                                  ? "bg-[#0c0a09] text-white font-medium shadow-xs"
+                                  : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                              }`}
+                            >
+                              <span>{sub.label}</span>
+                              {isSubActive && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div key={item.href} className="flex flex-col px-3 my-0.5">
                   <button
@@ -453,18 +507,49 @@ export function PosShell({
             if (item.href === "/inventory") {
               if (isCollapsed) {
                 return (
-                  <Link
-                    key={item.href}
-                    href="/inventory/purchase-orders"
-                    title="Inventory"
-                    className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
-                      isInventoryPage
-                        ? "bg-[#141010] text-white shadow-xs"
-                        : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
-                    }`}
-                  >
-                    <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
-                  </Link>
+                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
+                    <Link
+                      href="/inventory/purchase-orders"
+                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+                        isInventoryPage
+                          ? "bg-[#141010] text-white shadow-xs"
+                          : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+                      }`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
+                    </Link>
+
+                    {/* Flyout Hover Menu Popover Card */}
+                    <div className="absolute left-full bottom-0 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-auto">
+                      <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
+                          Inventory
+                        </div>
+                        {inventorySubItems.map((sub) => {
+                          const isSubActive =
+                            pathname === sub.path ||
+                            (pathname === "/inventory" && currentTab === sub.tab) ||
+                            (pathname === "/inventory" && sub.tab === "purchaseOrders" && !searchParams.get("tab"));
+                          return (
+                            <Link
+                              key={sub.tab}
+                              href={sub.path}
+                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${
+                                isSubActive
+                                  ? "bg-[#0c0a09] text-white font-medium shadow-xs"
+                                  : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                              }`}
+                            >
+                              <span>{sub.label}</span>
+                              {isSubActive && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 );
               }
 
