@@ -468,21 +468,30 @@ function SettingsContent() {
                   );
                 }
 
+                const isComingSoon = tab.id === "queue" || tab.id === "digitalStore" || tab.id === "branding";
                 return (
                   <button
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors cursor-pointer select-none whitespace-nowrap ${
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors cursor-pointer select-none whitespace-nowrap ${
                       isSelected
                         ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
                         : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
                     }`}
                   >
-                    <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
-                      {tab.icon}
-                    </span>
-                    <span className="truncate">{tab.label}</span>
+                    <div className="flex items-center gap-2.5 min-w-0 truncate">
+                      <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
+                        {tab.icon}
+                      </span>
+                      <span className="truncate">{tab.label}</span>
+                    </div>
+                    {isComingSoon && (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-amber-700 border border-amber-200/80 shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
+                        Coming Soon
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -490,7 +499,7 @@ function SettingsContent() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-4 lg:p-5 flex flex-col h-full min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-5 flex flex-col h-full min-h-0 overflow-hidden">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
             {/* {activeTab === "printers" && <OrganizationPrinters />} */}

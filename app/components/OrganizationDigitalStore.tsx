@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, ChangeEvent } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
 type DigitalStoreTab = "general" | "carousel" | "about" | "social" | "policies";
 
@@ -443,7 +444,8 @@ export function OrganizationDigitalStore() {
   const storeWebUrl = `https://${org?.slug || "skyzrestaurant"}.prest.store`;
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#fdf8f7] overflow-hidden select-none">
+    <ComingSoonOverlay title="Digital Store">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#fdf8f7] overflow-hidden select-none">
       {/* Hidden File Inputs */}
       <input
         type="file"
@@ -1071,5 +1073,6 @@ export function OrganizationDigitalStore() {
         </div>
       )}
     </div>
+    </ComingSoonOverlay>
   );
 }

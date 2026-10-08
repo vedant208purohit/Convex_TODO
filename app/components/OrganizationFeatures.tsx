@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { Toast, ToastMessage } from "./Toast";
 
 // ==========================================
 // PIXEL-PERFECT SWITCH / TOGGLE COMPONENT
@@ -211,19 +212,97 @@ function SearchIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+// Helper to format time strings (e.g., "11:00" -> "11:00 AM", "23:59" -> "11:59 PM", GMT/ISO dates -> "11:00 AM")
+function formatTimeString(timeStr: string): string {
+  if (!timeStr) return "";
+  const clean = timeStr.trim();
+
+  // Case 1: Already AM/PM format (e.g. "11:00 AM", "11:59 PM")
+  if (/^\d{1,2}:\d{2}\s*(AM|PM|am|pm)$/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+
+  // Case 2: 24-hour format string (e.g. "11:00", "23:59", "11:00:00")
+  const match24 = clean.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24) {
+    let h = parseInt(match24[1], 10);
+    const m = match24[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    const hStr = h < 10 ? `0${h}` : `${h}`;
+    return `${hStr}:${m} ${ampm}`;
+  }
+
+  // Case 3: Embedded time string (e.g. "Mon May 08 2023 11:00:00 GMT+0530" or ISO "2023-05-08T11:00:00.000+05:30")
+  const timeInStrMatch = clean.match(/(\d{2}):(\d{2}):(\d{2})/);
+  if (timeInStrMatch) {
+    let h = parseInt(timeInStrMatch[1], 10);
+    const m = timeInStrMatch[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12;
+    if (h === 0) h = 12;
+    const hStr = h < 10 ? `0${h}` : `${h}`;
+    return `${hStr}:${m} ${ampm}`;
+  }
+
+  return clean;
+}
+
+const DAYS_ORDER = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function TimingScheduleDisplay({ timings }: { timings: any }) {
+  if (!timings || typeof timings !== "object") return null;
+
+  return (
+    <div className="mt-3 p-4 bg-white border border-[#e7e5e4] rounded-md max-w-md space-y-2.5 shadow-sm">
+      {DAYS_ORDER.map((day) => {
+        const dayConfig = timings[day];
+        const isOpen = dayConfig?.is_open ?? true;
+        const hours = dayConfig?.hours ?? [];
+
+        return (
+          <div
+            key={day}
+            className={`flex items-center justify-between text-xs transition-opacity ${
+              isOpen ? "text-[#141010]" : "text-[#8a7e75] opacity-50"
+            }`}
+          >
+            <span className="font-medium text-sm font-sans">{day}</span>
+            <div className="text-right font-sans font-medium text-xs">
+              {!isOpen ? (
+                <span className="text-rose-600 font-semibold">Closed</span>
+              ) : hours.length > 0 ? (
+                hours.map((h: any, idx: number) => (
+                  <div key={idx}>
+                    {formatTimeString(h.start_time)} – {formatTimeString(h.end_time)}
+                  </div>
+                ))
+              ) : (
+                <span className="text-[#8a7e75] italic">No hours set</span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 type TabType = "general" | "serviceModes" | "cashier";
 
 export function OrganizationFeatures() {
   const [activeTab, setActiveTab] = useState<TabType>("general");
 
-  // Feedback notifications
-  const [toastMessage, setToastMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  // Feedback notifications (Standard Toast matching Menu page)
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMessage({ type, text });
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
+    setToast({
+      id: String(Date.now()),
+      type,
+      message: text,
+    });
   };
 
   // ------------------------------------------
@@ -372,32 +451,17 @@ export function OrganizationFeatures() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
-      {/* Toast Notification Banner */}
-      {toastMessage && (
-        <div
-          className={`p-4 mb-4 rounded-xl border text-sm font-medium transition-all shrink-0 ${
-            toastMessage.type === "success"
-              ? "bg-emerald-50 text-emerald-900 border-emerald-200"
-              : "bg-rose-50 text-rose-900 border-rose-200"
-          }`}
-        >
-          {toastMessage.text}
-        </div>
-      )}
+    <div className="flex flex-col h-full overflow-hidden relative">
 
       {/* Fixed / Sticky Top Header (Title + Subtitle + Pill + Sub-tabs) */}
       <div className="shrink-0 space-y-4 bg-[#fdf8f7] pb-3 border-b border-[#e7e5e4]">
         {/* Page Header Title Section & Metric Pill */}
         <div className="flex items-start justify-between">
           <div>
-            <span className="text-[11px] font-semibold text-[#5e5e5e] tracking-widest uppercase font-sans">
-              SETTINGS / FEATURES
-            </span>
-            <h1 className="text-[30px] leading-tight text-[#141010] font-normal mt-1" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+            <h1 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
               Features
             </h1>
-            <p className="text-sm text-[#5e5e5e] mt-1">
+            <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
               Configure operational feature flags and POS terminal preferences.
             </p>
           </div>
@@ -496,6 +560,9 @@ export function OrganizationFeatures() {
           <span>Mahendra Suthar (Admin Access)</span>
         </div>
       </div>
+
+      {/* Floating Standard Toast Component (Matching Menu page) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
@@ -523,7 +590,7 @@ function GeneralSection({ org, getFeatureFlag, handleOrgToggle, handleFeatureTog
           <div className="flex items-center gap-3.5">
             <StorefrontIcon className="w-5 h-5 text-[#141010]" />
             <div>
-              <h3 className="text-lg font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h3 className="text-base font-semibold text-[#141010]">
                 General Store Preferences
               </h3>
               <p className="text-xs text-[#5e5e5e] mt-0.5">
@@ -554,10 +621,14 @@ function GeneralSection({ org, getFeatureFlag, handleOrgToggle, handleFeatureTog
           {/* Setting 2: Auto-accept Orders */}
           <div className="p-4 bg-white border border-[#e7e5e4] rounded-md flex items-start justify-between hover:bg-neutral-50/40 transition-colors">
             <div className="pr-4">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h4 className="text-sm font-semibold text-[#141010]">Auto-accept orders?</h4>
                 <span className="px-2 py-0.5 text-[10px] uppercase font-semibold tracking-wider rounded bg-[#0c0a09] text-white">
                   Order Workflow Automation
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200/80 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Coming Soon
                 </span>
               </div>
               <p className="text-xs text-[#5e5e5e] mt-1 leading-relaxed max-w-2xl">
@@ -568,7 +639,7 @@ function GeneralSection({ org, getFeatureFlag, handleOrgToggle, handleFeatureTog
                 <span>Active trigger: Web QR, Mobile Aggregators, and Table Side self-service</span>
               </div>
             </div>
-            <Switch checked={autoAccept} onChange={() => handleFeatureToggle("auto_accept", autoAccept)} />
+            <Switch checked={false} disabled onChange={() => {}} />
           </div>
         </div>
       </div>
@@ -713,14 +784,30 @@ function ServiceModesSection({
       return;
     }
     try {
+      // Normalize store operational timings to conform strictly to Convex validator schema: { is_open, hours }
+      const normalizedTimings = Object.fromEntries(
+        Object.entries(org.operationTiming).map(([day, schedule]: [string, any]) => [
+          day,
+          {
+            is_open: Boolean(schedule?.is_open),
+            hours: Array.isArray(schedule?.hours)
+              ? schedule.hours.map((hour: any) => ({
+                  start_time: String(hour?.start_time ?? ""),
+                  end_time: String(hour?.end_time ?? ""),
+                }))
+              : [],
+          },
+        ])
+      );
+
       if (type === "delivery") {
         await updateScheduleConfig({
-          deliveryTimings: org.operationTiming,
+          deliveryTimings: normalizedTimings,
         });
         showToast("Fetched store operational timings for Delivery.");
       } else {
         await updateScheduleConfig({
-          pickupTimings: org.operationTiming,
+          pickupTimings: normalizedTimings,
         });
         showToast("Fetched store operational timings for Pickup.");
       }
@@ -756,7 +843,7 @@ function ServiceModesSection({
           <div className="flex items-center gap-3.5">
             <RestaurantIcon className="w-5 h-5 text-[#141010]" />
             <div>
-              <h3 className="text-lg font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h3 className="text-base font-semibold text-[#141010]">
                 Dine in
               </h3>
               <p className="text-xs text-[#5e5e5e] mt-0.5">
@@ -827,7 +914,7 @@ function ServiceModesSection({
           <div className="flex items-center gap-3.5">
             <MallIcon className="w-5 h-5 text-[#141010]" />
             <div>
-              <h3 className="text-lg font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h3 className="text-base font-semibold text-[#141010]">
                 Takeaway
               </h3>
               <p className="text-xs text-[#5e5e5e] mt-0.5">
@@ -898,7 +985,7 @@ function ServiceModesSection({
           <div className="flex items-center gap-3.5">
             <MopedIcon className="w-5 h-5 text-[#141010]" />
             <div>
-              <h3 className="text-lg font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h3 className="text-base font-semibold text-[#141010]">
                 Delivery
               </h3>
               <p className="text-xs text-[#5e5e5e] mt-0.5">
@@ -1045,7 +1132,7 @@ function ServiceModesSection({
           <div className="flex items-center gap-3.5">
             <CalendarIcon className="w-5 h-5 text-[#141010]" />
             <div>
-              <h3 className="text-lg font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h3 className="text-base font-semibold text-[#141010]">
                 Scheduled delivery
               </h3>
               <p className="text-xs text-[#5e5e5e] mt-0.5">
@@ -1145,9 +1232,6 @@ function ServiceModesSection({
               <p className="text-xs text-[#5e5e5e]">Set specific delivery timings.</p>
 
               <div className="flex items-center gap-4 pt-1 max-w-lg">
-                <div className="px-3.5 py-2 rounded border border-[#e7e5e4] bg-white text-xs text-[#141010] font-mono">
-                  Operational window: 09:00 AM – 10:30 PM
-                </div>
                 <button
                   type="button"
                   onClick={() => handleFetchOrgTimings("delivery")}
@@ -1157,6 +1241,9 @@ function ServiceModesSection({
                   <span>Fetch Organization's operational timings</span>
                 </button>
               </div>
+
+              {/* Day-by-Day Operational Schedule Display (Reference from Old Project) */}
+              <TimingScheduleDisplay timings={scheduleConfig?.deliveryTimings} />
             </div>
 
             {/* 4. Delivery Time Slot Size */}
@@ -1202,7 +1289,7 @@ function ServiceModesSection({
           <div className="flex items-center gap-3.5">
             <StoreIcon className="w-5 h-5 text-[#141010]" />
             <div>
-              <h3 className="text-lg font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+              <h3 className="text-base font-semibold text-[#141010]">
                 Scheduled pickup
               </h3>
               <p className="text-xs text-[#5e5e5e] mt-0.5">
@@ -1308,6 +1395,9 @@ function ServiceModesSection({
                   <span>Fetch Organization's operational timings</span>
                 </button>
               </div>
+
+              {/* Day-by-Day Operational Schedule Display (Reference from Old Project) */}
+              <TimingScheduleDisplay timings={scheduleConfig?.pickupTimings} />
             </div>
 
             {/* 4. Pickup Time Slot Size */}
@@ -1391,8 +1481,9 @@ function ServiceModesSection({
                     <input
                       type="text"
                       value={pickupCity}
-                      onChange={(e) => setPickupCity(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-[#e7e5e4] rounded text-[#141010] focus:outline-none focus:border-[#0c0a09]"
+                      readOnly
+                      disabled
+                      className="w-full px-3 py-2 text-sm bg-neutral-50 border border-[#e7e5e4] rounded text-[#5e5e5e] cursor-not-allowed focus:outline-none"
                     />
                   </div>
                   <div>
@@ -1412,8 +1503,9 @@ function ServiceModesSection({
                     <input
                       type="text"
                       value={pickupState}
-                      onChange={(e) => setPickupState(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-[#e7e5e4] rounded text-[#141010] focus:outline-none focus:border-[#0c0a09]"
+                      readOnly
+                      disabled
+                      className="w-full px-3 py-2 text-sm bg-neutral-50 border border-[#e7e5e4] rounded text-[#5e5e5e] cursor-not-allowed focus:outline-none"
                     />
                   </div>
                   <div>
@@ -1421,8 +1513,9 @@ function ServiceModesSection({
                     <input
                       type="text"
                       value={pickupCountry}
-                      onChange={(e) => setPickupCountry(e.target.value)}
-                      className="w-full px-3 py-2 text-sm bg-white border border-[#e7e5e4] rounded text-[#141010] focus:outline-none focus:border-[#0c0a09]"
+                      readOnly
+                      disabled
+                      className="w-full px-3 py-2 text-sm bg-neutral-50 border border-[#e7e5e4] rounded text-[#5e5e5e] cursor-not-allowed focus:outline-none"
                     />
                   </div>
                 </div>
@@ -1507,7 +1600,7 @@ function CashierSection({ getFeatureFlag, handleFeatureToggle }: CashierSectionP
         {/* Card Header & Search Bar */}
         <div className="sticky top-0 z-10 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#e7e5e4] bg-[#fdf8f7]/95 backdrop-blur-sm">
           <div className="max-w-xl">
-            <h3 className="font-display-md text-xl font-medium text-[#141010] leading-snug" style={{ fontFamily: "'EB Garamond', Georgia, serif" }}>
+            <h3 className="text-base font-semibold text-[#141010]">
               POS Terminal Customization
             </h3>
             <p className="text-xs text-[#5e5e5e] mt-0.5">

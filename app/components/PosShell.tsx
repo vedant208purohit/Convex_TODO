@@ -278,7 +278,7 @@ function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: b
         >
           <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
         </Link>
-        <div className="absolute left-full top-1/2 -translate-y-1/2 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-none">
+        <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
           <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
             {label}
           </div>
@@ -399,7 +399,7 @@ export function PosShell({
         </div>
 
         {/* Navigation */}
-        <nav className={`flex-1 py-4 flex flex-col gap-1.5 ${isCollapsed ? "overflow-visible" : "overflow-y-auto"}`}>
+        <nav className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
           {navItems.map((item) => {
             if (item.href === "/menu") {
               if (isCollapsed) {
@@ -417,7 +417,7 @@ export function PosShell({
                     </Link>
 
                     {/* Flyout Hover Menu Popover Card */}
-                    <div className="absolute left-full top-0 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-auto">
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
                       <div className="w-56 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
                         <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
                           Menu
@@ -520,7 +520,7 @@ export function PosShell({
                     </Link>
 
                     {/* Flyout Hover Menu Popover Card */}
-                    <div className="absolute left-full bottom-0 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-auto">
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
                       <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
                         <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
                           Inventory

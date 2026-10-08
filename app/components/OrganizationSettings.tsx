@@ -787,7 +787,7 @@ export function OrganizationSettings() {
           taxMode: taxGroupMode === "Inclusive" ? "inclusive" : "exclusive",
           componentIds: finalCompIds,
         });
-        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) updated in Convex Database successfully.`);
+        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) updated successfully.`);
       } else {
         // Create new tax group in Convex DB
         await createTaxGroupMutation({
@@ -800,13 +800,13 @@ export function OrganizationSettings() {
           setHiddenFallbackGroups((prev) => [...prev, taxGroupName.trim()]);
         }
         const actionText = drawerMode === "add" ? "created" : "updated";
-        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) ${actionText} in Convex Database successfully.`);
+        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) ${actionText} successfully.`);
       }
 
       handleCloseTaxGroupDrawer();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to save Tax Group in Convex Database.");
+      setErrorMessage(err?.message || "Failed to save Tax Group.");
     } finally {
       setIsSaving(false);
     }
@@ -1184,7 +1184,7 @@ export function OrganizationSettings() {
 
       await updateOrg(updatePayload as any);
 
-      setSuccessMessage("Organization settings updated successfully in Convex Database!");
+      setSuccessMessage("Organization settings updated successfully!");
       if (isTimingsDrawerOpen) handleCloseTimingsDrawer();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
@@ -1219,8 +1219,8 @@ export function OrganizationSettings() {
   return (
     <div className="flex flex-col h-full overflow-hidden font-sans">
       {/* Sticky / Fixed Top Header (Title + Subtitle + Sub-Nav Tabs) */}
-      <div className="shrink-0 space-y-2 bg-[#fdf8f7] pb-1 border-b border-[#eadfd6]">
-        <h1 className="text-2xl font-semibold text-[#1f1a17] font-sans">
+      <div className="shrink-0 space-y-2 bg-[#fdf8f7] pb-1 border-b border-[#e7e5e4]">
+        <h1 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
           {activeTab === "timings"
             ? "Operational Timings"
             : activeTab === "taxation"
@@ -1229,7 +1229,7 @@ export function OrganizationSettings() {
             ? "Country Requirements"
             : "Restaurant Details"}
         </h1>
-        <p className="mt-0.5 text-xs text-[#6f655e]">
+        <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
           {activeTab === "timings"
             ? "Set your restaurant's opening hours for each day."
             : activeTab === "taxation"
@@ -1240,14 +1240,14 @@ export function OrganizationSettings() {
         </p>
 
         {/* Sub-Navigation Tabs */}
-        <nav className="mt-2.5 flex">
+        <nav className="mt-2.5 flex font-sans">
           <button
             type="button"
             onClick={() => setActiveTab("details")}
             className={`pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "details"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Restaurant Details
@@ -1257,8 +1257,8 @@ export function OrganizationSettings() {
             onClick={() => setActiveTab("timings")}
             className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "timings"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Operational Timings
@@ -1268,8 +1268,8 @@ export function OrganizationSettings() {
             onClick={() => setActiveTab("taxation")}
             className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "taxation"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Taxation
@@ -1279,8 +1279,8 @@ export function OrganizationSettings() {
             onClick={() => setActiveTab("country")}
             className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "country"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Country Requirements
@@ -2802,12 +2802,12 @@ export function OrganizationSettings() {
 
       {/* FOOTER ACTIONS BAR (Fixed at bottom; Hidden on Operational Timings & Taxation since drawers handle actions) */}
       {activeTab !== "timings" && activeTab !== "taxation" && (
-        <div className="shrink-0 flex items-center justify-end gap-3 border-t border-[#eadfd6] bg-[#fdf8f7] pt-3 pb-1 px-1 z-20">
+        <div className="shrink-0 flex items-center justify-end gap-2.5 border-t border-[#e7e5e4] bg-[#fdf8f7] pt-2 pb-0 z-20">
           <button
             type="button"
             onClick={handleCancel}
             disabled={isSaving}
-            className="h-8.5 rounded-full border border-[#eadfd6] bg-white px-5 text-xs font-semibold text-[#1f1a17] shadow-2xs transition hover:bg-[#f3eeea] active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="h-8 rounded-full border border-[#e7e5e4] bg-white px-4 text-xs font-semibold text-[#141010] transition hover:bg-[#f1edec] active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             Cancel
           </button>
@@ -2815,7 +2815,7 @@ export function OrganizationSettings() {
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="flex h-8.5 items-center justify-center rounded-full bg-[#191513] px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-[#2e2824] active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="flex h-8 items-center justify-center rounded-full bg-[#0c0a09] px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {isSaving ? (
               <div className="flex items-center gap-2">
