@@ -444,6 +444,22 @@ describe("Multi-Menu Architecture Tests", () => {
 
     const choice = await t.run(async (ctx) => await ctx.db.get(choiceId));
     expect(choice?.imageAssetId).toBe(menuImageAssetId);
+
+    // Test clearing / removing media files (null should unset asset and storage IDs)
+    await t.mutation(api.menu.updateItem, {
+      id: itemId,
+      imageAssetId: null,
+      threeDModelAssetId: null,
+      threeDModelIosAssetId: null,
+      videoAssetId: null,
+    });
+
+    const clearedItem = await t.run(async (ctx) => await ctx.db.get(itemId));
+    expect(clearedItem?.imageAssetId).toBeUndefined();
+    expect(clearedItem?.imageStorageId).toBeUndefined();
+    expect(clearedItem?.threeDModelAssetId).toBeUndefined();
+    expect(clearedItem?.threeDModelIosAssetId).toBeUndefined();
+    expect(clearedItem?.videoAssetId).toBeUndefined();
   });
 
   test("6. Multi-Menu allMenus: true & menuId Queries", async () => {
