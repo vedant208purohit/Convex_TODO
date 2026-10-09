@@ -9,6 +9,7 @@ import {
   getCurrencyForCountry,
 } from "@/lib/constants/countries";
 import { downloadPurchaseOrderPdf } from "@/app/utils/generatePurchaseOrderPdf";
+import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 export interface PurchaseOrderItem {
   id: string;
@@ -1433,7 +1434,8 @@ export function PurchaseOrdersView({
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbfbfa] relative">
+    <ComingSoonOverlay title="Purchase Orders">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbfbfa] relative">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -1480,13 +1482,6 @@ export function PurchaseOrdersView({
       <header className="px-8 pt-8 pb-6 border-b border-[#eceae4] bg-[#fbfbfa] shrink-0">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <div className="flex items-center space-x-2 text-xs text-[#787670] tracking-wide uppercase mb-1 font-mono">
-              <span>INVENTORY</span>
-              <span>/</span>
-              <span className="text-[#141413] font-medium">
-                PURCHASE ORDERS
-              </span>
-            </div>
             <h1 className="font-serif text-[30px] font-normal leading-tight text-[#141413] tracking-tight">
               Purchase Orders
             </h1>
@@ -2355,5 +2350,6 @@ export function PurchaseOrdersView({
         </>
       )}
     </div>
+    </ComingSoonOverlay>
   );
 }

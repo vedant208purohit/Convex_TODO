@@ -233,7 +233,7 @@ export const listCaptainTables = query({
         const normOrderId = ctx.db.normalizeId("orders", table.currentOrderId);
         if (normOrderId) {
           const ord = await ctx.db.get(normOrderId);
-          if (ord && !ord.isCompleted && !ord.isRejected) {
+          if (ord && !ord.isRejected) {
             const rawItems = await ctx.db
               .query("orderItems")
               .withIndex("by_order", (q) => q.eq("orderId", ord._id))

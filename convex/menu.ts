@@ -1578,30 +1578,30 @@ export const updateItem = mutation({
     id: v.id("items"),
     name: v.optional(v.string()),
     price: v.optional(v.number()),
-    description: v.optional(v.string()),
+    description: v.optional(v.union(v.string(), v.null())),
     published: v.optional(v.boolean()),
     isAvailable: v.optional(v.boolean()),
     isGst: v.optional(v.boolean()),
-    taxGroupId: v.optional(v.id("taxGroups")),
+    taxGroupId: v.optional(v.union(v.id("taxGroups"), v.null())),
     taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     isVeg: v.optional(v.boolean()),
     isSpicy: v.optional(v.boolean()),
     showItemType: v.optional(v.boolean()),
     showQuantity: v.optional(v.boolean()),
-    quantity: v.optional(v.number()),
-    quantityUnit: v.optional(v.string()),
-    skuNumber: v.optional(v.string()),
+    quantity: v.optional(v.union(v.number(), v.null())),
+    quantityUnit: v.optional(v.union(v.string(), v.null())),
+    skuNumber: v.optional(v.union(v.string(), v.null())),
     markAsBestseller: v.optional(v.boolean()),
-    servingSize: v.optional(v.string()),
-    serving: v.optional(v.number()),
-    caloriesPerServing: v.optional(v.string()),
-    calorie: v.optional(v.string()),
-    protein: v.optional(v.string()),
-    carbs: v.optional(v.string()),
-    fat: v.optional(v.string()),
-    fiber: v.optional(v.string()),
-    sugar: v.optional(v.string()),
-    sodium: v.optional(v.string()),
+    servingSize: v.optional(v.union(v.string(), v.null())),
+    serving: v.optional(v.union(v.number(), v.null())),
+    caloriesPerServing: v.optional(v.union(v.string(), v.null())),
+    calorie: v.optional(v.union(v.string(), v.null())),
+    protein: v.optional(v.union(v.string(), v.null())),
+    carbs: v.optional(v.union(v.string(), v.null())),
+    fat: v.optional(v.union(v.string(), v.null())),
+    fiber: v.optional(v.union(v.string(), v.null())),
+    sugar: v.optional(v.union(v.string(), v.null())),
+    sodium: v.optional(v.union(v.string(), v.null())),
     showAllergenContents: v.optional(v.boolean()),
     allergens: v.optional(v.array(v.string())),
     nutrients: v.optional(
@@ -1625,24 +1625,51 @@ export const updateItem = mutation({
       )
     ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
-    imageStorageId: v.optional(v.id("_storage")),
-    imageAssetId: v.optional(v.id("organization_assets")),
-    threeDModelStorageId: v.optional(v.id("_storage")),
-    threeDModelAssetId: v.optional(v.id("organization_assets")),
-    threeDModelIosStorageId: v.optional(v.id("_storage")),
-    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
-    videoStorageId: v.optional(v.id("_storage")),
-    videoAssetId: v.optional(v.id("organization_assets")),
+    imageStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    imageAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
+    threeDModelStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    threeDModelAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
+    threeDModelIosStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    threeDModelIosAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
+    videoStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    videoAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const item = await ctx.db.get(id);
     if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
 
-    await ctx.db.patch(id, {
-      ...updates,
+    const patch: any = {
       updatedAt: Date.now(),
-    });
+    };
+
+    for (const [key, val] of Object.entries(updates)) {
+      if (val === null) {
+        patch[key] = undefined;
+      } else if (val !== undefined) {
+        patch[key] = val;
+      }
+    }
+
+    // Explicitly unset storage references when asset IDs are cleared
+    if (args.imageAssetId === null) {
+      patch.imageAssetId = undefined;
+      patch.imageStorageId = undefined;
+    }
+    if (args.threeDModelAssetId === null) {
+      patch.threeDModelAssetId = undefined;
+      patch.threeDModelStorageId = undefined;
+    }
+    if (args.threeDModelIosAssetId === null) {
+      patch.threeDModelIosAssetId = undefined;
+      patch.threeDModelIosStorageId = undefined;
+    }
+    if (args.videoAssetId === null) {
+      patch.videoAssetId = undefined;
+      patch.videoStorageId = undefined;
+    }
+
+    await ctx.db.patch(id, patch);
     return await ctx.db.get(id);
   },
 });
@@ -1991,30 +2018,44 @@ export const updateCustomizationItem = mutation({
     id: v.id("customizationItems"),
     name: v.optional(v.string()),
     price: v.optional(v.number()),
-    description: v.optional(v.string()),
+    description: v.optional(v.union(v.string(), v.null())),
     isGst: v.optional(v.boolean()),
-    taxGroupId: v.optional(v.id("taxGroups")),
+    taxGroupId: v.optional(v.union(v.id("taxGroups"), v.null())),
     taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     isVeg: v.optional(v.boolean()),
-    dietaryType: v.optional(v.string()),
+    dietaryType: v.optional(v.union(v.string(), v.null())),
     showQuantity: v.optional(v.boolean()),
-    quantity: v.optional(v.number()),
-    quantityUnit: v.optional(v.string()),
+    quantity: v.optional(v.union(v.number(), v.null())),
+    quantityUnit: v.optional(v.union(v.string(), v.null())),
     showCalorie: v.optional(v.boolean()),
-    calorie: v.optional(v.string()),
-    calorieMetric: v.optional(v.string()),
+    calorie: v.optional(v.union(v.string(), v.null())),
+    calorieMetric: v.optional(v.union(v.string(), v.null())),
     isAvailable: v.optional(v.boolean()),
     position: v.optional(v.number()),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
-    imageStorageId: v.optional(v.id("_storage")),
-    imageAssetId: v.optional(v.id("organization_assets")),
+    imageStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    imageAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const existing = await ctx.db.get(id);
     if (!existing || existing.deletedAt !== undefined) throw new Error("Customization item not found");
 
-    await ctx.db.patch(id, updates);
+    const patch: any = { updatedAt: Date.now() };
+    for (const [key, val] of Object.entries(updates)) {
+      if (val === null) {
+        patch[key] = undefined;
+      } else if (val !== undefined) {
+        patch[key] = val;
+      }
+    }
+
+    if (args.imageAssetId === null) {
+      patch.imageAssetId = undefined;
+      patch.imageStorageId = undefined;
+    }
+
+    await ctx.db.patch(id, patch);
     return await ctx.db.get(id);
   },
 });
