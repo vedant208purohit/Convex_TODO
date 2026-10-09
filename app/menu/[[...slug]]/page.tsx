@@ -1429,44 +1429,36 @@ export default function MenuPage() {
   // Active Tax Group resolved for choice tax calculations
   const resolvedChoiceTaxGroup = useMemo(() => {
     if (!taxGroups || taxGroups.length === 0) return null;
+    if (choiceSelectedTaxGroupId === "none") return null;
     if (choiceSelectedTaxGroupId) {
       return taxGroups.find((g) => g._id === choiceSelectedTaxGroupId) || null;
     }
-    return taxGroups.find((g) => g.isDefault) || taxGroups[0] || null;
+    return taxGroups.find((g) => g.isDefault) || null;
   }, [taxGroups, choiceSelectedTaxGroupId]);
 
   // Choice Tax Breakdown computation
   const choiceTaxBreakdown = useMemo(() => {
     const rawPrice = parseFloat(choicePrice || "0");
-    if (
-      isNaN(rawPrice) ||
-      rawPrice <= 0 ||
-      !choiceIsGst ||
-      !resolvedChoiceTaxGroup
-    ) {
+    if (isNaN(rawPrice) || rawPrice <= 0 || !choiceIsGst) {
       return null;
     }
 
     let components = (taxComponents || []).filter((c) =>
-      resolvedChoiceTaxGroup.componentIds?.includes(c._id),
+      resolvedChoiceTaxGroup?.componentIds?.includes(c._id),
     );
 
-    if (components.length === 0) {
-      components = [
-        {
-          _id: "tax_demo" as any,
-          _creationTime: 0,
-          name: "Tax",
-          code: "TAX",
-          rate: 5.0,
-          organizationId: "" as any,
-          createdAt: 0,
-        },
-      ];
-    }
-    const totalRate = components.reduce((sum, c) => sum + c.rate, 0) || 5;
+    const totalRate = components.reduce((sum, c) => sum + c.rate, 0) || 0;
 
-    if (totalRate <= 0) return null;
+    if (totalRate <= 0) {
+      return {
+        mode: choiceTaxMode,
+        basePrice: rawPrice.toFixed(2),
+        totalTax: "0.00",
+        finalPrice: rawPrice.toFixed(2),
+        totalRate: 0,
+        components: [],
+      };
+    }
 
     if (choiceTaxMode === "inclusive") {
       const base = rawPrice / (1 + totalRate / 100);
@@ -1869,10 +1861,11 @@ export default function MenuPage() {
   // Active Tax Group resolved for item tax calculations
   const resolvedTaxGroup = useMemo(() => {
     if (!taxGroups || taxGroups.length === 0) return null;
+    if (itemSelectedTaxGroupId === "none") return null;
     if (itemSelectedTaxGroupId) {
       return taxGroups.find((g) => g._id === itemSelectedTaxGroupId) || null;
     }
-    return taxGroups.find((g) => g.isDefault) || taxGroups[0] || null;
+    return taxGroups.find((g) => g.isDefault) || null;
   }, [taxGroups, itemSelectedTaxGroupId]);
 
   // Tax Breakdown computation
@@ -1889,22 +1882,20 @@ export default function MenuPage() {
       resolvedTaxGroup?.componentIds?.includes(c._id),
     );
 
-    if (matchedComponents.length === 0) {
-      matchedComponents = [
-        {
-          _id: "tax_demo" as any,
-          _creationTime: 0,
-          name: "Tax",
-          code: "TAX",
-          rate: 5.0,
-          organizationId: "" as any,
-          createdAt: 0,
-        },
-      ];
-    }
-
     const totalTaxRate =
-      matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 5;
+      matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 0;
+
+    if (totalTaxRate === 0) {
+      return {
+        mode: itemTaxMode,
+        isDemo,
+        basePrice: effectivePrice.toFixed(2),
+        totalTaxAmount: "0.00",
+        finalPrice: effectivePrice.toFixed(2),
+        components: [],
+        totalRate: 0,
+      };
+    }
 
     if (itemTaxMode === "inclusive") {
       const basePrice = effectivePrice / (1 + totalTaxRate / 100);
@@ -2205,8 +2196,8 @@ export default function MenuPage() {
     setItemQuantity("");
     setItemQuantityUnit("g");
     setItemIsGst(true);
-    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
-    setItemSelectedTaxGroupId(defaultTg?._id || "");
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
+    setItemSelectedTaxGroupId(defaultTg?._id || "none");
     setItemTaxMode(defaultTg?.taxMode || "inclusive");
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
@@ -2272,8 +2263,8 @@ export default function MenuPage() {
     setItemQuantity(item.quantity ? String(item.quantity) : "");
     setItemQuantityUnit(item.quantityUnit || "g");
     setItemIsGst(item.isGst ?? true);
-    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
-    setItemSelectedTaxGroupId(item.taxGroupId || defaultTg?._id || "");
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
+    setItemSelectedTaxGroupId(item.taxGroupId || defaultTg?._id || "none");
     setItemTaxMode(item.taxMode || defaultTg?.taxMode || "inclusive");
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
@@ -2690,9 +2681,12 @@ export default function MenuPage() {
           ? [matchedTypeObj.id as Id<"itemTypes">]
           : undefined;
 
-      const effectiveTaxGroupId = (itemSelectedTaxGroupId ||
-        resolvedTaxGroup?._id ||
-        undefined) as Id<"taxGroups"> | undefined;
+      const effectiveTaxGroupId =
+        itemSelectedTaxGroupId === "none"
+          ? undefined
+          : ((itemSelectedTaxGroupId ||
+              resolvedTaxGroup?._id ||
+              undefined) as Id<"taxGroups"> | undefined);
 
       if (editingItem) {
         await updateItemMutation({
@@ -3348,8 +3342,8 @@ export default function MenuPage() {
     setChoiceCalorie("");
     setChoiceCalorieMetric("kcal");
     setChoiceIsGst(false);
-    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
-    setChoiceSelectedTaxGroupId(defaultTg?._id || "");
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
+    setChoiceSelectedTaxGroupId(defaultTg?._id || "none");
     setChoiceTaxMode(defaultTg?.taxMode || "inclusive");
     setIsChoiceAdvancedOpen(false);
     setIsAddChoiceOpen(true);
@@ -3371,11 +3365,11 @@ export default function MenuPage() {
     setChoiceCalorie(choice.calorie || "");
     setChoiceCalorieMetric(choice.calorieMetric || "kcal");
     setChoiceIsGst(!!choice.isGst);
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
     setChoiceSelectedTaxGroupId(
       choice.taxGroupId ||
-        taxGroups?.find((g) => g.isDefault)?._id ||
-        taxGroups?.[0]?._id ||
-        "",
+        defaultTg?._id ||
+        "none",
     );
     setChoiceTaxMode(choice.taxMode || "inclusive");
     setIsChoiceAdvancedOpen(
@@ -3442,7 +3436,7 @@ export default function MenuPage() {
           calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
           isGst: choiceIsGst,
           taxGroupId:
-            choiceIsGst && choiceSelectedTaxGroupId
+            choiceIsGst && choiceSelectedTaxGroupId && choiceSelectedTaxGroupId !== "none"
               ? (choiceSelectedTaxGroupId as any)
               : undefined,
           taxMode: choiceIsGst ? choiceTaxMode : undefined,
@@ -3474,7 +3468,7 @@ export default function MenuPage() {
           calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
           isGst: choiceIsGst,
           taxGroupId:
-            choiceIsGst && choiceSelectedTaxGroupId
+            choiceIsGst && choiceSelectedTaxGroupId && choiceSelectedTaxGroupId !== "none"
               ? (choiceSelectedTaxGroupId as any)
               : undefined,
           taxMode: choiceIsGst ? choiceTaxMode : undefined,
@@ -4375,9 +4369,11 @@ export default function MenuPage() {
                               <div className="relative">
                                 <select
                                   value={
-                                    itemSelectedTaxGroupId ||
-                                    resolvedTaxGroup?._id ||
-                                    ""
+                                    itemSelectedTaxGroupId === "none"
+                                      ? "none"
+                                      : itemSelectedTaxGroupId ||
+                                        resolvedTaxGroup?._id ||
+                                        "none"
                                   }
                                   onChange={(e) => {
                                     setItemSelectedTaxGroupId(e.target.value);
@@ -4391,16 +4387,19 @@ export default function MenuPage() {
                                   className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 appearance-none focus:outline-none focus:border-[#141010] text-[#0c0a09] text-xs font-medium"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
-                                    taxGroups.map((tg) => (
-                                      <option key={tg._id} value={tg._id}>
-                                        {tg.name}{" "}
-                                        {tg.isDefault
-                                          ? "⭐ (Store Default)"
-                                          : ""}
-                                      </option>
-                                    ))
+                                    <>
+                                      <option value="none">None (0% Tax)</option>
+                                      {taxGroups.map((tg) => (
+                                        <option key={tg._id} value={tg._id}>
+                                          {tg.name}{" "}
+                                          {tg.isDefault
+                                            ? "⭐ (Store Default)"
+                                            : ""}
+                                        </option>
+                                      ))}
+                                    </>
                                   ) : (
-                                    <option value="">Default Store Tax</option>
+                                    <option value="none">None (0% Tax)</option>
                                   )}
                                 </select>
                                 <ChevronDownIcon className="absolute right-3 top-3 w-4 h-4 text-[#5e5e5e] pointer-events-none" />
@@ -4481,6 +4480,14 @@ export default function MenuPage() {
                                   {taxBreakdown.basePrice}
                                 </span>
                               </div>
+                              {taxBreakdown.totalRate === 0 && (
+                                <div className="flex justify-between text-[#5e5e5e] text-xs">
+                                  <span>• Tax (0%):</span>
+                                  <span className="font-medium text-[#141010]">
+                                    +{currencySymbol}0.00
+                                  </span>
+                                </div>
+                              )}
                               {taxBreakdown.components.map((c, idx) => (
                                 <div
                                   key={idx}
@@ -7834,21 +7841,30 @@ export default function MenuPage() {
                               </label>
                               <div className="relative">
                                 <select
-                                  value={choiceSelectedTaxGroupId}
+                                  value={
+                                    choiceSelectedTaxGroupId === "none"
+                                      ? "none"
+                                      : choiceSelectedTaxGroupId ||
+                                        resolvedChoiceTaxGroup?._id ||
+                                        "none"
+                                  }
                                   onChange={(e) =>
                                     setChoiceSelectedTaxGroupId(e.target.value)
                                   }
                                   className="w-full bg-white border border-neutral-300 rounded-md px-3 py-1.5 appearance-none focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-900 text-xs font-medium shadow-xs"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
-                                    taxGroups.map((tg) => (
-                                      <option key={tg._id} value={tg._id}>
-                                        {tg.name}{" "}
-                                        {tg.isDefault ? "⭐ (Default)" : ""}
-                                      </option>
-                                    ))
+                                    <>
+                                      <option value="none">None (0% Tax)</option>
+                                      {taxGroups.map((tg) => (
+                                        <option key={tg._id} value={tg._id}>
+                                          {tg.name}{" "}
+                                          {tg.isDefault ? "⭐ (Default)" : ""}
+                                        </option>
+                                      ))}
+                                    </>
                                   ) : (
-                                    <option value="">Default Store Tax</option>
+                                    <option value="none">None (0% Tax)</option>
                                   )}
                                 </select>
                                 <ChevronDownIcon className="absolute right-2.5 top-2.5 w-3.5 h-3.5 text-neutral-500 pointer-events-none" />
@@ -7892,7 +7908,13 @@ export default function MenuPage() {
                                     Tax Breakdown (
                                     {choiceTaxBreakdown.totalRate}%):
                                   </span>
-                                  <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  <span
+                                    className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                      choiceTaxBreakdown.mode === "inclusive"
+                                        ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                        : "text-blue-700 bg-blue-50 border-blue-200"
+                                    }`}
+                                  >
                                     {choiceTaxBreakdown.mode === "inclusive"
                                       ? "Inclusive"
                                       : "Exclusive"}
@@ -7905,6 +7927,14 @@ export default function MenuPage() {
                                     {choiceTaxBreakdown.basePrice}
                                   </span>
                                 </div>
+                                {choiceTaxBreakdown.totalRate === 0 && (
+                                  <div className="flex justify-between text-neutral-500">
+                                    <span>• Tax (0%):</span>
+                                    <span className="font-medium text-neutral-900">
+                                      +{currencySymbol}0.00
+                                    </span>
+                                  </div>
+                                )}
                                 {choiceTaxBreakdown.components.map((c, idx) => (
                                   <div
                                     key={idx}
