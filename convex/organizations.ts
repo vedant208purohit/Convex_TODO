@@ -623,6 +623,57 @@ function validateOrganizationState(org: {
   }
 }
 
+// Helper: Format safe organization response with resolved asset URLs
+async function formatSafeOrgResponse(ctx: any, org: Doc<"organizations"> | null) {
+  if (!org || org.deletedAt !== undefined) return null;
+  const safeOrg = stripSecrets(org);
+  if (!safeOrg) return null;
+
+  let resolvedLogoUrl: string | null = null;
+  if (org.logoAssetId || org.logoStorageId) {
+    try {
+      const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+        assetId: org.logoAssetId,
+        storageId: org.logoStorageId,
+        organizationId: org._id,
+      });
+      if (storageOrR2Url) {
+        resolvedLogoUrl = storageOrR2Url;
+      }
+    } catch {
+      // Asset fallback
+    }
+  }
+
+  if (!resolvedLogoUrl && org.logoUrl && typeof org.logoUrl === "string") {
+    const trimmed = org.logoUrl.trim();
+    if (
+      (trimmed.startsWith("http://") || trimmed.startsWith("https://")) &&
+      !trimmed.startsWith("blob:")
+    ) {
+      resolvedLogoUrl = trimmed;
+    }
+  }
+
+  let resolvedAboutUsImageUrl = org.aboutUsImageUrl ?? null;
+  if (org.aboutUsImageStorageId) {
+    try {
+      const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
+      if (storageUrl) {
+        resolvedAboutUsImageUrl = storageUrl;
+      }
+    } catch {
+      // Storage fallback
+    }
+  }
+
+  return {
+    ...safeOrg,
+    logoUrl: resolvedLogoUrl,
+    aboutUsImageUrl: resolvedAboutUsImageUrl,
+  };
+}
+
 // ----------------------------------------------------
 // QUERIES
 // ----------------------------------------------------
@@ -634,8 +685,7 @@ export const get = query({
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
     const org = await ctx.db.get(normalizedId);
-    if (!org || org.deletedAt !== undefined) return null;
-    return stripSecrets(org);
+    return await formatSafeOrgResponse(ctx, org);
   },
 });
 
@@ -648,8 +698,7 @@ export const getByLegacyId = query({
       .withIndex("by_legacy_id", (q) => q.eq("legacyId", args.legacyId))
       .first();
 
-    if (!org || org.deletedAt !== undefined) return null;
-    return stripSecrets(org);
+    return await formatSafeOrgResponse(ctx, org);
   },
 });
 
@@ -662,38 +711,19 @@ export const getBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .first();
 
-    if (!org || org.deletedAt !== undefined) return null;
-    return stripSecrets(org);
+    return await formatSafeOrgResponse(ctx, org);
   },
 });
 
 export const list = query({
   handler: async (ctx) => {
     const orgs = await ctx.db.query("organizations").collect();
-    return Promise.all(
+    const formatted = await Promise.all(
       orgs
         .filter((org) => org.deletedAt === undefined)
-        .map(async (org) => {
-          let resolvedAboutUsImageUrl = org.aboutUsImageUrl ?? null;
-          if (org.aboutUsImageStorageId) {
-            try {
-              const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
-              if (storageUrl) {
-                resolvedAboutUsImageUrl = storageUrl;
-              }
-            } catch {
-              // Storage fallback
-            }
-          }
-          const safeOrg = stripSecrets(org);
-          return safeOrg
-            ? {
-                ...safeOrg,
-                aboutUsImageUrl: resolvedAboutUsImageUrl,
-              }
-            : null;
-        })
-    ).then((res) => res.filter(Boolean));
+        .map((org) => formatSafeOrgResponse(ctx, org))
+    );
+    return formatted.filter(Boolean);
   },
 });
 

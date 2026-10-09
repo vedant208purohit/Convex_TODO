@@ -7,6 +7,7 @@ import {
   getCallerMembership,
   requireMember,
 } from "./organizationUsers";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 // ----------------------------------------------------
 // AUTHORIZATION HELPERS
@@ -310,68 +311,336 @@ export const resolvePublic = query({
 
 export const resolveCustomerSession = query({
   args: {
-    identifier: v.optional(v.string()),
+    organizationId: v.optional(v.union(v.id("organizations"), v.string())),
+    slug: v.optional(v.string()),
     qrId: v.optional(v.string()),
     tableId: v.optional(v.string()),
     tableNumber: v.optional(v.string()),
-    organizationId: v.optional(v.id("organizations")),
+    identifier: v.optional(v.string()), // general token or composite id
   },
   handler: async (ctx, args) => {
-    const rawId = args.identifier || args.qrId || args.tableId || args.tableNumber;
-    if (!rawId) return null;
+    // 0. If absolutely no parameters were provided, immediately reject with ORG_NOT_FOUND
+    const hasAnyParam =
+      (args.organizationId !== undefined && args.organizationId.trim() !== "") ||
+      (args.slug !== undefined && args.slug.trim() !== "") ||
+      (args.identifier !== undefined && args.identifier.trim() !== "") ||
+      (args.qrId !== undefined && args.qrId.trim() !== "") ||
+      (args.tableId !== undefined && args.tableId.trim() !== "") ||
+      (args.tableNumber !== undefined && args.tableNumber.trim() !== "");
 
-    let qr: Doc<"organizationQrCodes"> | null = null;
+    if (!hasAnyParam) {
+      return {
+        valid: false,
+        error: "Scan the restaurant QR code to start ordering.",
+        errorCode: "ORG_NOT_FOUND" as const,
+      };
+    }
 
-    const legacyMatches = await ctx.db
-      .query("organizationQrCodes")
-      .withIndex("by_legacy_id", (q) => q.eq("legacyId", rawId))
-      .collect();
+    // 1. Resolve Store / Organization
+    let activeOrg: Doc<"organizations"> | null = null;
 
-    qr = legacyMatches.find((q) => q.deletedAt === undefined) ?? null;
-
-    if (!qr) {
+    // A. By explicit organizationId
+    if (args.organizationId && args.organizationId.trim() !== "") {
+      const rawOrgId = args.organizationId.trim();
       try {
-        const doc = (await ctx.db.get(
-          rawId as Id<"organizationQrCodes">,
-        )) as any;
-        if (doc && doc.qrType !== undefined && doc.deletedAt === undefined) {
-          qr = doc as Doc<"organizationQrCodes">;
+        const normalizedId = ctx.db.normalizeId("organizations", rawOrgId);
+        if (normalizedId) {
+          const doc = await ctx.db.get(normalizedId);
+          if (doc && doc.deletedAt === undefined) {
+            activeOrg = doc;
+          }
         }
       } catch {
-        // Ignore invalid ID format
+        // Invalid ID format ignored
+      }
+
+      if (!activeOrg) {
+        // Try legacyId lookup
+        const legacyMatch = await ctx.db
+          .query("organizations")
+          .withIndex("by_legacy_id", (q) => q.eq("legacyId", rawOrgId))
+          .first();
+        if (legacyMatch && legacyMatch.deletedAt === undefined) {
+          activeOrg = legacyMatch;
+        }
       }
     }
 
-    if (!qr) {
+    // B. By explicit slug
+    if (!activeOrg && args.slug && args.slug.trim() !== "") {
+      const normalizedSlug = args.slug.trim().toLowerCase();
+      const slugMatch = await ctx.db
+        .query("organizations")
+        .withIndex("by_slug", (q) => q.eq("slug", normalizedSlug))
+        .first();
+      if (slugMatch && slugMatch.deletedAt === undefined) {
+        activeOrg = slugMatch;
+      }
+    }
+
+    // C. Check if identifier matches an org slug, legacyId, or Convex ID
+    if (!activeOrg && args.identifier && args.identifier.trim() !== "") {
+      const rawIdent = args.identifier.trim();
+
+      // Try slug match
+      const slugMatch = await ctx.db
+        .query("organizations")
+        .withIndex("by_slug", (q) => q.eq("slug", rawIdent.toLowerCase()))
+        .first();
+      if (slugMatch && slugMatch.deletedAt === undefined) {
+        activeOrg = slugMatch;
+      }
+
+      // Try legacyId match
+      if (!activeOrg) {
+        const legacyMatch = await ctx.db
+          .query("organizations")
+          .withIndex("by_legacy_id", (q) => q.eq("legacyId", rawIdent))
+          .first();
+        if (legacyMatch && legacyMatch.deletedAt === undefined) {
+          activeOrg = legacyMatch;
+        }
+      }
+
+      // Try direct ID match
+      if (!activeOrg) {
+        try {
+          const normalizedId = ctx.db.normalizeId("organizations", rawIdent);
+          if (normalizedId) {
+            const doc = await ctx.db.get(normalizedId);
+            if (doc && doc.deletedAt === undefined) {
+              activeOrg = doc;
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // D. Check if QR code was provided and has any context
+    let qrDoc: Doc<"organizationQrCodes"> | null = null;
+    let targetTableId: string | undefined = args.tableId?.trim() || undefined;
+    let targetTableNumber: string | undefined = args.tableNumber?.trim() || undefined;
+
+    const effectiveQrIdentifier =
+      args.qrId?.trim() ||
+      (args.identifier && (!activeOrg || args.identifier.trim() !== activeOrg.slug)
+        ? args.identifier.trim()
+        : undefined);
+
+    if (effectiveQrIdentifier) {
+      // Lookup by legacyId
+      const legacyMatches = await ctx.db
+        .query("organizationQrCodes")
+        .withIndex("by_legacy_id", (q) => q.eq("legacyId", effectiveQrIdentifier))
+        .collect();
+      qrDoc = legacyMatches.find((q) => q.deletedAt === undefined) ?? null;
+
+      // Direct Convex ID lookup
+      if (!qrDoc) {
+        try {
+          const doc = (await ctx.db.get(
+            effectiveQrIdentifier as Id<"organizationQrCodes">
+          )) as any;
+          if (doc && doc.qrType !== undefined && doc.deletedAt === undefined) {
+            qrDoc = doc as Doc<"organizationQrCodes">;
+          }
+        } catch {
+          // Ignore invalid id format
+        }
+      }
+
+      // Lookup by tableId if still not found
+      if (!qrDoc) {
+        try {
+          const tableQrs = await ctx.db
+            .query("organizationQrCodes")
+            .withIndex("by_table", (q) => q.eq("tableId", effectiveQrIdentifier))
+            .collect();
+          qrDoc = tableQrs.find((q) => q.deletedAt === undefined) ?? null;
+        } catch {
+          // Ignore
+        }
+      }
+
+      if (qrDoc) {
+        if (!targetTableId && qrDoc.tableId) {
+          targetTableId = qrDoc.tableId;
+        }
+        if (!targetTableNumber && qrDoc.tableNumber) {
+          targetTableNumber = qrDoc.tableNumber;
+        }
+      } else {
+        // If not a QR record, but identifier was passed without explicit table fields
+        if (!targetTableId && !targetTableNumber && !activeOrg) {
+          targetTableId = effectiveQrIdentifier;
+          targetTableNumber = effectiveQrIdentifier;
+        }
+      }
+    }
+
+    // 2. Resolve Organization Table (if table-specific context was requested)
+    let tableDoc: Doc<"organizationTables"> | null = null;
+    const hasTableRequest =
+      !!targetTableId ||
+      !!targetTableNumber ||
+      (qrDoc !== null && qrDoc.qrType === "DineIn");
+
+    if (hasTableRequest) {
+      const allTables = await ctx.db.query("organizationTables").collect();
+      const activeTables = allTables.filter((t) => t.deletedAt === undefined);
+
+      if (targetTableId) {
+        // Direct Convex ID lookup
+        try {
+          const doc = (await ctx.db.get(
+            targetTableId as Id<"organizationTables">
+          )) as any;
+          if (doc && doc.tableNumber !== undefined && doc.deletedAt === undefined) {
+            tableDoc = doc as Doc<"organizationTables">;
+          }
+        } catch {
+          // Ignore invalid id format
+        }
+
+        // Legacy ID lookup
+        if (!tableDoc) {
+          tableDoc = activeTables.find((t) => t.legacyId === targetTableId) ?? null;
+        }
+      }
+
+      // Lookup by tableNumber if not found by ID
+      if (!tableDoc && targetTableNumber) {
+        const normalizedNum = targetTableNumber.toLowerCase();
+        tableDoc =
+          activeTables.find(
+            (t) => t.tableNumber.trim().toLowerCase() === normalizedNum
+          ) ?? null;
+      }
+
+      // If still not found, check qrDoc tableNumber
+      if (!tableDoc && qrDoc?.tableNumber) {
+        const normalizedNum = qrDoc.tableNumber.trim().toLowerCase();
+        tableDoc =
+          activeTables.find(
+            (t) => t.tableNumber.trim().toLowerCase() === normalizedNum
+          ) ?? null;
+      }
+
+      if (!tableDoc) {
+        return {
+          valid: false,
+          error: "This table QR code is no longer active or the table was not found.",
+          errorCode: "TABLE_NOT_FOUND" as const,
+        };
+      }
+
+      // Check if table is blocked
+      if (tableDoc.isBlock) {
+        return {
+          valid: false,
+          error:
+            "This table is currently unavailable. Please ask a member of staff for assistance.",
+          errorCode: "TABLE_BLOCKED" as const,
+          table: {
+            _id: tableDoc._id,
+            tableNumber: tableDoc.tableNumber,
+            placement: tableDoc.placement,
+            seatingCapacity: tableDoc.seatingCapacity,
+            isBlock: true,
+          },
+        };
+      }
+    }
+
+    // If activeOrg was not explicitly specified via organizationId or slug,
+    // but a valid tableDoc or qrDoc was found in the database, resolve the store organization:
+    if (!activeOrg && (tableDoc || qrDoc)) {
+      const orgs = await ctx.db.query("organizations").collect();
+      const activeOrgs = orgs.filter((o) => o.deletedAt === undefined);
+      if (activeOrgs.length === 1) {
+        activeOrg = activeOrgs[0];
+      }
+    }
+
+    // If activeOrg is still not resolved, strictly return ORG_NOT_FOUND
+    if (!activeOrg) {
+      return {
+        valid: false,
+        error: "Scan the restaurant QR code to start ordering.",
+        errorCode: "ORG_NOT_FOUND" as const,
+      };
+    }
+
+    // Safe organization profile with asset-based logo resolution
+    let resolvedLogoUrl: string | null = null;
+    if (activeOrg.logoAssetId || activeOrg.logoStorageId) {
       try {
-        const tableQrs = await ctx.db
-          .query("organizationQrCodes")
-          .withIndex("by_table", (q) => q.eq("tableId", rawId))
-          .collect();
-        qr = tableQrs.find((q) => q.deletedAt === undefined) ?? null;
-      } catch {
-        // Ignore
+        const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+          assetId: activeOrg.logoAssetId,
+          storageId: activeOrg.logoStorageId,
+          organizationId: activeOrg._id,
+        });
+        if (storageOrR2Url) {
+          resolvedLogoUrl = storageOrR2Url;
+        }
+      } catch {}
+    }
+
+    if (!resolvedLogoUrl && activeOrg.logoUrl && typeof activeOrg.logoUrl === "string") {
+      const trimmed = activeOrg.logoUrl.trim();
+      if (
+        (trimmed.startsWith("http://") || trimmed.startsWith("https://")) &&
+        !trimmed.startsWith("blob:")
+      ) {
+        resolvedLogoUrl = trimmed;
       }
     }
 
-    if (!qr || qr.deletedAt !== undefined) {
-      return null;
+    const orgProfile = {
+      _id: activeOrg._id,
+      name: activeOrg.name,
+      slug: activeOrg.slug,
+      logoUrl: resolvedLogoUrl,
+      isVeg: activeOrg.isVeg ?? false,
+      isDineIn: activeOrg.isDineIn ?? true,
+      isTakeAway: activeOrg.isTakeAway ?? true,
+      isDelivery: activeOrg.isDelivery ?? true,
+      defaultCurrencySymbol: activeOrg.defaultCurrencySymbol ?? "₹",
+      defaultCurrency: activeOrg.defaultCurrency ?? "INR",
+    };
+
+    // 3. Resolve Layout Name
+    let layoutName: string | null = null;
+    if (tableDoc && tableDoc.layoutId) {
+      const layoutDoc = await ctx.db.get(tableDoc.layoutId);
+      if (layoutDoc && layoutDoc.deletedAt === undefined) {
+        layoutName = layoutDoc.name;
+      }
     }
 
     return {
-      _id: qr._id,
-      qrId: qr._id,
-      legacyId: qr.legacyId,
-      name: qr.name,
-      displayName: qr.name,
-      type: formatContractQrType(qr.qrType),
-      qrType: qr.qrType,
-      destination: qr.destination || qr.qrUrl,
-      qrUrl: qr.qrUrl,
-      counter: qr.counter,
-      tableNumber: qr.tableNumber,
-      tableId: qr.tableId,
-      status: qr.status ?? "ACTIVE",
+      valid: true,
+      table: tableDoc
+        ? {
+            _id: tableDoc._id,
+            tableNumber: tableDoc.tableNumber,
+            placement: tableDoc.placement,
+            seatingCapacity: tableDoc.seatingCapacity,
+            layoutName: layoutName ?? tableDoc.placement ?? null,
+            isBlock: tableDoc.isBlock ?? false,
+            isRequested: tableDoc.isRequested ?? false,
+          }
+        : null,
+      qr: qrDoc
+        ? {
+            _id: qrDoc._id,
+            name: qrDoc.name,
+            qrType: qrDoc.qrType,
+          }
+        : null,
+      organization: orgProfile,
     };
   },
 });
