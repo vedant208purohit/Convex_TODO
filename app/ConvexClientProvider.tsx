@@ -54,7 +54,8 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
       setResolutionState((prev) => ({ ...prev, loading: true, error: null }));
 
       try {
-        const res = await fetch("/api/auth/resolve-store", {
+        const search = typeof window !== "undefined" ? window.location.search : "";
+        const res = await fetch(`/api/auth/resolve-store${search}`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
