@@ -522,8 +522,12 @@ export function PosShell({
                     {/* Flyout Hover Menu Popover Card */}
                     <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
                       <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
-                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
-                          Inventory
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5 flex items-center justify-between">
+                          <span>Inventory</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full normal-case font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+                            Coming Soon
+                          </span>
                         </div>
                         {inventorySubItems.map((sub) => {
                           const isSubActive =
@@ -558,18 +562,22 @@ export function PosShell({
                   <button
                     type="button"
                     onClick={() => setIsInventoryExpanded((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
                       isInventoryPage
                         ? "bg-[#f1edec] text-[#141010] font-bold"
                         : "text-[#5e5e5e] hover:bg-[#f1edec]"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="w-5 flex items-center justify-center">{item.icon}</span>
-                      <span className="font-medium text-[15px]">{item.label}</span>
+                    <div className="flex items-center gap-1.5 min-w-0 text-left">
+                      <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
+                      <span className="font-medium text-[14px] shrink-0">{item.label}</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+                        Coming Soon
+                      </span>
                     </div>
                     <svg
-                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${
+                      className={`w-3.5 h-3.5 text-[#78716c] shrink-0 ml-1 transition-transform duration-200 ${
                         isInventoryExpanded ? "rotate-180" : ""
                       }`}
                       fill="none"

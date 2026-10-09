@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { useAuth } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { Id, Doc } from "../../convex/_generated/dataModel";
+import { DynamicQrCode } from "./DynamicQrCode";
 
 // ==========================================
 // SVG ICONS FOR TABLES & LAYOUTS UI
@@ -12,7 +13,15 @@ import { Id, Doc } from "../../convex/_generated/dataModel";
 
 function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="12" y1="5" x2="12" y2="19" />
       <line x1="5" y1="12" x2="19" y2="12" />
     </svg>
@@ -21,7 +30,15 @@ function PlusIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function PencilIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
     </svg>
   );
@@ -29,7 +46,15 @@ function PencilIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
     </svg>
   );
@@ -37,7 +62,15 @@ function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="6 9 12 15 18 9" />
     </svg>
   );
@@ -45,7 +78,15 @@ function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z" />
       <circle cx="12" cy="12" r="3" />
     </svg>
@@ -54,7 +95,15 @@ function EyeIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="12" r="10" />
       <line x1="12" y1="16" x2="12" y2="12" />
       <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -64,7 +113,15 @@ function InfoIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="18" y1="6" x2="6" y2="18" />
       <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
@@ -73,7 +130,15 @@ function CloseIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function CanvasViewIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="18" height="18" x="3" y="3" rx="2" />
       <path d="M3 9h18M9 21V9" />
     </svg>
@@ -82,7 +147,15 @@ function CanvasViewIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 function ListViewIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="8" y1="6" x2="21" y2="6" />
       <line x1="8" y1="12" x2="21" y2="12" />
       <line x1="8" y1="18" x2="21" y2="18" />
@@ -99,22 +172,30 @@ function ListViewIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 export function OrganizationTablesSettings() {
   // Main Sub-Tab State: "layouts" | "tables"
-  const [activeMainTab, setActiveMainTab] = useState<"layouts" | "tables">("layouts");
+  const [activeMainTab, setActiveMainTab] = useState<"layouts" | "tables">(
+    "layouts",
+  );
 
   // Selected Layout State for Tables view
-  const [selectedLayoutId, setSelectedLayoutId] = useState<Id<"organizationLayouts"> | null>(null);
+  const [selectedLayoutId, setSelectedLayoutId] =
+    useState<Id<"organizationLayouts"> | null>(null);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState(false);
 
   // View Switcher State inside Tables tab: "designer" | "list"
-  const [tablesViewMode, setTablesViewMode] = useState<"designer" | "list">("designer");
+  const [tablesViewMode, setTablesViewMode] = useState<"designer" | "list">(
+    "designer",
+  );
 
   // Drawer States
   const [showAddLayoutDrawer, setShowAddLayoutDrawer] = useState(false);
-  const [editingLayout, setEditingLayout] = useState<Doc<"organizationLayouts"> | null>(null);
+  const [editingLayout, setEditingLayout] =
+    useState<Doc<"organizationLayouts"> | null>(null);
 
   const [showAddTableDrawer, setShowAddTableDrawer] = useState(false);
-  const [editingTable, setEditingTable] = useState<Doc<"organizationTables"> | null>(null);
-  const [previewTable, setPreviewTable] = useState<Doc<"organizationTables"> | null>(null);
+  const [editingTable, setEditingTable] =
+    useState<Doc<"organizationTables"> | null>(null);
+  const [previewTable, setPreviewTable] =
+    useState<Doc<"organizationTables"> | null>(null);
 
   // Delete Confirmation State
   const [deletingTarget, setDeletingTarget] = useState<{
@@ -131,34 +212,49 @@ export function OrganizationTablesSettings() {
   const tableLayoutDropdownRef = useRef<HTMLButtonElement>(null);
 
   const [layoutNameInput, setLayoutNameInput] = useState("");
-  const [layoutErrorMessage, setLayoutErrorMessage] = useState<string | null>(null);
+  const [layoutErrorMessage, setLayoutErrorMessage] = useState<string | null>(
+    null,
+  );
   const [isLayoutSubmitting, setIsLayoutSubmitting] = useState(false);
   const [layoutPendingErrors, setLayoutPendingErrors] = useState<string[]>([]);
-  const [layoutPendingFields, setLayoutPendingFields] = useState<Record<string, boolean>>({});
+  const [layoutPendingFields, setLayoutPendingFields] = useState<
+    Record<string, boolean>
+  >({});
 
   const [tableNumberInput, setTableNumberInput] = useState("");
   const [seatingCapacityInput, setSeatingCapacityInput] = useState<number>(4);
-  const [tableLayoutIdInput, setTableLayoutIdInput] = useState<Id<"organizationLayouts"> | "">("");
-  const [isDrawerLayoutDropdownOpen, setIsDrawerLayoutDropdownOpen] = useState(false);
+  const [tableLayoutIdInput, setTableLayoutIdInput] = useState<
+    Id<"organizationLayouts"> | ""
+  >("");
+  const [isDrawerLayoutDropdownOpen, setIsDrawerLayoutDropdownOpen] =
+    useState(false);
   const [kidsSeatInput, setKidsSeatInput] = useState(false);
   const [disabledSeatInput, setDisabledSeatInput] = useState(false);
   const [barbequeGrillInput, setBarbequeGrillInput] = useState(false);
-  const [tableErrorMessage, setTableErrorMessage] = useState<string | null>(null);
+  const [tableErrorMessage, setTableErrorMessage] = useState<string | null>(
+    null,
+  );
   const [isTableSubmitting, setIsTableSubmitting] = useState(false);
   const [tablePendingErrors, setTablePendingErrors] = useState<string[]>([]);
-  const [tablePendingFields, setTablePendingFields] = useState<Record<string, boolean>>({});
+  const [tablePendingFields, setTablePendingFields] = useState<
+    Record<string, boolean>
+  >({});
 
   // Canvas Drag State & Zoom / Grid Snap State
   const [zoomLevel, setZoomLevel] = useState<number>(100);
   const [gridSnapSize, setGridSnapSize] = useState<number>(24);
-  const [isGridSnapDropdownOpen, setIsGridSnapDropdownOpen] = useState<boolean>(false);
+  const [isGridSnapDropdownOpen, setIsGridSnapDropdownOpen] =
+    useState<boolean>(false);
 
   const handleZoomIn = () => setZoomLevel((prev) => Math.min(200, prev + 10));
   const handleZoomOut = () => setZoomLevel((prev) => Math.max(50, prev - 10));
   const handleResetZoom = () => setZoomLevel(100);
 
-  const [draggingTableId, setDraggingTableId] = useState<Id<"organizationTables"> | null>(null);
-  const [tempPositions, setTempPositions] = useState<Record<string, { x: number; y: number }>>({});
+  const [draggingTableId, setDraggingTableId] =
+    useState<Id<"organizationTables"> | null>(null);
+  const [tempPositions, setTempPositions] = useState<
+    Record<string, { x: number; y: number }>
+  >({});
   const canvasRef = useRef<HTMLDivElement>(null);
 
   // Dragging refs for Pointer Events tracking
@@ -171,18 +267,23 @@ export function OrganizationTablesSettings() {
   // AUTH & CONVEX BACKEND QUERIES & MUTATIONS
   // ------------------------------------------
   const { isSignedIn } = useAuth();
-  const organizations = useQuery(api.organizations.list, isSignedIn ? {} : "skip");
+  const organizations = useQuery(
+    api.organizations.list,
+    isSignedIn ? {} : "skip",
+  );
   const organization = organizations?.[0] ?? null;
   const currentMembership = useQuery(
     api.organizationUsers.getCurrentMembership,
-    organization?._id && isSignedIn ? { organizationId: organization._id } : "skip"
+    organization?._id && isSignedIn
+      ? { organizationId: organization._id }
+      : "skip",
   );
   const isAuthReady = Boolean(isSignedIn && currentMembership);
 
   // Organization Layouts APIs
   const layouts = useQuery(
     api.organizationLayouts.list,
-    isAuthReady ? {} : "skip"
+    isAuthReady ? {} : "skip",
   );
   const createLayout = useMutation(api.organizationLayouts.create);
   const updateLayout = useMutation(api.organizationLayouts.update);
@@ -191,7 +292,7 @@ export function OrganizationTablesSettings() {
   // Organization Tables APIs
   const allTables = useQuery(
     api.organizationTables.list,
-    isAuthReady ? {} : "skip"
+    isAuthReady ? {} : "skip",
   );
   const createTable = useMutation(api.organizationTables.create);
   const updateTable = useMutation(api.organizationTables.update);
@@ -200,7 +301,7 @@ export function OrganizationTablesSettings() {
   // Organization QR Codes query for previewing table QR
   const previewTableQr = useQuery(
     api.organizationQrCodes.getByTable,
-    previewTable && isAuthReady ? { tableId: previewTable._id } : "skip"
+    previewTable && isAuthReady ? { tableId: previewTable._id } : "skip",
   );
 
   const isLoadingLayouts = layouts === undefined;
@@ -217,7 +318,10 @@ export function OrganizationTablesSettings() {
   const activeLayoutsList = layouts ?? [];
   const allActiveTablesList = allTables ?? [];
 
-  const selectedLayout = activeLayoutsList.find((l) => l._id === selectedLayoutId) ?? activeLayoutsList[0] ?? null;
+  const selectedLayout =
+    activeLayoutsList.find((l) => l._id === selectedLayoutId) ??
+    activeLayoutsList[0] ??
+    null;
 
   const tablesInSelectedLayout = selectedLayout
     ? allActiveTablesList.filter((t) => t.layoutId === selectedLayout._id)
@@ -225,19 +329,24 @@ export function OrganizationTablesSettings() {
 
   const totalSeatsInSelectedLayout = tablesInSelectedLayout.reduce(
     (sum, t) => sum + (t.seatingCapacity || 0),
-    0
+    0,
   );
 
   const totalCapacityAllTables = allActiveTablesList.reduce(
     (sum, t) => sum + (t.seatingCapacity || 0),
-    0
+    0,
   );
 
   // Helper map for table count per layout
-  const tableCountByLayout = activeLayoutsList.reduce<Record<string, number>>((acc, l) => {
-    acc[l._id] = allActiveTablesList.filter((t) => t.layoutId === l._id).length;
-    return acc;
-  }, {});
+  const tableCountByLayout = activeLayoutsList.reduce<Record<string, number>>(
+    (acc, l) => {
+      acc[l._id] = allActiveTablesList.filter(
+        (t) => t.layoutId === l._id,
+      ).length;
+      return acc;
+    },
+    {},
+  );
 
   // ------------------------------------------
   // HANDLERS FOR LAYOUTS
@@ -276,7 +385,10 @@ export function OrganizationTablesSettings() {
       setTimeout(() => {
         if (layoutNameInputRef.current) {
           layoutNameInputRef.current.focus();
-          layoutNameInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          layoutNameInputRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       }, 50);
       return;
@@ -325,7 +437,9 @@ export function OrganizationTablesSettings() {
     setEditingTable(null);
     setTableNumberInput("");
     setSeatingCapacityInput(4);
-    setTableLayoutIdInput(selectedLayoutId ?? (activeLayoutsList[0]?._id || ""));
+    setTableLayoutIdInput(
+      selectedLayoutId ?? (activeLayoutsList[0]?._id || ""),
+    );
     setKidsSeatInput(false);
     setDisabledSeatInput(false);
     setBarbequeGrillInput(false);
@@ -372,13 +486,25 @@ export function OrganizationTablesSettings() {
       setTimeout(() => {
         if (pending["tableNumber"] && tableNumberInputRef.current) {
           tableNumberInputRef.current.focus();
-          tableNumberInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
-        } else if (pending["seatingCapacity"] && seatingCapacityInputRef.current) {
+          tableNumberInputRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        } else if (
+          pending["seatingCapacity"] &&
+          seatingCapacityInputRef.current
+        ) {
           seatingCapacityInputRef.current.focus();
-          seatingCapacityInputRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          seatingCapacityInputRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         } else if (pending["tableLayoutId"] && tableLayoutDropdownRef.current) {
           tableLayoutDropdownRef.current.focus();
-          tableLayoutDropdownRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+          tableLayoutDropdownRef.current.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
         }
       }, 50);
       return;
@@ -389,7 +515,9 @@ export function OrganizationTablesSettings() {
     setTablePendingFields({});
     setTableErrorMessage(null);
 
-    const targetLayoutId = tableLayoutIdInput ? (tableLayoutIdInput as Id<"organizationLayouts">) : undefined;
+    const targetLayoutId = tableLayoutIdInput
+      ? (tableLayoutIdInput as Id<"organizationLayouts">)
+      : undefined;
 
     try {
       if (editingTable) {
@@ -434,14 +562,23 @@ export function OrganizationTablesSettings() {
 
     try {
       if (deletingTarget.type === "layout") {
-        if (deletingTarget.hasTablesCount && deletingTarget.hasTablesCount > 0) {
-          alert("Tables must be reassigned before deleting a layout containing active tables.");
+        if (
+          deletingTarget.hasTablesCount &&
+          deletingTarget.hasTablesCount > 0
+        ) {
+          alert(
+            "Tables must be reassigned before deleting a layout containing active tables.",
+          );
           setDeletingTarget(null);
           return;
         }
-        await removeLayout({ id: deletingTarget.id as Id<"organizationLayouts"> });
+        await removeLayout({
+          id: deletingTarget.id as Id<"organizationLayouts">,
+        });
       } else {
-        await removeTable({ id: deletingTarget.id as Id<"organizationTables"> });
+        await removeTable({
+          id: deletingTarget.id as Id<"organizationTables">,
+        });
       }
     } catch (err: any) {
       alert(err?.message || "Failed to delete item");
@@ -456,7 +593,7 @@ export function OrganizationTablesSettings() {
 
   const handleTablePointerDown = (
     e: React.PointerEvent<HTMLDivElement>,
-    table: Doc<"organizationTables">
+    table: Doc<"organizationTables">,
   ) => {
     if (e.button !== 0) return;
     e.stopPropagation();
@@ -472,8 +609,10 @@ export function OrganizationTablesSettings() {
 
     const scale = zoomLevel / 100;
     const rect = canvasEl.getBoundingClientRect();
-    const currentX = tempPositions[table._id]?.x ?? parseInt(table.xPosition || "80", 10);
-    const currentY = tempPositions[table._id]?.y ?? parseInt(table.yPosition || "80", 10);
+    const currentX =
+      tempPositions[table._id]?.x ?? parseInt(table.xPosition || "80", 10);
+    const currentY =
+      tempPositions[table._id]?.y ?? parseInt(table.yPosition || "80", 10);
 
     const pointerX = (e.clientX - rect.left) / scale;
     const pointerY = (e.clientY - rect.top) / scale;
@@ -490,7 +629,12 @@ export function OrganizationTablesSettings() {
 
   useEffect(() => {
     const handleGlobalPointerMove = (e: PointerEvent | MouseEvent) => {
-      if (!isDraggingActiveRef.current || !draggingTableRef.current || !canvasRef.current) return;
+      if (
+        !isDraggingActiveRef.current ||
+        !draggingTableRef.current ||
+        !canvasRef.current
+      )
+        return;
 
       const table = draggingTableRef.current;
       const scale = zoomLevel / 100;
@@ -500,8 +644,14 @@ export function OrganizationTablesSettings() {
       const rawY = (e.clientY - rect.top) / scale - dragOffsetRef.current.y;
 
       const snap = gridSnapSize > 0 ? gridSnapSize : 1;
-      const snappedX = Math.max(24, Math.min(1400, Math.round(rawX / snap) * snap));
-      const snappedY = Math.max(24, Math.min(1400, Math.round(rawY / snap) * snap));
+      const snappedX = Math.max(
+        24,
+        Math.min(1400, Math.round(rawX / snap) * snap),
+      );
+      const snappedY = Math.max(
+        24,
+        Math.min(1400, Math.round(rawY / snap) * snap),
+      );
 
       latestPositionRef.current = { x: snappedX, y: snappedY };
 
@@ -569,7 +719,8 @@ export function OrganizationTablesSettings() {
               {activeMainTab === "layouts" ? "Tables & Layouts" : "Tables"}
             </h1>
             <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
-              Set up your dining areas and manage the tables assigned to each area.
+              Set up your dining areas and manage the tables assigned to each
+              area.
             </p>
           </div>
 
@@ -634,12 +785,14 @@ export function OrganizationTablesSettings() {
                   Dining Layouts
                 </h2>
                 <p className="text-xs text-[#5e5e5e] mt-0.5">
-                  {activeLayoutsList.length} active dining zones configured across your restaurant
+                  {activeLayoutsList.length} active dining zones configured
+                  across your restaurant
                 </p>
               </div>
               <div className="flex items-center space-x-2">
                 <span className="inline-flex items-center text-[11px] font-medium text-[#5e5e5e] bg-[#f7f3f2] px-3 py-1 rounded-full border border-[#e7e5e4]">
-                  Total Capacity: {allActiveTablesList.length} Tables ({totalCapacityAllTables} Seats)
+                  Total Capacity: {allActiveTablesList.length} Tables (
+                  {totalCapacityAllTables} Seats)
                 </span>
               </div>
             </div>
@@ -649,27 +802,40 @@ export function OrganizationTablesSettings() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#f7f3f2] text-[#5e5e5e] text-[11px] uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-4 rounded-l-lg font-medium">Layout Name</th>
+                    <th className="py-3 px-4 rounded-l-lg font-medium">
+                      Layout Name
+                    </th>
                     <th className="py-3 px-4 font-medium">Tables Added</th>
-                    <th className="py-3 px-4 rounded-r-lg text-right font-medium">Actions</th>
+                    <th className="py-3 px-4 rounded-r-lg text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f1edec] text-sm">
                   {activeLayoutsList.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="py-8 text-center text-sm text-[#5e5e5e]">
-                        No dining layouts configured yet. Click "Add new layout" to create one.
+                      <td
+                        colSpan={3}
+                        className="py-8 text-center text-sm text-[#5e5e5e]"
+                      >
+                        No dining layouts configured yet. Click "Add new layout"
+                        to create one.
                       </td>
                     </tr>
                   ) : (
                     activeLayoutsList.map((layout) => {
                       const count = tableCountByLayout[layout._id] || 0;
                       return (
-                        <tr key={layout._id} className="hover:bg-[#faf2ee]/50 transition-colors group">
+                        <tr
+                          key={layout._id}
+                          className="hover:bg-[#faf2ee]/50 transition-colors group"
+                        >
                           <td className="py-4 px-4">
                             <div className="flex items-center space-x-3">
                               <div className="w-2 h-2 rounded-full bg-emerald-600"></div>
-                              <span className="font-medium text-[#0c0a09]">{layout.name}</span>
+                              <span className="font-medium text-[#0c0a09]">
+                                {layout.name}
+                              </span>
                               {layout.name.toLowerCase().includes("indoor") ? (
                                 <span className="text-[10px] text-[#5e5e5e] uppercase tracking-wider bg-[#f1edec] px-1.5 py-0.5 rounded font-mono">
                                   Main Floor
@@ -714,7 +880,8 @@ export function OrganizationTablesSettings() {
             <footer className="px-6 py-4 bg-[#faf2ee]/60 border-t border-[#f1edec] flex items-center">
               <span className="text-xs text-[#5e5e5e] flex items-center">
                 <InfoIcon className="w-4 h-4 mr-2 text-[#5e5e5e]" />
-                Tables must be reassigned before deleting a layout containing active tables.
+                Tables must be reassigned before deleting a layout containing
+                active tables.
               </span>
             </footer>
           </section>
@@ -738,7 +905,9 @@ export function OrganizationTablesSettings() {
                   <span className="font-semibold text-[#0c0a09]">
                     {selectedLayout ? selectedLayout.name : "Select Layout"}
                   </span>
-                  <ChevronDownIcon className={`w-4 h-4 text-[#0c0a09] transition-transform ${isLayoutDropdownOpen ? "rotate-180" : ""}`} />
+                  <ChevronDownIcon
+                    className={`w-4 h-4 text-[#0c0a09] transition-transform ${isLayoutDropdownOpen ? "rotate-180" : ""}`}
+                  />
                 </button>
 
                 {/* Dropdown Popover */}
@@ -772,16 +941,32 @@ export function OrganizationTablesSettings() {
                           >
                             {isSelected ? (
                               <div className="flex items-center gap-2">
-                                <svg className="w-3.5 h-3.5 text-[#0c0a09] shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                                  <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                <svg
+                                  className="w-3.5 h-3.5 text-[#0c0a09] shrink-0"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                  strokeWidth="2.5"
+                                >
+                                  <path
+                                    d="M5 13l4 4L19 7"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  />
                                 </svg>
-                                <span className="font-semibold text-[#0c0a09]">{l.name}</span>
+                                <span className="font-semibold text-[#0c0a09]">
+                                  {l.name}
+                                </span>
                               </div>
                             ) : (
-                              <span className="pl-5 text-[#1c1917] font-medium">{l.name}</span>
+                              <span className="pl-5 text-[#1c1917] font-medium">
+                                {l.name}
+                              </span>
                             )}
                             <span className="text-[11px] text-[#a8a29e] font-normal">
-                              {isSelected ? "Selected" : `${count} ${count === 1 ? "table" : "tables"}`}
+                              {isSelected
+                                ? "Selected"
+                                : `${count} ${count === 1 ? "table" : "tables"}`}
                             </span>
                           </button>
                         );
@@ -817,8 +1002,18 @@ export function OrganizationTablesSettings() {
                     }`}
                     type="button"
                   >
-                    <CanvasViewIcon className={`w-3.5 h-3.5 ${tablesViewMode === "designer" ? "text-white stroke-white" : "text-[#5e5e5e]"}`} />
-                    <span className={tablesViewMode === "designer" ? "text-white" : "text-[#5e5e5e]"}>Table Designer</span>
+                    <CanvasViewIcon
+                      className={`w-3.5 h-3.5 ${tablesViewMode === "designer" ? "text-white stroke-white" : "text-[#5e5e5e]"}`}
+                    />
+                    <span
+                      className={
+                        tablesViewMode === "designer"
+                          ? "text-white"
+                          : "text-[#5e5e5e]"
+                      }
+                    >
+                      Table Designer
+                    </span>
                   </button>
                   <button
                     onClick={() => setTablesViewMode("list")}
@@ -829,8 +1024,18 @@ export function OrganizationTablesSettings() {
                     }`}
                     type="button"
                   >
-                    <ListViewIcon className={`w-3.5 h-3.5 ${tablesViewMode === "list" ? "text-white stroke-white" : "text-[#5e5e5e]"}`} />
-                    <span className={tablesViewMode === "list" ? "text-white" : "text-[#5e5e5e]"}>Table list</span>
+                    <ListViewIcon
+                      className={`w-3.5 h-3.5 ${tablesViewMode === "list" ? "text-white stroke-white" : "text-[#5e5e5e]"}`}
+                    />
+                    <span
+                      className={
+                        tablesViewMode === "list"
+                          ? "text-white"
+                          : "text-[#5e5e5e]"
+                      }
+                    >
+                      Table list
+                    </span>
                   </button>
                 </div>
 
@@ -858,11 +1063,14 @@ export function OrganizationTablesSettings() {
                 </span>
                 <span className="text-[#5e5e5e]">•</span>
                 <span className="text-[#5e5e5e]">
-                  {tablesInSelectedLayout.length} tables placed ({allActiveTablesList.length} total allocated)
+                  {tablesInSelectedLayout.length} tables placed (
+                  {allActiveTablesList.length} total allocated)
                 </span>
               </div>
               <span className="text-[11px] font-mono uppercase tracking-wider text-[#5e5e5e]">
-                {selectedLayout ? selectedLayout.name.toUpperCase() : "VENUE FLOOR"}
+                {selectedLayout
+                  ? selectedLayout.name.toUpperCase()
+                  : "VENUE FLOOR"}
               </span>
             </div>
 
@@ -915,7 +1123,8 @@ export function OrganizationTablesSettings() {
                   className="flex-1 relative p-8 cursor-crosshair overflow-auto select-none min-h-[500px] max-h-[650px]"
                   style={{
                     backgroundColor: "#ffffff",
-                    backgroundImage: "radial-gradient(#d6d3d1 0.85px, transparent 0.85px)",
+                    backgroundImage:
+                      "radial-gradient(#d6d3d1 0.85px, transparent 0.85px)",
                     backgroundSize: `${gridSnapSize * (zoomLevel / 100)}px ${gridSnapSize * (zoomLevel / 100)}px`,
                   }}
                 >
@@ -928,7 +1137,9 @@ export function OrganizationTablesSettings() {
                       minWidth: "1200px",
                       minHeight: "750px",
                       position: "relative",
-                      transition: draggingTableId ? "none" : "transform 0.15s ease-out",
+                      transition: draggingTableId
+                        ? "none"
+                        : "transform 0.15s ease-out",
                     }}
                   >
                     {tablesInSelectedLayout.length === 0 ? (
@@ -937,7 +1148,8 @@ export function OrganizationTablesSettings() {
                         <div
                           className="absolute inset-0 opacity-[0.035] pointer-events-none"
                           style={{
-                            backgroundImage: "radial-gradient(#0c0a09 1px, transparent 1px)",
+                            backgroundImage:
+                              "radial-gradient(#0c0a09 1px, transparent 1px)",
                             backgroundSize: "24px 24px",
                           }}
                         ></div>
@@ -952,14 +1164,60 @@ export function OrganizationTablesSettings() {
                               xmlns="http://www.w3.org/2000/svg"
                             >
                               {/* Central Dining Table Blueprint */}
-                              <rect fill="#fff" height="20" rx="3" stroke="currentColor" strokeDasharray="2 2" width="20" x="14" y="14"></rect>
+                              <rect
+                                fill="#fff"
+                                height="20"
+                                rx="3"
+                                stroke="currentColor"
+                                strokeDasharray="2 2"
+                                width="20"
+                                x="14"
+                                y="14"
+                              ></rect>
                               {/* Surrounding chairs representing layout */}
-                              <rect fill="currentColor" height="3" rx="1.5" stroke="currentColor" width="10" x="19" y="8"></rect>
-                              <rect fill="currentColor" height="3" rx="1.5" stroke="currentColor" width="10" x="19" y="37"></rect>
-                              <rect fill="currentColor" height="10" rx="1.5" stroke="currentColor" width="3" x="8" y="19"></rect>
-                              <rect fill="currentColor" height="10" rx="1.5" stroke="currentColor" width="3" x="37" y="19"></rect>
+                              <rect
+                                fill="currentColor"
+                                height="3"
+                                rx="1.5"
+                                stroke="currentColor"
+                                width="10"
+                                x="19"
+                                y="8"
+                              ></rect>
+                              <rect
+                                fill="currentColor"
+                                height="3"
+                                rx="1.5"
+                                stroke="currentColor"
+                                width="10"
+                                x="19"
+                                y="37"
+                              ></rect>
+                              <rect
+                                fill="currentColor"
+                                height="10"
+                                rx="1.5"
+                                stroke="currentColor"
+                                width="3"
+                                x="8"
+                                y="19"
+                              ></rect>
+                              <rect
+                                fill="currentColor"
+                                height="10"
+                                rx="1.5"
+                                stroke="currentColor"
+                                width="3"
+                                x="37"
+                                y="19"
+                              ></rect>
                               {/* Center table accent dot */}
-                              <circle cx="24" cy="24" fill="currentColor" r="2"></circle>
+                              <circle
+                                cx="24"
+                                cy="24"
+                                fill="currentColor"
+                                r="2"
+                              ></circle>
                             </svg>
                           </div>
 
@@ -968,8 +1226,12 @@ export function OrganizationTablesSettings() {
                             No tables in this layout yet
                           </h2>
                           <p className="text-sm font-light text-[#5e5e5e] max-w-sm leading-relaxed mb-7">
-                            Add your first table to start building the seating layout for{" "}
-                            <strong className="font-medium text-[#141010]">{selectedLayout?.name || "this layout"}</strong>.
+                            Add your first table to start building the seating
+                            layout for{" "}
+                            <strong className="font-medium text-[#141010]">
+                              {selectedLayout?.name || "this layout"}
+                            </strong>
+                            .
                           </p>
 
                           {/* Primary CTA Button */}
@@ -979,7 +1241,10 @@ export function OrganizationTablesSettings() {
                             type="button"
                           >
                             <PlusIcon className="w-3.5 h-3.5 stroke-[2] text-white stroke-white" />
-                            <span className="text-white font-semibold" style={{ color: "#ffffff" }}>
+                            <span
+                              className="text-white font-semibold"
+                              style={{ color: "#ffffff" }}
+                            >
                               Add new table
                             </span>
                           </button>
@@ -994,7 +1259,8 @@ export function OrganizationTablesSettings() {
                               >
                                 Table Designer
                               </span>{" "}
-                              or manage them directly from Table List once created.
+                              or manage them directly from Table List once
+                              created.
                             </p>
                           </div>
                         </div>
@@ -1002,8 +1268,12 @@ export function OrganizationTablesSettings() {
                     ) : (
                       tablesInSelectedLayout.map((table) => {
                         const temp = tempPositions[table._id];
-                        const posX = temp ? temp.x : parseInt(table.xPosition || "80", 10);
-                        const posY = temp ? temp.y : parseInt(table.yPosition || "80", 10);
+                        const posX = temp
+                          ? temp.x
+                          : parseInt(table.xPosition || "80", 10);
+                        const posY = temp
+                          ? temp.y
+                          : parseInt(table.yPosition || "80", 10);
 
                         // Seating dot circles generator
                         const capacity = table.seatingCapacity || 4;
@@ -1015,7 +1285,9 @@ export function OrganizationTablesSettings() {
                         return (
                           <div
                             key={table._id}
-                            onPointerDown={(e) => handleTablePointerDown(e, table)}
+                            onPointerDown={(e) =>
+                              handleTablePointerDown(e, table)
+                            }
                             onContextMenu={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
@@ -1037,7 +1309,9 @@ export function OrganizationTablesSettings() {
                             {isDragging && (
                               <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-[#0c0a09] text-white text-[10px] font-mono px-2.5 py-0.5 rounded-full shadow-xl whitespace-nowrap z-50 flex items-center gap-1.5 animate-pulse border border-stone-700 pointer-events-none">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                                <span>Moving: X:{posX}px Y:{posY}px</span>
+                                <span>
+                                  Moving: X:{posX}px Y:{posY}px
+                                </span>
                               </div>
                             )}
 
@@ -1047,7 +1321,9 @@ export function OrganizationTablesSettings() {
                                 <div
                                   key={i}
                                   className={`w-3.5 h-3.5 rounded-full shadow-sm transition-colors ${
-                                    isDragging ? "bg-amber-500 scale-110" : "bg-[#141010]"
+                                    isDragging
+                                      ? "bg-amber-500 scale-110"
+                                      : "bg-[#141010]"
                                   }`}
                                 ></div>
                               ))}
@@ -1117,21 +1393,27 @@ export function OrganizationTablesSettings() {
                               </span>
                               <span
                                 className={`absolute top-2 right-2 w-2 h-2 rounded-full pointer-events-none ${
-                                  isDragging ? "bg-amber-400 animate-ping" : "bg-emerald-400"
+                                  isDragging
+                                    ? "bg-amber-400 animate-ping"
+                                    : "bg-emerald-400"
                                 }`}
                               ></span>
                             </div>
 
                             {/* Bottom Circular Seats */}
                             <div className="flex items-center justify-center gap-2 mt-1.5 pointer-events-none">
-                              {Array.from({ length: bottomSeats }).map((_, i) => (
-                                <div
-                                  key={i}
-                                  className={`w-3.5 h-3.5 rounded-full shadow-sm transition-colors ${
-                                    isDragging ? "bg-amber-500 scale-110" : "bg-[#141010]"
-                                  }`}
-                                ></div>
-                              ))}
+                              {Array.from({ length: bottomSeats }).map(
+                                (_, i) => (
+                                  <div
+                                    key={i}
+                                    className={`w-3.5 h-3.5 rounded-full shadow-sm transition-colors ${
+                                      isDragging
+                                        ? "bg-amber-500 scale-110"
+                                        : "bg-[#141010]"
+                                    }`}
+                                  ></div>
+                                ),
+                              )}
                             </div>
                           </div>
                         );
@@ -1144,7 +1426,8 @@ export function OrganizationTablesSettings() {
                 <footer className="bg-white px-5 py-2.5 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#5e5e5e]">
                   <span className="flex items-center">
                     <InfoIcon className="w-4 h-4 mr-2 text-[#5e5e5e]" />
-                    Drag any table to reposition • Click the Eye icon on a table to view details & QR code.
+                    Drag any table to reposition • Click the Eye icon on a table
+                    to view details & QR code.
                   </span>
                   <span className="font-mono text-[11px] text-[#5e5e5e]">
                     Auto-saved
@@ -1164,7 +1447,8 @@ export function OrganizationTablesSettings() {
                     <div
                       className="absolute inset-0 opacity-[0.035] pointer-events-none"
                       style={{
-                        backgroundImage: "radial-gradient(#0c0a09 1px, transparent 1px)",
+                        backgroundImage:
+                          "radial-gradient(#0c0a09 1px, transparent 1px)",
                         backgroundSize: "24px 24px",
                       }}
                     ></div>
@@ -1179,14 +1463,60 @@ export function OrganizationTablesSettings() {
                           xmlns="http://www.w3.org/2000/svg"
                         >
                           {/* Central Dining Table Blueprint */}
-                          <rect fill="#fff" height="20" rx="3" stroke="currentColor" strokeDasharray="2 2" width="20" x="14" y="14"></rect>
+                          <rect
+                            fill="#fff"
+                            height="20"
+                            rx="3"
+                            stroke="currentColor"
+                            strokeDasharray="2 2"
+                            width="20"
+                            x="14"
+                            y="14"
+                          ></rect>
                           {/* Surrounding chairs representing layout */}
-                          <rect fill="currentColor" height="3" rx="1.5" stroke="currentColor" width="10" x="19" y="8"></rect>
-                          <rect fill="currentColor" height="3" rx="1.5" stroke="currentColor" width="10" x="19" y="37"></rect>
-                          <rect fill="currentColor" height="10" rx="1.5" stroke="currentColor" width="3" x="8" y="19"></rect>
-                          <rect fill="currentColor" height="10" rx="1.5" stroke="currentColor" width="3" x="37" y="19"></rect>
+                          <rect
+                            fill="currentColor"
+                            height="3"
+                            rx="1.5"
+                            stroke="currentColor"
+                            width="10"
+                            x="19"
+                            y="8"
+                          ></rect>
+                          <rect
+                            fill="currentColor"
+                            height="3"
+                            rx="1.5"
+                            stroke="currentColor"
+                            width="10"
+                            x="19"
+                            y="37"
+                          ></rect>
+                          <rect
+                            fill="currentColor"
+                            height="10"
+                            rx="1.5"
+                            stroke="currentColor"
+                            width="3"
+                            x="8"
+                            y="19"
+                          ></rect>
+                          <rect
+                            fill="currentColor"
+                            height="10"
+                            rx="1.5"
+                            stroke="currentColor"
+                            width="3"
+                            x="37"
+                            y="19"
+                          ></rect>
                           {/* Center table accent dot */}
-                          <circle cx="24" cy="24" fill="currentColor" r="2"></circle>
+                          <circle
+                            cx="24"
+                            cy="24"
+                            fill="currentColor"
+                            r="2"
+                          ></circle>
                         </svg>
                       </div>
 
@@ -1195,8 +1525,12 @@ export function OrganizationTablesSettings() {
                         No tables in this layout yet
                       </h2>
                       <p className="text-sm font-light text-[#5e5e5e] max-w-sm leading-relaxed mb-7">
-                        Add your first table to start building the seating layout for{" "}
-                        <strong className="font-medium text-[#141010]">{selectedLayout?.name || "this layout"}</strong>.
+                        Add your first table to start building the seating
+                        layout for{" "}
+                        <strong className="font-medium text-[#141010]">
+                          {selectedLayout?.name || "this layout"}
+                        </strong>
+                        .
                       </p>
 
                       {/* Primary CTA Button */}
@@ -1206,7 +1540,10 @@ export function OrganizationTablesSettings() {
                         type="button"
                       >
                         <PlusIcon className="w-3.5 h-3.5 stroke-[2] text-white stroke-white" />
-                        <span className="text-white font-semibold" style={{ color: "#ffffff" }}>
+                        <span
+                          className="text-white font-semibold"
+                          style={{ color: "#ffffff" }}
+                        >
                           Add new table
                         </span>
                       </button>
@@ -1227,24 +1564,65 @@ export function OrganizationTablesSettings() {
                     </div>
                   </div>
                 ) : (
-                  <section className="bg-white border border-[#e7e5e4] rounded-2xl shadow-sm overflow-hidden flex flex-col" data-purpose="table-list-card">
+                  <section
+                    className="bg-white border border-[#e7e5e4] rounded-2xl shadow-sm overflow-hidden flex flex-col"
+                    data-purpose="table-list-card"
+                  >
                     <div className="overflow-auto max-h-[580px]">
                       <table className="w-full text-left border-collapse">
                         <thead>
                           <tr className="border-b border-[#e7e5e4] bg-[#faf9f7] text-[11px] font-mono tracking-wider uppercase text-[#78716c]">
-                            <th className="py-3.5 px-6 font-semibold" scope="col">TABLE</th>
-                            <th className="py-3.5 px-6 font-semibold" scope="col">CAPACITY</th>
-                            <th className="py-3.5 px-6 font-semibold" scope="col">KIDS SEAT</th>
-                            <th className="py-3.5 px-6 font-semibold" scope="col">DISABLED SEAT</th>
-                            <th className="py-3.5 px-6 font-semibold" scope="col">BARBEQUE GRILL</th>
-                            <th className="py-3.5 px-6 text-right font-semibold" scope="col">ACTIONS</th>
+                            <th
+                              className="py-3.5 px-6 font-semibold"
+                              scope="col"
+                            >
+                              TABLE
+                            </th>
+                            <th
+                              className="py-3.5 px-6 font-semibold"
+                              scope="col"
+                            >
+                              CAPACITY
+                            </th>
+                            <th
+                              className="py-3.5 px-6 font-semibold"
+                              scope="col"
+                            >
+                              KIDS SEAT
+                            </th>
+                            <th
+                              className="py-3.5 px-6 font-semibold"
+                              scope="col"
+                            >
+                              DISABLED SEAT
+                            </th>
+                            <th
+                              className="py-3.5 px-6 font-semibold"
+                              scope="col"
+                            >
+                              BARBEQUE GRILL
+                            </th>
+                            <th
+                              className="py-3.5 px-6 text-right font-semibold"
+                              scope="col"
+                            >
+                              ACTIONS
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[#f5f4f0] text-[13px] text-[#1c1917]">
                           {tablesInSelectedLayout.map((table) => {
-                            const isBooth = table.tableNumber.toLowerCase().includes("booth") || table.tableNumber.toUpperCase().startsWith("B");
-                            const initials = table.tableNumber.replace(/[^a-zA-Z0-9]/g, "").slice(0, 2).toUpperCase() || "T1";
-                            const defaultPlacement = isBooth ? "Wall Banquette" : table.tableNumber.toLowerCase().includes("round") ? "Round Center" : "Standard Dining Table";
+                            const isBooth =
+                              table.tableNumber
+                                .toLowerCase()
+                                .includes("booth") ||
+                              table.tableNumber.toUpperCase().startsWith("B");
+                            const initials =
+                              table.tableNumber
+                                .replace(/[^a-zA-Z0-9]/g, "")
+                                .slice(0, 2)
+                                .toUpperCase() || "T1";
+                            const defaultPlacement = "";
 
                             return (
                               <tr
@@ -1265,7 +1643,13 @@ export function OrganizationTablesSettings() {
                                       {initials}
                                     </div>
                                     <div>
-                                      <span className="font-semibold block text-[#0c0a09] leading-tight group-hover:underline decoration-[#d6d3d1]">{table.tableNumber}</span>
+                                      <span className="font-semibold block text-[#0c0a09] leading-tight group-hover:underline decoration-[#d6d3d1]">
+                                        {table.tableNumber
+                                          .toLowerCase()
+                                          .startsWith("table")
+                                          ? table.tableNumber
+                                          : `Table`}
+                                      </span>
                                       <span className="text-[11px] text-[#a8a29e] font-normal">
                                         {table.placement || defaultPlacement}
                                       </span>
@@ -1343,21 +1727,62 @@ export function OrganizationTablesSettings() {
                     <div className="px-6 py-3.5 bg-[#faf9f7] border-t border-[#e7e5e4] flex items-center justify-between text-[12px] text-[#78716c]">
                       <div className="flex items-center gap-2">
                         <span>
-                          Showing <span className="font-semibold text-[#0c0a09]">{tablesInSelectedLayout.length} tables</span> in {selectedLayout?.name || "this layout"}
+                          Showing{" "}
+                          <span className="font-semibold text-[#0c0a09]">
+                            {tablesInSelectedLayout.length} tables
+                          </span>{" "}
+                          in {selectedLayout?.name || "this layout"}
                         </span>
                         <span className="text-[#d6d3d1]">•</span>
                         <span>
-                          Total seating capacity: <span className="font-semibold text-[#0c0a09]">{totalSeatsInSelectedLayout} seats</span>
+                          Total seating capacity:{" "}
+                          <span className="font-semibold text-[#0c0a09]">
+                            {totalSeatsInSelectedLayout} seats
+                          </span>
                         </span>
                       </div>
                       <div className="flex items-center gap-4">
-                        <span className="text-[11px] text-[#a8a29e] font-mono">Synchronized with Table Designer</span>
+                        <span className="text-[11px] text-[#a8a29e] font-mono">
+                          Synchronized with Table Designer
+                        </span>
                         <div className="flex items-center gap-1">
-                          <button className="px-2 py-1 border border-[#e7e5e4] bg-white rounded text-[#d6d3d1] cursor-not-allowed" disabled type="button">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
+                          <button
+                            className="px-2 py-1 border border-[#e7e5e4] bg-white rounded text-[#d6d3d1] cursor-not-allowed"
+                            disabled
+                            type="button"
+                          >
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M15 19l-7-7 7-7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                              />
+                            </svg>
                           </button>
-                          <button className="px-2 py-1 border border-[#e7e5e4] bg-white rounded text-[#d6d3d1] cursor-not-allowed" disabled type="button">
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" /></svg>
+                          <button
+                            className="px-2 py-1 border border-[#e7e5e4] bg-white rounded text-[#d6d3d1] cursor-not-allowed"
+                            disabled
+                            type="button"
+                          >
+                            <svg
+                              className="w-3.5 h-3.5"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                d="M9 5l7 7-7 7"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="2"
+                              />
+                            </svg>
                           </button>
                         </div>
                       </div>
@@ -1366,10 +1791,18 @@ export function OrganizationTablesSettings() {
                 )}
 
                 {/* Secondary Info Note Callout */}
-                <aside className="p-3.5 bg-[#f5f4f0] border border-[#e7e5e4] rounded-lg flex items-center gap-3" data-purpose="status-callout">
+                <aside
+                  className="p-3.5 bg-[#f5f4f0] border border-[#e7e5e4] rounded-lg flex items-center gap-3"
+                  data-purpose="status-callout"
+                >
                   <InfoIcon className="w-4 h-4 text-[#78716c] flex-shrink-0" />
                   <p className="text-[12px] text-[#57534e]">
-                    Switch back to <span className="font-medium text-[#1c1917]">Table Designer</span> anytime to re-arrange floor grid positions or inspect live visual seating reservations.
+                    Switch back to{" "}
+                    <span className="font-medium text-[#1c1917]">
+                      Table Designer
+                    </span>{" "}
+                    anytime to re-arrange floor grid positions or inspect live
+                    visual seating reservations.
                   </p>
                 </aside>
               </div>
@@ -1405,7 +1838,11 @@ export function OrganizationTablesSettings() {
                 </p>
               </div>
 
-              <form onSubmit={handleSaveLayout} className="p-8 space-y-6" id="add-layout-form">
+              <form
+                onSubmit={handleSaveLayout}
+                className="p-8 space-y-6"
+                id="add-layout-form"
+              >
                 {/* Action Required Banner for Layout Drawer */}
                 {layoutPendingErrors.length > 0 && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
@@ -1413,7 +1850,8 @@ export function OrganizationTablesSettings() {
                       <span className="text-lg">⚠️</span>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-rose-900">
-                          Action Required ({layoutPendingErrors.length} pending field{layoutPendingErrors.length > 1 ? "s" : ""})
+                          Action Required ({layoutPendingErrors.length} pending
+                          field{layoutPendingErrors.length > 1 ? "s" : ""})
                         </h4>
                         <p className="mt-1 text-xs text-rose-700">
                           Please fill in all required fields before saving:
@@ -1435,8 +1873,12 @@ export function OrganizationTablesSettings() {
                 )}
 
                 <div className="space-y-2">
-                  <label className="block text-[11px] uppercase font-semibold tracking-wider text-[#5e5e5e]" htmlFor="layout-name">
-                    Layout name <span className="text-red-500 font-bold">*</span>
+                  <label
+                    className="block text-[11px] uppercase font-semibold tracking-wider text-[#5e5e5e]"
+                    htmlFor="layout-name"
+                  >
+                    Layout name{" "}
+                    <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
                     ref={layoutNameInputRef}
@@ -1453,12 +1895,18 @@ export function OrganizationTablesSettings() {
                           return copy;
                         });
                         setLayoutPendingErrors((prev) =>
-                          prev.filter((msg) => !msg.toLowerCase().includes("layout name"))
+                          prev.filter(
+                            (msg) => !msg.toLowerCase().includes("layout name"),
+                          ),
                         );
                       }
                     }}
                     placeholder="Enter layout name"
-                    style={{ backgroundColor: layoutPendingFields["layoutName"] ? "#fff5f5" : "#ffffff" }}
+                    style={{
+                      backgroundColor: layoutPendingFields["layoutName"]
+                        ? "#fff5f5"
+                        : "#ffffff",
+                    }}
                     className={`w-full h-[44px] px-3.5 border rounded-lg text-sm text-[#0c0a09] placeholder-stone-400 focus:outline-none transition shadow-sm ${
                       layoutPendingFields["layoutName"]
                         ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
@@ -1479,7 +1927,9 @@ export function OrganizationTablesSettings() {
                 <div className="bg-[#f7f3f2] border border-[#e7e5e4] rounded-lg p-4 text-[12px] text-[#0c0a09] leading-relaxed flex items-start gap-3">
                   <InfoIcon className="w-4 h-4 text-[#5e5e5e] mt-0.5 shrink-0" />
                   <span>
-                    Layout names must be unique across your organization. Once created, tables can be created and placed inside this dining area.
+                    Layout names must be unique across your organization. Once
+                    created, tables can be created and placed inside this dining
+                    area.
                   </span>
                 </div>
               </form>
@@ -1499,7 +1949,10 @@ export function OrganizationTablesSettings() {
                 form="add-layout-form"
                 type="submit"
               >
-                <span className="text-white font-medium" style={{ color: "#ffffff" }}>
+                <span
+                  className="text-white font-medium"
+                  style={{ color: "#ffffff" }}
+                >
                   {isLayoutSubmitting ? "Creating..." : "Create"}
                 </span>
               </button>
@@ -1531,7 +1984,11 @@ export function OrganizationTablesSettings() {
                 </p>
               </div>
 
-              <form onSubmit={handleSaveLayout} className="p-8 space-y-6" id="edit-layout-form">
+              <form
+                onSubmit={handleSaveLayout}
+                className="p-8 space-y-6"
+                id="edit-layout-form"
+              >
                 {/* Action Required Banner for Edit Layout Drawer */}
                 {layoutPendingErrors.length > 0 && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
@@ -1539,7 +1996,8 @@ export function OrganizationTablesSettings() {
                       <span className="text-lg">⚠️</span>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-rose-900">
-                          Action Required ({layoutPendingErrors.length} pending field{layoutPendingErrors.length > 1 ? "s" : ""})
+                          Action Required ({layoutPendingErrors.length} pending
+                          field{layoutPendingErrors.length > 1 ? "s" : ""})
                         </h4>
                         <p className="mt-1 text-xs text-rose-700">
                           Please fill in all required fields before saving:
@@ -1562,7 +2020,10 @@ export function OrganizationTablesSettings() {
 
                 <div className="space-y-2">
                   <div className="flex justify-between items-baseline">
-                    <label className="block text-[11px] uppercase font-semibold tracking-wider text-[#5e5e5e]" htmlFor="edit-layout-name">
+                    <label
+                      className="block text-[11px] uppercase font-semibold tracking-wider text-[#5e5e5e]"
+                      htmlFor="edit-layout-name"
+                    >
                       Layout name <span className="text-red-500">*</span>
                     </label>
                     <span className="text-[11px] text-[#5e5e5e]">Required</span>
@@ -1582,12 +2043,18 @@ export function OrganizationTablesSettings() {
                           return copy;
                         });
                         setLayoutPendingErrors((prev) =>
-                          prev.filter((msg) => !msg.toLowerCase().includes("layout name"))
+                          prev.filter(
+                            (msg) => !msg.toLowerCase().includes("layout name"),
+                          ),
                         );
                       }
                     }}
                     placeholder="e.g. Indoor-DineIn"
-                    style={{ backgroundColor: layoutPendingFields["layoutName"] ? "#fff5f5" : "#ffffff" }}
+                    style={{
+                      backgroundColor: layoutPendingFields["layoutName"]
+                        ? "#fff5f5"
+                        : "#ffffff",
+                    }}
                     className={`w-full h-[44px] px-3.5 border rounded-lg text-sm text-[#0c0a09] placeholder-stone-400 focus:outline-none transition shadow-sm ${
                       layoutPendingFields["layoutName"]
                         ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
@@ -1612,12 +2079,16 @@ export function OrganizationTablesSettings() {
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                     </span>
                     <span className="text-xs font-medium text-[#0c0a09]">
-                      Currently contains {tableCountByLayout[editingLayout._id] || 0} active tables
+                      Currently contains{" "}
+                      {tableCountByLayout[editingLayout._id] || 0} active tables
                     </span>
                   </div>
                   <div className="pt-3 border-t border-[#e7e5e4]/60 text-[11px] text-[#5e5e5e] flex items-start gap-2 leading-relaxed">
                     <InfoIcon className="w-3.5 h-3.5 text-[#5e5e5e] shrink-0 mt-0.5" />
-                    <span>Case-insensitive layout name uniqueness is enforced across your venue terminals.</span>
+                    <span>
+                      Case-insensitive layout name uniqueness is enforced across
+                      your venue terminals.
+                    </span>
                   </div>
                 </div>
               </form>
@@ -1637,7 +2108,10 @@ export function OrganizationTablesSettings() {
                 form="edit-layout-form"
                 type="submit"
               >
-                <span className="text-white font-medium" style={{ color: "#ffffff" }}>
+                <span
+                  className="text-white font-medium"
+                  style={{ color: "#ffffff" }}
+                >
                   {isLayoutSubmitting ? "Updating..." : "Update"}
                 </span>
               </button>
@@ -1665,7 +2139,9 @@ export function OrganizationTablesSettings() {
                   <CloseIcon className="w-4 h-4" />
                 </button>
                 <p className="font-mono text-[10px] uppercase font-bold tracking-wider text-[#98928e] mb-1">
-                  {editingTable ? `EDITING TABLE: ${editingTable.tableNumber}` : "NEW TABLE"}
+                  {editingTable
+                    ? `EDITING TABLE: ${editingTable.tableNumber}`
+                    : "NEW TABLE"}
                 </p>
                 <h2 className="font-garamond text-[28px] font-normal leading-tight text-[#0c0a09]">
                   {editingTable ? "Edit table" : "Add table"}
@@ -1677,7 +2153,11 @@ export function OrganizationTablesSettings() {
                 </p>
               </div>
 
-              <form onSubmit={handleSaveTable} className="p-8 space-y-6" id="table-form">
+              <form
+                onSubmit={handleSaveTable}
+                className="p-8 space-y-6"
+                id="table-form"
+              >
                 {/* Action Required Banner for Table Drawer */}
                 {tablePendingErrors.length > 0 && (
                   <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 shadow-sm animate-shake mb-4">
@@ -1685,7 +2165,8 @@ export function OrganizationTablesSettings() {
                       <span className="text-lg">⚠️</span>
                       <div className="flex-1">
                         <h4 className="text-sm font-semibold text-rose-900">
-                          Action Required ({tablePendingErrors.length} pending field{tablePendingErrors.length > 1 ? "s" : ""})
+                          Action Required ({tablePendingErrors.length} pending
+                          field{tablePendingErrors.length > 1 ? "s" : ""})
                         </h4>
                         <p className="mt-1 text-xs text-rose-700">
                           Please fill in all required fields before saving:
@@ -1708,8 +2189,12 @@ export function OrganizationTablesSettings() {
 
                 {/* Table Number */}
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold tracking-wider text-[#5e5e5e] uppercase" htmlFor="table-num">
-                    Table number <span className="text-red-500 font-bold">*</span>
+                  <label
+                    className="block text-[11px] font-semibold tracking-wider text-[#5e5e5e] uppercase"
+                    htmlFor="table-num"
+                  >
+                    Table number{" "}
+                    <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
                     ref={tableNumberInputRef}
@@ -1726,12 +2211,19 @@ export function OrganizationTablesSettings() {
                           return copy;
                         });
                         setTablePendingErrors((prev) =>
-                          prev.filter((msg) => !msg.toLowerCase().includes("table number"))
+                          prev.filter(
+                            (msg) =>
+                              !msg.toLowerCase().includes("table number"),
+                          ),
                         );
                       }
                     }}
                     placeholder="Enter table number"
-                    style={{ backgroundColor: tablePendingFields["tableNumber"] ? "#fff5f5" : "#ffffff" }}
+                    style={{
+                      backgroundColor: tablePendingFields["tableNumber"]
+                        ? "#fff5f5"
+                        : "#ffffff",
+                    }}
                     className={`w-full text-xs text-[#0c0a09] placeholder-stone-400 rounded-lg border px-3.5 py-2.5 shadow-sm outline-none transition-all ${
                       tablePendingFields["tableNumber"]
                         ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
@@ -1751,8 +2243,12 @@ export function OrganizationTablesSettings() {
 
                 {/* Seating Capacity */}
                 <div className="space-y-1.5">
-                  <label className="block text-[11px] font-semibold tracking-wider text-[#5e5e5e] uppercase" htmlFor="seating-cap">
-                    Seating capacity <span className="text-red-500 font-bold">*</span>
+                  <label
+                    className="block text-[11px] font-semibold tracking-wider text-[#5e5e5e] uppercase"
+                    htmlFor="seating-cap"
+                  >
+                    Seating capacity{" "}
+                    <span className="text-red-500 font-bold">*</span>
                   </label>
                   <input
                     ref={seatingCapacityInputRef}
@@ -1771,12 +2267,19 @@ export function OrganizationTablesSettings() {
                           return copy;
                         });
                         setTablePendingErrors((prev) =>
-                          prev.filter((msg) => !msg.toLowerCase().includes("seating capacity"))
+                          prev.filter(
+                            (msg) =>
+                              !msg.toLowerCase().includes("seating capacity"),
+                          ),
                         );
                       }
                     }}
                     placeholder="Enter seating capacity"
-                    style={{ backgroundColor: tablePendingFields["seatingCapacity"] ? "#fff5f5" : "#ffffff" }}
+                    style={{
+                      backgroundColor: tablePendingFields["seatingCapacity"]
+                        ? "#fff5f5"
+                        : "#ffffff",
+                    }}
                     className={`w-full text-xs text-[#0c0a09] placeholder-stone-400 rounded-lg border px-3.5 py-2.5 shadow-sm outline-none transition-all ${
                       tablePendingFields["seatingCapacity"]
                         ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09] focus:border-rose-500"
@@ -1797,15 +2300,24 @@ export function OrganizationTablesSettings() {
                 {/* Select Layout */}
                 <div className="space-y-1.5 relative">
                   <label className="block text-[11px] font-semibold tracking-wider text-[#5e5e5e] uppercase">
-                    Select layout <span className="text-red-500 font-bold">*</span>
+                    Select layout{" "}
+                    <span className="text-red-500 font-bold">*</span>
                   </label>
-                  
+
                   <div className="relative">
                     <button
                       ref={tableLayoutDropdownRef}
                       type="button"
-                      onClick={() => setIsDrawerLayoutDropdownOpen(!isDrawerLayoutDropdownOpen)}
-                      style={{ backgroundColor: tablePendingFields["tableLayoutId"] ? "#fff5f5" : "#ffffff" }}
+                      onClick={() =>
+                        setIsDrawerLayoutDropdownOpen(
+                          !isDrawerLayoutDropdownOpen,
+                        )
+                      }
+                      style={{
+                        backgroundColor: tablePendingFields["tableLayoutId"]
+                          ? "#fff5f5"
+                          : "#ffffff",
+                      }}
                       className={`w-full flex items-center justify-between h-[44px] px-3.5 border rounded-lg text-xs shadow-sm focus:outline-none transition-all cursor-pointer text-left ${
                         tablePendingFields["tableLayoutId"]
                           ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse text-[#0c0a09]"
@@ -1813,9 +2325,13 @@ export function OrganizationTablesSettings() {
                       }`}
                     >
                       <span className="font-medium text-[#0c0a09]">
-                        {activeLayoutsList.find((l) => l._id === tableLayoutIdInput)?.name || "-- Select Layout --"}
+                        {activeLayoutsList.find(
+                          (l) => l._id === tableLayoutIdInput,
+                        )?.name || "-- Select Layout --"}
                       </span>
-                      <ChevronDownIcon className={`w-4 h-4 text-[#5e5e5e] transition-transform ${isDrawerLayoutDropdownOpen ? "rotate-180" : ""}`} />
+                      <ChevronDownIcon
+                        className={`w-4 h-4 text-[#5e5e5e] transition-transform ${isDrawerLayoutDropdownOpen ? "rotate-180" : ""}`}
+                      />
                     </button>
 
                     {/* Popover Options List */}
@@ -1845,7 +2361,12 @@ export function OrganizationTablesSettings() {
                                       return copy;
                                     });
                                     setTablePendingErrors((prev) =>
-                                      prev.filter((msg) => !msg.toLowerCase().includes("layout selection"))
+                                      prev.filter(
+                                        (msg) =>
+                                          !msg
+                                            .toLowerCase()
+                                            .includes("layout selection"),
+                                      ),
                                     );
                                   }
                                 }}
@@ -1857,8 +2378,18 @@ export function OrganizationTablesSettings() {
                               >
                                 <span>{l.name}</span>
                                 {isSelected && (
-                                  <svg className="w-3.5 h-3.5 text-[#0c0a09]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2.5">
-                                    <path d="M5 13l4 4L19 7" strokeLinecap="round" strokeLinejoin="round" />
+                                  <svg
+                                    className="w-3.5 h-3.5 text-[#0c0a09]"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="2.5"
+                                  >
+                                    <path
+                                      d="M5 13l4 4L19 7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                    />
                                   </svg>
                                 )}
                               </button>
@@ -1875,7 +2406,8 @@ export function OrganizationTablesSettings() {
                     </p>
                   ) : (
                     <p className="text-[11px] text-[#5e5e5e]">
-                      Assigns table coordinates and floor availability to this zone.
+                      Assigns table coordinates and floor availability to this
+                      zone.
                     </p>
                   )}
                 </div>
@@ -1917,7 +2449,9 @@ export function OrganizationTablesSettings() {
                       <input
                         type="checkbox"
                         checked={barbequeGrillInput}
-                        onChange={(e) => setBarbequeGrillInput(e.target.checked)}
+                        onChange={(e) =>
+                          setBarbequeGrillInput(e.target.checked)
+                        }
                         className="w-4 h-4 rounded border-[#d6d3d1] text-[#0c0a09] focus:ring-0 cursor-pointer accent-[#0c0a09]"
                       />
                     </label>
@@ -1928,7 +2462,9 @@ export function OrganizationTablesSettings() {
                 <div className="bg-[#faf9f8] border border-[#e7e5e4] rounded-xl p-4 text-[12px] text-[#5e5e5e] leading-relaxed flex items-start gap-3">
                   <InfoIcon className="w-4 h-4 text-[#5e5e5e] shrink-0 mt-0.5" />
                   <span>
-                    Changes to capacity and amenities will update seating assignments and waiter handheld indicators immediately across all devices.
+                    Changes to capacity and amenities will update seating
+                    assignments and waiter handheld indicators immediately
+                    across all devices.
                   </span>
                 </div>
               </form>
@@ -1951,14 +2487,17 @@ export function OrganizationTablesSettings() {
                 form="table-form"
                 type="submit"
               >
-                <span className="text-white font-medium" style={{ color: "#ffffff" }}>
+                <span
+                  className="text-white font-medium"
+                  style={{ color: "#ffffff" }}
+                >
                   {isTableSubmitting
                     ? editingTable
                       ? "Updating..."
                       : "Creating..."
                     : editingTable
-                    ? "Update"
-                    : "Create"}
+                      ? "Update"
+                      : "Create"}
                 </span>
               </button>
             </footer>
@@ -2018,38 +2557,56 @@ export function OrganizationTablesSettings() {
               {/* Details List */}
               <div className="space-y-4">
                 <div className="border-b border-stone-100 pb-3">
-                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Table number</div>
-                  <div className="text-sm font-semibold text-[#1c1917]">{previewTable.tableNumber}</div>
-                </div>
-
-                <div className="border-b border-stone-100 pb-3">
-                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Seating Capacity</div>
-                  <div className="text-sm font-semibold text-[#1c1917]">{previewTable.seatingCapacity}</div>
-                </div>
-
-                <div className="border-b border-stone-100 pb-3">
-                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Layout</div>
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">
+                    Table number
+                  </div>
                   <div className="text-sm font-semibold text-[#1c1917]">
-                    {activeLayoutsList.find((l) => l._id === previewTable.layoutId)?.name || "--"}
+                    {previewTable.tableNumber}
                   </div>
                 </div>
 
                 <div className="border-b border-stone-100 pb-3">
-                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Kids seat available</div>
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">
+                    Seating Capacity
+                  </div>
+                  <div className="text-sm font-semibold text-[#1c1917]">
+                    {previewTable.seatingCapacity}
+                  </div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">
+                    Layout
+                  </div>
+                  <div className="text-sm font-semibold text-[#1c1917]">
+                    {activeLayoutsList.find(
+                      (l) => l._id === previewTable.layoutId,
+                    )?.name || "--"}
+                  </div>
+                </div>
+
+                <div className="border-b border-stone-100 pb-3">
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">
+                    Kids seat available
+                  </div>
                   <div className="text-sm font-semibold text-[#1c1917]">
                     {previewTable.kidsSeatAvailability ? "Yes" : "No"}
                   </div>
                 </div>
 
                 <div className="border-b border-stone-100 pb-3">
-                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Disabled seat available</div>
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">
+                    Disabled seat available
+                  </div>
                   <div className="text-sm font-semibold text-[#1c1917]">
                     {previewTable.disabledSeatAvailability ? "Yes" : "No"}
                   </div>
                 </div>
 
                 <div className="border-b border-stone-100 pb-3">
-                  <div className="text-xs text-[#78716c] font-medium mb-0.5">Barbeque grill available</div>
+                  <div className="text-xs text-[#78716c] font-medium mb-0.5">
+                    Barbeque grill available
+                  </div>
                   <div className="text-sm font-semibold text-[#1c1917]">
                     {previewTable.barbequeGrillAvailability ? "Yes" : "No"}
                   </div>
@@ -2060,15 +2617,39 @@ export function OrganizationTablesSettings() {
               <div className="pt-2">
                 <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm">
                   {(() => {
-                    const storeParam = organization?.slug ? `store=${encodeURIComponent(organization.slug)}&` : "";
-                    const qrUrlStr = previewTableQr?.qrUrl || `https://pos.app/store?${storeParam}type=DineIn&table_id=${previewTable._id}&table_number=${encodeURIComponent(previewTable.tableNumber)}`;
-                    const qrImgSrc = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrlStr)}`;
+                    const storeSlug = organization?.slug || "balwant-new";
+                    const customerBaseUrl =
+                      process.env.NEXT_PUBLIC_DIGITAL_STORE_BASE_URL ||
+                      "https://dev-pos-user.get-prest.com/store";
+                    const base = customerBaseUrl.split("?")[0];
+
+                    let qrUrlStr = "";
+                    if (previewTableQr && previewTableQr.qrUrl) {
+                      if (
+                        previewTableQr.qrUrl.startsWith("http://") ||
+                        previewTableQr.qrUrl.startsWith("https://")
+                      ) {
+                        qrUrlStr = previewTableQr.qrUrl;
+                      } else {
+                        const path = previewTableQr.qrUrl.startsWith("/")
+                          ? previewTableQr.qrUrl
+                          : `/${previewTableQr.qrUrl}`;
+                        const origin = base.replace(/\/store\/?$/, "");
+                        qrUrlStr = `${origin}${path}`;
+                      }
+                    } else {
+                      const params = new URLSearchParams();
+                      if (storeSlug) params.set("store", storeSlug);
+                      params.set("type", "DineIn");
+                      params.set("qr_name", `Table ${previewTable.tableNumber}`);
+                      params.set("table_id", previewTable._id);
+                      qrUrlStr = `${base}?${params.toString()}`;
+                    }
+
                     return (
-                      <img
-                        src={qrImgSrc}
-                        alt={`QR Code for Table ${previewTable.tableNumber}`}
-                        className="w-64 h-64 object-contain"
-                      />
+                      <div className="w-64 h-64 flex items-center justify-center p-2 bg-white rounded-xl">
+                        <DynamicQrCode value={qrUrlStr} size={240} />
+                      </div>
                     );
                   })()}
                 </div>
@@ -2109,12 +2690,20 @@ export function OrganizationTablesSettings() {
 
             {/* Modal Heading & Subject */}
             <div className="space-y-1 mb-4">
-              <h2 className="font-garamond text-2xl font-normal text-[#141010] leading-snug" id="modal-headline">
-                {deletingTarget.type === "layout" ? "Delete layout?" : "Delete table?"}
+              <h2
+                className="font-garamond text-2xl font-normal text-[#141010] leading-snug"
+                id="modal-headline"
+              >
+                {deletingTarget.type === "layout"
+                  ? "Delete layout?"
+                  : "Delete table?"}
               </h2>
               <p className="text-sm font-medium text-[#1c1b1b]">
                 Are you sure you want to delete{" "}
-                <span className="font-semibold text-stone-900">{deletingTarget.name}</span>?
+                <span className="font-semibold text-stone-900">
+                  {deletingTarget.name}
+                </span>
+                ?
               </p>
             </div>
 
@@ -2123,39 +2712,56 @@ export function OrganizationTablesSettings() {
               {deletingTarget.type === "table" ? (
                 <>
                   <div className="flex items-start gap-2">
-                    <span className="text-stone-400 font-bold select-none">•</span>
+                    <span className="text-stone-400 font-bold select-none">
+                      •
+                    </span>
                     <p>
-                      This table will no longer be available for seating or orders in{" "}
+                      This table will no longer be available for seating or
+                      orders in{" "}
                       <strong className="text-stone-800 font-medium">
                         {selectedLayout?.name || "this layout"}
-                      </strong>.
+                      </strong>
+                      .
                     </p>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-stone-400 font-bold select-none">•</span>
+                    <span className="text-stone-400 font-bold select-none">
+                      •
+                    </span>
                     <p>
-                      Table position coordinates and amenity configurations will be permanently cleared from this layout.
+                      Table position coordinates and amenity configurations will
+                      be permanently cleared from this layout.
                     </p>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-stone-400 font-bold select-none">•</span>
+                    <span className="text-stone-400 font-bold select-none">
+                      •
+                    </span>
                     <p>
-                      Historical orders, guest checks, and KOT records associated with this table will retain their historical audit log.
+                      Historical orders, guest checks, and KOT records
+                      associated with this table will retain their historical
+                      audit log.
                     </p>
                   </div>
                 </>
               ) : (
                 <>
                   <div className="flex items-start gap-2">
-                    <span className="text-stone-400 font-bold select-none">•</span>
+                    <span className="text-stone-400 font-bold select-none">
+                      •
+                    </span>
                     <p>
-                      This layout zone and floor canvas configuration will be permanently removed.
+                      This layout zone and floor canvas configuration will be
+                      permanently removed.
                     </p>
                   </div>
                   <div className="flex items-start gap-2">
-                    <span className="text-stone-400 font-bold select-none">•</span>
+                    <span className="text-stone-400 font-bold select-none">
+                      •
+                    </span>
                     <p>
-                      Tables assigned to this layout must be reassigned before deletion can proceed.
+                      Tables assigned to this layout must be reassigned before
+                      deletion can proceed.
                     </p>
                   </div>
                 </>
@@ -2176,7 +2782,9 @@ export function OrganizationTablesSettings() {
                 className="px-5 py-2.5 rounded-full bg-[#dc2626] hover:bg-[#b91c1c] active:bg-[#991b1b] text-white text-xs font-medium transition-colors shadow-sm cursor-pointer"
                 type="button"
               >
-                {deletingTarget.type === "layout" ? "Delete layout" : "Delete table"}
+                {deletingTarget.type === "layout"
+                  ? "Delete layout"
+                  : "Delete table"}
               </button>
             </div>
           </div>

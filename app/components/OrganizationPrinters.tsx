@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id, Doc } from "../../convex/_generated/dataModel";
 import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
+import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
 type PrinterType = "Lan" | "Bluetooth" | "Usb";
 type PrinterUseFor = "Cashier" | "Station" | "WorkStation";
@@ -383,11 +384,15 @@ export function OrganizationPrinters() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      {/* Top Heading */}
-      <div>
-        <h2 className="text-xl font-medium text-[#141010]">Printer settings</h2>
-      </div>
+    <ComingSoonOverlay
+      title="Printers & Hardware"
+      description="Thermal ESC/POS receipt printer setup, LAN/Bluetooth connections, and workstation routing will be available soon."
+    >
+      <div className="mx-auto max-w-5xl space-y-6">
+        {/* Top Heading */}
+        <div>
+          <h2 className="text-xl font-medium text-[#141010]">Printer settings</h2>
+        </div>
 
       {/* Feedback Alert */}
       {feedback && (
@@ -623,7 +628,8 @@ export function OrganizationPrinters() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ComingSoonOverlay>
   );
 }
 

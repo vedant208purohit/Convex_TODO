@@ -91,87 +91,210 @@ export default function CustomersPage() {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
+  // Helper to normalize email addresses for deduplication
+  const normalizeEmail = (raw?: string | null): string | null => {
+    if (!raw) return null;
+    const cleaned = raw.toLowerCase().trim();
+    if (
+      !cleaned ||
+      cleaned === "null" ||
+      cleaned === "undefined" ||
+      cleaned === "none" ||
+      cleaned === "guest@example.com" ||
+      cleaned === "customer@example.com" ||
+      cleaned === "guest" ||
+      !cleaned.includes("@")
+    ) {
+      return null;
+    }
+    return cleaned;
+  };
+
   // Unified Data Aggregation: Combine Convex `customers` + customer data extracted from `orders`
   const aggregatedCustomers = useMemo(() => {
     const customerMap = new Map<string, CustomerRowData>();
+    const convexIdToKey = new Map<string, string>();
+    const phoneToKey = new Map<string, string>();
+    const emailToKey = new Map<string, string>();
+    const nameToKey = new Map<string, string>();
+
+    const sourceCountsMap = new Map<string, Record<string, number>>();
+
+    // Helper to find or resolve customer key by checking existing indexes
+    const resolveCustomerKey = (
+      convexId: string | null,
+      cleanPhone: string | null,
+      normEmail: string | null,
+      normName: string | null,
+      fallbackId?: string
+    ): string => {
+      const matchedKeysSet = new Set<string>();
+
+      // Check primary strong identifiers first
+      if (convexId && convexIdToKey.has(convexId)) {
+        matchedKeysSet.add(convexIdToKey.get(convexId)!);
+      }
+      if (cleanPhone && phoneToKey.has(cleanPhone)) {
+        matchedKeysSet.add(phoneToKey.get(cleanPhone)!);
+      }
+      if (normEmail && emailToKey.has(normEmail)) {
+        matchedKeysSet.add(emailToKey.get(normEmail)!);
+      }
+
+      // Check secondary identifier (name) only if no primary identifier matched
+      if (matchedKeysSet.size === 0 && normName && nameToKey.has(normName)) {
+        matchedKeysSet.add(nameToKey.get(normName)!);
+      }
+
+      const matchedKeys = Array.from(matchedKeysSet).filter((k) => customerMap.has(k));
+
+      let primaryKey: string;
+
+      if (matchedKeys.length === 0) {
+        if (convexId) primaryKey = convexId;
+        else if (cleanPhone) primaryKey = `phone_${cleanPhone}`;
+        else if (normEmail) primaryKey = `email_${normEmail}`;
+        else if (normName) primaryKey = `name_${normName.replace(/\s+/g, "_")}`;
+        else primaryKey = fallbackId || `cust_${Math.random().toString(36).substring(2, 9)}`;
+      } else {
+        primaryKey = matchedKeys[0];
+
+        // Merge duplicate entries if multiple indexes matched different existing records
+        for (let i = 1; i < matchedKeys.length; i++) {
+          const duplicateKey = matchedKeys[i];
+          if (duplicateKey === primaryKey) continue;
+
+          const primaryEntry = customerMap.get(primaryKey);
+          const duplicateEntry = customerMap.get(duplicateKey);
+
+          if (primaryEntry && duplicateEntry) {
+            primaryEntry.totalOrders += duplicateEntry.totalOrders;
+            primaryEntry.totalSpend += duplicateEntry.totalSpend;
+
+            if (duplicateEntry.convexId && !primaryEntry.convexId) {
+              primaryEntry.convexId = duplicateEntry.convexId;
+            }
+            if (duplicateEntry.phone && !primaryEntry.phone) {
+              primaryEntry.phone = duplicateEntry.phone;
+            }
+            if (duplicateEntry.email && !primaryEntry.email) {
+              primaryEntry.email = duplicateEntry.email;
+            }
+            if (
+              (!primaryEntry.name || primaryEntry.name === "Guest Customer" || primaryEntry.name.startsWith("+91")) &&
+              duplicateEntry.name &&
+              duplicateEntry.name !== "Guest Customer"
+            ) {
+              primaryEntry.name = duplicateEntry.name;
+            }
+
+            if (
+              duplicateEntry.lastOrderDate &&
+              (!primaryEntry.lastOrderDate || duplicateEntry.lastOrderDate > primaryEntry.lastOrderDate)
+            ) {
+              primaryEntry.lastOrderDate = duplicateEntry.lastOrderDate;
+              primaryEntry.lastOrderDisplay = duplicateEntry.lastOrderDisplay;
+              primaryEntry.lastOrderNumber = duplicateEntry.lastOrderNumber;
+            }
+
+            const dupCounts = sourceCountsMap.get(duplicateKey);
+            if (dupCounts) {
+              const primCounts = sourceCountsMap.get(primaryKey) || {};
+              for (const [src, cnt] of Object.entries(dupCounts)) {
+                primCounts[src] = (primCounts[src] || 0) + cnt;
+              }
+              sourceCountsMap.set(primaryKey, primCounts);
+              sourceCountsMap.delete(duplicateKey);
+            }
+
+            for (const [id, target] of Array.from(convexIdToKey.entries())) {
+              if (target === duplicateKey) convexIdToKey.set(id, primaryKey);
+            }
+            for (const [p, target] of Array.from(phoneToKey.entries())) {
+              if (target === duplicateKey) phoneToKey.set(p, primaryKey);
+            }
+            for (const [e, target] of Array.from(emailToKey.entries())) {
+              if (target === duplicateKey) emailToKey.set(e, primaryKey);
+            }
+            for (const [n, target] of Array.from(nameToKey.entries())) {
+              if (target === duplicateKey) nameToKey.set(n, primaryKey);
+            }
+
+            customerMap.delete(duplicateKey);
+          }
+        }
+      }
+
+      if (convexId) convexIdToKey.set(convexId, primaryKey);
+      if (cleanPhone) phoneToKey.set(cleanPhone, primaryKey);
+      if (normEmail) emailToKey.set(normEmail, primaryKey);
+      if (normName) nameToKey.set(normName, primaryKey);
+
+      return primaryKey;
+    };
 
     // A. Populate from Convex `customers` table
     if (searchResults && Array.isArray(searchResults)) {
       for (const cust of searchResults) {
-        const cleanPhone = (cust.phone || "").replace(/\D/g, "");
-        const key = cust._id
-          ? String(cust._id)
-          : cleanPhone
-          ? `phone_${cleanPhone}`
-          : cust.email
-          ? `email_${cust.email}`
-          : `cust_${cust._id}`;
-
+        const convexId = cust._id ? String(cust._id) : null;
+        const cleanPhone = (cust.phone || "").replace(/\D/g, "") || null;
+        const normEmail = normalizeEmail(cust.email);
         const fullName = `${cust.firstName || ""} ${cust.lastName || ""}`.trim();
-        const displayName = fullName || "Guest Customer";
+        const normName = fullName && fullName !== "Guest Customer" ? fullName.toLowerCase() : null;
 
-        customerMap.set(key, {
-          id: key,
-          convexId: cust._id,
-          name: displayName,
-          phone: cust.phone || "",
-          countryCode: cust.countryCode || "+91",
-          email: cust.email || "",
-          totalOrders: 0,
-          totalSpend: 0,
-          lastOrderDisplay: "—",
-          lastOrderNumber: "—",
-          retentionPercent: 0,
-          averageOrderSource: "Dine In",
-          averageOrderValue: 0,
-        });
+        const key = resolveCustomerKey(convexId, cleanPhone, normEmail, normName, cust._id ? String(cust._id) : undefined);
+
+        let entry = customerMap.get(key);
+        if (!entry) {
+          const displayName = fullName || "Guest Customer";
+          entry = {
+            id: key,
+            convexId: cust._id,
+            name: displayName,
+            phone: cust.phone || "",
+            countryCode: cust.countryCode || "+91",
+            email: cust.email || "",
+            totalOrders: 0,
+            totalSpend: 0,
+            lastOrderDisplay: "—",
+            lastOrderNumber: "—",
+            retentionPercent: 0,
+            averageOrderSource: "Dine In",
+            averageOrderValue: 0,
+          };
+          customerMap.set(key, entry);
+        } else {
+          if (
+            (!entry.name || entry.name === "Guest Customer" || entry.name.startsWith("+91")) &&
+            fullName
+          ) {
+            entry.name = fullName;
+          }
+          if (!entry.phone && cust.phone) {
+            entry.phone = cust.phone;
+          }
+          if (!entry.email && cust.email) {
+            entry.email = cust.email;
+          }
+          if (!entry.convexId && cust._id) {
+            entry.convexId = cust._id;
+          }
+        }
       }
     }
 
     // B. Aggregate metrics from real `orders` database
     const ordersList = ordersResponse?.orders || [];
-    const sourceCountsMap = new Map<string, Record<string, number>>();
 
     for (const ord of ordersList) {
-      const cleanPhone = (ord.customerPhone || "").replace(/\D/g, "");
+      const cleanPhone = (ord.customerPhone || "").replace(/\D/g, "") || null;
       const orderCustId = ord.customerId ? String(ord.customerId) : null;
       const rawName = ord.customerName?.trim() || "";
-      const orderCustName = rawName !== "Guest Customer" ? rawName : "";
+      const orderCustName = rawName && rawName !== "Guest Customer" ? rawName : "";
+      const normName = orderCustName ? orderCustName.toLowerCase() : null;
+      const normEmail = normalizeEmail(ord.customerEmail);
 
-      // Look for existing key in customerMap
-      let key: string | null = null;
-      if (orderCustId && customerMap.has(orderCustId)) {
-        key = orderCustId;
-      } else if (cleanPhone && customerMap.has(`phone_${cleanPhone}`)) {
-        key = `phone_${cleanPhone}`;
-      } else {
-        // Match existing entry by phone, convexId, or name
-        for (const [k, c] of customerMap.entries()) {
-          if (orderCustId && c.convexId && String(c.convexId) === orderCustId) {
-            key = k;
-            break;
-          }
-          if (cleanPhone && c.phone && c.phone.replace(/\D/g, "") === cleanPhone) {
-            key = k;
-            break;
-          }
-          if (
-            orderCustName &&
-            c.name.toLowerCase() === orderCustName.toLowerCase()
-          ) {
-            key = k;
-            break;
-          }
-        }
-      }
-
-      // Generate a stable key if no match found
-      if (!key) {
-        if (orderCustId) key = orderCustId;
-        else if (cleanPhone) key = `phone_${cleanPhone}`;
-        else if (orderCustName) key = `name_${orderCustName.toLowerCase().replace(/\s+/g, "_")}`;
-        else key = `ordcust_${ord._id}`;
-      }
+      const key = resolveCustomerKey(orderCustId, cleanPhone, normEmail, normName, `ordcust_${ord._id}`);
 
       let entry = customerMap.get(key);
 
@@ -386,11 +509,7 @@ export default function CustomersPage() {
           <div className="flex flex-col gap-6">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div className="flex flex-col gap-1 max-w-2xl">
-                <div className="flex items-center gap-2 text-[11px] font-mono font-semibold text-stone-500 uppercase tracking-widest">
-                  <span>Patronage & Hospitality Records</span>
-                  <span>•</span>
-                  <span>Registry 2026</span>
-                </div>
+
                 <h1 className="font-serif text-3xl lg:text-4xl text-stone-900 leading-tight">
                   Customers
                 </h1>
