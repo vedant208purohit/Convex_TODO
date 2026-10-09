@@ -73,6 +73,31 @@ export async function recordOrderActivity(
   return { activityId, totalDuration, position: nextPosition };
 }
 
+
+async function resolveWaiterInfo(ctx: any, waiterUserId?: string) {
+  if (!waiterUserId || !waiterUserId.trim()) return null;
+  const idStr = waiterUserId.trim();
+
+  try {
+    const userDoc = await ctx.db.get(idStr as any);
+    if (userDoc) {
+      const name = `${userDoc.firstName || ""} ${userDoc.lastName || ""}`.trim() || userDoc.name || userDoc.email || idStr;
+      return { id: userDoc._id, name };
+    }
+  } catch {}
+
+  const orgUser = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_user", (q: any) => q.eq("userId", idStr))
+    .first();
+  if (orgUser) {
+    const name = `${orgUser.firstName || ""} ${orgUser.lastName || ""}`.trim() || orgUser.email || idStr;
+    return { id: orgUser._id, name };
+  }
+
+  return { id: idStr, name: idStr };
+}
+
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
 // ==========================================
@@ -559,7 +584,7 @@ export const createOrder = mutation({
       orderSource: args.orderSource ?? "Prest-Cashier",
       orderStatusId: initialStatus?._id,
       orderStatusName: initialStatus?.name ?? "Accepted",
-      isCompleted: resolvedPaymentStatus === "Paid",
+      isCompleted: args.orderType === "DineIn" ? false : resolvedPaymentStatus === "Paid",
       isRejected: false,
       isModify: false,
       tableId: args.tableId,
@@ -772,6 +797,7 @@ export const listLiveOrders = query({
         })),
         activities: activities.sort((a, b) => a.position - b.position),
         table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+        waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
       });
     }
 
@@ -900,6 +926,7 @@ export const getOrderDetails = query({
       activities: activities.sort((a, b) => a.position - b.position),
       payments,
       table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
     };
   },
 });
@@ -1506,6 +1533,7 @@ export const listOrders = query({
         })),
         payments,
         table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+        waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
       });
     }
 

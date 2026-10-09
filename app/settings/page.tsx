@@ -2,6 +2,8 @@
 
 import { ReactNode, useCallback, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrderProcessesView } from "../components/order-processes/OrderProcessesView";
@@ -14,6 +16,7 @@ import { OrganizationQueueSettings } from "../components/OrganizationQueueSettin
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrganizationLiveScreens } from "../components/OrganizationLiveScreens";
 import { OrganizationQrManagement } from "../components/OrganizationQrManagement";
 
 // ==========================================
@@ -335,6 +338,9 @@ const SETTINGS_TABS: SettingsNavOption[] = [
 ];
 
 function SettingsContent() {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const isDineInActive = activeOrg?.isDineIn !== false;
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -449,16 +455,20 @@ function SettingsContent() {
               {SETTINGS_TABS.map((tab) => {
                 const isSelected = activeTab === tab.id;
                 if (isSettingsCollapsed) {
+                  const isTabDisabled = tab.id === "tables" && !isDineInActive;
                   return (
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => setActiveTab(tab.id)}
-                      title={tab.label}
-                      className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all cursor-pointer select-none ${
-                        isSelected
-                          ? "bg-[#0c0a09] text-white shadow-xs"
-                          : "text-[#5e5e5e] hover:bg-white hover:text-[#141010]"
+                      onClick={() => !isTabDisabled && setActiveTab(tab.id)}
+                      disabled={isTabDisabled}
+                      title={isTabDisabled ? "Dine-in is disabled in Settings" : tab.label}
+                      className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all select-none ${
+                        isTabDisabled
+                          ? "opacity-40 cursor-not-allowed text-[#8a7e75]"
+                          : isSelected
+                          ? "bg-[#0c0a09] text-white shadow-xs cursor-pointer"
+                          : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] cursor-pointer"
                       }`}
                     >
                       <span className="w-5 h-5 flex items-center justify-center shrink-0">
@@ -468,21 +478,40 @@ function SettingsContent() {
                   );
                 }
 
+                const isComingSoon =
+                  tab.id === "queue" ||
+                  tab.id === "printers" ||
+                  tab.id === "liveScreens" ||
+                  tab.id === "digitalStore" ||
+                  tab.id === "branding";
+                const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors cursor-pointer select-none whitespace-nowrap ${
-                      isSelected
-                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
-                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
+                    onClick={() => !isTabDisabled && setActiveTab(tab.id)}
+                    disabled={isTabDisabled}
+                    title={isTabDisabled ? "Dine-in is disabled in Settings" : undefined}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors select-none whitespace-nowrap ${
+                      isTabDisabled
+                        ? "opacity-40 cursor-not-allowed text-[#8a7e75] border-l-4 border-l-transparent"
+                        : isSelected
+                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09] cursor-pointer"
+                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent cursor-pointer"
                     }`}
                   >
-                    <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
-                      {tab.icon}
-                    </span>
-                    <span className="truncate">{tab.label}</span>
+                    <div className="flex items-center gap-2.5 min-w-0 truncate">
+                      <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
+                        {tab.icon}
+                      </span>
+                      <span className="truncate">{tab.label}</span>
+                    </div>
+                    {isComingSoon && (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-amber-700 border border-amber-200/80 shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
+                        Coming Soon
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -490,27 +519,48 @@ function SettingsContent() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-4 lg:p-5 flex flex-col h-full min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-5 flex flex-col h-full min-h-0 overflow-hidden">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
-            {/* {activeTab === "printers" && <OrganizationPrinters />} */}
+            {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {/* {activeTab === "waiters" && <OrganizationWaiters />} */}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
             {activeTab === "payment" && <OrganizationPaymentModes />}
-            {activeTab === "tables" && <OrganizationTablesSettings />}
+            {activeTab === "tables" && (
+              isDineInActive ? (
+                <OrganizationTablesSettings />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-xl border border-stone-200">
+                  <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-2xl mb-3">🍽️</div>
+                  <h3 className="font-serif text-lg font-medium text-stone-900">Tables &amp; Layouts Disabled</h3>
+                  <p className="text-xs text-stone-500 max-w-sm mt-1 mb-4">
+                    Dine-In service mode is currently turned off in Settings &gt; Features &gt; Service Modes.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("features")}
+                    className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg shadow-sm hover:bg-stone-800 transition cursor-pointer"
+                  >
+                    Go to Service Modes
+                  </button>
+                </div>
+              )
+            )}
+            {activeTab === "liveScreens" && <OrganizationLiveScreens />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
               activeTab !== "queue" &&
-              // activeTab !== "printers" &&
+              activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
               // activeTab !== "waiters" &&
               activeTab !== "payment" &&
               activeTab !== "tables" &&
+              activeTab !== "liveScreens" &&
               activeTab !== "digitalStore" &&
               activeTab !== "branding" && (
                 <div className="py-12 text-center">

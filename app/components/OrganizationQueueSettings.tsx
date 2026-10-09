@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { Toast, type ToastMessage } from "./Toast";
+import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
 // ----------------------------------------------------
 // TYPES & INTERFACES
@@ -235,7 +237,7 @@ export function OrganizationQueueSettings() {
   // Meta & UI States
   const [isDirty, setIsDirty] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [copyModalTarget, setCopyModalTarget] = useState<
     "waitlist" | "reservation"
@@ -469,12 +471,13 @@ export function OrganizationQueueSettings() {
     }
   };
 
-  // Toast auto-hide
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3200);
+  // Toast auto-hide (Matching Menu page)
+  const showToast = (msg: string, type: "success" | "error" = "success") => {
+    setToast({
+      id: String(Date.now()),
+      type,
+      message: msg,
+    });
   };
 
   const markDirty = () => {
@@ -909,16 +912,16 @@ export function OrganizationQueueSettings() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] text-stone-800 font-sans">
-      {/* Main Content Area */}
-      <div className="max-w-5xl w-full mx-auto p-6 lg:p-8 space-y-8">
-        {/* Page Title Header */}
+    <ComingSoonOverlay title="Queue & Waitlist Settings">
+      <div className="flex flex-col h-full overflow-hidden font-sans">
+      {/* Sticky / Fixed Top Header (Title + Subtitle + Sub-Nav Tabs) */}
+      <div className="shrink-0 space-y-2 bg-[#fdf8f7] pb-1 border-b border-[#e7e5e4]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-serif text-3xl font-bold text-stone-900 tracking-tight">
+            <h1 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
               Queue &amp; Waitlist
             </h1>
-            <p className="text-sm text-stone-500 mt-1">
+            <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
               Configure guest check-in rules, reservations, operational hours,
               and proximity geofencing.
             </p>
@@ -939,38 +942,37 @@ export function OrganizationQueueSettings() {
           </div>
         </div>
 
-        {/* Navigation Tabs */}
-        <div className="border-b border-stone-200">
-          <nav aria-label="Tabs" className="flex space-x-8">
-            <button
-              type="button"
-              onClick={() => setActiveTab("waitlist")}
-              className={`py-3.5 px-1 text-sm font-semibold flex items-center gap-2 transition-all border-b-2 ${
-                activeTab === "waitlist"
-                  ? "border-stone-900 text-stone-900"
-                  : "border-transparent text-stone-500 hover:text-stone-700 hover:border-stone-300"
-              }`}
-            >
-              <span>Waitlist</span>
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-            </button>
+        {/* Sub-Navigation Tabs */}
+        <nav className="mt-2.5 flex font-sans">
+          <button
+            type="button"
+            onClick={() => setActiveTab("waitlist")}
+            className={`pb-2 text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === "waitlist"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
+            }`}
+          >
+            <span>Waitlist</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+          </button>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab("reservations")}
-              className={`py-3.5 px-1 text-sm font-medium flex items-center gap-2 transition-all border-b-2 ${
-                activeTab === "reservations"
-                  ? "border-stone-900 text-stone-900 font-semibold"
-                  : "border-transparent text-stone-500 hover:text-stone-700 hover:border-stone-300"
-              }`}
-            >
-              <span>Reservations</span>
-              <span className="text-[10px] bg-stone-100 text-stone-600 px-1.5 py-0.5 rounded-full font-semibold">
-                Configurable
-              </span>
-            </button>
-          </nav>
-        </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab("reservations")}
+            className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer flex items-center gap-2 ${
+              activeTab === "reservations"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
+            }`}
+          >
+            <span>Reservations</span>
+          </button>
+        </nav>
+      </div>
+
+      {/* Scrollable Form & Content Area */}
+      <div className="flex-1 overflow-y-auto pt-3 space-y-4 pr-1 pb-2">
 
         {/* TAB PANE 1: WAITLIST CONFIGURATION */}
         {activeTab === "waitlist" && (
@@ -2129,7 +2131,7 @@ export function OrganizationQueueSettings() {
         )}
 
         {/* Bottom Save Action Bar inside Canvas */}
-        <div className="pt-4 pb-12 flex items-center justify-end gap-3 border-t border-stone-200">
+        <div className="pt-4 pb-2 flex items-center justify-end gap-3 border-t border-stone-200">
           <button
             type="button"
             onClick={handleDiscard}
@@ -2314,15 +2316,8 @@ export function OrganizationQueueSettings() {
         </div>
       )}
 
-      {/* Floating Toast Notification */}
-      {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 transform transition-all duration-300 bg-stone-900 text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 border border-stone-700 text-sm">
-          <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">
-            ✓
-          </div>
-          <span>{toastMessage}</span>
-        </div>
-      )}
+      {/* Standard Floating Toast Notification Component (Matching Menu Page) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* GEOFENCE RADIUS SIDEBAR DRAWER (MATCHING REFERENCE DESIGN) */}
       {isGeoDrawerOpen && (
@@ -2476,5 +2471,6 @@ export function OrganizationQueueSettings() {
         </div>
       )}
     </div>
+    </ComingSoonOverlay>
   );
 }

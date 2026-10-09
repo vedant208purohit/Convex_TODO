@@ -53,6 +53,23 @@ function getOrderTableDisplay(order?: {
   return "N/A";
 }
 
+function getOrderWaiterDisplay(order?: {
+  waiter?: { name?: string } | null;
+  waiterUserId?: string | null;
+  waiterName?: string | null;
+} | null): string {
+  if (order?.waiter?.name && order.waiter.name.trim()) {
+    return order.waiter.name.trim();
+  }
+  if (order?.waiterName && order.waiterName.trim()) {
+    return order.waiterName.trim();
+  }
+  if (order?.waiterUserId && order.waiterUserId.trim()) {
+    return order.waiterUserId.trim();
+  }
+  return "Not Assigned";
+}
+
 function formatOrderTypeLabel(type?: string): string {
   if (!type) return "Dine-In";
   if (type === "ScheduledPickup") return "Scheduled Pickup";
@@ -405,11 +422,8 @@ function TimelineIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   );
 }
 
-function formatDateDisplay(d: Date): string {
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}/${month}/${year}`;
+function formatDateDisplay(d: Date, country?: string, timezone?: string): string {
+  return formatStoreDate(d, country, timezone);
 }
 
 const MONTH_NAMES = [
@@ -1156,7 +1170,7 @@ export default function OrdersPage() {
       `"${o.orderType}"`,
       `"${o.paymentStatus}"`,
       `"${o.display_total_amount}"`,
-      `"${new Date(o.createdAt).toLocaleString("en-IN")}"`,
+      `"${formatStoreDateTime(o.createdAt, activeOrg?.country, activeOrg?.organizationTimeZone)}"`,
     ]);
 
     const csvContent =
@@ -1237,15 +1251,15 @@ export default function OrdersPage() {
       setIsDeletingOrder(true);
       await cancelOrderMutation({
         orderId: selectedOrderId,
-        reason: "Deleted by admin from Order Details",
+        reason: "Cancelled by admin from Order Details",
       });
       setIsDeleteDialogOpen(false);
       showToast(
-        `Order ${selectedOrderDetails.orderNumber} deleted successfully.`,
+        `Order ${selectedOrderDetails.orderNumber} cancelled successfully.`,
       );
       setSelectedOrderId(null);
     } catch (err: any) {
-      showToast(err.message || "Failed to delete order");
+      showToast(err.message || "Failed to cancel order");
     } finally {
       setIsDeletingOrder(false);
     }
@@ -1527,7 +1541,7 @@ export default function OrdersPage() {
                       <div className="text-xs text-[#7a716b]">
                         Assigned Captain:{" "}
                         <span className="font-semibold text-[#0c0a09]">
-                          Johan Coder
+                          {getOrderWaiterDisplay(order)}
                         </span>
                       </div>
                     </div>
@@ -1950,18 +1964,37 @@ export default function OrdersPage() {
                         </span>
                       </button>
 
-                      {/* Delete Order */}
-                      <button
-                        type="button"
-                        onClick={() => setIsDeleteDialogOpen(true)}
-                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
-                      >
-                        <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">
-                          Delete Order
-                        </span>
-                      </button>
+                      {/* Cancel Order */}
+                    {(() => {
+                      const hasPayment = Boolean(
+                        order?.paymentStatus === "Paid" ||
+                        (order?.netPaid && order.netPaid > 0) ||
+                        (order?.totalCredit && order.totalCredit > 0) ||
+                        (order?.payments && order.payments.length > 0)
+                      );
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => !hasPayment && setIsDeleteDialogOpen(true)}
+                          disabled={hasPayment}
+                          title={hasPayment ? "Cannot cancel an order with completed payments. Issue a refund first." : undefined}
+                          style={{
+                            backgroundColor: hasPayment ? "#292524" : "#1c1917",
+                            color: "#ffffff"
+                          }}
+                          className={`flex items-center justify-center gap-2 px-3 py-2.5 !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs ${
+                            hasPayment
+                              ? "opacity-40 cursor-not-allowed select-none bg-[#292524]"
+                              : "bg-[#1c1917] hover:bg-black cursor-pointer hover:opacity-95"
+                          }`}
+                        >
+                          <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
+                          <span className="!text-white text-white font-semibold text-xs">
+                            Cancel Order
+                          </span>
+                        </button>
+                      );
+                    })()}
 
                       {/* Print Receipt */}
                       <button
@@ -2298,7 +2331,7 @@ export default function OrdersPage() {
                                 }
                                 className="py-2 text-xs font-medium font-sans bg-[#faf8f5] hover:bg-[#f4eee8] text-[#141010] border border-[#e7e5e4] rounded-md transition-colors text-center cursor-pointer"
                               >
-                                {currencySymbol}{amt.toLocaleString("en-US")}
+                                {currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
                               </button>
                             ));
                           })()}
@@ -2625,10 +2658,10 @@ export default function OrdersPage() {
                 id="delete-dialog-title"
                 className="text-lg font-bold text-[#141010] mb-2 font-sans"
               >
-                Delete {order.orderNumber}?
+                Cancel {order.orderNumber}?
               </h3>
               <p className="text-sm text-[#4b5563] mb-6 font-sans">
-                Are you sure you want to delete this order?
+                Are you sure you want to cancel this order?
               </p>
 
               {/* Action Buttons */}
@@ -2646,7 +2679,7 @@ export default function OrdersPage() {
                   onClick={handleConfirmDeleteOrder}
                   className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#ef4444] hover:bg-[#dc2626] text-white transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                 >
-                  {isDeletingOrder ? "Deleting..." : "Confirm"}
+                  {isDeletingOrder ? "Cancelling..." : "Confirm"}
                 </button>
               </div>
             </div>
@@ -3048,16 +3081,11 @@ export default function OrdersPage() {
                       !isPaid &&
                       !isRefunded &&
                       !isPartiallyRefunded;
-                    const orderDateStr = new Date(
+                    const orderDateStr = formatStoreDateTime(
                       order.createdAt,
-                    ).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                    });
+                      activeOrg?.country,
+                      activeOrg?.organizationTimeZone,
+                    );
 
                     // Format relative time
                     const diffMins = Math.max(

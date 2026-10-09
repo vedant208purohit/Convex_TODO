@@ -838,7 +838,9 @@ export default function MenuPage() {
 
   const currencySymbol =
     organization?.defaultCurrencySymbol ||
-    (organization?.country ? getCurrencyForCountry(organization.country).symbol : undefined) ||
+    (organization?.country
+      ? getCurrencyForCountry(organization.country).symbol
+      : undefined) ||
     taxSettings?.currencySymbol ||
     "$";
 
@@ -928,9 +930,7 @@ export default function MenuPage() {
   const updateItemPreferencesMutation = useMutation(
     api.chefPrepPreferences.updateItemPreferences,
   );
-  const createPreferenceMutation = useMutation(
-    api.chefPrepPreferences.create,
-  );
+  const createPreferenceMutation = useMutation(api.chefPrepPreferences.create);
 
   useEffect(() => {
     if (
@@ -1654,7 +1654,9 @@ export default function MenuPage() {
   const [childNutrientNameInput, setChildNutrientNameInput] = useState("");
 
   // Chef Prep Preferences State for Item Setup
-  const [selectedChefPrepPrefIds, setSelectedChefPrepPrefIds] = useState<string[]>([]);
+  const [selectedChefPrepPrefIds, setSelectedChefPrepPrefIds] = useState<
+    string[]
+  >([]);
   const [isQuickCreatePrefOpen, setIsQuickCreatePrefOpen] = useState(false);
   const [quickCreatePrefName, setQuickCreatePrefName] = useState("");
   const [isSubmittingQuickPref, setIsSubmittingQuickPref] = useState(false);
@@ -2728,19 +2730,19 @@ export default function MenuPage() {
           nutrients: itemNutrients,
           imageAssetId: itemImageAssetId
             ? (itemImageAssetId as Id<"organization_assets">)
-            : undefined,
+            : null,
           threeDModelAssetId:
             show3dAndroidUpload && item3dAndroidAssetId
               ? (item3dAndroidAssetId as Id<"organization_assets">)
-              : undefined,
+              : null,
           threeDModelIosAssetId:
             show3dIosUpload && item3dIosAssetId
               ? (item3dIosAssetId as Id<"organization_assets">)
-              : undefined,
+              : null,
           videoAssetId:
             showVideoUpload && itemVideoAssetId
               ? (itemVideoAssetId as Id<"organization_assets">)
-              : undefined,
+              : null,
         });
 
         // Persist Chef Prep Preferences for editing item
@@ -2814,7 +2816,8 @@ export default function MenuPage() {
           await updateItemPreferencesMutation({
             organizationId: organization._id,
             itemId: newItemId,
-            preferenceIds: selectedChefPrepPrefIds as Id<"chefPrepPreferences">[],
+            preferenceIds:
+              selectedChefPrepPrefIds as Id<"chefPrepPreferences">[],
           });
         }
 
@@ -3734,7 +3737,7 @@ export default function MenuPage() {
                                 Click to upload item image
                               </p>
                               <p className="text-[11px] text-[#5e5e5e]">
-                                JPG, PNG, WEBP (Max 10MB)
+                                JPG, PNG, WEBP (Max 25MB)
                               </p>
                             </div>
                           </div>
@@ -4942,16 +4945,22 @@ export default function MenuPage() {
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-2">
-                            <span className="material-symbols-outlined text-[#7f7570] text-[20px]">soup_kitchen</span>
+                            <span className="material-symbols-outlined text-[#7f7570] text-[20px]">
+                              soup_kitchen
+                            </span>
                             <h2 className="text-[20px] font-semibold text-[#0c0a09]">
                               Chef Prep Preferences
                             </h2>
                           </div>
                           <p className="text-sm text-[#78716c] mt-1">
-                            Select which preparation options are available to customers when ordering this item. Manage master preferences in{" "}
+                            Select which preparation options are available to
+                            customers when ordering this item. Manage master
+                            preferences in{" "}
                             <button
                               type="button"
-                              onClick={() => router.push("/menu/chef-prep-preferences")}
+                              onClick={() =>
+                                router.push("/menu/chef-prep-preferences")
+                              }
                               className="underline font-medium text-[#0c0a09] hover:text-[#44403c] cursor-pointer"
                             >
                               Menu → Chef Prep Preferences
@@ -4982,7 +4991,9 @@ export default function MenuPage() {
                       ) : (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                           {masterChefPrepPreferences.map((pref) => {
-                            const isChecked = selectedChefPrepPrefIds.includes(pref._id);
+                            const isChecked = selectedChefPrepPrefIds.includes(
+                              pref._id,
+                            );
                             return (
                               <label
                                 key={pref._id}
@@ -4998,21 +5009,33 @@ export default function MenuPage() {
                                     checked={isChecked}
                                     onChange={(e) => {
                                       if (e.target.checked) {
-                                        setSelectedChefPrepPrefIds((prev) => [...prev, pref._id]);
+                                        setSelectedChefPrepPrefIds((prev) => [
+                                          ...prev,
+                                          pref._id,
+                                        ]);
                                       } else {
                                         setSelectedChefPrepPrefIds((prev) =>
-                                          prev.filter((id) => id !== pref._id)
+                                          prev.filter((id) => id !== pref._id),
                                         );
                                       }
                                     }}
                                     className="w-4 h-4 accent-black rounded cursor-pointer"
                                   />
-                                  <span className={`text-sm font-medium ${isChecked ? "text-[#0c0a09]" : "text-[#78716c]"}`}>
+                                  <span
+                                    className={`text-sm font-medium ${isChecked ? "text-[#0c0a09]" : "text-[#78716c]"}`}
+                                  >
                                     {pref.name}
                                   </span>
                                 </div>
                                 <span
-                                  style={isChecked ? { color: "#ffffff", backgroundColor: "#0c0a09" } : undefined}
+                                  style={
+                                    isChecked
+                                      ? {
+                                          color: "#ffffff",
+                                          backgroundColor: "#0c0a09",
+                                        }
+                                      : undefined
+                                  }
                                   className={`text-[11px] font-semibold tracking-wider uppercase px-2.5 py-0.5 rounded-full ${
                                     isChecked
                                       ? "bg-[#0c0a09] !text-white"
@@ -5030,8 +5053,13 @@ export default function MenuPage() {
                       {/* Master Link Alert Notice */}
                       <div className="p-3.5 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex items-center justify-between gap-3">
                         <div className="flex items-center gap-2 text-xs text-[#78716c]">
-                          <span className="material-symbols-outlined text-[#7f7570] text-[18px]">lightbulb</span>
-                          <span>Need a new preference? Add it first in Menu → Chef Prep Preferences.</span>
+                          <span className="material-symbols-outlined text-[#7f7570] text-[18px]">
+                            lightbulb
+                          </span>
+                          <span>
+                            Need a new preference? Add it first in Menu → Chef
+                            Prep Preferences.
+                          </span>
                         </div>
                         <button
                           type="button"
@@ -6803,7 +6831,7 @@ export default function MenuPage() {
                                         {currencySymbol}
                                         {formatCurrencyAmount(
                                           item.price / 100,
-                                          organization?.country
+                                          organization?.country,
                                         )}
                                       </td>
 
@@ -7242,7 +7270,7 @@ export default function MenuPage() {
                             {currencySymbol}
                             {formatCurrencyAmount(
                               item.price / 100,
-                              organization?.country
+                              organization?.country,
                             )}
                           </span>
                         </div>
@@ -8737,7 +8765,9 @@ export default function MenuPage() {
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
             <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 flex flex-col gap-4 border border-[#e7e5e4]">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-[#0c0a09]">Add Chef Prep Preference</h3>
+                <h3 className="text-lg font-semibold text-[#0c0a09]">
+                  Add Chef Prep Preference
+                </h3>
                 <button
                   type="button"
                   onClick={() => {
@@ -8746,7 +8776,9 @@ export default function MenuPage() {
                   }}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-[#78716c] hover:bg-[#f5f5f4]"
                 >
-                  <span className="material-symbols-outlined text-[20px]">close</span>
+                  <span className="material-symbols-outlined text-[20px]">
+                    close
+                  </span>
                 </button>
               </div>
               <div>
@@ -8763,7 +8795,8 @@ export default function MenuPage() {
                   autoFocus
                 />
                 <p className="text-xs text-[#78716c] mt-1.5">
-                  Instructs the kitchen prep station without altering inventory deductions or pricing.
+                  Instructs the kitchen prep station without altering inventory
+                  deductions or pricing.
                 </p>
               </div>
               <div className="flex items-center justify-end gap-2 pt-2">
@@ -8779,21 +8812,33 @@ export default function MenuPage() {
                 </button>
                 <button
                   type="button"
-                  disabled={!quickCreatePrefName.trim() || isSubmittingQuickPref}
+                  disabled={
+                    !quickCreatePrefName.trim() || isSubmittingQuickPref
+                  }
                   onClick={async () => {
-                    if (!organization?._id || !quickCreatePrefName.trim()) return;
+                    if (!organization?._id || !quickCreatePrefName.trim())
+                      return;
                     setIsSubmittingQuickPref(true);
                     try {
                       const newPrefId = await createPreferenceMutation({
                         organizationId: organization._id,
                         name: quickCreatePrefName.trim(),
                       });
-                      setSelectedChefPrepPrefIds((prev) => [...prev, newPrefId]);
+                      setSelectedChefPrepPrefIds((prev) => [
+                        ...prev,
+                        newPrefId,
+                      ]);
                       setQuickCreatePrefName("");
                       setIsQuickCreatePrefOpen(false);
-                      showToast(`Preference "${quickCreatePrefName.trim()}" created`, "success");
+                      showToast(
+                        `Preference "${quickCreatePrefName.trim()}" created`,
+                        "success",
+                      );
                     } catch (err: any) {
-                      showToast(err.message || "Failed to create preference", "error");
+                      showToast(
+                        err.message || "Failed to create preference",
+                        "error",
+                      );
                     } finally {
                       setIsSubmittingQuickPref(false);
                     }

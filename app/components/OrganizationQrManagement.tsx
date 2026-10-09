@@ -1022,7 +1022,7 @@ export function OrganizationQrManagement() {
           organizationId: activeOrg._id,
         });
         showToast(
-          `${nameStr} (${selectedQrTypeInModal}) QR generated and saved to Convex database.`,
+          `${nameStr} (${selectedQrTypeInModal}) QR generated and saved successfully.`,
         );
       } catch (err: any) {
         console.error("Failed to create QR in Convex:", err);

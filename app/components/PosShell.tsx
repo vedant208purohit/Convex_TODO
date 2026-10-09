@@ -167,6 +167,8 @@ type NavItem = {
   href: string;
   label: string;
   icon: ReactNode;
+  disabled?: boolean;
+  disabledTooltip?: string;
 };
 
 const navItems: NavItem[] = [
@@ -245,7 +247,14 @@ const inventorySubItems = [
   { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
 ];
 
-function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: boolean }) {
+function NavLink({
+  href,
+  label,
+  icon,
+  isCollapsed,
+  disabled,
+  disabledTooltip,
+}: NavItem & { isCollapsed?: boolean; disabled?: boolean; disabledTooltip?: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active =
@@ -268,21 +277,42 @@ function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: b
   if (isCollapsed) {
     return (
       <div className="relative group flex items-center justify-center my-0.5">
-        <Link
-          href={targetHref}
-          className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
-            active
-              ? "bg-[#141010] text-white shadow-xs"
-              : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
-          }`}
-        >
-          <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
-        </Link>
-        <div className="absolute left-full top-1/2 -translate-y-1/2 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-none">
+        disabled ? (
+          <div
+            className="flex items-center justify-center w-12 h-12 mx-auto rounded-xl opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
+            title={disabledTooltip || "Disabled in settings"}
+          >
+            <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+          </div>
+        ) : (
+          <Link
+            href={targetHref}
+            className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+              active
+                ? "bg-[#141010] text-white shadow-xs"
+                : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+            }`}
+          >
+            <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+          </Link>
+        )
+        <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
           <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
             {label}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (disabled) {
+    return (
+      <div
+        className="flex items-center gap-3 px-6 py-3 text-[15px] opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
+        title={disabledTooltip || "Disabled in settings"}
+      >
+        <span className="w-5 text-center flex items-center justify-center">{icon}</span>
+        <span className="font-medium text-[15px]">{label}</span>
       </div>
     );
   }
@@ -350,6 +380,7 @@ export function PosShell({
 
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const isDineInActive = Boolean(activeOrg?.isDineIn);
   const branchName = activeOrg?.name || "Flagship Main Store";
 
   return (
@@ -399,7 +430,7 @@ export function PosShell({
         </div>
 
         {/* Navigation */}
-        <nav className={`flex-1 py-4 flex flex-col gap-1.5 ${isCollapsed ? "overflow-visible" : "overflow-y-auto"}`}>
+        <nav className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
           {navItems.map((item) => {
             if (item.href === "/menu") {
               if (isCollapsed) {
@@ -417,7 +448,7 @@ export function PosShell({
                     </Link>
 
                     {/* Flyout Hover Menu Popover Card */}
-                    <div className="absolute left-full top-0 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-auto">
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
                       <div className="w-56 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
                         <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
                           Menu
@@ -520,10 +551,14 @@ export function PosShell({
                     </Link>
 
                     {/* Flyout Hover Menu Popover Card */}
-                    <div className="absolute left-full bottom-0 pl-3.5 z-50 hidden group-hover:block transition-all pointer-events-auto">
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
                       <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
-                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
-                          Inventory
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5 flex items-center justify-between">
+                          <span>Inventory</span>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full normal-case font-sans">
+                            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+                            Coming Soon
+                          </span>
                         </div>
                         {inventorySubItems.map((sub) => {
                           const isSubActive =
@@ -558,18 +593,22 @@ export function PosShell({
                   <button
                     type="button"
                     onClick={() => setIsInventoryExpanded((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
+                    className={`w-full flex items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${
                       isInventoryPage
                         ? "bg-[#f1edec] text-[#141010] font-bold"
                         : "text-[#5e5e5e] hover:bg-[#f1edec]"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="w-5 flex items-center justify-center">{item.icon}</span>
-                      <span className="font-medium text-[15px]">{item.label}</span>
+                    <div className="flex items-center gap-1.5 min-w-0 text-left">
+                      <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
+                      <span className="font-medium text-[14px] shrink-0">{item.label}</span>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+                        Coming Soon
+                      </span>
                     </div>
                     <svg
-                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${
+                      className={`w-3.5 h-3.5 text-[#78716c] shrink-0 ml-1 transition-transform duration-200 ${
                         isInventoryExpanded ? "rotate-180" : ""
                       }`}
                       fill="none"
@@ -610,7 +649,16 @@ export function PosShell({
               );
             }
 
-            return <NavLink key={item.href} {...item} isCollapsed={isCollapsed} />;
+            const isCaptainDisabled = item.href === "/captain" && !isDineInActive;
+            return (
+              <NavLink
+                key={item.href}
+                {...item}
+                isCollapsed={isCollapsed}
+                disabled={isCaptainDisabled || item.disabled}
+                disabledTooltip={isCaptainDisabled ? "Dine-in & Captain POS is disabled in Settings > Features" : item.disabledTooltip}
+              />
+            );
           })}
         </nav>
 
