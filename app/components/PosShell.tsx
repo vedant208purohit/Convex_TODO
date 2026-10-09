@@ -167,6 +167,8 @@ type NavItem = {
   href: string;
   label: string;
   icon: ReactNode;
+  disabled?: boolean;
+  disabledTooltip?: string;
 };
 
 const navItems: NavItem[] = [
@@ -245,7 +247,14 @@ const inventorySubItems = [
   { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
 ];
 
-function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: boolean }) {
+function NavLink({
+  href,
+  label,
+  icon,
+  isCollapsed,
+  disabled,
+  disabledTooltip,
+}: NavItem & { isCollapsed?: boolean; disabled?: boolean; disabledTooltip?: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active =
@@ -268,21 +277,42 @@ function NavLink({ href, label, icon, isCollapsed }: NavItem & { isCollapsed?: b
   if (isCollapsed) {
     return (
       <div className="relative group flex items-center justify-center my-0.5">
-        <Link
-          href={targetHref}
-          className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
-            active
-              ? "bg-[#141010] text-white shadow-xs"
-              : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
-          }`}
-        >
-          <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
-        </Link>
+        disabled ? (
+          <div
+            className="flex items-center justify-center w-12 h-12 mx-auto rounded-xl opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
+            title={disabledTooltip || "Disabled in settings"}
+          >
+            <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+          </div>
+        ) : (
+          <Link
+            href={targetHref}
+            className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+              active
+                ? "bg-[#141010] text-white shadow-xs"
+                : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+            }`}
+          >
+            <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+          </Link>
+        )
         <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
           <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
             {label}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (disabled) {
+    return (
+      <div
+        className="flex items-center gap-3 px-6 py-3 text-[15px] opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
+        title={disabledTooltip || "Disabled in settings"}
+      >
+        <span className="w-5 text-center flex items-center justify-center">{icon}</span>
+        <span className="font-medium text-[15px]">{label}</span>
       </div>
     );
   }
@@ -350,6 +380,7 @@ export function PosShell({
 
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const isDineInActive = Boolean(activeOrg?.isDineIn);
   const branchName = activeOrg?.name || "Flagship Main Store";
 
   return (
@@ -618,7 +649,16 @@ export function PosShell({
               );
             }
 
-            return <NavLink key={item.href} {...item} isCollapsed={isCollapsed} />;
+            const isCaptainDisabled = item.href === "/captain" && !isDineInActive;
+            return (
+              <NavLink
+                key={item.href}
+                {...item}
+                isCollapsed={isCollapsed}
+                disabled={isCaptainDisabled || item.disabled}
+                disabledTooltip={isCaptainDisabled ? "Dine-in & Captain POS is disabled in Settings > Features" : item.disabledTooltip}
+              />
+            );
           })}
         </nav>
 

@@ -131,7 +131,7 @@ function getDisplayTableTitle(tableNumber: string) {
   return `Table ${clean}`;
 }
 
-export default function CaptainPage() {
+export default function CashierTablesView(props?: any) {
   // ----------------------------------------------------
   // CONVEX LIVE DATA HOOKS
   // ----------------------------------------------------
@@ -170,6 +170,19 @@ export default function CaptainPage() {
     api.taxation.listTaxComponents,
     activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
+  const orgFeatures = useQuery(
+    api.organizationFeatures.list,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
+  const skipPhoneNumberRequired = useMemo(() => {
+    return orgFeatures?.find((f: any) => f.featureKey === "skip_phone_number_required")?.active ?? false;
+  }, [orgFeatures]);
+  const showWaiterOnCashierCard = useMemo(() => {
+    return orgFeatures?.find((f: any) => f.featureKey === "show_waiter_on_cashier_card")?.active ?? false;
+  }, [orgFeatures]);
+  const showMemberNumberOnCashierCard = useMemo(() => {
+    return orgFeatures?.find((f: any) => f.featureKey === "show_member_number_on_cashier_card")?.active ?? false;
+  }, [orgFeatures]);
 
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
@@ -836,6 +849,11 @@ export default function CaptainPage() {
     const digits = customerPhone.replace(/\D/g, "");
     const isIndia = isIndiaCountry(customerCountryCode);
 
+    if (!skipPhoneNumberRequired && !digits) {
+      showToast("Please enter customer phone number");
+      return;
+    }
+
     if (digits) {
       if (isIndia && digits.length !== 10) {
         showToast("Please enter a valid 10-digit mobile number");
@@ -1142,6 +1160,11 @@ export default function CaptainPage() {
 
         const currentDial = customerCountryCode || defaultOrgCountryCode || "+91";
         let rawPhone = customerPhone.trim();
+        if (!skipPhoneNumberRequired && !rawPhone) {
+          showToast("Please enter customer phone number");
+          setIsPlacingCart(false);
+          return;
+        }
         if (!rawPhone) {
           const timeSlice = (Date.now() % 1000000).toString().padStart(6, "0");
           const randomSeed = Math.floor(10 + Math.random() * 90).toString();
@@ -1155,7 +1178,7 @@ export default function CaptainPage() {
         await createOrderMutation({
           organizationId: orgId,
           orderType: "DineIn",
-          orderSource: "Prest-Captain",
+          orderSource: "Prest-Cashier",
           tableId: selectedTable._id,
           waiterUserId: selectedWaiter.id,
           customerPhone: resolvedPhone,
@@ -1226,84 +1249,90 @@ export default function CaptainPage() {
     }
   };
 
-  if (activeOrg && activeOrg.isDineIn === false) {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center bg-[#fdf8f7] text-[#141010] p-6 text-center select-none font-sans">
-        <div className="w-16 h-16 rounded-2xl bg-white border border-[#e7e5e4] shadow-sm flex items-center justify-center text-3xl mb-4">
-          🍽️
-        </div>
-        <h1 className="text-xl font-bold text-[#0c0a09] mb-1">Dine-In Service Disabled</h1>
-        <p className="text-sm text-[#7a716b] max-w-md mb-6">
-          Dine-In table management and Captain POS operations are currently turned off in Settings &gt; Features &gt; Service Modes.
-        </p>
-        <Link
-          href="/dashboard"
-          className="px-5 py-2.5 bg-[#0c0a09] text-white text-xs font-semibold rounded-xl shadow-xs hover:bg-stone-800 transition"
-        >
-          Return to Dashboard
-        </Link>
-      </div>
-    );
-  }
-
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-[#fdf8f7] text-[#141010] font-sans select-none">
+    <div className="flex-1 flex flex-col overflow-hidden bg-[#fdf8f7] h-[calc(100vh-64px)] text-[#141010] font-sans select-none">
       {/* Main Floor Container */}
       <div className="flex-1 flex overflow-hidden relative">
         <main className="flex-1 flex flex-col min-w-0 bg-[#fdf8f7] border-r border-[#e7e5e4] overflow-hidden">
-          {/* Top Bar with Layout Stats & Live Sync Indicator */}
-          <div className="h-14 px-4 sm:px-6 border-b border-[#e7e5e4] bg-white flex items-center justify-between shrink-0 gap-3">
-            <div className="flex items-center space-x-3 shrink-0">
-              <Link
-                href="/dashboard"
-                className="text-[#5e5e5e] hover:text-[#0c0a09] p-1.5 transition rounded-lg hover:bg-[#f1edec]"
-                title="Go to dashboard"
+          {/* Row 1: Cart / Table Tabs & Status Counts */}
+          <div className="h-11 px-4 sm:px-6 border-b border-[#e7e5e4] bg-white flex items-center justify-between shrink-0 text-sm gap-3">
+            {/* Left: Table & Cart Switcher */}
+            <div className="flex items-center space-x-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-w-0 py-1">
+              {/* TABLE TAB (ACTIVE) */}
+              <button
+                type="button"
+                className="px-3.5 py-1 text-xs font-medium rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer bg-[#0c0a09] !text-white text-white shadow-xs shrink-0"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path d="M10 19l-7-7m0 0l7-7m-7 7h18" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                <svg className="w-3.5 h-3.5 shrink-0 stroke-white text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                 </svg>
-              </Link>
-              <div className="flex items-center space-x-2 whitespace-nowrap">
-                <h1 className="font-sans font-bold text-2xl sm:text-[26px] md:text-[28px] text-[#0c0a09] leading-none whitespace-nowrap">
-                  Captain POS
-                </h1>
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block animate-pulse shadow-sm shrink-0" title="Live Synced" />
-              </div>
+                <span className="!text-white text-white font-semibold">Table</span>
+              </button>
+
+              {/* CART TABS */}
+              {props?.cartTabs?.map((c: any) => {
+                const count = c.items?.reduce((acc: number, it: any) => acc + it.quantity, 0) || 0;
+                return (
+                  <div key={c.id} className="relative group/tab flex items-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => props.onSwitchToCart && props.onSwitchToCart(c.id)}
+                      className="px-3.5 py-1 text-xs font-medium rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer text-[#5e5e5e] hover:bg-[#f1edec] shrink-0"
+                    >
+                      <span>{c.label}</span>
+                      {count > 0 && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#10b981]" />
+                      )}
+                    </button>
+                    {props.cartTabs?.length > 1 && props.onCloseCart && (
+                      <button
+                        type="button"
+                        onClick={(e) => props.onCloseCart(c.id, e)}
+                        className="ml-0.5 text-[#8a7e75] hover:text-red-500 text-xs p-0.5"
+                        title="Close Cart"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+
+              {props?.onAddNewCart && (
+                <button
+                  type="button"
+                  onClick={props.onAddNewCart}
+                  className="w-6 h-6 flex items-center justify-center rounded-lg border border-dashed border-[#e7e5e4] hover:border-[#0c0a09] text-[#5e5e5e] hover:text-[#0c0a09] transition-all text-xs font-light cursor-pointer shrink-0"
+                  title="Open new simultaneous cart tab"
+                >
+                  +
+                </button>
+              )}
             </div>
 
-            {/* Status Counts Pill Filters & Clock/Waiter */}
-            <div className="flex items-center space-x-3 min-w-0 overflow-hidden">
-              <div className="flex items-center space-x-1.5 text-xs font-sans overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink">
-                <span className="px-2.5 py-1 rounded-full bg-white border border-[#e7e5e4] font-semibold text-[#141010] shadow-2xs whitespace-nowrap">
-                  All ({captainTables?.length || 0})
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-semibold shadow-2xs whitespace-nowrap">
-                  Available ({captainTables?.filter((t) => !t.currentOrder && !t.isBlock && !t.postpaidOrderRequest).length || 0})
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-sky-50 text-sky-800 border border-sky-200/80 font-semibold shadow-2xs whitespace-nowrap">
-                  Occupied ({captainTables?.filter((t) => t.currentOrder).length || 0})
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200/80 font-semibold shadow-2xs whitespace-nowrap">
-                  QR Request ({captainTables?.filter((t) => t.postpaidOrderRequest).length || 0})
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-800 border border-rose-200/80 font-semibold shadow-2xs whitespace-nowrap">
-                  Blocked ({captainTables?.filter((t) => t.isBlock).length || 0})
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-2 text-xs font-sans pl-2.5 border-l border-[#e7e5e4] shrink-0 whitespace-nowrap">
-                <span className="font-mono text-[#0c0a09] font-semibold">{systemTime || "04:21 PM"}</span>
-                {selectedWaiter.name && (
-                  <span className="hidden sm:inline bg-[#f1edec] border border-[#e7e5e4] px-2 py-0.5 rounded-md text-[11px] text-[#141010] font-medium truncate max-w-[110px]">
-                    {selectedWaiter.name}
-                  </span>
-                )}
-              </div>
+            {/* Right: Status Counts Pill Filters */}
+            <div className="flex items-center space-x-1.5 text-xs font-sans overflow-x-auto py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden shrink-0">
+              <span className="px-2.5 py-0.5 rounded-full bg-white border border-[#e7e5e4] font-semibold text-[#141010] shadow-2xs whitespace-nowrap">
+                All ({captainTables?.length || 0})
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-semibold shadow-2xs whitespace-nowrap">
+                Available ({captainTables?.filter((t) => !t.currentOrder && !t.isBlock && !t.postpaidOrderRequest).length || 0})
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-800 border border-sky-200/80 font-semibold shadow-2xs whitespace-nowrap">
+                Occupied ({captainTables?.filter((t) => t.currentOrder).length || 0})
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200/80 font-semibold shadow-2xs whitespace-nowrap">
+                QR Request ({captainTables?.filter((t) => t.postpaidOrderRequest).length || 0})
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-800 border border-rose-200/80 font-semibold shadow-2xs whitespace-nowrap">
+                Blocked ({captainTables?.filter((t) => t.isBlock).length || 0})
+              </span>
             </div>
           </div>
 
-          {/* Section Tabs (Layouts) with Zoom Controls */}
-          <div className="h-12 px-4 sm:px-6 border-b border-[#e7e5e4] bg-white flex items-center justify-between shrink-0 text-sm">
+          {/* Row 2: Layout Selector & Zoom Controls */}
+          <div className="h-11 px-4 sm:px-6 border-b border-[#e7e5e4] bg-[#fdf8f7]/60 flex items-center justify-between shrink-0 text-sm gap-3">
+            {/* Left: Layouts */}
             <div className="flex items-center space-x-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden min-w-0 py-1">
               {layouts?.map((layout) => {
                 const isSelected = selectedLayoutId === layout._id;
@@ -1312,7 +1341,7 @@ export default function CaptainPage() {
                     key={layout._id}
                     type="button"
                     onClick={() => setSelectedLayoutId(layout._id)}
-                    className={`px-3.5 py-1.5 font-medium text-xs rounded-lg transition-all cursor-pointer flex items-center shrink-0 ${
+                    className={`px-3 py-1 font-medium text-xs rounded-lg transition-all cursor-pointer flex items-center shrink-0 ${
                       isSelected
                         ? "bg-[#0c0a09] !text-white border border-[#0c0a09] shadow-xs font-semibold"
                         : "bg-[#f1edec] text-[#44403c] hover:text-[#0c0a09] hover:bg-[#e7e5e4] border border-[#e7e5e4]"
@@ -1327,33 +1356,30 @@ export default function CaptainPage() {
               })}
             </div>
 
-            {/* Floor Map Zoom Controls */}
-            <div className="flex items-center gap-1 border border-[#e7e5e4] rounded-lg px-2 py-0.5 bg-stone-50 font-mono text-[11px] shrink-0 ml-3">
+            {/* Right: Floor Map Zoom Controls */}
+            <div className="flex items-center gap-1 border border-[#e7e5e4] rounded-lg px-2 py-0.5 bg-white font-mono text-[11px] shrink-0">
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.max(50, z - 10))}
                 disabled={zoomLevel <= 50}
-                className="hover:text-black px-1.5 py-0.5 font-bold cursor-pointer hover:bg-stone-200 rounded disabled:opacity-30 disabled:cursor-not-allowed select-none transition-colors"
-                title="Zoom Out (-10%)"
+                className="p-1 hover:bg-[#f1edec] rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Zoom Out"
               >
-                -
+                <svg className="w-3.5 h-3.5 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 12H4" />
+                </svg>
               </button>
-              <button
-                type="button"
-                onClick={() => setZoomLevel(100)}
-                className="text-[#0c0a09] font-semibold px-2 py-0.5 border-x border-stone-200 hover:bg-stone-200 rounded transition-colors cursor-pointer select-none"
-                title="Reset Zoom to 100%"
-              >
-                {zoomLevel}%
-              </button>
+              <span className="w-9 text-center font-bold text-stone-700 select-none">{zoomLevel}%</span>
               <button
                 type="button"
                 onClick={() => setZoomLevel((z) => Math.min(150, z + 10))}
                 disabled={zoomLevel >= 150}
-                className="hover:text-black px-1.5 py-0.5 font-bold cursor-pointer hover:bg-stone-200 rounded disabled:opacity-30 disabled:cursor-not-allowed select-none transition-colors"
-                title="Zoom In (+10%)"
+                className="p-1 hover:bg-[#f1edec] rounded cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                title="Zoom In"
               >
-                +
+                <svg className="w-3.5 h-3.5 text-stone-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                </svg>
               </button>
             </div>
           </div>
@@ -1678,7 +1704,11 @@ export default function CaptainPage() {
                   {/* Phone Input with Dynamic Country Code Dropdown */}
                   <div className="space-y-1.5">
                     <label className="block text-xs font-semibold text-[#0c0a09]">
-                      Customer Phone <span className="text-stone-400 text-xs font-normal">(Optional)</span>
+                      Customer Phone {skipPhoneNumberRequired ? (
+                        <span className="text-stone-400 text-xs font-normal">(Optional)</span>
+                      ) : (
+                        <span className="text-rose-600 font-bold">*</span>
+                      )}
                     </label>
                     <div className="flex rounded-xl border border-[#e7e5e4] bg-white overflow-hidden shadow-2xs transition-all focus-within:border-[#0c0a09] focus-within:ring-1 focus-within:ring-[#0c0a09]">
                       {/* Dynamic Country Dial Selector */}
@@ -1717,49 +1747,53 @@ export default function CaptainPage() {
                     </div>
                   </div>
 
-                  {/* Members Input */}
-                  <div className="space-y-1.5">
-                    <label className="block text-xs font-semibold text-[#0c0a09]">Number of Guests</label>
-                    <input
-                      type="number"
-                      value={customerCount}
-                      min={1}
-                      onChange={(e) => setCustomerCount(parseInt(e.target.value) || 1)}
-                      className="w-full text-sm font-sans px-3.5 py-2.5 border border-[#e7e5e4] rounded-xl shadow-2xs focus:outline-none focus:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09] bg-white text-[#0c0a09] placeholder:text-[#a8a29e]"
-                      placeholder="e.g. 2"
-                    />
-                  </div>
-
-                  {/* Waiter Selection from Employees */}
-                  <div className="space-y-2">
-                    <label className="block text-xs font-semibold text-[#0c0a09]">Assign Waiter / Server</label>
-                    <div className="flex flex-wrap gap-2">
-                      {waiterEmployees.map((w) => {
-                        const isSelected = selectedWaiter.id === w.id;
-                        return (
-                          <button
-                            key={w.id}
-                            onClick={() =>
-                              setSelectedWaiter({
-                                id: w.id,
-                                name: w.name,
-                              })
-                            }
-                            className={`px-3.5 py-2 text-xs rounded-lg font-medium transition cursor-pointer flex items-center space-x-1.5 ${
-                              isSelected
-                                ? "bg-[#0c0a09] text-white shadow-xs"
-                                : "bg-white border border-[#e7e5e4] text-[#141010] hover:bg-[#f1edec]"
-                            }`}
-                          >
-                            <span>{w.name}</span>
-                          </button>
-                        );
-                      })}
-                      {waiterEmployees.length === 0 && (
-                        <span className="text-xs text-[#7a716b] italic">No employees found</span>
-                      )}
+                  {/* Members Input (Gated by showMemberNumberOnCashierCard) */}
+                  {showMemberNumberOnCashierCard && (
+                    <div className="space-y-1.5">
+                      <label className="block text-xs font-semibold text-[#0c0a09]">Number of Guests</label>
+                      <input
+                        type="number"
+                        value={customerCount}
+                        min={1}
+                        onChange={(e) => setCustomerCount(parseInt(e.target.value) || 1)}
+                        className="w-full text-sm font-sans px-3.5 py-2.5 border border-[#e7e5e4] rounded-xl shadow-2xs focus:outline-none focus:border-[#0c0a09] focus:ring-1 focus:ring-[#0c0a09] bg-white text-[#0c0a09] placeholder:text-[#a8a29e]"
+                        placeholder="e.g. 2"
+                      />
                     </div>
-                  </div>
+                  )}
+
+                  {/* Waiter Selection from Employees (Gated by showWaiterOnCashierCard) */}
+                  {showWaiterOnCashierCard && (
+                    <div className="space-y-2">
+                      <label className="block text-xs font-semibold text-[#0c0a09]">Assign Waiter / Server</label>
+                      <div className="flex flex-wrap gap-2">
+                        {waiterEmployees.map((w) => {
+                          const isSelected = selectedWaiter.id === w.id;
+                          return (
+                            <button
+                              key={w.id}
+                              onClick={() =>
+                                setSelectedWaiter({
+                                  id: w.id,
+                                  name: w.name,
+                                })
+                              }
+                              className={`px-3.5 py-2 text-xs rounded-lg font-medium transition cursor-pointer flex items-center space-x-1.5 ${
+                                isSelected
+                                  ? "bg-[#0c0a09] text-white shadow-xs"
+                                  : "bg-white border border-[#e7e5e4] text-[#141010] hover:bg-[#f1edec]"
+                              }`}
+                            >
+                              <span>{w.name}</span>
+                            </button>
+                          );
+                        })}
+                        {waiterEmployees.length === 0 && (
+                          <span className="text-xs text-[#7a716b] italic">No employees found</span>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Customer Previous Order History & Insights */}
                   {hasCustomerPhone && customerStats && (

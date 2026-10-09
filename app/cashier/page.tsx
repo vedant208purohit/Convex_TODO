@@ -10,6 +10,8 @@ import {
 } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { UserButton, useUser } from "@clerk/nextjs";
+import CashierTablesView from "../components/CashierTablesView";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
@@ -24,6 +26,7 @@ import {
   formatStoreDate,
   formatStoreTime,
   formatStoreDateTime,
+  isIndiaCountry,
 } from "../../lib/constants/countries";
 
 // ==========================================
@@ -116,6 +119,7 @@ interface CartTab {
 // ==========================================
 
 function CashierPosContent() {
+  const { user } = useUser();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -190,6 +194,40 @@ function CashierPosContent() {
     activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : {},
   );
   const printers = useQuery(api.organizationPrinters.list, {});
+  const orgFeatures = useQuery(
+    api.organizationFeatures.list,
+    activeOrg ? { organizationId: activeOrg._id } : {}
+  );
+  const showTableTabInCashier = useMemo(() => {
+    const feat = orgFeatures?.find((f) => f.featureKey === "show_table_tab_in_cashier");
+    return feat ? feat.active : false;
+  }, [orgFeatures]);
+
+  const showMemberNumberOnCashierCard = useMemo(() => {
+    const feat = orgFeatures?.find((f) => f.featureKey === "show_member_number_on_cashier_card");
+    return feat ? feat.active : false;
+  }, [orgFeatures]);
+
+  const showTableOnCashierCard = useMemo(() => {
+    const feat = orgFeatures?.find((f) => f.featureKey === "show_table_on_cashier_card");
+    return feat ? feat.active : false;
+  }, [orgFeatures]);
+
+  const showWaiterOnCashierCard = useMemo(() => {
+    const feat = orgFeatures?.find((f) => f.featureKey === "show_waiter_on_cashier_card");
+    return feat ? feat.active : false;
+  }, [orgFeatures]);
+
+  const skipPhoneNumberRequired = useMemo(() => {
+    const feat = orgFeatures?.find((f) => f.featureKey === "skip_phone_number_required");
+    return feat ? feat.active : false;
+  }, [orgFeatures]);
+
+  const isDineInActive = Boolean(activeOrg?.isDineIn);
+  const isTakeAwayActive = Boolean(activeOrg?.isTakeAway ?? true);
+  const isDeliveryActive = Boolean(activeOrg?.isDelivery);
+  const isScheduledPickupActive = Boolean(activeOrg?.scheduledPickup);
+  const isTableTabAllowed = isDineInActive && showTableTabInCashier;
 
   // 5. Mutations
   const createOrderMutation = useMutation(api.orders.createOrder);
@@ -199,6 +237,28 @@ function CashierPosContent() {
   // ==========================================
 
   const [isHydrated, setIsHydrated] = useState(false);
+  const [cashierViewMode, setCashierViewMode] = useState<"tables" | "cart">("cart");
+
+  useEffect(() => {
+    if ((!showTableTabInCashier || !isDineInActive) && cashierViewMode === "tables") {
+      setCashierViewMode("cart");
+    }
+  }, [showTableTabInCashier, cashierViewMode, isDineInActive]);
+
+  // Auto-fallback orderType when service modes change
+  useEffect(() => {
+    setCartTabs((prev) =>
+      prev.map((tab) => {
+        if (tab.orderType === "DineIn" && !isDineInActive) {
+          return { ...tab, orderType: isTakeAwayActive ? "TakeAway" : isScheduledPickupActive ? "Scheduled" : "TakeAway" };
+        }
+        if (tab.orderType === "Scheduled" && !isScheduledPickupActive) {
+          return { ...tab, orderType: isTakeAwayActive ? "TakeAway" : isDineInActive ? "DineIn" : "TakeAway" };
+        }
+        return tab;
+      })
+    );
+  }, [isDineInActive, isScheduledPickupActive, isTakeAwayActive]);
 
   // Step Indicator: 1: Build Order | 2: Order Details | 3: Payment
   const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(() => {
@@ -1781,6 +1841,11 @@ function CashierPosContent() {
       const currentDial =
         activeCart.customerCountryCode || defaultOrgCountryCode || "+91";
       let rawPhone = activeCart.customerPhone?.trim();
+      if (!skipPhoneNumberRequired && !rawPhone) {
+        showToast("Please enter customer phone number");
+        setIsProcessingOrder(false);
+        return;
+      }
       if (!rawPhone) {
         const timeSlice = (Date.now() % 1000000).toString().padStart(6, "0");
         const randomSeed = Math.floor(10 + Math.random() * 90).toString();
@@ -1796,11 +1861,18 @@ function CashierPosContent() {
         orderType: resolvedOrderType,
         tableId:
           activeCart.orderType === "DineIn" &&
-          activeCart.isTableRequired !== false
+          showTableOnCashierCard &&
+          ((showWaiterOnCashierCard && activeCart.isTableRequired === true) || !showWaiterOnCashierCard)
             ? (activeCart.tableId as any)
             : undefined,
-        waiterUserId: activeCart.waiterId,
-        membersOnTable: activeCart.guestCount,
+        waiterUserId:
+          activeCart.orderType === "DineIn" && showWaiterOnCashierCard
+            ? activeCart.waiterId
+            : undefined,
+        membersOnTable:
+          activeCart.orderType === "DineIn" && showMemberNumberOnCashierCard
+            ? activeCart.guestCount
+            : undefined,
         customerName: resolvedCustomerName,
         customerPhone: resolvedCustomerPhone,
         customerEmail: activeCart.customerEmail || undefined,
@@ -2174,49 +2246,63 @@ function CashierPosContent() {
 
         {/* Right: Cashier / Terminal Info */}
         <div className="flex items-center space-x-3">
-          {/* Printer status pill */}
-          <div className="hidden lg:flex items-center gap-1.5 text-xs text-stone-500 border-r border-stone-200 pr-3">
-            <span className="text-[11px] font-medium text-stone-400">
-              Printer:
-            </span>
-            {printerStatus === "connected" ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
-                Online
-              </span>
-            ) : printerStatus === "checking" ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                Checking
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full border border-stone-200">
-                <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
-                Offline
-              </span>
-            )}
-          </div>
-
           <div className="text-right hidden sm:block">
             <div className="text-sm font-medium text-stone-900 leading-tight">
-              Mahendra Suthar
+              {user?.fullName || user?.firstName || activeOrg?.name || "Store Owner"}
             </div>
             <div className="text-[11px] text-stone-500 leading-tight">
-              Admin POS terminal
+              {activeOrg?.name ? `${activeOrg.name} (POS)` : "POS Terminal"}
             </div>
           </div>
-          <div className="w-9 h-9 rounded-full bg-stone-950 text-white font-medium text-xs flex items-center justify-center tracking-wider">
-            MS
+          <div className="flex items-center justify-center">
+            <UserButton afterSignOutUrl="/sign-in" />
           </div>
         </div>
       </header>
       {/* END: MainHeader */}
 
       {/* ========================================================================= */}
-      {/* STEP 1: BUILD ORDER WORKSPACE (CART ON LEFT, CATALOG ON RIGHT)            */}
+      {/* STEP 1: BUILD ORDER WORKSPACE (TABLE FLOOR MAP OR CART + CATALOG)         */}
       {/* ========================================================================= */}
       {currentStep === 1 && (
-        <main className="flex-1 flex overflow-hidden p-4 gap-4">
+        isTableTabAllowed && cashierViewMode === "tables" ? (
+          <CashierTablesView
+            activeOrg={activeOrg}
+            activeCart={activeCart}
+            cartTabs={cartTabs}
+            activeCartId={activeCartId}
+            currencySymbol={taxCalculation.currencySymbol}
+            showToast={showToast}
+            onSwitchToCart={(cId: string) => {
+              switchActiveCart(cId);
+              setCashierViewMode("cart");
+            }}
+            onAddNewCart={handleAddNewCartTab}
+            onCloseCart={handleCloseCartTab}
+            onSelectTableAndProceed={(tableData: any) => {
+              setCartTabs((prev) =>
+                prev.map((c) =>
+                  c.id === activeCartId
+                    ? {
+                        ...c,
+                        orderType: "DineIn",
+                        isTableRequired: true,
+                        tableId: tableData.tableId,
+                        tableName: tableData.tableName,
+                        guestCount: tableData.guestCount,
+                        waiterId: tableData.waiterId,
+                        waiterName: tableData.waiterName,
+                        customerPhone: tableData.customerPhone || c.customerPhone,
+                        customerName: tableData.customerName || c.customerName,
+                      }
+                    : c
+                )
+              );
+              setCashierViewMode("cart");
+            }}
+          />
+        ) : (
+          <main className="flex-1 flex overflow-hidden p-4 gap-4">
           {/* ===================================================================== */}
           {/* BEGIN: LeftCartPanel (approx 41% width)                               */}
           {/* ===================================================================== */}
@@ -2226,8 +2312,22 @@ function CashierPosContent() {
           >
             {/* Cart Switcher Header */}
             <div className="p-3.5 border-b border-[#e7e5e4] flex items-center justify-between bg-[#fdf8f7]/50">
-              {/* Multiple Carts Tabs */}
+              {/* Multiple Carts Tabs with Table Tab */}
               <div className="flex items-center space-x-1.5 overflow-x-auto max-w-[65%]">
+                {/* TABLE TAB BUTTON (Gated by show_table_tab_in_cashier and isDineIn) */}
+                {isTableTabAllowed && (
+                  <button
+                    type="button"
+                    onClick={() => setCashierViewMode("tables")}
+                    className="px-3.5 py-1 text-xs font-medium rounded-lg transition-all flex items-center space-x-1.5 cursor-pointer text-[#5e5e5e] hover:bg-[#f1edec]"
+                  >
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                    <span>Table</span>
+                  </button>
+                )}
+
                 {cartTabs.map((c) => {
                   const isActive = c.id === activeCartId;
                   const count = c.items.reduce(
@@ -3004,6 +3104,7 @@ function CashierPosContent() {
           </section>
           {/* END: RightCatalogPanel */}
         </main>
+        )
       )}
 
       {/* =====================================================      {/* ========================================================================= */}
@@ -3455,9 +3556,13 @@ function CashierPosContent() {
                         htmlFor="phone-number"
                       >
                         PHONE NUMBER{" "}
-                        <span className="font-normal text-stone-400">
-                          (OPTIONAL)
-                        </span>
+                        {skipPhoneNumberRequired ? (
+                          <span className="font-normal text-stone-400">
+                            (OPTIONAL)
+                          </span>
+                        ) : (
+                          <span className="text-rose-600 font-bold">*</span>
+                        )}
                       </label>
                       <div className="flex rounded-lg shadow-sm border border-stone-200 overflow-hidden focus-within:ring-1 focus-within:ring-stone-900 focus-within:border-stone-900 bg-white">
                         {/* Dynamic Country Selector */}
@@ -3566,55 +3671,58 @@ function CashierPosContent() {
                       Select Order Service Mode
                     </label>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      {/* Dine In */}
-                      <button
-                        onClick={() =>
-                          setCartTabs((prev) =>
-                            prev.map((c) =>
-                              c.id === activeCartId
-                                ? { ...c, orderType: "DineIn" }
-                                : c,
-                            ),
-                          )
-                        }
-                        className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
-                          activeCart.orderType === "DineIn"
-                            ? "bg-black text-white shadow-md border-2 border-black"
-                            : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800"
-                        }`}
-                        type="button"
-                      >
-                        <svg
-                          className={`w-4 h-4 ${
-                            activeCart.orderType === "DineIn"
-                              ? "text-white stroke-[2.5]"
-                              : "text-stone-700"
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                          />
-                        </svg>
-                        <span
-                          className={
-                            activeCart.orderType === "DineIn"
-                              ? "text-white font-semibold"
-                              : "text-stone-800 font-medium"
+                      {/* Dine In (Only visible if Dine In active) */}
+                      {isDineInActive && (
+                        <button
+                          onClick={() =>
+                            setCartTabs((prev) =>
+                              prev.map((c) =>
+                                c.id === activeCartId
+                                  ? { ...c, orderType: "DineIn" }
+                                  : c,
+                              ),
+                            )
                           }
+                          className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
+                            activeCart.orderType === "DineIn"
+                              ? "bg-black text-white shadow-md border-2 border-black"
+                              : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800"
+                          }`}
+                          type="button"
                         >
-                          Dine In
-                        </span>
-                      </button>
+                          <svg
+                            className={`w-4 h-4 ${
+                              activeCart.orderType === "DineIn"
+                                ? "text-white stroke-[2.5]"
+                                : "text-stone-700"
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                            />
+                          </svg>
+                          <span
+                            className={
+                              activeCart.orderType === "DineIn"
+                                ? "text-white font-semibold"
+                                : "text-stone-800 font-medium"
+                            }
+                          >
+                            Dine In
+                          </span>
+                        </button>
+                      )}
 
                       {/* Takeaway */}
                       <button
                         onClick={() =>
+                          isTakeAwayActive &&
                           setCartTabs((prev) =>
                             prev.map((c) =>
                               c.id === activeCartId
@@ -3623,10 +3731,14 @@ function CashierPosContent() {
                             ),
                           )
                         }
-                        className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
-                          activeCart.orderType === "TakeAway"
-                            ? "bg-black text-white shadow-md border-2 border-black"
-                            : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800"
+                        disabled={!isTakeAwayActive}
+                        title={!isTakeAwayActive ? "Takeaway is disabled in Settings" : undefined}
+                        className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition ${
+                          !isTakeAwayActive
+                            ? "opacity-40 cursor-not-allowed bg-stone-50 border border-stone-200 text-stone-400 select-none"
+                            : activeCart.orderType === "TakeAway"
+                            ? "bg-black text-white shadow-md border-2 border-black cursor-pointer"
+                            : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800 cursor-pointer"
                         }`}
                         type="button"
                       >
@@ -3686,158 +3798,164 @@ function CashierPosContent() {
                         </span>
                       </button>
 
-                      {/* Scheduled */}
-                      <button
-                        onClick={() =>
-                          setCartTabs((prev) =>
-                            prev.map((c) =>
-                              c.id === activeCartId
-                                ? { ...c, orderType: "Scheduled" }
-                                : c,
-                            ),
-                          )
-                        }
-                        className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
-                          activeCart.orderType === "Scheduled"
-                            ? "bg-black text-white shadow-md border-2 border-black"
-                            : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800"
-                        }`}
-                        type="button"
-                      >
-                        <svg
-                          className={`w-4 h-4 ${
-                            activeCart.orderType === "Scheduled"
-                              ? "text-white stroke-[2.5]"
-                              : "text-stone-700"
-                          }`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth="2"
-                          />
-                        </svg>
-                        <span
-                          className={
-                            activeCart.orderType === "Scheduled"
-                              ? "text-white font-semibold"
-                              : "text-stone-800 font-medium"
+                      {/* Scheduled (Only visible if scheduledPickup active) */}
+                      {isScheduledPickupActive && (
+                        <button
+                          onClick={() =>
+                            setCartTabs((prev) =>
+                              prev.map((c) =>
+                                c.id === activeCartId
+                                  ? { ...c, orderType: "Scheduled" }
+                                  : c,
+                              ),
+                            )
                           }
+                          className={`flex items-center justify-center space-x-2 py-3 px-4 rounded-xl font-medium text-xs transition cursor-pointer ${
+                            activeCart.orderType === "Scheduled"
+                              ? "bg-black text-white shadow-md border-2 border-black"
+                              : "bg-white hover:bg-stone-50 border border-stone-200 text-stone-800"
+                          }`}
+                          type="button"
                         >
-                          Scheduled pickup
-                        </span>
-                      </button>
+                          <svg
+                            className={`w-4 h-4 ${
+                              activeCart.orderType === "Scheduled"
+                                ? "text-white stroke-[2.5]"
+                                : "text-stone-700"
+                            }`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                            />
+                          </svg>
+                          <span
+                            className={
+                              activeCart.orderType === "Scheduled"
+                                ? "text-white font-semibold"
+                                : "text-stone-800 font-medium"
+                            }
+                          >
+                            Scheduled pickup
+                          </span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
                   {/* Dine-in Table Options */}
-                  {activeCart.orderType === "DineIn" && (
+                  {activeCart.orderType === "DineIn" && (showTableOnCashierCard || showWaiterOnCashierCard) && (
                     <>
-                      {/* STATE 1: Table & Service Details Container */}
-                      <div className="mt-5 pt-5 border-t border-stone-100">
-                        <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-2">
-                          Table Required?
-                        </label>
-                        <div className="inline-flex p-1 bg-stone-100/90 rounded-xl border border-stone-200/80 space-x-1">
-                          {/* Option 1: Yes, assign a table */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCartTabs((prev) =>
-                                prev.map((c) =>
-                                  c.id === activeCartId
-                                    ? { ...c, isTableRequired: true }
-                                    : c,
-                                ),
-                              )
-                            }
-                            className={`flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs transition cursor-pointer ${
-                              activeCart.isTableRequired === true
-                                ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-stone-900"
-                                : "text-stone-700 hover:text-black hover:bg-white/80"
-                            }`}
-                          >
-                            {activeCart.isTableRequired === true && (
-                              <svg
-                                className="w-3.5 h-3.5 stroke-[2.5] text-emerald-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  d="M5 13l4 4L19 7"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            )}
-                            <span
-                              className={
+                      {/* STATE 1: Table & Service Details Container (Only shown when BOTH are enabled) */}
+                      {showTableOnCashierCard && showWaiterOnCashierCard && (
+                        <div className="mt-5 pt-5 border-t border-stone-100">
+                          <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-2">
+                            Table Required?
+                          </label>
+                          <div className="inline-flex p-1 bg-stone-100/90 rounded-xl border border-stone-200/80 space-x-1">
+                            {/* Option 1: Yes, assign a table */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCartTabs((prev) =>
+                                  prev.map((c) =>
+                                    c.id === activeCartId
+                                      ? { ...c, isTableRequired: true }
+                                      : c,
+                                  ),
+                                )
+                              }
+                              className={`flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs transition cursor-pointer ${
                                 activeCart.isTableRequired === true
-                                  ? "text-white font-semibold"
-                                  : "text-stone-700 font-medium"
-                              }
+                                  ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-stone-900"
+                                  : "text-stone-700 hover:text-black hover:bg-white/80"
+                              }`}
                             >
-                              Yes, assign a table
-                            </span>
-                          </button>
-
-                          {/* Option 2: No table (DEFAULT) */}
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setCartTabs((prev) =>
-                                prev.map((c) =>
-                                  c.id === activeCartId
-                                    ? {
-                                        ...c,
-                                        isTableRequired: false,
-                                        tableId: undefined,
-                                        tableName: undefined,
-                                      }
-                                    : c,
-                                ),
-                              )
-                            }
-                            className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs transition cursor-pointer ${
-                              activeCart.isTableRequired !== true
-                                ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-stone-900"
-                                : "text-stone-700 hover:text-black hover:bg-white/80"
-                            }`}
-                          >
-                            {activeCart.isTableRequired !== true && (
-                              <svg
-                                className="w-3.5 h-3.5 stroke-[2.5] text-emerald-400"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                              {activeCart.isTableRequired === true && (
+                                <svg
+                                  className="w-3.5 h-3.5 stroke-[2.5] text-emerald-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    d="M5 13l4 4L19 7"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                  />
+                                </svg>
+                              )}
+                              <span
+                                className={
+                                  activeCart.isTableRequired === true
+                                    ? "text-white font-semibold"
+                                    : "text-stone-700 font-medium"
+                                }
                               >
-                                <path
-                                  d="M5 13l4 4L19 7"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            )}
-                            <span
-                              className={
-                                activeCart.isTableRequired !== true
-                                  ? "text-white font-semibold"
-                                  : "text-stone-700 font-medium"
+                                Yes, assign a table
+                              </span>
+                            </button>
+
+                            {/* Option 2: No table (DEFAULT) */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setCartTabs((prev) =>
+                                  prev.map((c) =>
+                                    c.id === activeCartId
+                                      ? {
+                                          ...c,
+                                          isTableRequired: false,
+                                          tableId: undefined,
+                                          tableName: undefined,
+                                        }
+                                      : c,
+                                  ),
+                                )
                               }
+                              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs transition cursor-pointer ${
+                                activeCart.isTableRequired !== true
+                                  ? "bg-[#0c0a09] text-white shadow-sm ring-1 ring-stone-900"
+                                  : "text-stone-700 hover:text-black hover:bg-white/80"
+                              }`}
                             >
-                              No table
-                            </span>
-                          </button>
+                              {activeCart.isTableRequired !== true && (
+                                <svg
+                                  className="w-3.5 h-3.5 stroke-[2.5] text-emerald-400"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    d="M5 13l4 4L19 7"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                  />
+                                </svg>
+                              )}
+                              <span
+                                className={
+                                  activeCart.isTableRequired !== true
+                                    ? "text-white font-semibold"
+                                    : "text-stone-700 font-medium"
+                                }
+                              >
+                                No table
+                              </span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* STATE A: No Table Selected Card (Direct-to-Counter / Open Dining) */}
-                      {activeCart.isTableRequired !== true && (
+                      {showTableOnCashierCard && showWaiterOnCashierCard && activeCart.isTableRequired !== true && (
                         <div className="mt-6 border border-stone-200 rounded-xl p-6 bg-white space-y-5">
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-stone-100">
                             <div>
@@ -3856,6 +3974,7 @@ function CashierPosContent() {
                                       d="M5 13l4 4L19 7"
                                       strokeLinecap="round"
                                       strokeLinejoin="round"
+                                      strokeWidth="2"
                                     />
                                   </svg>
                                   <span>Direct-to-Counter / Open Dining</span>
@@ -3871,251 +3990,260 @@ function CashierPosContent() {
                         </div>
                       )}
 
-                      {/* STATE B: If Table is Required, show Table Assignment Grid */}
-                      {activeCart.isTableRequired === true && (
+                      {/* STATE B: Show Table / Waiter Assignment Grid based on flags */}
+                      {((showTableOnCashierCard && showWaiterOnCashierCard && activeCart.isTableRequired === true) ||
+                        (!(showTableOnCashierCard && showWaiterOnCashierCard) && (showTableOnCashierCard || showWaiterOnCashierCard))) && (
                         <div className="mt-6 border border-stone-200 rounded-xl p-6 bg-white space-y-6">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                            {/* Table Assignment */}
-                            <div>
-                              <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
-                                Table Assignment *
-                              </label>
-                              <div className="relative">
-                                <select
-                                  value={activeCart.tableId || ""}
-                                  onChange={(e) => {
-                                    const selectedTbl = tables?.find(
-                                      (t) => t._id === e.target.value,
-                                    );
-                                    setCartTabs((prev) =>
-                                      prev.map((c) =>
-                                        c.id === activeCartId
-                                          ? {
-                                              ...c,
-                                              tableId: e.target.value,
-                                              tableName:
-                                                selectedTbl?.tableNumber,
-                                              guestCount:
-                                                selectedTbl?.seatingCapacity ||
-                                                c.guestCount ||
-                                                2,
-                                            }
-                                          : c,
-                                      ),
-                                    );
-                                  }}
-                                  className="w-full text-xs border border-stone-200 rounded-lg px-3 py-2.5 text-stone-900 font-medium appearance-none pr-8 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white cursor-pointer"
-                                >
-                                  <option value="">Select Table</option>
-                                  {tables && tables.length > 0 ? (
-                                    tables.map((tbl) => (
-                                      <option key={tbl._id} value={tbl._id}>
-                                        {tbl.tableNumber} ({tbl.seatingCapacity}{" "}
-                                        Seater)
-                                      </option>
-                                    ))
-                                  ) : (
-                                    <option value="" disabled>
-                                      No tables configured in settings
-                                    </option>
-                                  )}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-stone-500">
-                                  <svg
-                                    className="w-4 h-4"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      d="M19 9l-7 7-7-7"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth="2"
-                                    />
-                                  </svg>
-                                </div>
-                              </div>
-                              <div className="flex items-center space-x-1.5 mt-2 text-[11px] text-emerald-700">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                <span>Table Status: Clean &amp; Ready</span>
-                              </div>
-                            </div>
-
-                            {/* Assigned Waiter / Captain */}
-                            <div>
-                              <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
-                                Assigned Waiter / Captain
-                              </label>
-                              <div className="relative">
-                                <select
-                                  value={activeCart.waiterId || ""}
-                                  onChange={(e) => {
-                                    const selectedStaff =
-                                      availableWaitersAndStaff.find(
-                                        (w) => w.id === e.target.value,
+                            {/* Table Assignment (Gated by showTableOnCashierCard) */}
+                            {showTableOnCashierCard && (
+                              <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
+                                  Table Assignment *
+                                </label>
+                                <div className="relative">
+                                  <select
+                                    value={activeCart.tableId || ""}
+                                    onChange={(e) => {
+                                      const selectedTbl = tables?.find(
+                                        (t) => t._id === e.target.value,
                                       );
-                                    setCartTabs((prev) =>
-                                      prev.map((c) =>
-                                        c.id === activeCartId
-                                          ? {
-                                              ...c,
-                                              waiterId: e.target.value,
-                                              waiterName: selectedStaff
-                                                ? selectedStaff.name
-                                                : undefined,
-                                            }
-                                          : c,
-                                      ),
-                                    );
-                                  }}
-                                  className="w-full text-xs border border-stone-200 rounded-lg px-3 py-2.5 text-stone-900 font-medium appearance-none pr-8 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white cursor-pointer"
-                                >
-                                  <option value="">
-                                    Select Waiter / Captain
-                                  </option>
-                                  {availableWaitersAndStaff.length > 0 ? (
-                                    availableWaitersAndStaff.map((w) => (
-                                      <option key={w.id} value={w.id}>
-                                        {w.name} ({w.roleDisplay})
-                                      </option>
-                                    ))
-                                  ) : (
-                                    <option value="" disabled>
-                                      No staff configured
-                                    </option>
-                                  )}
-                                </select>
-                                <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-stone-500">
-                                  <svg
-                                    className="w-4 h-4"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      d="M19 9l-7 7-7-7"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth="2"
-                                    />
-                                  </svg>
-                                </div>
-                              </div>
-                              <p className="mt-2 text-[11px] text-stone-500">
-                                Duty Shift: Floor Station A
-                              </p>
-                            </div>
-
-                            {/* Guest Count (PAX) */}
-                            <div>
-                              <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
-                                Guest Count (PAX)
-                              </label>
-                              <div className="flex items-center border border-stone-200 rounded-lg overflow-hidden bg-stone-50/50">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const current = activeCart.guestCount || 2;
-                                    if (current > 1) {
                                       setCartTabs((prev) =>
                                         prev.map((c) =>
                                           c.id === activeCartId
-                                            ? { ...c, guestCount: current - 1 }
+                                            ? {
+                                                ...c,
+                                                tableId: e.target.value,
+                                                tableName:
+                                                  selectedTbl?.tableNumber,
+                                                guestCount:
+                                                  selectedTbl?.seatingCapacity ||
+                                                  c.guestCount ||
+                                                  2,
+                                              }
                                             : c,
                                         ),
                                       );
-                                    }
-                                  }}
-                                  className="px-3 py-2 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
-                                >
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
+                                    }}
+                                    className="w-full text-xs border border-stone-200 rounded-lg px-3 py-2.5 text-stone-900 font-medium appearance-none pr-8 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white cursor-pointer"
                                   >
-                                    <path
-                                      d="M20 12H4"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth="2"
-                                    />
-                                  </svg>
-                                </button>
-                                <div className="flex-1 text-center text-xs font-semibold text-stone-900 py-2">
-                                  {activeCart.guestCount || 2} Guests
+                                    <option value="">Select Table</option>
+                                    {tables && tables.length > 0 ? (
+                                      tables.map((tbl) => (
+                                        <option key={tbl._id} value={tbl._id}>
+                                          {tbl.tableNumber} ({tbl.seatingCapacity}{" "}
+                                          Seater)
+                                        </option>
+                                      ))
+                                    ) : (
+                                      <option value="" disabled>
+                                        No tables configured in settings
+                                      </option>
+                                    )}
+                                  </select>
+                                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-stone-500">
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        d="M19 9l-7 7-7-7"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                      />
+                                    </svg>
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const current = activeCart.guestCount || 2;
-                                    setCartTabs((prev) =>
-                                      prev.map((c) =>
-                                        c.id === activeCartId
-                                          ? { ...c, guestCount: current + 1 }
-                                          : c,
-                                      ),
-                                    );
-                                  }}
-                                  className="px-3 py-2 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
-                                >
-                                  <svg
-                                    className="w-3.5 h-3.5"
-                                    fill="none"
-                                    stroke="currentColor"
-                                    viewBox="0 0 24 24"
-                                  >
-                                    <path
-                                      d="M12 4v16m8-8H4"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      strokeWidth="2"
-                                    />
-                                  </svg>
-                                </button>
+                                <div className="flex items-center space-x-1.5 mt-2 text-[11px] text-emerald-700">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                  <span>Table Status: Clean &amp; Ready</span>
+                                </div>
                               </div>
-                              <p className="mt-2 text-[11px] text-stone-500">
-                                {activeCart.tableId &&
-                                tables?.find(
-                                  (t) => t._id === activeCart.tableId,
-                                )
-                                  ? `Table capacity: ${tables.find((t) => t._id === activeCart.tableId)?.seatingCapacity} Pax`
-                                  : "Seating capacity"}
-                              </p>
-                            </div>
+                            )}
+
+                            {/* Assigned Waiter / Captain (Gated by showWaiterOnCashierCard) */}
+                            {showWaiterOnCashierCard && (
+                              <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
+                                  Assigned Waiter / Captain
+                                </label>
+                                <div className="relative">
+                                  <select
+                                    value={activeCart.waiterId || ""}
+                                    onChange={(e) => {
+                                      const selectedStaff =
+                                        availableWaitersAndStaff.find(
+                                          (w) => w.id === e.target.value,
+                                        );
+                                      setCartTabs((prev) =>
+                                        prev.map((c) =>
+                                          c.id === activeCartId
+                                            ? {
+                                                ...c,
+                                                waiterId: e.target.value,
+                                                waiterName: selectedStaff
+                                                  ? selectedStaff.name
+                                                  : undefined,
+                                              }
+                                            : c,
+                                        ),
+                                      );
+                                    }}
+                                    className="w-full text-xs border border-stone-200 rounded-lg px-3 py-2.5 text-stone-900 font-medium appearance-none pr-8 focus:ring-1 focus:ring-stone-900 focus:border-stone-900 focus:outline-none bg-white cursor-pointer"
+                                  >
+                                    <option value="">
+                                      Select Waiter / Captain
+                                    </option>
+                                    {availableWaitersAndStaff.length > 0 ? (
+                                      availableWaitersAndStaff.map((w) => (
+                                        <option key={w.id} value={w.id}>
+                                          {w.name} ({w.roleDisplay})
+                                        </option>
+                                      ))
+                                    ) : (
+                                      <option value="" disabled>
+                                        No staff configured
+                                      </option>
+                                    )}
+                                  </select>
+                                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-stone-500">
+                                    <svg
+                                      className="w-4 h-4"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        d="M19 9l-7 7-7-7"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                      />
+                                    </svg>
+                                  </div>
+                                </div>
+                                <p className="mt-2 text-[11px] text-stone-500">
+                                  Duty Shift: Floor Station A
+                                </p>
+                              </div>
+                            )}
+
+                            {/* Guest Count (PAX) (Gated by showMemberNumberOnCashierCard) */}
+                            {showMemberNumberOnCashierCard && (
+                              <div>
+                                <label className="block text-[11px] font-bold uppercase tracking-wider text-stone-700 mb-1.5">
+                                  Guest Count (PAX)
+                                </label>
+                                <div className="flex items-center border border-stone-200 rounded-lg overflow-hidden bg-stone-50/50">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = activeCart.guestCount || 2;
+                                      if (current > 1) {
+                                        setCartTabs((prev) =>
+                                          prev.map((c) =>
+                                            c.id === activeCartId
+                                              ? { ...c, guestCount: current - 1 }
+                                              : c,
+                                          ),
+                                        );
+                                      }
+                                    }}
+                                    className="px-3 py-2 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                                  >
+                                    <svg
+                                      className="w-3.5 h-3.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        d="M20 12H4"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                      />
+                                    </svg>
+                                  </button>
+                                  <div className="flex-1 text-center text-xs font-semibold text-stone-900 py-2">
+                                    {activeCart.guestCount || 2} Guests
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const current = activeCart.guestCount || 2;
+                                      setCartTabs((prev) =>
+                                        prev.map((c) =>
+                                          c.id === activeCartId
+                                            ? { ...c, guestCount: current + 1 }
+                                            : c,
+                                        ),
+                                      );
+                                    }}
+                                    className="px-3 py-2 text-stone-600 hover:bg-stone-100 transition-colors cursor-pointer"
+                                  >
+                                    <svg
+                                      className="w-3.5 h-3.5"
+                                      fill="none"
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path
+                                        d="M12 4v16m8-8H4"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        strokeWidth="2"
+                                      />
+                                    </svg>
+                                  </button>
+                                </div>
+                                <p className="mt-2 text-[11px] text-stone-500">
+                                  {activeCart.tableId &&
+                                  tables?.find(
+                                    (t) => t._id === activeCart.tableId,
+                                  )
+                                    ? `Table capacity: ${tables.find((t) => t._id === activeCart.tableId)?.seatingCapacity} Pax`
+                                    : "Covers allocation"}
+                                </p>
+                              </div>
+                            )}
                           </div>
 
                           {/* Routing Banner Notice */}
-                          <div className="pt-2 border-t border-stone-100 flex items-center space-x-2 text-xs text-stone-600">
-                            <svg
-                              className="w-4 h-4 text-stone-400 shrink-0"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                              />
-                            </svg>
-                            <span>
-                              Kitchen Order Ticket (KOT) will route{" "}
-                              <strong>
-                                {activeCart.tableName
-                                  ? /^table\b/i.test(
-                                      activeCart.tableName.trim(),
-                                    )
-                                    ? activeCart.tableName.trim()
-                                    : `Table ${activeCart.tableName.trim()}`
-                                  : "assigned table"}
-                              </strong>{" "}
-                              straight to the{" "}
-                              <strong>Main Kitchen KDS Display</strong>.
-                            </span>
-                          </div>
+                          {showTableOnCashierCard && (
+                            <div className="pt-2 border-t border-stone-100 flex items-center space-x-2 text-xs text-stone-600">
+                              <svg
+                                className="w-4 h-4 text-stone-400 shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                />
+                              </svg>
+                              <span>
+                                Kitchen Order Ticket (KOT) will route{" "}
+                                <strong>
+                                  {activeCart.tableName
+                                    ? /^table\b/i.test(
+                                        activeCart.tableName.trim(),
+                                      )
+                                      ? activeCart.tableName.trim()
+                                      : `Table ${activeCart.tableName.trim()}`
+                                    : "assigned table"}
+                                </strong>{" "}
+                                straight to the{" "}
+                                <strong>Main Kitchen KDS Display</strong>.
+                              </span>
+                            </div>
+                          )}
                         </div>
                       )}
                     </>
@@ -4615,7 +4743,25 @@ function CashierPosContent() {
                   </span>
                 </div>
                 <button
-                  onClick={() => goToStep(3)}
+                  onClick={() => {
+                    const digits = (activeCart?.customerPhone || "").replace(/\D/g, "");
+                    if (!skipPhoneNumberRequired && !digits) {
+                      showToast("Please enter customer phone number");
+                      return;
+                    }
+                    if (digits) {
+                      const isIndia = isIndiaCountry(activeCart?.customerCountryCode || defaultOrgCountryCode);
+                      if (isIndia && digits.length !== 10) {
+                        showToast("Please enter a valid 10-digit mobile number");
+                        return;
+                      }
+                      if (!isIndia && (digits.length < 7 || digits.length > 15)) {
+                        showToast("Please enter a valid mobile number (7-15 digits)");
+                        return;
+                      }
+                    }
+                    goToStep(3);
+                  }}
                   className="inline-flex items-center px-7 py-3 rounded-full bg-stone-950 text-white text-xs font-semibold hover:bg-stone-850 transition shadow-md group cursor-pointer"
                   type="button"
                 >
@@ -5293,114 +5439,6 @@ function CashierPosContent() {
                           </div>
                         </div>
 
-                        {/* Quick Card Shortcuts (Fast Tender Shortcuts) */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
-                              Fast Tender Shortcuts
-                            </span>
-                            <span className="text-[11px] text-stone-400">
-                              Click to auto-fill tender amount
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                            {/* Exact Button */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setTenderCardGiven(
-                                  (totalPayablePaise / 100).toFixed(2),
-                                )
-                              }
-                              className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                tenderCardGiven.trim() &&
-                                parseFloat(tenderCardGiven) ===
-                                  totalPayablePaise / 100
-                                  ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
-                                  : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
-                              }`}
-                            >
-                              <span
-                                className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                  tenderCardGiven.trim() &&
-                                  parseFloat(tenderCardGiven) ===
-                                    totalPayablePaise / 100
-                                    ? "text-stone-300"
-                                    : "text-stone-400"
-                                }`}
-                              >
-                                Exact Total
-                              </span>
-                              <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}
-                                {formatCurrencyAmount(
-                                  totalPayablePaise / 100,
-                                  activeOrg?.country,
-                                )}
-                              </span>
-                            </button>
-
-                            {/* Dynamic Fast Denominations */}
-                            {(() => {
-                              const exactVal = totalPayablePaise / 100;
-                              const d1 = Math.ceil(exactVal / 100) * 100;
-                              const d2 = Math.ceil(exactVal / 500) * 500;
-                              const d3 =
-                                Math.ceil((exactVal + 500) / 500) * 500;
-                              const d4 =
-                                Math.ceil((exactVal + 1000) / 1000) * 1000;
-
-                              const uniqueShortcuts = Array.from(
-                                new Set([
-                                  d1 > exactVal ? d1 : d1 + 100,
-                                  d2 > exactVal ? d2 : d2 + 500,
-                                  d3,
-                                  d4 > d3 ? d4 : d3 + 1000,
-                                ]),
-                              ).slice(0, 4);
-
-                              return uniqueShortcuts.map((amt) => {
-                                const isSelected =
-                                  tenderCardGiven.trim() &&
-                                  parseFloat(tenderCardGiven) === amt;
-                                return (
-                                  <button
-                                    key={amt}
-                                    type="button"
-                                    onClick={() =>
-                                      setTenderCardGiven(amt.toFixed(2))
-                                    }
-                                    className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                      isSelected
-                                        ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
-                                        : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                        isSelected
-                                          ? "text-stone-300"
-                                          : "text-stone-400"
-                                      }`}
-                                    >
-                                      Note
-                                    </span>
-                                    <span className="text-sm font-serif font-bold">
-                                      {taxCalculation.currencySymbol}
-                                      {formatCurrencyAmount(
-                                        amt,
-                                        activeOrg?.country,
-                                        0,
-                                        0,
-                                      )}
-                                    </span>
-                                  </button>
-                                );
-                              });
-                            })()}
-                          </div>
-                        </div>
-
                         {/* Optional Auth / Transaction Ref Code */}
                         <div>
                           <label
@@ -5491,114 +5529,6 @@ function CashierPosContent() {
                               }
                               className="block w-full px-4 py-3.5 bg-transparent text-xl font-semibold text-[#141010] placeholder:text-stone-400 placeholder:font-normal not-italic focus:outline-none"
                             />
-                          </div>
-                        </div>
-
-                        {/* Quick UPI Shortcuts (Fast Tender Shortcuts) */}
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
-                              Fast Tender Shortcuts
-                            </span>
-                            <span className="text-[11px] text-stone-400">
-                              Click to auto-fill tender amount
-                            </span>
-                          </div>
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
-                            {/* Exact Button */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setTenderUpiGiven(
-                                  (totalPayablePaise / 100).toFixed(2),
-                                )
-                              }
-                              className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                tenderUpiGiven.trim() &&
-                                parseFloat(tenderUpiGiven) ===
-                                  totalPayablePaise / 100
-                                  ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
-                                  : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
-                              }`}
-                            >
-                              <span
-                                className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                  tenderUpiGiven.trim() &&
-                                  parseFloat(tenderUpiGiven) ===
-                                    totalPayablePaise / 100
-                                    ? "text-stone-300"
-                                    : "text-stone-400"
-                                }`}
-                              >
-                                Exact Total
-                              </span>
-                              <span className="text-sm font-serif font-bold">
-                                {taxCalculation.currencySymbol}
-                                {formatCurrencyAmount(
-                                  totalPayablePaise / 100,
-                                  activeOrg?.country,
-                                )}
-                              </span>
-                            </button>
-
-                            {/* Dynamic Fast Denominations */}
-                            {(() => {
-                              const exactVal = totalPayablePaise / 100;
-                              const d1 = Math.ceil(exactVal / 100) * 100;
-                              const d2 = Math.ceil(exactVal / 500) * 500;
-                              const d3 =
-                                Math.ceil((exactVal + 500) / 500) * 500;
-                              const d4 =
-                                Math.ceil((exactVal + 1000) / 1000) * 1000;
-
-                              const uniqueShortcuts = Array.from(
-                                new Set([
-                                  d1 > exactVal ? d1 : d1 + 100,
-                                  d2 > exactVal ? d2 : d2 + 500,
-                                  d3,
-                                  d4 > d3 ? d4 : d3 + 1000,
-                                ]),
-                              ).slice(0, 4);
-
-                              return uniqueShortcuts.map((amt) => {
-                                const isSelected =
-                                  tenderUpiGiven.trim() &&
-                                  parseFloat(tenderUpiGiven) === amt;
-                                return (
-                                  <button
-                                    key={amt}
-                                    type="button"
-                                    onClick={() =>
-                                      setTenderUpiGiven(amt.toFixed(2))
-                                    }
-                                    className={`p-3 rounded-xl border text-xs transition-all text-center cursor-pointer select-none ${
-                                      isSelected
-                                        ? "border-stone-900 bg-stone-900 text-white font-bold shadow-xs"
-                                        : "border-stone-200/90 bg-white hover:bg-stone-50 text-stone-800 font-semibold shadow-2xs hover:border-stone-300"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`block text-[10px] uppercase tracking-wider mb-0.5 ${
-                                        isSelected
-                                          ? "text-stone-300"
-                                          : "text-stone-400"
-                                      }`}
-                                    >
-                                      Note
-                                    </span>
-                                    <span className="text-sm font-serif font-bold">
-                                      {taxCalculation.currencySymbol}
-                                      {formatCurrencyAmount(
-                                        amt,
-                                        activeOrg?.country,
-                                        0,
-                                        0,
-                                      )}
-                                    </span>
-                                  </button>
-                                );
-                              });
-                            })()}
                           </div>
                         </div>
 

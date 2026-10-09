@@ -1622,21 +1622,34 @@ function CashierSection({ getFeatureFlag, handleFeatureToggle }: CashierSectionP
           ) : (
             filteredFeatures.map((item) => {
               const active = getFeatureFlag(item.key);
+              const isComingSoon = item.key === "skip_payment_on_cashier_card";
               return (
                 <div
                   key={item.key}
-                  className="p-5 hover:bg-neutral-50/50 transition-colors flex items-start justify-between gap-6"
+                  className={`p-5 transition-colors flex items-start justify-between gap-6 ${
+                    isComingSoon ? "opacity-50 select-none bg-stone-50/50" : "hover:bg-neutral-50/50"
+                  }`}
                 >
                   <div className="flex-1 pr-4">
-                    <div className="flex items-center gap-2.5 mb-1">
+                    <div className="flex items-center gap-2.5 mb-1 flex-wrap">
                       <span className="text-sm font-semibold text-[#141010] font-sans">{item.title}</span>
                       <span className="px-2 py-0.5 bg-[#f1edec] text-[#5e5e5e] rounded text-[10px] tracking-wider font-mono">
                         {item.key}
                       </span>
+                      {isComingSoon && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200/80">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                          Coming Soon
+                        </span>
+                      )}
                     </div>
                     <p className="text-xs text-[#5e5e5e] leading-relaxed max-w-2xl">{item.description}</p>
                   </div>
-                  <Switch checked={active} onChange={() => handleFeatureToggle(item.key, active)} />
+                  <Switch
+                    checked={isComingSoon ? false : active}
+                    onChange={() => !isComingSoon && handleFeatureToggle(item.key, active)}
+                    disabled={isComingSoon}
+                  />
                 </div>
               );
             })
