@@ -9,7 +9,10 @@ import { Id, Doc } from "../../../convex/_generated/dataModel";
 
 import { EditCustomerModal } from "../../components/customers/EditCustomerModal";
 import { DeleteCustomerModal } from "../../components/customers/DeleteCustomerModal";
-import { AddressDrawer } from "../../components/customers/AddressDrawer";
+import {
+  AddressDrawer,
+  FallbackAddressItem,
+} from "../../components/customers/AddressDrawer";
 
 import {
   formatPhoneNumberWithCountryCode,
@@ -29,40 +32,57 @@ export default function CustomerProfilePage() {
 
   // Extract raw digits from idParam if present
   const rawDigits = decodedIdParam.replace(/\D/g, "");
-  const normalizedPhoneDigits = rawDigits.length > 10 && rawDigits.startsWith("91") ? rawDigits.slice(2) : rawDigits;
+  const normalizedPhoneDigits =
+    rawDigits.length > 10 && rawDigits.startsWith("91")
+      ? rawDigits.slice(2)
+      : rawDigits;
 
   const isOrdCust = decodedIdParam.startsWith("ordcust_");
   const isNameCust = decodedIdParam.startsWith("name_");
   const isExplicitPhone =
     decodedIdParam.startsWith("phone_") ||
-    (normalizedPhoneDigits.length >= 7 && normalizedPhoneDigits.length <= 15 && !isOrdCust && !isNameCust);
+    (normalizedPhoneDigits.length >= 7 &&
+      normalizedPhoneDigits.length <= 15 &&
+      !isOrdCust &&
+      !isNameCust);
 
-  const isConvexId = !isExplicitPhone && !isOrdCust && !isNameCust && decodedIdParam.length >= 20;
+  const isConvexId =
+    !isExplicitPhone &&
+    !isOrdCust &&
+    !isNameCust &&
+    decodedIdParam.length >= 20;
 
   const customerId = isConvexId ? (decodedIdParam as Id<"customers">) : null;
   const phoneParam = isExplicitPhone ? normalizedPhoneDigits : "";
 
   // 1. Query Active Organization
   const organizations = useQuery(api.organizations.list);
-  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const activeOrg =
+    organizations && organizations.length > 0 ? organizations[0] : null;
 
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+    (activeOrg?.country
+      ? getCurrencyForCountry(activeOrg.country).symbol
+      : "₹");
   const storeTimezone =
     activeOrg?.organizationTimeZone ||
-    (activeOrg?.country ? getTimezoneForCountry(activeOrg.country) : "Asia/Kolkata");
-  const storePhoneCode = activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+91";
+    (activeOrg?.country
+      ? getTimezoneForCountry(activeOrg.country)
+      : "Asia/Kolkata");
+  const storePhoneCode = activeOrg?.country
+    ? getPhoneCodeForCountry(activeOrg.country)
+    : "+91";
 
   // 2. Query Customer Document by ID or by Phone
   const customerById = useQuery(
     api.customers.getCustomer,
-    customerId ? { id: customerId } : "skip"
+    customerId ? { id: customerId } : "skip",
   );
 
   const customerByPhone = useQuery(
     api.customers.getCustomerByPhone,
-    phoneParam ? { phone: phoneParam } : "skip"
+    phoneParam ? { phone: phoneParam } : "skip",
   );
 
   const customerDoc = customerById || customerByPhone;
@@ -71,13 +91,13 @@ export default function CustomerProfilePage() {
   // 3. Query Customer Addresses
   const customerAddresses = useQuery(
     api.userAddresses.getCustomerAddresses,
-    resolvedCustomerId ? { customerId: resolvedCustomerId } : "skip"
+    resolvedCustomerId ? { customerId: resolvedCustomerId } : "skip",
   );
 
   // 4. Query All Store Orders to aggregate orders for this customer
   const storeOrdersResponse = useQuery(
     api.orders.listOrders,
-    activeOrg ? { organizationId: activeOrg._id, pageSize: 500 } : "skip"
+    activeOrg ? { organizationId: activeOrg._id, pageSize: 500 } : "skip",
   );
 
   // Filter orders belonging to this customer
@@ -85,42 +105,134 @@ export default function CustomerProfilePage() {
     const allOrders = storeOrdersResponse?.orders || [];
     if (allOrders.length === 0) return [];
 
-    const targetPhoneDigits = (customerDoc?.phone || phoneParam || rawDigits || "").replace(/\D/g, "");
-    const cleanTargetDigits = targetPhoneDigits.length > 10 && targetPhoneDigits.startsWith("91") ? targetPhoneDigits.slice(2) : targetPhoneDigits;
+    // If route is ordcust_<orderId>, locate the target order from allOrders to resolve customer identity
+    const targetOrder = isOrdCust
+      ? allOrders.find((o) => o._id === decodedIdParam.slice(8))
+      : null;
 
-    const targetName = (
-      `${customerDoc?.firstName || ""} ${customerDoc?.lastName || ""}`.trim() ||
-      (decodedIdParam.startsWith("name_") ? decodedIdParam.slice(5).replace(/_/g, " ") : "")
-    ).trim().toLowerCase();
+    const targetCustomerId =
+      resolvedCustomerId || targetOrder?.customerId || null;
+
+    // Collect candidate identifiers from customerDoc, route params, targetOrder, AND any orders already linked to targetCustomerId
+    const targetPhoneDigitsSet = new Set<string>();
+    const targetEmailSet = new Set<string>();
+    const targetNameSet = new Set<string>();
+
+    const addPhone = (p?: string | null) => {
+      if (!p) return;
+      const digits = p.replace(/\D/g, "");
+      const clean = digits.length > 10 && digits.startsWith("91") ? digits.slice(2) : digits;
+      if (clean && clean.length >= 7) {
+        targetPhoneDigitsSet.add(clean);
+      }
+    };
+
+    const addEmail = (e?: string | null) => {
+      if (!e) return;
+      const clean = e.trim().toLowerCase();
+      if (clean && clean.includes("@") && !clean.includes("example.com")) {
+        targetEmailSet.add(clean);
+      }
+    };
+
+    const addName = (n?: string | null) => {
+      if (!n) return;
+      const clean = n.trim().toLowerCase();
+      if (clean && clean !== "guest customer" && clean !== "guest") {
+        targetNameSet.add(clean);
+      }
+    };
+
+    // Add identifiers from customer document & route params
+    addPhone(customerDoc?.phone);
+    addPhone(phoneParam);
+    addPhone(targetOrder?.customerPhone);
+    if (!isOrdCust && rawDigits.length >= 7) addPhone(rawDigits);
+
+    addEmail(customerDoc?.email);
+    addEmail(targetOrder?.customerEmail);
+    if (decodedIdParam.startsWith("email_")) addEmail(decodedIdParam.slice(6));
+
+    addName(`${customerDoc?.firstName || ""} ${customerDoc?.lastName || ""}`);
+    addName(targetOrder?.customerName);
+    if (decodedIdParam.startsWith("name_")) addName(decodedIdParam.slice(5).replace(/_/g, " "));
+
+    // Also extract identifiers from any orders explicitly linked to targetCustomerId or matching initial phone/email/name
+    for (const ord of allOrders) {
+      const isLinkedToCustId = targetCustomerId && ord.customerId === targetCustomerId;
+
+      let isPhoneMatch = false;
+      if (ord.customerPhone) {
+        const ordDigits = ord.customerPhone.replace(/\D/g, "");
+        const cleanOrdDigits = ordDigits.length > 10 && ordDigits.startsWith("91") ? ordDigits.slice(2) : ordDigits;
+        if (cleanOrdDigits) {
+          for (const tp of Array.from(targetPhoneDigitsSet)) {
+            if (cleanOrdDigits === tp || cleanOrdDigits.endsWith(tp) || tp.endsWith(cleanOrdDigits)) {
+              isPhoneMatch = true;
+              break;
+            }
+          }
+        }
+      }
+
+      const isEmailMatch = !!ord.customerEmail && targetEmailSet.has(ord.customerEmail.trim().toLowerCase());
+      const isNameMatch = !!ord.customerName && targetNameSet.has(ord.customerName.trim().toLowerCase());
+
+      if (isLinkedToCustId || isPhoneMatch || isEmailMatch || isNameMatch) {
+        addPhone(ord.customerPhone);
+        addEmail(ord.customerEmail);
+        addName(ord.customerName);
+      }
+    }
 
     return allOrders.filter((ord) => {
       // Direct customerId match
-      if (resolvedCustomerId && ord.customerId === resolvedCustomerId) {
+      if (targetCustomerId && ord.customerId === targetCustomerId) {
+        return true;
+      }
+      if (ord.customerId === decodedIdParam) {
         return true;
       }
       // Match by order ID if key is ordcust_<orderId>
       if (isOrdCust && ord._id === decodedIdParam.slice(8)) {
         return true;
       }
-      // Phone number match
-      if (cleanTargetDigits && cleanTargetDigits.length >= 7 && ord.customerPhone) {
+      // Phone number match against target phone set
+      if (ord.customerPhone) {
         const ordPhoneDigits = ord.customerPhone.replace(/\D/g, "");
-        if (ordPhoneDigits && (ordPhoneDigits.endsWith(cleanTargetDigits) || cleanTargetDigits.endsWith(ordPhoneDigits))) {
-          return true;
+        const cleanOrdDigits = ordPhoneDigits.length > 10 && ordPhoneDigits.startsWith("91") ? ordPhoneDigits.slice(2) : ordPhoneDigits;
+        if (cleanOrdDigits) {
+          for (const targetPhone of targetPhoneDigitsSet) {
+            if (
+              cleanOrdDigits === targetPhone ||
+              cleanOrdDigits.endsWith(targetPhone) ||
+              targetPhone.endsWith(cleanOrdDigits)
+            ) {
+              return true;
+            }
+          }
         }
       }
-      // Name match
-      if (targetName && targetName !== "guest customer" && ord.customerName) {
-        if (ord.customerName.toLowerCase().trim() === targetName) {
-          return true;
-        }
+      // Email match against target email set
+      if (ord.customerEmail && targetEmailSet.has(ord.customerEmail.trim().toLowerCase())) {
+        return true;
       }
-
-      if (ord.customerId === decodedIdParam) return true;
+      // Name match against target name set
+      if (ord.customerName && targetNameSet.has(ord.customerName.trim().toLowerCase())) {
+        return true;
+      }
 
       return false;
     });
-  }, [storeOrdersResponse, customerDoc, resolvedCustomerId, phoneParam, rawDigits, decodedIdParam, isOrdCust]);
+  }, [
+    storeOrdersResponse,
+    customerDoc,
+    resolvedCustomerId,
+    phoneParam,
+    rawDigits,
+    decodedIdParam,
+    isOrdCust,
+  ]);
 
   // 5. Query Organization Queues to show Queue Activity for this customer
   const allQueuesResponse = useQuery(api.organizationQueues.list, {});
@@ -128,7 +240,12 @@ export default function CustomerProfilePage() {
   const customerQueueList = useMemo(() => {
     if (!allQueuesResponse || !Array.isArray(allQueuesResponse)) return [];
 
-    const targetPhone = (customerDoc?.phone || phoneParam || rawDigits || "").replace(/\D/g, "");
+    const targetPhone = (
+      customerDoc?.phone ||
+      phoneParam ||
+      rawDigits ||
+      ""
+    ).replace(/\D/g, "");
     const targetUserId = resolvedCustomerId ? String(resolvedCustomerId) : "";
 
     return allQueuesResponse.filter((q) => {
@@ -141,7 +258,10 @@ export default function CustomerProfilePage() {
       if (targetPhone && targetPhone.length >= 7) {
         if (q.userId) {
           const uDigits = q.userId.replace(/\D/g, "");
-          if (uDigits && (uDigits.endsWith(targetPhone) || targetPhone.endsWith(uDigits))) {
+          if (
+            uDigits &&
+            (uDigits.endsWith(targetPhone) || targetPhone.endsWith(uDigits))
+          ) {
             return true;
           }
         }
@@ -155,10 +275,18 @@ export default function CustomerProfilePage() {
 
       return false;
     });
-  }, [allQueuesResponse, customerDoc, resolvedCustomerId, phoneParam, rawDigits]);
+  }, [
+    allQueuesResponse,
+    customerDoc,
+    resolvedCustomerId,
+    phoneParam,
+    rawDigits,
+  ]);
 
   // UI Tab & Filter States
-  const [activeTab, setActiveTab] = useState<"orders" | "surveys" | "queue">("orders");
+  const [activeTab, setActiveTab] = useState<"orders" | "surveys" | "queue">(
+    "orders",
+  );
   const [orderSearch, setOrderSearch] = useState("");
   const [isAddressDrawerOpen, setIsAddressDrawerOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -170,17 +298,23 @@ export default function CustomerProfilePage() {
     : "";
 
   const firstOrderWithName = customerOrdersList.find(
-    (o) => o.customerName && o.customerName.trim() !== "" && o.customerName.trim() !== "Guest Customer"
+    (o) =>
+      o.customerName &&
+      o.customerName.trim() !== "" &&
+      o.customerName.trim() !== "Guest Customer",
   );
   const firstOrderWithPhone = customerOrdersList.find(
-    (o) => o.customerPhone && o.customerPhone.trim() !== ""
+    (o) => o.customerPhone && o.customerPhone.trim() !== "",
   );
   const firstOrderWithEmail = customerOrdersList.find(
-    (o) => o.customerEmail && o.customerEmail.trim() !== ""
+    (o) => o.customerEmail && o.customerEmail.trim() !== "",
   );
 
   const nameFromParam = decodedIdParam.startsWith("name_")
-    ? decodedIdParam.slice(5).replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+    ? decodedIdParam
+        .slice(5)
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (l) => l.toUpperCase())
     : "";
 
   const displayName =
@@ -189,19 +323,28 @@ export default function CustomerProfilePage() {
     nameFromParam ||
     "Guest Customer";
 
-  const rawPhone = customerDoc?.phone || phoneParam || firstOrderWithPhone?.customerPhone || "";
+  const rawPhone =
+    customerDoc?.phone ||
+    phoneParam ||
+    firstOrderWithPhone?.customerPhone ||
+    "";
   const formattedPhone = rawPhone
-    ? formatPhoneNumberWithCountryCode(rawPhone, customerDoc?.countryCode || storePhoneCode)
+    ? formatPhoneNumberWithCountryCode(
+        rawPhone,
+        customerDoc?.countryCode || storePhoneCode,
+      )
     : "—";
 
-  const emailDisplay = customerDoc?.email || firstOrderWithEmail?.customerEmail?.trim() || "";
+  const emailDisplay =
+    customerDoc?.email || firstOrderWithEmail?.customerEmail?.trim() || "";
 
   const initials = (() => {
     const clean = displayName.replace(/[^a-zA-Z\s]/g, "").trim();
     if (!clean) return "GC";
     const parts = clean.split(/\s+/).filter(Boolean);
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    if (parts.length === 1 && parts[0].length >= 2) return parts[0].slice(0, 2).toUpperCase();
+    if (parts.length === 1 && parts[0].length >= 2)
+      return parts[0].slice(0, 2).toUpperCase();
     return parts[0][0].toUpperCase();
   })();
 
@@ -213,13 +356,18 @@ export default function CustomerProfilePage() {
       const orderNum = (o._id || "").toLowerCase();
       const type = (o.orderType || "").toLowerCase();
       const items = (o.itemsSummary || "").toLowerCase();
-      return orderNum.includes(term) || type.includes(term) || items.includes(term);
+      return (
+        orderNum.includes(term) || type.includes(term) || items.includes(term)
+      );
     });
   }, [customerOrdersList, orderSearch]);
 
   // Real Calculated Metrics
   const totalSpend = useMemo(() => {
-    return customerOrdersList.reduce((acc, o) => acc + (o.totalAmount || 0) / 100, 0);
+    return customerOrdersList.reduce(
+      (acc, o) => acc + (o.totalAmount || 0) / 100,
+      0,
+    );
   }, [customerOrdersList]);
 
   // Extract delivery addresses from past orders as fallbacks
@@ -259,7 +407,9 @@ export default function CustomerProfilePage() {
               addr.landmark ? `Near ${addr.landmark}` : undefined,
               addr.city,
               addr.zipCode,
-            ].filter(Boolean).join(", "),
+            ]
+              .filter(Boolean)
+              .join(", "),
           });
         }
       }
@@ -267,8 +417,26 @@ export default function CustomerProfilePage() {
     return list;
   }, [customerOrdersList]);
 
-  const dbAddressCount = customerAddresses ? customerAddresses.length : 0;
-  const addressCount = Math.max(dbAddressCount, orderAddresses.length);
+  // Total unique address count (combined saved userAddresses + historical order addresses)
+  const addressCount = useMemo(() => {
+    const dbAddresses = customerAddresses || [];
+    const seen = new Set(
+      dbAddresses.map(
+        (a) =>
+          `${(a.addressLine1 || "").toLowerCase().trim().replace(/\s+/g, " ")}_${(a.city || "").toLowerCase().trim()}`,
+      ),
+    );
+
+    let count = dbAddresses.length;
+    for (const fb of orderAddresses) {
+      const key = `${(fb.addressLine1 || "").toLowerCase().trim().replace(/\s+/g, " ")}_${(fb.city || "").toLowerCase().trim()}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        count++;
+      }
+    }
+    return count;
+  }, [customerAddresses, orderAddresses]);
 
   // Most frequent order type
   const topOrderType = useMemo(() => {
@@ -299,14 +467,18 @@ export default function CustomerProfilePage() {
   }, [customerDoc, customerOrdersList]);
 
   const totalOrdersCount = customerOrdersList.length;
-  const averageOrderValue = totalOrdersCount > 0 ? totalSpend / totalOrdersCount : 0;
-  const retentionVal = totalOrdersCount > 1 ? Math.min(100, Number(((totalOrdersCount / 12) * 100).toFixed(2))) : 0;
+  const averageOrderValue =
+    totalOrdersCount > 0 ? totalSpend / totalOrdersCount : 0;
+  const retentionVal =
+    totalOrdersCount > 1
+      ? Math.min(100, Number(((totalOrdersCount / 12) * 100).toFixed(2)))
+      : 0;
 
   const isCustomerLoading = customerId
     ? customerById === undefined
     : phoneParam
-    ? customerByPhone === undefined
-    : false;
+      ? customerByPhone === undefined
+      : false;
   const isOrdersLoading = storeOrdersResponse === undefined;
   const isLoading = isCustomerLoading || isOrdersLoading;
 
@@ -343,7 +515,8 @@ export default function CustomerProfilePage() {
               </span>
               <span>›</span>
               <span className="text-stone-900 font-semibold">
-                {displayName}{formattedPhone !== "—" ? ` (${formattedPhone})` : ""}
+                {displayName}
+                {formattedPhone !== "—" ? ` (${formattedPhone})` : ""}
               </span>
             </div>
           </div>
@@ -373,7 +546,9 @@ export default function CustomerProfilePage() {
                   {emailDisplay && (
                     <>
                       {formattedPhone !== "—" && <span>•</span>}
-                      <span className="font-mono text-stone-600">{emailDisplay}</span>
+                      <span className="font-mono text-stone-600">
+                        {emailDisplay}
+                      </span>
                     </>
                   )}
                   {formattedPhone !== "—" && <span>•</span>}
@@ -402,7 +577,8 @@ export default function CustomerProfilePage() {
                 Total Spend
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
-                {currencySymbol}{formatCurrencyAmount(totalSpend, activeOrg?.country)}
+                {currencySymbol}
+                {formatCurrencyAmount(totalSpend, activeOrg?.country)}
               </span>
             </div>
 
@@ -420,7 +596,8 @@ export default function CustomerProfilePage() {
                 Average Value
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
-                {currencySymbol}{formatCurrencyAmount(averageOrderValue, activeOrg?.country)}
+                {currencySymbol}
+                {formatCurrencyAmount(averageOrderValue, activeOrg?.country)}
               </span>
             </div>
 
@@ -516,7 +693,11 @@ export default function CustomerProfilePage() {
                   First Visited
                 </span>
                 <span className="text-sm text-stone-900 mt-1">
-                  {formatStoreDate(earliestVisitDate, activeOrg?.country, storeTimezone)}
+                  {formatStoreDate(
+                    earliestVisitDate,
+                    activeOrg?.country,
+                    storeTimezone,
+                  )}
                 </span>
               </div>
 
@@ -525,7 +706,11 @@ export default function CustomerProfilePage() {
                   Customer Since
                 </span>
                 <span className="text-sm text-stone-900 mt-1">
-                  {formatStoreDate(earliestVisitDate, activeOrg?.country, storeTimezone)}
+                  {formatStoreDate(
+                    earliestVisitDate,
+                    activeOrg?.country,
+                    storeTimezone,
+                  )}
                 </span>
               </div>
             </div>
@@ -615,15 +800,22 @@ export default function CustomerProfilePage() {
                         <th className="py-3 px-4 font-semibold">Order ID</th>
                         <th className="py-3 px-4 font-semibold">Date & Time</th>
                         <th className="py-3 px-4 font-semibold">Order Type</th>
-                        <th className="py-3 px-4 font-semibold">Items Summary</th>
+                        <th className="py-3 px-4 font-semibold">
+                          Items Summary
+                        </th>
                         <th className="py-3 px-4 font-semibold">Amount</th>
-                        <th className="py-3 px-4 font-semibold text-right">Status</th>
+                        <th className="py-3 px-4 font-semibold text-right">
+                          Status
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100 text-stone-800">
                       {filteredOrders.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-stone-400 font-mono">
+                          <td
+                            colSpan={6}
+                            className="py-8 text-center text-stone-400 font-mono"
+                          >
                             No orders found for this customer.
                           </td>
                         </tr>
@@ -637,7 +829,11 @@ export default function CustomerProfilePage() {
                               #ORD-{(ord._id || "").slice(-4).toUpperCase()}
                             </td>
                             <td className="py-3.5 px-4 text-stone-600">
-                              {formatStoreDateTime(ord.createdAt, activeOrg?.country, storeTimezone)}
+                              {formatStoreDateTime(
+                                ord.createdAt,
+                                activeOrg?.country,
+                                storeTimezone,
+                              )}
                             </td>
                             <td className="py-3.5 px-4">
                               <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 font-medium border border-stone-200">
@@ -648,12 +844,18 @@ export default function CustomerProfilePage() {
                               {ord.itemsSummary || "Dine In Order Items"}
                             </td>
                             <td className="py-3.5 px-4 font-mono font-semibold text-stone-900">
-                              {currencySymbol}{formatCurrencyAmount((ord.totalAmount || 0) / 100, activeOrg?.country)}
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                (ord.totalAmount || 0) / 100,
+                                activeOrg?.country,
+                              )}
                             </td>
                             <td className="py-3.5 px-4 text-right">
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-mono text-[10px] font-bold border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                                {ord.paymentStatus === "Paid" ? "Completed" : ord.paymentStatus || "Completed"}
+                                {ord.paymentStatus === "Paid"
+                                  ? "Completed"
+                                  : ord.paymentStatus || "Completed"}
                               </span>
                             </td>
                           </tr>
@@ -675,7 +877,9 @@ export default function CustomerProfilePage() {
                   Customer Surveys Disabled / Pending
                 </h3>
                 <p className="text-xs text-stone-500 max-w-md leading-relaxed">
-                  Survey feedback responses for this customer profile are currently disabled / pending as configured. No survey records are attached.
+                  Survey feedback responses for this customer profile are
+                  currently disabled / pending as configured. No survey records
+                  are attached.
                 </p>
               </div>
             )}
@@ -696,43 +900,62 @@ export default function CustomerProfilePage() {
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-[#faf2ee] text-stone-600 font-mono text-[10px] uppercase tracking-wider border-b border-stone-200">
-                        <th className="py-3 px-4 font-semibold">Queue / Ticket No</th>
+                        <th className="py-3 px-4 font-semibold">
+                          Queue / Ticket No
+                        </th>
                         <th className="py-3 px-4 font-semibold">Type</th>
                         <th className="py-3 px-4 font-semibold">Date & Time</th>
-                        <th className="py-3 px-4 font-semibold">Party & Amenities</th>
+                        <th className="py-3 px-4 font-semibold">
+                          Party & Amenities
+                        </th>
                         <th className="py-3 px-4 font-semibold">Table</th>
-                        <th className="py-3 px-4 font-semibold text-right">Status</th>
+                        <th className="py-3 px-4 font-semibold text-right">
+                          Status
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-stone-100 text-stone-800">
                       {customerQueueList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-stone-400 font-mono">
-                            No active waitlist or reservation history found for this guest.
+                          <td
+                            colSpan={6}
+                            className="py-8 text-center text-stone-400 font-mono"
+                          >
+                            No active waitlist or reservation history found for
+                            this guest.
                           </td>
                         </tr>
                       ) : (
                         customerQueueList.map((q) => (
-                          <tr key={q._id} className="hover:bg-[#faf2ee]/40 transition-colors">
+                          <tr
+                            key={q._id}
+                            className="hover:bg-[#faf2ee]/40 transition-colors"
+                          >
                             <td className="py-3.5 px-4 font-mono font-semibold text-stone-900">
-                              {q.queueNumber || `#QN-${(q._id || "").slice(-4).toUpperCase()}`}
+                              {q.queueNumber ||
+                                `#QN-${(q._id || "").slice(-4).toUpperCase()}`}
                             </td>
                             <td className="py-3.5 px-4">
                               <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 font-medium border border-stone-200 capitalize">
                                 {q.queueType === "waitlist"
                                   ? "Waitlist"
                                   : q.queueType === "reservation"
-                                  ? "Reservation"
-                                  : q.queueType}
+                                    ? "Reservation"
+                                    : q.queueType}
                               </span>
                             </td>
                             <td className="py-3.5 px-4 text-stone-600">
-                              {formatStoreDateTime(q.reservationTime || q.createdAt, activeOrg?.country, storeTimezone)}
+                              {formatStoreDateTime(
+                                q.reservationTime || q.createdAt,
+                                activeOrg?.country,
+                                storeTimezone,
+                              )}
                             </td>
                             <td className="py-3.5 px-4">
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-semibold text-stone-900">
-                                  {q.totalGuests || 1} {q.totalGuests === 1 ? "Guest" : "Guests"}
+                                  {q.totalGuests || 1}{" "}
+                                  {q.totalGuests === 1 ? "Guest" : "Guests"}
                                 </span>
                                 <div className="flex flex-wrap gap-1">
                                   {q.kidsSeat && (
@@ -754,21 +977,26 @@ export default function CustomerProfilePage() {
                               </div>
                             </td>
                             <td className="py-3.5 px-4 font-mono text-stone-800">
-                              {q.table?.tableNumber ? `Table ${q.table.tableNumber}` : "—"}
+                              {q.table?.tableNumber
+                                ? `Table ${q.table.tableNumber}`
+                                : "—"}
                             </td>
                             <td className="py-3.5 px-4 text-right">
                               <span
                                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[10px] font-bold border ${
-                                  q.queueStatus === "arrived" || q.queueStatus === "completed"
+                                  q.queueStatus === "arrived" ||
+                                  q.queueStatus === "completed"
                                     ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                                     : q.queueStatus === "booked"
-                                    ? "bg-blue-50 text-blue-800 border-blue-200"
-                                    : q.queueStatus === "pending"
-                                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                                    : "bg-stone-100 text-stone-600 border-stone-200"
+                                      ? "bg-blue-50 text-blue-800 border-blue-200"
+                                      : q.queueStatus === "pending"
+                                        ? "bg-amber-50 text-amber-800 border-amber-200"
+                                        : "bg-stone-100 text-stone-600 border-stone-200"
                                 }`}
                               >
-                                {q.queueStatus?.replace(/_/g, " ").toUpperCase() || "PENDING"}
+                                {q.queueStatus
+                                  ?.replace(/_/g, " ")
+                                  .toUpperCase() || "PENDING"}
                               </span>
                             </td>
                           </tr>

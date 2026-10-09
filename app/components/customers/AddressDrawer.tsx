@@ -37,24 +37,35 @@ export function AddressDrawer({
 }: AddressDrawerProps) {
   const addresses = useQuery(
     api.userAddresses.getCustomerAddresses,
-    customerId ? { customerId } : "skip"
+    customerId ? { customerId } : "skip",
   );
 
-  const createAddressMutation = useMutation(api.userAddresses.createUserAddress);
-  const updateAddressMutation = useMutation(api.userAddresses.updateUserAddress);
-  const setDefaultAddressMutation = useMutation(api.userAddresses.setDefaultUserAddress);
-  const deleteAddressMutation = useMutation(api.userAddresses.deleteUserAddress);
+  const createAddressMutation = useMutation(
+    api.userAddresses.createUserAddress,
+  );
+  const updateAddressMutation = useMutation(
+    api.userAddresses.updateUserAddress,
+  );
+  const setDefaultAddressMutation = useMutation(
+    api.userAddresses.setDefaultUserAddress,
+  );
+  const deleteAddressMutation = useMutation(
+    api.userAddresses.deleteUserAddress,
+  );
 
   // Address Form States
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<Doc<"userAddresses"> | null>(null);
+  const [editingAddress, setEditingAddress] =
+    useState<Doc<"userAddresses"> | null>(null);
 
   const [addressLine1, setAddressLine1] = useState("");
   const [addressLine2, setAddressLine2] = useState("");
   const [landmark, setLandmark] = useState("");
   const [city, setCity] = useState("Ahmedabad");
   const [zipCode, setZipCode] = useState("");
-  const [addressType, setAddressType] = useState<"Home" | "Work" | "Other">("Home");
+  const [addressType, setAddressType] = useState<"Home" | "Work" | "Other">(
+    "Home",
+  );
   const [deliveryInstructions, setDeliveryInstructions] = useState("");
   const [isDefault, setIsDefault] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -66,9 +77,10 @@ export function AddressDrawer({
 
     const result = [...dbList];
     const seen = new Set(
-      dbList.map((a) =>
-        `${(a.addressLine1 || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}`
-      )
+      dbList.map(
+        (a) =>
+          `${(a.addressLine1 || "").toLowerCase().trim()}_${(a.city || "").toLowerCase().trim()}`,
+      ),
     );
 
     for (const fb of fallbackAddresses) {
@@ -117,7 +129,9 @@ export function AddressDrawer({
     setFormError(null);
 
     if (!customerId) {
-      setFormError("Guest customer record is not registered in DB yet. Save customer details first.");
+      setFormError(
+        "Guest customer record is not registered in DB yet. Save customer details first.",
+      );
       return;
     }
     if (!addressLine1.trim()) {
@@ -185,12 +199,12 @@ export function AddressDrawer({
     }
   };
 
-
-
   return (
     <div
       className={`fixed inset-0 z-50 flex justify-end bg-stone-900/40 backdrop-blur-xs transition-opacity duration-300 ${
-        isOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+        isOpen
+          ? "opacity-100 pointer-events-auto"
+          : "opacity-0 pointer-events-none"
       }`}
       onClick={onClose}
     >
@@ -204,9 +218,23 @@ export function AddressDrawer({
         <div className="px-6 pt-6 pb-4 bg-[#faf2ee]/70 border-b border-[#e9e1dd] flex items-start justify-between shrink-0">
           <div className="flex flex-col">
             <div className="flex items-center gap-1.5 text-stone-500 font-mono text-[10px] uppercase tracking-wider font-semibold">
-              <svg className="w-3.5 h-3.5 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              <svg
+                className="w-3.5 h-3.5 text-stone-600"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                />
               </svg>
               <span>CUSTOMER FOLIO</span>
             </div>
@@ -215,7 +243,9 @@ export function AddressDrawer({
             </h2>
             <p className="text-xs text-stone-500 mt-1">
               Saved delivery and billing addresses for{" "}
-              <span className="font-semibold text-stone-900">{customerName}</span>
+              <span className="font-semibold text-stone-900">
+                {customerName}
+              </span>
             </p>
           </div>
           <button
@@ -380,15 +410,21 @@ export function AddressDrawer({
             </form>
           ) : (
             <>
-              {addresses === undefined ? (
-                <div className="py-12 text-center text-xs text-stone-400 font-mono">
-                  Loading addresses...
-                </div>
-              ) : displayList.length === 0 ? (
+              {displayList.length === 0 ? (
                 <div className="p-8 text-center bg-white rounded-2xl border border-stone-200/80 shadow-2xs">
                   <div className="w-12 h-12 rounded-full bg-[#faf2ee] flex items-center justify-center text-stone-500 mx-auto mb-3">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                      />
                     </svg>
                   </div>
                   <h3 className="font-serif text-base text-stone-800 font-normal">
@@ -416,17 +452,51 @@ export function AddressDrawer({
                         <div className="flex items-center gap-2">
                           <span className="text-stone-700">
                             {typeLabel === "Work" ? (
-                              <svg className="w-4 h-4 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                              <svg
+                                className="w-4 h-4 text-stone-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                                />
                               </svg>
                             ) : typeLabel === "Other" ? (
-                              <svg className="w-4 h-4 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <svg
+                                className="w-4 h-4 text-stone-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
                               </svg>
                             ) : (
-                              <svg className="w-4 h-4 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+                              <svg
+                                className="w-4 h-4 text-stone-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                                strokeWidth={2}
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                                />
                               </svg>
                             )}
                           </span>
@@ -455,7 +525,8 @@ export function AddressDrawer({
                             }`}
                         </p>
                         <p className="font-mono text-stone-500 text-xs mt-0.5">
-                          {addr.city}, {addr.state || "Gujarat"} — {addr.zipCode}
+                          {addr.city}, {addr.state || "Gujarat"} —{" "}
+                          {addr.zipCode}
                         </p>
                       </div>
 
@@ -500,19 +571,6 @@ export function AddressDrawer({
                   );
                 })
               )}
-
-              {/* Add New Address Button */}
-              <button
-                type="button"
-                onClick={handleOpenAdd}
-                className="w-full py-3 rounded-2xl bg-[#faf2ee] border border-[#e9e1dd] text-stone-700 font-medium text-xs hover:bg-[#eee7e3] hover:text-stone-900 flex items-center justify-center gap-2 transition-colors mt-1 cursor-pointer"
-              >
-                <svg className="w-4 h-4 text-stone-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                <span>Add New Address</span>
-              </button>
             </>
           )}
         </div>
@@ -531,4 +589,3 @@ export function AddressDrawer({
     </div>
   );
 }
-

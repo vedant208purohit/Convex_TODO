@@ -551,14 +551,7 @@ export function OrganizationFeatures() {
           />
         )}
 
-        {/* Sync Status Footer Banner */}
-        <div className="mt-8 pt-4 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#8a7e75] font-sans pb-4">
-          <span className="flex items-center gap-1.5">
-            <VerifiedIcon className="w-4 h-4 text-emerald-600" />
-            <span>Synced with PREST Convex reactive cluster (Node #01)</span>
-          </span>
-          <span>Mahendra Suthar (Admin Access)</span>
-        </div>
+
       </div>
 
       {/* Floating Standard Toast Component (Matching Menu page) */}

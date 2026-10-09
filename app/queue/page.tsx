@@ -340,17 +340,28 @@ export default function QueueDashboardPage() {
     }
   }
 
+  function getCleanPhoneNumber(phone: string, notes?: string): string {
+    if (notes) {
+      const parsed = parseCustomerInfo(notes, phone);
+      if (parsed.subtitle) return parsed.subtitle;
+    }
+    if (phone && !phone.startsWith("user_")) {
+      return phone;
+    }
+    return "";
+  }
+
   // Open Call Modal
-  function handleOpenCallModal(name: string, phone: string) {
+  function handleOpenCallModal(name: string, phone: string, notes?: string) {
     setContactName(name);
-    setContactPhone(phone);
+    setContactPhone(getCleanPhoneNumber(phone, notes));
     setIsCallModalOpen(true);
   }
 
   // Open Notify SMS Modal
-  function handleOpenNotifyModal(name: string, phone: string) {
+  function handleOpenNotifyModal(name: string, phone: string, notes?: string) {
     setContactName(name);
-    setContactPhone(phone);
+    setContactPhone(getCleanPhoneNumber(phone, notes));
     setIsNotifyModalOpen(true);
   }
 
@@ -539,19 +550,12 @@ export default function QueueDashboardPage() {
   };
 
   return (
-    <PosShell title="Queue & Host Folio" subtitle="Service Floor • Host Stand">
+    <PosShell title="Queue & Host Folio">
         <div className="flex-1 min-h-0 flex flex-col bg-[#fff8f5] text-[#1e1b19] overflow-y-scroll [scrollbar-gutter:stable]">
           {/* Operational Header Section */}
         <div className="px-8 pt-6 pb-4 bg-[#fff8f5] flex flex-col gap-4 border-b border-[#eee7e3]">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="text-xs text-[#645d58] uppercase tracking-widest font-mono">
-                  Service Floor • Host Stand
-                </span>
-                <span className="w-1 h-1 rounded-full bg-[#7f7570]" />
-                <span className="text-xs text-[#4d4541] font-medium">Station #02</span>
-              </div>
               <h1 className="text-3xl font-serif text-[#1e1b19] tracking-tight">Queue & Host Folio</h1>
             </div>
 
@@ -957,7 +961,7 @@ export default function QueueDashboardPage() {
                                         onClick={() =>
                                           handleOpenCallModal(
                                             item.notes ? customer.name : "Guest",
-                                            item.userId || "+91 9825000000"
+                                            item.userId || "", item.notes
                                           )
                                         }
                                         className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f4ece8] hover:bg-[#e9e1dd] text-[#1e1b19] transition-colors"
@@ -970,7 +974,7 @@ export default function QueueDashboardPage() {
                                         onClick={() =>
                                           handleOpenNotifyModal(
                                             item.notes ? customer.name : "Guest",
-                                            item.userId || "+91 9825000000"
+                                            item.userId || "", item.notes
                                           )
                                         }
                                         className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f4ece8] hover:bg-[#e9e1dd] text-[#1e1b19] transition-colors"
@@ -1231,7 +1235,7 @@ export default function QueueDashboardPage() {
                                         onClick={() =>
                                           handleOpenCallModal(
                                             item.notes ? item.notes.split("-")[0] : "Guest",
-                                            item.userId || "+91 9825000000"
+                                            item.userId || "", item.notes
                                           )
                                         }
                                         className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f4ece8] hover:bg-[#e9e1dd] text-[#1e1b19]"
@@ -1243,7 +1247,7 @@ export default function QueueDashboardPage() {
                                         onClick={() =>
                                           handleOpenNotifyModal(
                                             item.notes ? item.notes.split("-")[0] : "Guest",
-                                            item.userId || "+91 9825000000"
+                                            item.userId || "", item.notes
                                           )
                                         }
                                         className="w-8 h-8 rounded-full flex items-center justify-center bg-[#f4ece8] hover:bg-[#e9e1dd] text-[#1e1b19]"

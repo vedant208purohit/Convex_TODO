@@ -16,6 +16,7 @@ import { OrganizationQueueSettings } from "../components/OrganizationQueueSettin
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrganizationLiveScreens } from "../components/OrganizationLiveScreens";
 import { OrganizationQrManagement } from "../components/OrganizationQrManagement";
 
 // ==========================================
@@ -477,7 +478,12 @@ function SettingsContent() {
                   );
                 }
 
-                const isComingSoon = tab.id === "queue" || tab.id === "digitalStore" || tab.id === "branding";
+                const isComingSoon =
+                  tab.id === "queue" ||
+                  tab.id === "printers" ||
+                  tab.id === "liveScreens" ||
+                  tab.id === "digitalStore" ||
+                  tab.id === "branding";
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
@@ -516,7 +522,7 @@ function SettingsContent() {
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-5 flex flex-col h-full min-h-0 overflow-hidden">
             {activeTab === "organization" && <OrganizationSettings />}
             {activeTab === "queue" && <OrganizationQueueSettings />}
-            {/* {activeTab === "printers" && <OrganizationPrinters />} */}
+            {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {/* {activeTab === "waiters" && <OrganizationWaiters />} */}
@@ -542,17 +548,19 @@ function SettingsContent() {
                 </div>
               )
             )}
+            {activeTab === "liveScreens" && <OrganizationLiveScreens />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
               activeTab !== "queue" &&
-              // activeTab !== "printers" &&
+              activeTab !== "printers" &&
               activeTab !== "features" &&
               activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
               // activeTab !== "waiters" &&
               activeTab !== "payment" &&
               activeTab !== "tables" &&
+              activeTab !== "liveScreens" &&
               activeTab !== "digitalStore" &&
               activeTab !== "branding" && (
                 <div className="py-12 text-center">
