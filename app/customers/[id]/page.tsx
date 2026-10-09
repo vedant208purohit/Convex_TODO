@@ -836,9 +836,27 @@ export default function CustomerProfilePage() {
                               )}
                             </td>
                             <td className="py-3.5 px-4">
-                              <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 font-medium border border-stone-200">
-                                {ord.orderType || "Dine In"}
-                              </span>
+                              {ord.orderType === "ScheduledDelivery" ||
+                              ord.orderType === "ScheduledPickup" ||
+                              (ord as any).scheduledDeliveryDate ? (
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 font-semibold border border-amber-200 text-[11px]">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                  {ord.orderType === "ScheduledDelivery"
+                                    ? "Scheduled Delivery"
+                                    : ord.orderType === "ScheduledPickup"
+                                    ? "Scheduled Pickup"
+                                    : ord.orderType}
+                                  {((ord as any).scheduledDeliveryDate || (ord as any).scheduledDeliveryTime) && (
+                                    <span className="text-[10px] text-amber-700 font-normal">
+                                      ({(ord as any).scheduledDeliveryDate || ""} {(ord as any).scheduledDeliveryTime || ""})
+                                    </span>
+                                  )}
+                                </span>
+                              ) : (
+                                <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 font-medium border border-stone-200">
+                                  {ord.orderType || "Dine In"}
+                                </span>
+                              )}
                             </td>
                             <td className="py-3.5 px-4 max-w-xs truncate text-stone-700">
                               {ord.itemsSummary || "Dine In Order Items"}
