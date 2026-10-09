@@ -83,7 +83,7 @@ export function AddCustomerModal({
             <h2 className="font-serif text-xl font-medium text-stone-900">
               New Customer Registration
             </h2>
-            <p className="text-xs text-stone-500 font-mono uppercase tracking-wider mt-0.5">
+            <p className="text-xs text-stone-500 uppercase tracking-wider mt-0.5">
               Patronage Registry
             </p>
           </div>
@@ -138,7 +138,7 @@ export function AddCustomerModal({
               <select
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value)}
-                className="bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-2.5 py-2 text-xs font-mono font-medium text-stone-900 outline-none shrink-0"
+                className="bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-2.5 py-2 text-xs font-medium text-stone-900 outline-none shrink-0"
               >
                 {COUNTRY_DIAL_OPTIONS.map((opt) => (
                   <option key={opt.code} value={opt.code}>
@@ -152,7 +152,7 @@ export function AddCustomerModal({
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 placeholder="e.g. 98989 89898"
-                className="flex-1 bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-3 py-2 text-sm font-mono text-stone-900 outline-none transition-colors"
+                className="flex-1 bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-3 py-2 text-sm text-stone-900 outline-none transition-colors"
               />
             </div>
           </div>

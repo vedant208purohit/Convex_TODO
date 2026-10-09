@@ -549,7 +549,7 @@ export default function CustomersPage() {
                 {/* Filter Dropdown */}
                 <div className="inline-flex items-center bg-white px-3.5 py-2 rounded-full border border-stone-200 shadow-xs text-stone-800 text-xs">
                   <span className="text-stone-400 mr-2">📅</span>
-                  <span className="font-mono text-[10px] text-stone-500 uppercase tracking-wider mr-1">
+                  <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mr-1">
                     Filter:
                   </span>
                   <select
@@ -573,7 +573,7 @@ export default function CustomersPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                     Total Customers
                   </span>
                   <span className="text-stone-400">👥</span>
@@ -590,7 +590,7 @@ export default function CustomersPage() {
 
               <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                     Average Spend
                   </span>
                   <span className="text-stone-400">💳</span>
@@ -604,7 +604,7 @@ export default function CustomersPage() {
 
               <div className="bg-white p-5 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                     Repeat Customer Rate
                   </span>
                   <span className="text-stone-400">🔄</span>
@@ -623,7 +623,7 @@ export default function CustomersPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="bg-[#faf2ee] text-stone-600 font-mono text-[10px] uppercase tracking-wider border-b border-stone-200 select-none">
+                  <tr className="bg-[#faf2ee] text-stone-600 text-[11px] font-semibold uppercase tracking-wider border-b border-stone-200 select-none">
                     <th
                       className="py-3 px-5 font-semibold cursor-pointer hover:text-stone-900"
                       onClick={() => handleSortToggle("name")}
@@ -685,7 +685,7 @@ export default function CustomersPage() {
                 <tbody className="divide-y divide-stone-100 text-xs text-stone-800">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={8} className="py-12 text-center text-stone-400 font-mono">
+                      <td colSpan={8} className="py-12 text-center text-stone-400 text-xs">
                         Loading customer database...
                       </td>
                     </tr>
@@ -748,7 +748,7 @@ export default function CustomersPage() {
                                 <span className="font-medium text-sm text-stone-900 group-hover:text-black">
                                   {cust.name}
                                 </span>
-                                <span className="text-xs text-stone-500 font-mono tracking-tight">
+                                <span className="text-xs text-stone-500 tracking-tight">
                                   {formattedPhone}
                                 </span>
                               </div>
@@ -756,7 +756,7 @@ export default function CustomersPage() {
                           </td>
 
                           {/* Total Orders */}
-                          <td className="py-4 px-5 font-mono font-medium text-stone-900">
+                          <td className="py-4 px-5 text-sm font-medium text-stone-900">
                             {cust.totalOrders > 0 ? `#${cust.totalOrders}` : "—"}
                           </td>
 
@@ -767,17 +767,17 @@ export default function CustomersPage() {
                                 <span className="text-xs text-stone-900 font-medium">
                                   {cust.lastOrderDisplay}
                                 </span>
-                                <span className="font-mono text-[10px] text-stone-500">
+                                <span className="text-[10px] text-stone-500 font-medium">
                                   {cust.lastOrderNumber}
                                 </span>
                               </div>
                             ) : (
-                              <span className="text-stone-400 font-mono">—</span>
+                              <span className="text-stone-400">—</span>
                             )}
                           </td>
 
                           {/* Total Spend */}
-                          <td className="py-4 px-5 font-mono font-semibold text-stone-900">
+                          <td className="py-4 px-5 text-sm font-semibold text-stone-900">
                             {cust.totalSpend > 0
                               ? `${currencySymbol}${formatCurrencyAmount(cust.totalSpend, activeOrg?.country)}`
                               : "—"}
@@ -786,11 +786,11 @@ export default function CustomersPage() {
                           {/* Retention */}
                           <td className="py-4 px-5">
                             {cust.retentionPercent > 0 ? (
-                              <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 font-mono text-[11px] font-medium border border-stone-200">
+                              <span className="px-2.5 py-1 rounded-full bg-stone-100 text-stone-800 text-[11px] font-medium border border-stone-200">
                                 {cust.retentionPercent}%
                               </span>
                             ) : (
-                              <span className="text-stone-400 font-mono">—</span>
+                              <span className="text-stone-400">—</span>
                             )}
                           </td>
 
@@ -802,12 +802,12 @@ export default function CustomersPage() {
                                 {cust.averageOrderSource}
                               </span>
                             ) : (
-                              <span className="text-stone-400 font-mono">—</span>
+                              <span className="text-stone-400">—</span>
                             )}
                           </td>
 
                           {/* Average Order Value */}
-                          <td className="py-4 px-5 font-mono text-stone-700">
+                          <td className="py-4 px-5 text-sm font-medium text-stone-700">
                             {cust.averageOrderValue > 0
                               ? `${currencySymbol}${formatCurrencyAmount(cust.averageOrderValue, activeOrg?.country)}`
                               : "—"}
@@ -855,7 +855,7 @@ export default function CustomersPage() {
                   customers
                 </span>
 
-                <div className="flex items-center gap-1 font-mono text-xs">
+                <div className="flex items-center gap-1 text-xs font-medium">
                   <button
                     type="button"
                     disabled={currentPage === 1}

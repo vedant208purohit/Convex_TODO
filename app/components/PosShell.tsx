@@ -169,6 +169,7 @@ type NavItem = {
   icon: ReactNode;
   disabled?: boolean;
   disabledTooltip?: string;
+  badge?: string;
 };
 
 const navItems: NavItem[] = [
@@ -216,6 +217,7 @@ const navItems: NavItem[] = [
     href: "/kds",
     label: "KDS",
     icon: <KdsIcon className="w-4 h-4" />,
+    badge: "Coming Soon",
   },
   {
     href: "/qr-codes",
@@ -251,6 +253,7 @@ function NavLink({
   href,
   label,
   icon,
+  badge,
   isCollapsed,
   disabled,
   disabledTooltip,
@@ -297,8 +300,13 @@ function NavLink({
           </Link>
         )}
         <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
-          <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
-            {label}
+          <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap flex items-center gap-1.5">
+            <span>{label}</span>
+            {badge && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] rounded-full">
+                {badge}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -311,8 +319,16 @@ function NavLink({
         className="flex items-center gap-3 px-6 py-3 text-[15px] opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
         title={disabledTooltip || "Disabled in settings"}
       >
-        <span className="w-5 text-center flex items-center justify-center">{icon}</span>
-        <span className="font-medium text-[15px]">{label}</span>
+        <span className="w-5 text-center flex items-center justify-center shrink-0">{icon}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-medium text-[15px] shrink-0">{label}</span>
+          {badge && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+              {badge}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
@@ -326,8 +342,16 @@ function NavLink({
           : "text-[#5e5e5e] hover:bg-[#f1edec]"
       }`}
     >
-      <span className="w-5 text-center flex items-center justify-center">{icon}</span>
-      <span className="font-medium text-[15px]">{label}</span>
+      <span className="w-5 text-center flex items-center justify-center shrink-0">{icon}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="font-medium text-[15px] shrink-0">{label}</span>
+        {badge && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+            {badge}
+          </span>
+        )}
+      </div>
     </Link>
   );
 }

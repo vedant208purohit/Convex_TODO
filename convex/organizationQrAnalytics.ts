@@ -44,11 +44,10 @@ export function computeOrderNetRevenue(order: {
     return 0;
   }
   if (order.paymentStatus === "Partially Refunded") {
-    const netPaise = Math.max(0, (order.totalAmount || 0) - (order.refundAmount || 0));
-    return netPaise / 100;
+    return Math.max(0, (order.totalAmount || 0) - (order.refundAmount || 0));
   }
   if (order.paymentStatus === "Paid") {
-    return (order.totalAmount || 0) / 100;
+    return order.totalAmount || 0;
   }
   return 0;
 }
@@ -172,18 +171,35 @@ export const getIndividualAnalytics = query({
       if ((s as any).sessionId) qrSessionIds.add(String((s as any).sessionId));
     }
 
-    // 4. Fetch orders attributed to QR, table, or QR session
+    // 4. Fetch orders attributed to QR, table, or QR session (Ignore POS cashier & pre-existing orders)
     const allOrders = await ctx.db.query("orders").collect();
+    const qrCreationTime = (qr as any).createdAt ?? (qr as any)._creationTime ?? 0;
     const validOrders = allOrders.filter(
-      (o: any) =>
-        (qrIdsToMatch.has(String(o.qrId || "")) ||
-          (qr.tableId && o.tableId === qr.tableId) ||
-          (o.sessionId && qrSessionIds.has(String(o.sessionId)))) &&
-        !o.isRejected &&
-        o.paymentStatus !== "Refunded" &&
-        o.paymentStatus !== "Failed" &&
-        o.createdAt >= startTs &&
-        o.createdAt <= endTs,
+      (o: any) => {
+        if (o.isRejected || o.paymentStatus === "Refunded" || o.paymentStatus === "Failed") return false;
+        if (o.paymentStatus !== "Paid" && !o.isCompleted) return false;
+        if (o.createdAt < startTs || o.createdAt > endTs) return false;
+
+        // 1. Directly placed via this QR code
+        if (o.qrId && qrIdsToMatch.has(String(o.qrId))) return true;
+
+        // 2. Placed during a customer QR ordering session for this QR code
+        if (o.sessionId && qrSessionIds.has(String(o.sessionId))) return true;
+
+        // 3. Fallback: Placed for this table, BUT must be a QR/digital order AND placed AFTER QR was created
+        if (qr.tableId && o.tableId === qr.tableId) {
+          const src = (o.orderSource || "").toUpperCase();
+          const isDigitalOrQr = src.includes("QR") || src === "PREST-ONLINE" || src === "ONLINE" || Boolean(o.sessionId);
+          const isPosCounter = src === "PREST-CASHIER" || src === "PREST-CAPTAIN" || src === "POS";
+          const wasCreatedAfterQr = o.createdAt >= (qrCreationTime - 60000);
+
+          if (isDigitalOrQr && !isPosCounter && wasCreatedAfterQr) {
+            return true;
+          }
+        }
+
+        return false;
+      },
     );
 
     const rawCarts = await ctx.db
@@ -196,32 +212,49 @@ export const getIndividualAnalytics = query({
       return qrIdsToMatch.has(cid) || (qr.tableId && c.tableId === qr.tableId);
     });
 
+    // Map any raw session reference (_id or sessionId) to canonical key to avoid double counting
+    const sessionCanonicalKey = (rawId: string) => {
+      for (const s of allSessions) {
+        if (String(s._id) === rawId || (s as any).sessionId === rawId) {
+          return (s as any).sessionId || String(s._id);
+        }
+      }
+      return rawId;
+    };
+
     const cartSessionSet = new Set<string>();
 
     for (const c of allCarts) {
+      const cartTime = (c as any).updatedAt ?? c.createdAt ?? 0;
       if (
         (c.hasItems || (c.itemCount ?? 0) > 0) &&
-        c.createdAt >= startTs &&
-        c.createdAt <= endTs
+        ((c.createdAt >= startTs && c.createdAt <= endTs) ||
+          (cartTime >= startTs && cartTime <= endTs))
       ) {
-        if (c.sessionId) cartSessionSet.add(String(c.sessionId));
+        if (c.sessionId) {
+          cartSessionSet.add(sessionCanonicalKey(String(c.sessionId)));
+        } else if ((c as any)._id) {
+          cartSessionSet.add(sessionCanonicalKey(String((c as any)._id)));
+        }
       }
     }
 
     for (const s of allSessions) {
       const st = (s as any).startedAt ?? (s as any).firstScanAt ?? (s as any).createdAt ?? 0;
+      const actTime = (s as any).lastActivityAt ?? (s as any).updatedAt ?? st;
       if (
         ((s as any).cartItemCount ?? 0) > 0 &&
-        st >= startTs &&
-        st <= endTs
+        ((st >= startTs && st <= endTs) || (actTime >= startTs && actTime <= endTs))
       ) {
-        cartSessionSet.add(String(s._id));
-        if ((s as any).sessionId) cartSessionSet.add(String((s as any).sessionId));
+        cartSessionSet.add(sessionCanonicalKey(String(s._id)));
+        if ((s as any).sessionId) {
+          cartSessionSet.add(sessionCanonicalKey(String((s as any).sessionId)));
+        }
       }
     }
 
     const untrackedOrdersCount = validOrders.filter(
-      (o) => !o.sessionId || !cartSessionSet.has(String(o.sessionId)),
+      (o) => !o.sessionId || !cartSessionSet.has(sessionCanonicalKey(String(o.sessionId))),
     ).length;
 
     const carts = Math.max(cartSessionSet.size + untrackedOrdersCount, validOrders.length);
@@ -253,7 +286,7 @@ export const getIndividualAnalytics = query({
         orders: hourlyMap[hour],
       }));
 
-    // 6. Derive Peak Time string (e.g., "7 PM – 9 PM")
+    // 6. Derive Peak Time string (Standard 1-hour interval matching hourly chart, e.g., "1 PM – 2 PM")
     let peakHour = -1;
     let maxHourOrders = 0;
     for (let h = 0; h < 24; h++) {
@@ -265,9 +298,15 @@ export const getIndividualAnalytics = query({
 
     let peakTime = "N/A";
     if (peakHour >= 0 && maxHourOrders > 0) {
-      const startPeriod = peakHour >= 12 ? (peakHour === 12 ? "12 PM" : `${peakHour - 12} PM`) : (peakHour === 0 ? "12 AM" : `${peakHour} AM`);
-      const endHour = (peakHour + 2) % 24;
-      const endPeriod = endHour >= 12 ? (endHour === 12 ? "12 PM" : `${endHour - 12} PM`) : (endHour === 0 ? "12 AM" : `${endHour} AM`);
+      const formatHour = (hour: number) => {
+        if (hour === 0) return "12 AM";
+        if (hour < 12) return `${hour} AM`;
+        if (hour === 12) return "12 PM";
+        return `${hour - 12} PM`;
+      };
+      const startPeriod = formatHour(peakHour);
+      const endHour = (peakHour + 1) % 24;
+      const endPeriod = formatHour(endHour);
       peakTime = `${startPeriod} – ${endPeriod}`;
     }
 
@@ -472,20 +511,33 @@ export const getOverallPerformance = query({
         if ((s as any).sessionId) sessionIdsForQr.add(String((s as any).sessionId));
       }
 
+      const qrCreationTime = (qr as any).createdAt ?? (qr as any)._creationTime ?? 0;
       const attributedOrders = (
         await ctx.db
           .query("orders")
           .collect()
       ).filter(
-        (o: any) =>
-          (o.qrId === qr._id ||
-            (qr.tableId && o.tableId === qr.tableId) ||
-            (o.sessionId && sessionIdsForQr.has(String(o.sessionId)))) &&
-          !o.isRejected &&
-          o.paymentStatus !== "Refunded" &&
-          o.paymentStatus !== "Failed" &&
-          o.createdAt >= startTs &&
-          o.createdAt <= endTs,
+        (o: any) => {
+          if (o.isRejected || o.paymentStatus === "Refunded" || o.paymentStatus === "Failed") return false;
+          if (o.paymentStatus !== "Paid" && !o.isCompleted) return false;
+          if (o.createdAt < startTs || o.createdAt > endTs) return false;
+
+          if (o.qrId === qr._id) return true;
+          if (o.sessionId && sessionIdsForQr.has(String(o.sessionId))) return true;
+
+          if (qr.tableId && o.tableId === qr.tableId) {
+            const src = (o.orderSource || "").toUpperCase();
+            const isDigitalOrQr = src.includes("QR") || src === "PREST-ONLINE" || src === "ONLINE" || Boolean(o.sessionId);
+            const isPosCounter = src === "PREST-CASHIER" || src === "PREST-CAPTAIN" || src === "POS";
+            const wasCreatedAfterQr = o.createdAt >= (qrCreationTime - 60000);
+
+            if (isDigitalOrQr && !isPosCounter && wasCreatedAfterQr) {
+              return true;
+            }
+          }
+
+          return false;
+        },
       );
 
       const orders = attributedOrders.length;

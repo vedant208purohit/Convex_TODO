@@ -63,6 +63,7 @@ interface OrgFormData {
 
 import {
   COUNTRIES_MASTER,
+  getCountryMaster,
   getStatesForCountry,
   getCurrencyForCountry,
   getTimezoneForCountry,
@@ -1475,22 +1476,27 @@ export function OrganizationSettings() {
                     <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
                       Country*
                     </label>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
-                      Read-only
-                    </span>
                   </div>
                   <select
                     value={formData.country || "India"}
-                    disabled
+                    onChange={(e) => {
+                      const newCountry = e.target.value;
+                      updateField("country", newCountry);
+                      const master = getCountryMaster(newCountry);
+                      if (master) {
+                        updateField("phoneCountryCode", master.phoneCode);
+                        updateField("defaultCurrency", master.currency.code);
+                        updateField("defaultCurrencySymbol", master.currency.symbol);
+                        updateField("organizationTimeZone", master.defaultTimezone);
+                      }
+                    }}
                     style={{
-                      backgroundColor: "#f5efeb",
-                      color: "#6f655e",
                       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundPosition: "right 1rem center",
                       backgroundRepeat: "no-repeat",
                       backgroundSize: "1.5em 1.5em"
                     }}
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-3 pr-10 text-sm text-[#1f1a17] font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-stone-900"
                   >
                     {COUNTRY_OPTIONS.map((c) => (
                       <option key={c} value={c}>

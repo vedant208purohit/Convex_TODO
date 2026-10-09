@@ -130,10 +130,10 @@ function CashierPosContent() {
     return orgs[0];
   }, [orgs]);
 
-  // Dynamic Country Dial Code resolved from Store Organization Country
+  // Dynamic Country Dial Code resolved from Store Organization Country via countries.ts
   const defaultOrgCountryCode = useMemo(() => {
-    return getPhoneCodeForCountry(activeOrg?.country || "India");
-  }, [activeOrg?.country]);
+    return (activeOrg as any)?.phoneCountryCode || (activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+1");
+  }, [activeOrg]);
 
   // 2. Query Multi-Menu Data & Categories
   const [selectedMenuId, setSelectedMenuId] = useState<string>("all");
@@ -169,13 +169,9 @@ function CashierPosContent() {
     activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : undefined) ||
-    storeTaxSettings?.currencySymbol ||
-    "$";
+  const currencySymbol = useMemo(() => {
+    return activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country)?.symbol : "$") || "$";
+  }, [activeOrg]);
 
   // 4. Query Tables, Staff (Employees), Customers, Payment Modes, and Printers
   const tables = useQuery(api.organizationTables.list, {});
@@ -288,6 +284,19 @@ function CashierPosContent() {
       specialNotes: "",
     },
   ]);
+
+  // Sync active cart phone country code with store organization default
+  useEffect(() => {
+    if (!defaultOrgCountryCode) return;
+    setCartTabs((prev) =>
+      prev.map((c) => {
+        if (!c.customerCountryCode || (!c.customerPhone && c.customerCountryCode !== defaultOrgCountryCode)) {
+          return { ...c, customerCountryCode: defaultOrgCountryCode };
+        }
+        return c;
+      })
+    );
+  }, [defaultOrgCountryCode]);
 
   const [activeCartId, setActiveCartId] = useState<string>(() => {
     if (typeof window !== "undefined") {

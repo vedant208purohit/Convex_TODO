@@ -4,6 +4,7 @@ import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { DynamicQrCode } from "./DynamicQrCode";
+import { formatCurrencyAmount, getCurrencyForCountry } from "@/lib/constants/countries";
 
 interface TableItem {
   id: string;
@@ -18,11 +19,87 @@ interface TableItem {
   avgDwellMinutes?: number;
 }
 
+// Resolves store operational hour window from weekly schedule
+function parseOperationalHourRange(operationTiming: any, activeHours?: number[]) {
+  let minHour = 24;
+  let maxHour = -1;
+
+  const parseH = (str?: string): number | null => {
+    if (!str || typeof str !== "string") return null;
+    const clean = str.trim();
+    if (clean.includes("T")) {
+      const timePart = clean.split("T")[1];
+      const h = parseInt(timePart.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    if (clean.includes(":")) {
+      const h = parseInt(clean.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    const h = parseInt(clean, 10);
+    return isNaN(h) ? null : h;
+  };
+
+  if (operationTiming && typeof operationTiming === "object") {
+    for (const key of Object.keys(operationTiming)) {
+      const day = operationTiming[key];
+      if (!day || typeof day !== "object") continue;
+      const isActive = day.active ?? day.is_open ?? true;
+      if (!isActive) continue;
+
+      if (day.is_open_all_day) {
+        minHour = Math.min(minHour, 0);
+        maxHour = Math.max(maxHour, 23);
+        continue;
+      }
+
+      if (day.open) {
+        const oh = parseH(day.open);
+        if (oh !== null) minHour = Math.min(minHour, oh);
+      }
+      if (day.close) {
+        const ch = parseH(day.close);
+        if (ch !== null) maxHour = Math.max(maxHour, Math.min(23, ch));
+      }
+
+      if (Array.isArray(day.hours)) {
+        for (const slot of day.hours) {
+          if (!slot) continue;
+          const sh = parseH(slot.start_time || slot.open || slot.start);
+          const eh = parseH(slot.end_time || slot.close || slot.end);
+          if (sh !== null) minHour = Math.min(minHour, sh);
+          if (eh !== null) maxHour = Math.max(maxHour, Math.min(23, eh));
+        }
+      }
+    }
+  }
+
+  if (minHour > maxHour) {
+    minHour = 10;
+    maxHour = 23;
+  }
+
+  if (activeHours && activeHours.length > 0) {
+    for (const h of activeHours) {
+      if (typeof h === "number" && h >= 0 && h <= 23) {
+        minHour = Math.min(minHour, h);
+        maxHour = Math.max(maxHour, h);
+      }
+    }
+  }
+
+  minHour = Math.max(0, Math.min(23, minHour));
+  maxHour = Math.max(minHour, Math.min(23, maxHour));
+
+  return { startHour: minHour, endHour: maxHour };
+}
+
 interface TableQrAnalyticsDetailProps {
   table: TableItem;
   storeSlug: string;
   onBack: () => void;
   showToast: (msg: string) => void;
+  activeOrg?: any;
 }
 
 // Icons
@@ -144,7 +221,13 @@ export function TableQrAnalyticsDetail({
   storeSlug,
   onBack,
   showToast,
+  activeOrg: passedActiveOrg,
 }: TableQrAnalyticsDetailProps) {
+  const orgList = useQuery(api.organizations.list);
+  const activeOrg = passedActiveOrg || (orgList && orgList.length > 0 ? orgList[0] : null);
+  const currencySymbol = useMemo(() => {
+    return activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country)?.symbol : "$") || "$";
+  }, [activeOrg]);
   // Applied Date Filter
   const [appliedPreset, setAppliedPreset] = useState<string>("Today");
   const [appliedStartDate, setAppliedStartDate] = useState<Date>(() => getPresetDateRange("Today").start);
@@ -336,38 +419,42 @@ export function TableQrAnalyticsDetail({
     };
   }, [rawAnalytics, table]);
 
-  // Dynamic Store Operating Hours (2-Hour Interval Steps to prevent label crowding)
+  // Dynamic Store Operating Hours based on actual operational schedule
   const hourlyData = useMemo(() => {
-    const hours = [
-      { label: "12A", hourStart: 0, hourEnd: 1 },
-      { label: "2A", hourStart: 2, hourEnd: 3 },
-      { label: "4A", hourStart: 4, hourEnd: 5 },
-      { label: "6A", hourStart: 6, hourEnd: 7 },
-      { label: "8A", hourStart: 8, hourEnd: 9 },
-      { label: "10A", hourStart: 10, hourEnd: 11 },
-      { label: "12P", hourStart: 12, hourEnd: 13 },
-      { label: "2P", hourStart: 14, hourEnd: 15 },
-      { label: "4P", hourStart: 16, hourEnd: 17 },
-      { label: "6P", hourStart: 18, hourEnd: 19 },
-      { label: "8P", hourStart: 20, hourEnd: 21 },
-      { label: "10P", hourStart: 22, hourEnd: 23 },
-    ];
-
     const map: Record<number, number> = {};
+    const activeHours: number[] = [];
     if (metrics.ordersByTime && metrics.ordersByTime.length > 0) {
       metrics.ordersByTime.forEach((item: any) => {
         map[item.hour] = item.orders;
+        if (item.orders > 0) activeHours.push(item.hour);
       });
     }
 
+    const { startHour, endHour } = parseOperationalHourRange(
+      activeOrg?.operationTiming,
+      activeHours,
+    );
+
+    const formatHourLabel = (h: number): string => {
+      if (h === 0) return "12A";
+      if (h < 12) return `${h}A`;
+      if (h === 12) return "12P";
+      return `${h - 12}P`;
+    };
+
+    const hourList: Array<{ label: string; hour: number }> = [];
+    for (let h = startHour; h <= endHour; h++) {
+      hourList.push({ label: formatHourLabel(h), hour: h });
+    }
+
     let maxVal = 0;
-    hours.forEach((h) => {
-      const count = (map[h.hourStart] || 0) + (map[h.hourEnd] || 0);
+    hourList.forEach((h) => {
+      const count = map[h.hour] || 0;
       if (count > maxVal) maxVal = count;
     });
 
-    return hours.map((h) => {
-      const count = (map[h.hourStart] || 0) + (map[h.hourEnd] || 0);
+    return hourList.map((h) => {
+      const count = map[h.hour] || 0;
       const height = maxVal > 0 && count > 0 ? `${Math.round((count / maxVal) * 100)}%` : "4%";
       const isPeak = maxVal > 0 && count === maxVal;
       return {
@@ -377,7 +464,7 @@ export function TableQrAnalyticsDetail({
         isPeak,
       };
     });
-  }, [metrics.ordersByTime]);
+  }, [metrics.ordersByTime, activeOrg?.operationTiming]);
 
   const renderMonthCalendar = (
     year: number,
@@ -719,7 +806,7 @@ export function TableQrAnalyticsDetail({
           </div>
           <div className="mt-3 flex flex-col">
             <span className="font-garamond text-3xl sm:text-4xl font-normal text-[#141010] tracking-tight">
-              ₹{metrics.revenue.toLocaleString("en-IN")}
+              {currencySymbol}{formatCurrencyAmount(metrics.revenue, activeOrg?.country)}
             </span>
             <span className="text-xs text-[#5e5e5e] font-medium mt-1 whitespace-nowrap">Completed order sales</span>
           </div>
@@ -857,7 +944,7 @@ export function TableQrAnalyticsDetail({
 
             <div className="p-3.5 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] flex flex-col gap-0.5 min-w-0">
               <span className="text-[10px] font-bold text-[#5e5e5e] uppercase">Revenue</span>
-              <span className="font-garamond text-2xl font-normal text-[#141010]">₹{metrics.revenue.toLocaleString("en-IN")}</span>
+              <span className="font-garamond text-2xl font-normal text-[#141010]">{currencySymbol}{formatCurrencyAmount(metrics.revenue, activeOrg?.country)}</span>
               <span className="text-[11px] text-[#5e5e5e]">Completed order sales</span>
             </div>
 
@@ -866,7 +953,7 @@ export function TableQrAnalyticsDetail({
                 <span className="text-[10px] font-bold text-[#5e5e5e] uppercase">Avg Order</span>
               </div>
               <span className="font-garamond text-2xl font-normal text-[#141010]">
-                ₹{metrics.orders > 0 ? Math.round(metrics.revenue / metrics.orders) : 0}
+                {currencySymbol}{formatCurrencyAmount(metrics.orders > 0 ? Math.round(metrics.revenue / metrics.orders) : 0, activeOrg?.country)}
               </span>
               <span className="text-[11px] text-[#5e5e5e]">Amount spent per order</span>
             </div>

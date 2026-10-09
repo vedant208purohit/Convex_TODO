@@ -601,6 +601,9 @@ export function OrganizationQrManagement() {
   const [selectedQrTypeInModal, setSelectedQrTypeInModal] = useState<
     "DineIn" | "TakeAway" | "Delivery" | "Queue"
   >("DineIn");
+  const [selectedStatusInModal, setSelectedStatusInModal] = useState<
+    "ACTIVE" | "INACTIVE"
+  >("ACTIVE");
   const [newTableName, setNewTableName] = useState("");
   const [newCapacity, setNewCapacity] = useState(4);
   const [newPlacement, setNewPlacement] = useState("");
@@ -1014,6 +1017,7 @@ export function OrganizationQrManagement() {
             : `${nameStr} QR`,
           displayName: nameStr,
           qrType: selectedQrTypeInModal,
+          status: selectedStatusInModal,
           tableId:
             isDineIn && selectedTableIdInModal
               ? selectedTableIdInModal
@@ -1033,6 +1037,7 @@ export function OrganizationQrManagement() {
     setIsModalOpen(false);
     setSelectedTableIdInModal("");
     setNewTableName("");
+    setSelectedStatusInModal("ACTIVE");
   };
 
   // Render full table QR analytics detail view if active
@@ -1043,6 +1048,7 @@ export function OrganizationQrManagement() {
         storeSlug={storeSlug}
         onBack={() => setViewingAnalyticsTableId(null)}
         showToast={showToast}
+        activeOrg={activeOrg}
       />
     );
   }
@@ -1457,9 +1463,12 @@ export function OrganizationQrManagement() {
                           </td>
                         </tr>
                       ) : (
-                        filteredTables.map((table) => {
+                        filteredTables.map((table, index) => {
                           const isActive = table.status === "Active";
                           const isPending = table.status === "Pending QR";
+                          const isLastTwo =
+                            filteredTables.length > 1 &&
+                            index >= filteredTables.length - 2;
 
                           return (
                             <tr
@@ -1470,7 +1479,7 @@ export function OrganizationQrManagement() {
                                 }
                               }}
                               className={`hover:bg-[#fdf8f7]/60 transition-colors group cursor-pointer ${
-                                activeDropdown === table.id ? "relative z-30" : "relative"
+                                activeDropdown === table.id ? "relative z-40" : "relative"
                               }`}
                             >
                               <td className="py-4 pl-5 px-4">
@@ -1595,7 +1604,9 @@ export function OrganizationQrManagement() {
                                     {activeDropdown === table.id && (
                                       <div
                                         onClick={(e) => e.stopPropagation()}
-                                        className="absolute right-0 top-full mt-1.5 w-44 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1.5 flex flex-col text-left animate-in fade-in zoom-in-95"
+                                        className={`absolute right-0 ${
+                                          isLastTwo ? "bottom-full mb-1.5" : "top-full mt-1.5"
+                                        } w-44 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1.5 flex flex-col text-left animate-in fade-in zoom-in-95`}
                                       >
                                         {table.isGenerated ? (
                                           <>
@@ -1813,9 +1824,12 @@ export function OrganizationQrManagement() {
                     </div>
                   )
                 ) : (
-                  filteredTables.map((table) => {
+                  filteredTables.map((table, index) => {
                     const isActive = table.status === "Active";
                     const isPending = table.status === "Pending QR";
+                    const isLastTwoInGrid =
+                      filteredTables.length > 1 &&
+                      index >= filteredTables.length - 2;
 
                     return (
                       <div
@@ -2034,7 +2048,9 @@ export function OrganizationQrManagement() {
                             {activeDropdown === table.id && (
                               <div
                                 onClick={(e) => e.stopPropagation()}
-                                className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1.5 flex flex-col"
+                                className={`absolute right-0 ${
+                                  isLastTwoInGrid ? "bottom-full mb-1.5" : "top-full mt-1"
+                                } w-48 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1.5 flex flex-col`}
                               >
                                 {table.isGenerated ? (
                                   <>
@@ -2163,7 +2179,7 @@ export function OrganizationQrManagement() {
                   <label className="text-xs font-semibold text-[#141010] uppercase tracking-wider">
                     QR Type
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 bg-[#fdf8f7] p-1 rounded-xl border border-[#e7e5e4]">
+                  <div className="flex items-center gap-1.5 bg-[#fdf8f7] p-1.5 rounded-xl border border-[#e7e5e4]">
                     {orgIsDineIn && (
                       <button
                         type="button"
@@ -2172,10 +2188,10 @@ export function OrganizationQrManagement() {
                           setSelectedTableIdInModal("");
                           setNewTableName("");
                         }}
-                        className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                        className={`relative flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                           selectedQrTypeInModal === "DineIn"
                             ? "bg-[#141010] text-white shadow-xs"
-                            : "text-[#5e5e5e] hover:text-[#141010]"
+                            : "text-[#5e5e5e] hover:text-[#141010] hover:bg-white/60"
                         }`}
                         style={
                           selectedQrTypeInModal === "DineIn"
@@ -2184,7 +2200,7 @@ export function OrganizationQrManagement() {
                         }
                       >
                         <TableRestaurantIcon
-                          className="w-4 h-4"
+                          className="w-4 h-4 shrink-0"
                           style={
                             selectedQrTypeInModal === "DineIn"
                               ? { color: "#ffffff", stroke: "#ffffff" }
@@ -2203,12 +2219,12 @@ export function OrganizationQrManagement() {
                           setSelectedTableIdInModal("");
                           setNewTableName("Takeaway Counter");
                         }}
-                        className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                          takeAwayCount >= 1 && selectedQrTypeInModal !== "TakeAway"
-                            ? "opacity-60 text-[#78716c] bg-[#f5f5f4]"
-                            : selectedQrTypeInModal === "TakeAway"
-                              ? "bg-[#141010] text-white shadow-xs cursor-pointer"
-                              : "text-[#5e5e5e] hover:text-[#141010] cursor-pointer"
+                        className={`relative flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          selectedQrTypeInModal === "TakeAway"
+                            ? "bg-[#141010] text-white shadow-xs"
+                            : takeAwayCount >= 1
+                              ? "bg-[#f5f5f4] text-[#78716c] hover:bg-[#edeceb]"
+                              : "text-[#5e5e5e] hover:text-[#141010] hover:bg-white/60"
                         }`}
                         style={
                           selectedQrTypeInModal === "TakeAway"
@@ -2217,9 +2233,17 @@ export function OrganizationQrManagement() {
                         }
                         title={takeAwayCount >= 1 ? "Takeaway QR code already exists for this store" : "Takeaway Channel"}
                       >
+                        <TakeawayIcon
+                          className="w-4 h-4 shrink-0"
+                          style={
+                            selectedQrTypeInModal === "TakeAway"
+                              ? { color: "#ffffff", stroke: "#ffffff" }
+                              : undefined
+                          }
+                        />
                         <span className="font-bold">Takeaway</span>
                         {takeAwayCount >= 1 && (
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
+                          <span className="absolute -top-2 -right-1 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300 shadow-2xs leading-none pointer-events-none select-none tracking-tight">
                             Created
                           </span>
                         )}
@@ -2234,12 +2258,12 @@ export function OrganizationQrManagement() {
                           setSelectedTableIdInModal("");
                           setNewTableName("Delivery Bag");
                         }}
-                        className={`py-2 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                          deliveryCount >= 1 && selectedQrTypeInModal !== "Delivery"
-                            ? "opacity-60 text-[#78716c] bg-[#f5f5f4]"
-                            : selectedQrTypeInModal === "Delivery"
-                              ? "bg-[#141010] text-white shadow-xs cursor-pointer"
-                              : "text-[#5e5e5e] hover:text-[#141010] cursor-pointer"
+                        className={`relative flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                          selectedQrTypeInModal === "Delivery"
+                            ? "bg-[#141010] text-white shadow-xs"
+                            : deliveryCount >= 1
+                              ? "bg-[#f5f5f4] text-[#78716c] hover:bg-[#edeceb]"
+                              : "text-[#5e5e5e] hover:text-[#141010] hover:bg-white/60"
                         }`}
                         style={
                           selectedQrTypeInModal === "Delivery"
@@ -2248,9 +2272,17 @@ export function OrganizationQrManagement() {
                         }
                         title={deliveryCount >= 1 ? "Delivery QR code already exists for this store" : "Delivery Channel"}
                       >
+                        <DeliveryIcon
+                          className="w-4 h-4 shrink-0"
+                          style={
+                            selectedQrTypeInModal === "Delivery"
+                              ? { color: "#ffffff", stroke: "#ffffff" }
+                              : undefined
+                          }
+                        />
                         <span className="font-bold">Delivery</span>
                         {deliveryCount >= 1 && (
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">
+                          <span className="absolute -top-2 -right-1 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold border border-amber-300 shadow-2xs leading-none pointer-events-none select-none tracking-tight">
                             Created
                           </span>
                         )}
@@ -2261,21 +2293,47 @@ export function OrganizationQrManagement() {
 
                 {/* Single QR Existing Alert for Non-DineIn Channels */}
                 {selectedQrTypeInModal === "TakeAway" && takeAwayCount >= 1 && (
-                  <div className="p-3 bg-[#fff9f2] rounded-xl border border-[#ffe4cc] text-xs text-[#8d4b00] flex items-center gap-2">
-                    <span className="font-bold">⚠️ Notice:</span>
-                    <span>
-                      A Takeaway QR code already exists for this store. Only 1
-                      Takeaway QR code is maintained per store (handles both immediate Takeaway & Scheduled Pickup).
-                    </span>
+                  <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                    <svg
+                      className="w-4 h-4 text-amber-600 shrink-0 mt-0.5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <div className="flex-1 leading-relaxed text-[12px]">
+                      <span className="font-bold text-amber-950 mr-1.5">Notice:</span>
+                      <span>
+                        A Takeaway QR code already exists for this store. Only 1
+                        Takeaway QR code is maintained per store (handles both immediate Takeaway & Scheduled Pickup).
+                      </span>
+                    </div>
                   </div>
                 )}
                 {selectedQrTypeInModal === "Delivery" && deliveryCount >= 1 && (
-                  <div className="p-3 bg-[#fff9f2] rounded-xl border border-[#ffe4cc] text-xs text-[#8d4b00] flex items-center gap-2">
-                    <span className="font-bold">⚠️ Notice:</span>
-                    <span>
-                      A Delivery QR code already exists for this store. Only 1
-                      Delivery QR code is maintained per store (handles both immediate Delivery & Scheduled Delivery).
-                    </span>
+                  <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
+                    <svg
+                      className="w-4 h-4 text-amber-600 shrink-0 mt-0.5"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                    <div className="flex-1 leading-relaxed text-[12px]">
+                      <span className="font-bold text-amber-950 mr-1.5">Notice:</span>
+                      <span>
+                        A Delivery QR code already exists for this store. Only 1
+                        Delivery QR code is maintained per store (handles both immediate Delivery & Scheduled Delivery).
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -2409,17 +2467,26 @@ export function OrganizationQrManagement() {
                     Status
                   </label>
                   <div className="relative">
-                    <select className="w-full appearance-none px-4 py-2.5 bg-white text-[#141010] text-sm font-semibold rounded-xl border border-[#e7e5e4] focus:outline-none focus:border-[#141010] cursor-pointer shadow-xs">
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
+                    <select
+                      value={selectedStatusInModal}
+                      onChange={(e) =>
+                        setSelectedStatusInModal(
+                          e.target.value as "ACTIVE" | "INACTIVE",
+                        )
+                      }
+                      className="w-full appearance-none px-4 py-2.5 bg-white text-[#141010] text-sm font-semibold rounded-xl border border-[#e7e5e4] focus:outline-none focus:border-[#141010] cursor-pointer shadow-xs"
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
                     </select>
                     <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#141010]">
                       <ChevronDownIcon className="w-4 h-4" />
                     </div>
                   </div>
                   <p className="text-[11px] text-[#5e5e5e]">
-                    Active QR codes can be scanned and used by customers
-                    immediately.
+                    {selectedStatusInModal === "ACTIVE"
+                      ? "Active QR codes can be scanned and used by customers immediately."
+                      : "Inactive QR codes will be disabled and will not accept customer orders."}
                   </p>
                 </div>
               </div>
@@ -2486,8 +2553,18 @@ export function OrganizationQrManagement() {
                   </div>
 
                   <div className="flex items-center gap-1.5 text-xs text-[#5e5e5e] font-medium pt-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                    <span>Will be activated upon creation</span>
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        selectedStatusInModal === "ACTIVE"
+                          ? "bg-emerald-500"
+                          : "bg-stone-400"
+                      }`}
+                    />
+                    <span>
+                      {selectedStatusInModal === "ACTIVE"
+                        ? "Will be activated upon creation"
+                        : "Will be created as Inactive (disabled)"}
+                    </span>
                   </div>
                 </div>
 
@@ -2501,7 +2578,10 @@ export function OrganizationQrManagement() {
                 <div className="flex justify-end gap-3 pt-4 border-t border-[#e7e5e4]">
                   <button
                     type="button"
-                    onClick={() => setIsModalOpen(false)}
+                    onClick={() => {
+                      setIsModalOpen(false);
+                      setSelectedStatusInModal("ACTIVE");
+                    }}
                     className="px-5 py-2.5 rounded-xl text-xs font-semibold text-[#5e5e5e] hover:bg-[#f1edec] transition-colors cursor-pointer"
                   >
                     Cancel

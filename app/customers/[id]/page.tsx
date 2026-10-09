@@ -485,7 +485,7 @@ export default function CustomerProfilePage() {
   if (isLoading) {
     return (
       <PosShell title="Customer Profile">
-        <div className="flex-1 p-8 bg-[#fff8f5] flex items-center justify-center font-mono text-stone-500">
+        <div className="flex-1 p-8 bg-[#fff8f5] flex items-center justify-center  text-stone-500">
           Loading customer profile...
         </div>
       </PosShell>
@@ -532,7 +532,7 @@ export default function CustomerProfilePage() {
                   <h1 className="font-serif text-2xl lg:text-3xl text-stone-900 leading-none">
                     {displayName}
                   </h1>
-                  <span className="px-3 py-1 rounded-full bg-stone-900 text-white font-mono text-[10px] uppercase font-bold tracking-wider">
+                  <span className="px-3 py-1 rounded-full bg-stone-900 text-white text-[10px] uppercase font-semibold tracking-wider">
                     {totalOrdersCount >= 5 ? "VIP REGULAR" : "STANDARD GUEST"}
                   </span>
                 </div>
@@ -540,15 +540,13 @@ export default function CustomerProfilePage() {
                   {formattedPhone !== "—" && (
                     <span className="inline-flex items-center gap-1 text-stone-900">
                       <span className="text-emerald-600 text-sm">✓</span>
-                      <span className="font-mono">{formattedPhone}</span>
+                      <span>{formattedPhone}</span>
                     </span>
                   )}
                   {emailDisplay && (
                     <>
                       {formattedPhone !== "—" && <span>•</span>}
-                      <span className="font-mono text-stone-600">
-                        {emailDisplay}
-                      </span>
+                      <span className="text-stone-600 truncate max-w-xs">{emailDisplay}</span>
                     </>
                   )}
                   {formattedPhone !== "—" && <span>•</span>}
@@ -573,7 +571,7 @@ export default function CustomerProfilePage() {
           {/* Profile Summary Metrics Grid (6 clean horizontal modules) */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Total Spend
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
@@ -583,7 +581,7 @@ export default function CustomerProfilePage() {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Total Orders
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
@@ -592,7 +590,7 @@ export default function CustomerProfilePage() {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Average Value
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
@@ -602,21 +600,21 @@ export default function CustomerProfilePage() {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Surveys Done
               </span>
               <div className="flex items-center justify-between mt-1">
                 <span className="font-serif text-xl font-medium text-stone-400">
                   0
                 </span>
-                <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-500 font-mono text-[9px] uppercase font-bold tracking-wider">
+                <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-500 text-[9px] uppercase font-semibold tracking-wider">
                   Pending
                 </span>
               </div>
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Order Type
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
@@ -625,7 +623,7 @@ export default function CustomerProfilePage() {
             </div>
 
             <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Retention
               </span>
               <span className="font-serif text-xl font-medium text-stone-900 mt-1">
@@ -660,9 +658,9 @@ export default function CustomerProfilePage() {
               )}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-6 pt-1">
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 pt-1">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Full Name
                 </span>
                 <span className="text-sm text-stone-900 font-medium mt-1">
@@ -670,26 +668,26 @@ export default function CustomerProfilePage() {
                 </span>
               </div>
 
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Email Address
                 </span>
-                <span className="text-sm text-stone-900 font-mono mt-1">
+                <span className="text-sm text-stone-900 font-medium mt-1 break-words truncate">
                   {emailDisplay || "—"}
                 </span>
               </div>
 
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Phone
                 </span>
-                <span className="text-sm text-stone-900 font-mono mt-1">
+                <span className="text-sm text-stone-900 font-medium mt-1 break-words truncate">
                   {formattedPhone}
                 </span>
               </div>
 
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   First Visited
                 </span>
                 <span className="text-sm text-stone-900 mt-1">
@@ -701,8 +699,8 @@ export default function CustomerProfilePage() {
                 </span>
               </div>
 
-              <div className="flex flex-col">
-                <span className="font-mono text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
+              <div className="flex flex-col min-w-0">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Customer Since
                 </span>
                 <span className="text-sm text-stone-900 mt-1">
@@ -731,7 +729,7 @@ export default function CustomerProfilePage() {
               >
                 <span>Orders</span>
                 <span
-                  className={`px-2 py-0.5 rounded-full font-mono text-[10px] ${
+                  className={`px-2 py-0.5 rounded-full text-[10px] ${
                     activeTab === "orders"
                       ? "bg-stone-900 text-white"
                       : "bg-stone-200 text-stone-700"
@@ -751,7 +749,7 @@ export default function CustomerProfilePage() {
                 }`}
               >
                 <span>Surveys</span>
-                <span className="px-2 py-0.5 rounded-full font-mono text-[9px] uppercase font-bold tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                <span className="px-2 py-0.5 rounded-full text-[9px] uppercase font-bold tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
                   Pending / Disabled
                 </span>
               </button>
@@ -766,7 +764,7 @@ export default function CustomerProfilePage() {
                 }`}
               >
                 <span>Queue Activity</span>
-                <span className="px-2 py-0.5 rounded-full font-mono text-[10px] bg-stone-200 text-stone-700">
+                <span className="px-2 py-0.5 rounded-full text-[10px] bg-stone-200 text-stone-700">
                   {customerQueueList.length}
                 </span>
               </button>
@@ -788,7 +786,7 @@ export default function CustomerProfilePage() {
                       className="w-full bg-[#faf2ee] text-stone-900 text-xs pl-10 pr-4 py-2 rounded-full border border-stone-200 focus:outline-none focus:border-stone-900"
                     />
                   </div>
-                  <div className="text-xs text-stone-500 font-mono">
+                  <div className="text-xs text-stone-500 ">
                     Showing {filteredOrders.length} orders
                   </div>
                 </div>
@@ -796,7 +794,7 @@ export default function CustomerProfilePage() {
                 <div className="overflow-x-auto border border-stone-200 rounded-xl">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-[#faf2ee] text-stone-600 font-mono text-[10px] uppercase tracking-wider border-b border-stone-200">
+                      <tr className="bg-[#faf2ee] text-stone-600 text-[11px] font-semibold uppercase tracking-wider border-b border-stone-200">
                         <th className="py-3 px-4 font-semibold">Order ID</th>
                         <th className="py-3 px-4 font-semibold">Date & Time</th>
                         <th className="py-3 px-4 font-semibold">Order Type</th>
@@ -814,7 +812,7 @@ export default function CustomerProfilePage() {
                         <tr>
                           <td
                             colSpan={6}
-                            className="py-8 text-center text-stone-400 font-mono"
+                            className="py-8 text-center text-stone-400 "
                           >
                             No orders found for this customer.
                           </td>
@@ -825,7 +823,7 @@ export default function CustomerProfilePage() {
                             key={ord._id}
                             className="hover:bg-[#faf2ee]/40 transition-colors"
                           >
-                            <td className="py-3.5 px-4 font-mono font-semibold text-stone-900">
+                            <td className="py-3.5 px-4 font-semibold text-stone-900 text-sm">
                               #ORD-{(ord._id || "").slice(-4).toUpperCase()}
                             </td>
                             <td className="py-3.5 px-4 text-stone-600">
@@ -843,7 +841,7 @@ export default function CustomerProfilePage() {
                             <td className="py-3.5 px-4 max-w-xs truncate text-stone-700">
                               {ord.itemsSummary || "Dine In Order Items"}
                             </td>
-                            <td className="py-3.5 px-4 font-mono font-semibold text-stone-900">
+                            <td className="py-3.5 px-4 font-semibold text-stone-900 text-sm">
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 (ord.totalAmount || 0) / 100,
@@ -851,7 +849,7 @@ export default function CustomerProfilePage() {
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-right">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 font-mono text-[10px] font-bold border border-emerald-200">
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
                                 {ord.paymentStatus === "Paid"
                                   ? "Completed"
@@ -891,7 +889,7 @@ export default function CustomerProfilePage() {
                   <h3 className="font-serif text-lg text-stone-900">
                     Waitlist & Table Reservations
                   </h3>
-                  <div className="text-xs text-stone-500 font-mono">
+                  <div className="text-xs text-stone-500 ">
                     Showing {customerQueueList.length} queue records
                   </div>
                 </div>
@@ -899,7 +897,7 @@ export default function CustomerProfilePage() {
                 <div className="overflow-x-auto border border-stone-200 rounded-xl">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="bg-[#faf2ee] text-stone-600 font-mono text-[10px] uppercase tracking-wider border-b border-stone-200">
+                      <tr className="bg-[#faf2ee] text-stone-600 text-[11px] font-semibold uppercase tracking-wider border-b border-stone-200">
                         <th className="py-3 px-4 font-semibold">
                           Queue / Ticket No
                         </th>
@@ -919,7 +917,7 @@ export default function CustomerProfilePage() {
                         <tr>
                           <td
                             colSpan={6}
-                            className="py-8 text-center text-stone-400 font-mono"
+                            className="py-8 text-center text-stone-400 "
                           >
                             No active waitlist or reservation history found for
                             this guest.
@@ -931,7 +929,7 @@ export default function CustomerProfilePage() {
                             key={q._id}
                             className="hover:bg-[#faf2ee]/40 transition-colors"
                           >
-                            <td className="py-3.5 px-4 font-mono font-semibold text-stone-900">
+                            <td className="py-3.5 px-4 font-semibold text-stone-900 text-sm">
                               {q.queueNumber ||
                                 `#QN-${(q._id || "").slice(-4).toUpperCase()}`}
                             </td>
@@ -976,14 +974,14 @@ export default function CustomerProfilePage() {
                                 </div>
                               </div>
                             </td>
-                            <td className="py-3.5 px-4 font-mono text-stone-800">
+                            <td className="py-3.5 px-4 text-stone-800 text-sm font-medium">
                               {q.table?.tableNumber
                                 ? `Table ${q.table.tableNumber}`
                                 : "—"}
                             </td>
                             <td className="py-3.5 px-4 text-right">
                               <span
-                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full font-mono text-[10px] font-bold border ${
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold border ${
                                   q.queueStatus === "arrived" ||
                                   q.queueStatus === "completed"
                                     ? "bg-emerald-50 text-emerald-800 border-emerald-200"

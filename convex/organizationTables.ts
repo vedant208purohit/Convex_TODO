@@ -83,7 +83,7 @@ export async function validateUniqueTableNumber(
   );
 
   if (duplicate) {
-    throw new Error(`Hey! ${tableNumber.trim()} is already taken.`);
+    throw new Error(`This table name "${tableNumber.trim()}" is already taken. Please choose a different table number.`);
   }
 }
 
