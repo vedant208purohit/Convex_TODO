@@ -1127,7 +1127,10 @@ export const listLiveOrders = query({
 });
 
 export const getOrderDetails = query({
-  args: { id: v.union(v.id("orders"), v.string()) },
+  args: {
+    id: v.union(v.id("orders"), v.string()),
+    sessionOrderId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     let order = null;
     const normalizedId = ctx.db.normalizeId("orders", args.id);
