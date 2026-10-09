@@ -214,7 +214,18 @@ export function normalizeTargetDateYMD(dateStr: string, timeZone: string): { ymd
     return { ymd: trimmed, weekday: dayFormatter.format(d) };
   }
 
-  const parsed = new Date(trimmed);
+  // Clean conversational prefixes: e.g. "Today (Fri, Oct 9)" -> "Fri, Oct 9"
+  const cleaned = trimmed.replace(/^(today|tomorrow)\s*\(/i, "").replace(/\)$/, "").trim();
+
+  // If missing 4-digit year, attach current store year
+  let parseTarget = cleaned;
+  if (!/\b\d{4}\b/.test(cleaned)) {
+    const currentStoreContext = getStoreTimeContext(Date.now(), timeZone);
+    const currentYear = currentStoreContext.ymd.split("-")[0];
+    parseTarget = `${cleaned}, ${currentYear}`;
+  }
+
+  const parsed = new Date(parseTarget);
   if (!isNaN(parsed.getTime())) {
     const ctx = getStoreTimeContext(parsed.getTime(), timeZone);
     return { ymd: ctx.ymd, weekday: ctx.weekday };
