@@ -135,7 +135,10 @@ export function parseTimeToMinutes(timeStr?: string | null): number | null {
 }
 
 export function parseLeadTimeMinutes(limit?: string | number | null): number {
-  if (typeof limit === "number" && limit >= 0) return limit;
+  if (typeof limit === "number" && limit >= 0) {
+    if (limit <= 72) return limit * 60;
+    return limit;
+  }
   if (!limit || typeof limit !== "string") return 30;
 
   const trimmed = limit.trim().toLowerCase();
@@ -146,8 +149,25 @@ export function parseLeadTimeMinutes(limit?: string | number | null): number {
   if (trimmed.includes("day")) return num * 24 * 60;
   if (trimmed.includes("hour") || trimmed.includes("hr")) return num * 60;
   if (trimmed.includes("min") || trimmed.includes("m")) return num;
-  if (num > 0 && num <= 24) return num * 60;
+  if (num > 0 && num <= 72) return num * 60;
   return num;
+}
+
+export function parseAdvanceDaysCount(
+  limit?: number | string | null,
+  limitType?: string | null
+): number {
+  const num = typeof limit === "number" ? limit : parseInt(String(limit || 7), 10);
+  const count = isNaN(num) || num <= 0 ? 7 : num;
+  const type = (limitType || "days").trim().toLowerCase();
+
+  if (type.startsWith("month")) {
+    return count * 30;
+  }
+  if (type.startsWith("week")) {
+    return count * 7;
+  }
+  return count;
 }
 
 export function getStoreTimeContext(timestamp: number, timeZone: string) {
@@ -218,6 +238,26 @@ export function validateScheduledOrderSlot(args: {
   // 1. Check Date is not in the past
   if (targetDate.ymd < currentStoreTime.ymd) {
     throw new Error("Selected schedule date cannot be in the past.");
+  }
+
+  // 1.5 Check Date does not exceed configured advance booking horizon
+  const advanceLimit = args.isPickup
+    ? args.scheduleConfig?.advancePickupLimit
+    : args.scheduleConfig?.advanceDeliveryLimit;
+  const advanceLimitType = args.isPickup
+    ? args.scheduleConfig?.advancePickupLimitType
+    : args.scheduleConfig?.advanceDeliveryLimitType;
+  const horizonDays = parseAdvanceDaysCount(advanceLimit, advanceLimitType);
+
+  const [cYear, cMonth, cDay] = currentStoreTime.ymd.split("-").map(Number);
+  const maxDate = new Date(cYear, cMonth - 1, cDay + horizonDays, 23, 59, 59);
+  const maxYear = maxDate.getFullYear();
+  const maxM = String(maxDate.getMonth() + 1).padStart(2, "0");
+  const maxD = String(maxDate.getDate()).padStart(2, "0");
+  const maxYMD = `${maxYear}-${maxM}-${maxD}`;
+
+  if (targetDate.ymd > maxYMD) {
+    throw new Error(`Selected date is beyond the maximum advance booking limit (${horizonDays} days).`);
   }
 
   // 2. Parse slot window: e.g. "12:00 PM – 12:30 PM" or "12:00 PM - 12:30 PM"
@@ -397,7 +437,13 @@ export const createOrder = mutation({
     const orgTimeZone = org?.organizationTimeZone || "Asia/Kolkata";
 
     // 0. Service-Mode Feature Toggle Enforcement
-    if (args.orderSource === "PREST-QR" || args.orderSource === "PREST-DIGITAL-STORE" || (!args.cashierUserId && !args.waiterUserId && args.orderSource !== "POS")) {
+    if (
+      args.orderSource === "PREST-QR" ||
+      args.orderSource === "PREST-DIGITAL-STORE" ||
+      args.orderSource === "PREST-ONLINE" ||
+      args.orderSource === "Prest-Online" ||
+      args.orderSource === "ONLINE"
+    ) {
       if (args.orderType === "DineIn" && org.isDineIn === false) {
         throw new Error("Dine In service is currently disabled for this store.");
       }

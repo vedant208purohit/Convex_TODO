@@ -90,14 +90,14 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
 
       await ctx.db.insert("organizationSchedulePickups", {
         advanceOrderTimeLimit: "15 mins",
-        advancePickupLimit: 7,
-        advancePickupLimitType: "days",
+        advancePickupLimit: 1,
+        advancePickupLimitType: "months",
         pickupTimings: defaultTimings,
         pickupTimeSlotSize: "30",
 
         advanceScheduleDeliveryOrderTimeLimit: "15 mins",
-        advanceDeliveryLimit: 7,
-        advanceDeliveryLimitType: "days",
+        advanceDeliveryLimit: 1,
+        advanceDeliveryLimitType: "months",
         deliveryTimings: defaultTimings,
         deliveryTimeSlotSize: "30",
         createdAt: now,
@@ -139,6 +139,7 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
       t.mutation(api.orders.createOrder, {
         organizationId: dineInOffOrg,
         orderType: "DineIn",
+        orderSource: "PREST-QR",
         items: [{ itemId, quantity: 1 }],
       })
     ).rejects.toThrow("Dine In service is currently disabled for this store.");
@@ -149,6 +150,7 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
       t.mutation(api.orders.createOrder, {
         organizationId: takeAwayOffOrg,
         orderType: "TakeAway",
+        orderSource: "PREST-QR",
         items: [{ itemId, quantity: 1 }],
       })
     ).rejects.toThrow("Takeaway service is currently disabled for this store.");
@@ -159,6 +161,7 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
       t.mutation(api.orders.createOrder, {
         organizationId: schedPickupOffOrg,
         orderType: "ScheduledPickup",
+        orderSource: "PREST-QR",
         scheduledPickupDate: "2026-10-15",
         scheduledPickupTime: "02:00 PM – 02:30 PM",
         items: [{ itemId, quantity: 1 }],
@@ -171,6 +174,7 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
       t.mutation(api.orders.createOrder, {
         organizationId: deliveryOffOrg,
         orderType: "Delivery",
+        orderSource: "PREST-QR",
         deliveryAddress: { addressLine1: "123 Street", city: "Ahmedabad" },
         items: [{ itemId, quantity: 1 }],
       })
@@ -182,6 +186,7 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
       t.mutation(api.orders.createOrder, {
         organizationId: schedDelivOffOrg,
         orderType: "ScheduledDelivery",
+        orderSource: "PREST-QR",
         scheduledDeliveryDate: "2026-10-15",
         scheduledDeliveryTime: "02:00 PM – 02:30 PM",
         deliveryAddress: { addressLine1: "123 Street", city: "Ahmedabad" },
@@ -295,4 +300,51 @@ describe("POS-Default Service Modes & Scheduling Synchronization Tests", () => {
     expect(stats.recentOrders[0].scheduledDeliveryTime).toBe("03:00 PM – 03:30 PM");
     expect(stats.recentOrders[0].orderType).toBe("ScheduledPickup");
   });
+
+  it("5. Enforces advanceOrderTimeLimit (e.g. 24 hours notice)", async () => {
+    const { orgId, itemId } = await seedTestStore();
+
+    // Update schedule config to require 24 hours advance notice
+    await t.run(async (ctx) => {
+      const all = await ctx.db.query("organizationSchedulePickups").collect();
+      if (all[0]) {
+        await ctx.db.patch(all[0]._id, {
+          advanceOrderTimeLimit: "24",
+        });
+      }
+    });
+
+    const fakeClockMs = new Date("2026-10-16T07:00:00Z").getTime();
+    const { validateScheduledOrderSlot } = await import("./orders");
+
+    // Attempt slot for today when 24 hrs is required -> Rejected
+    expect(() =>
+      validateScheduledOrderSlot({
+        dateStr: "2026-10-16",
+        timeSlotStr: "04:00 PM – 04:30 PM",
+        isPickup: true,
+        scheduleConfig: { advanceOrderTimeLimit: "24" },
+        timeZone: "Asia/Kolkata",
+        currentTimeMs: fakeClockMs,
+      })
+    ).toThrow("Selected time slot does not meet the minimum advance preparation lead time.");
+  });
+
+  it("6. Enforces advance booking horizon limit (e.g. 7 days max)", async () => {
+    const fakeClockMs = new Date("2026-10-16T07:00:00Z").getTime();
+    const { validateScheduledOrderSlot } = await import("./orders");
+
+    // Attempt booking 20 days in the future when limit is 7 days -> Rejected
+    expect(() =>
+      validateScheduledOrderSlot({
+        dateStr: "2026-11-15",
+        timeSlotStr: "02:00 PM – 02:30 PM",
+        isPickup: true,
+        scheduleConfig: { advancePickupLimit: 7, advancePickupLimitType: "days" },
+        timeZone: "Asia/Kolkata",
+        currentTimeMs: fakeClockMs,
+      })
+    ).toThrow("Selected date is beyond the maximum advance booking limit (7 days).");
+  });
 });
+
