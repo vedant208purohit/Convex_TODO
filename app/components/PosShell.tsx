@@ -277,7 +277,7 @@ function NavLink({
   if (isCollapsed) {
     return (
       <div className="relative group flex items-center justify-center my-0.5">
-        disabled ? (
+        {disabled ? (
           <div
             className="flex items-center justify-center w-12 h-12 mx-auto rounded-xl opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
             title={disabledTooltip || "Disabled in settings"}
@@ -295,7 +295,7 @@ function NavLink({
           >
             <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
           </Link>
-        )
+        )}
         <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
           <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
             {label}

@@ -1663,74 +1663,62 @@ export function OrganizationSettings() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#eadfd6]">
-                  {/* Render Convex DB Tax Groups */}
-                  {dbTaxGroups && dbTaxGroups.length > 0 ? (
-                    dbTaxGroups.map((group) => {
-                      const comps = group.componentIds
-                        .map((id) => taxComponentMap.get(id))
-                        .filter((c): c is { compId: Id<"taxComponents">; name: string; code?: string; rate: number } => Boolean(c));
-                      const totalRate = comps.reduce((s, c) => s + (c?.rate || 0), 0);
+                {DAYS.map((day) => {
+                  const dayConfig = formData.schedule[day] || {
+                    is_open: true,
+                    is_open_all_day: false,
+                    hours: [{ start_time: "11:00", end_time: "23:59" }],
+                  };
 
-                      return (
-                        <tr key={group._id} className="transition hover:bg-[#fdfbf9]">
-                          <td className="py-3.5 px-5 text-[13px] font-medium text-[#1f1a17]">
-                            {group.name} {group.isDefault ? "(Default)" : ""}
-                          </td>
-                          <td className="py-3.5 px-5">
-                            <div className="flex flex-wrap items-center gap-2">
-                              {comps.map((c, idx) => (
-                                <span
-                                  key={idx}
-                                  className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]"
-                                >
-                                  {c?.name} {c?.rate}%
-                                </span>
-                              ))}
-                            </div>
-                          </td>
-                          <td className="py-3.5 px-5 text-[13px] font-medium text-[#1f1a17]">{totalRate.toFixed(1)}%</td>
-                          <td className="py-3.5 px-5 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenEditTaxGroup(
-                                    group.name,
-                                    comps.map((c) => ({
-                                      compId: c.compId,
-                                      name: c?.name || "",
-                                      code: c?.code || "",
-                                      rate: (c?.rate || 0).toString(),
-                                    })),
-                                    group._id
-                                  )
-                                }
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
-                                title="Edit Tax Group"
-                              >
-                                <EditPencilIcon className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTaxGroup(group._id, group.name)}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
-                                title="Delete Tax Group"
-                              >
-                                <TrashIcon className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="py-10 text-center text-sm text-[#8c827a]">
-                        No taxes configured for this store. Click &quot;+ Add Tax Group&quot; to configure taxation.
+                  const formattedHoursText = !dayConfig.is_open
+                    ? "Closed"
+                    : dayConfig.is_open_all_day
+                    ? "Open All Day"
+                    : dayConfig.hours.length > 0
+                    ? dayConfig.hours
+                        .map(
+                          (slot) =>
+                            `${formatTime12h(slot.start_time)} — ${formatTime12h(slot.end_time)}`
+                        )
+                        .join(", ")
+                    : "Open All Day";
+
+                  return (
+                    <tr key={day} className="transition hover:bg-[#fdfbf9]">
+                      <td className="py-3.5 px-5 font-medium text-[13px] text-[#1f1a17]">
+                        {day}
+                      </td>
+
+                      <td className="py-3.5 px-5">
+                        <span
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            dayConfig.is_open
+                              ? "bg-[#eaf4ed] text-[#1e6b37] border border-[#c6e6cf]"
+                              : "bg-[#fdeaea] text-[#b91c1c] border border-[#f8c4c4]"
+                          }`}
+                        >
+                          {dayConfig.is_open ? "Open" : "Closed"}
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-5 text-[13px] text-[#1f1a17] font-medium">
+                        {formattedHoursText}
+                      </td>
+
+                      <td className="py-3.5 px-5 text-right">
+                        <button
+                          type="button"
+                          onClick={handleOpenTimingsDrawer}
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
+                          title="Edit Timings"
+                        >
+                          <EditPencilIcon className="w-3.5 h-3.5" />
+                        </button>
                       </td>
                     </tr>
-                  )}
-                </tbody>
+                  );
+                })}
+              </tbody>
             </table>
           </div>
         </div>
