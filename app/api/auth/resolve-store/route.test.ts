@@ -238,4 +238,39 @@ describe("Phase 4 — Default POS Store Resolution Route (/api/auth/resolve-stor
     expect(data.success).toBe(false);
     expect(data.code).toBe("BRIDGE_UNREACHABLE");
   });
+
+  test("forwards convexUrl, slug, and organizationId searchParams to Master bridge", async () => {
+    mockAuth.mockResolvedValueOnce({ userId: "user_clerk_b_target" });
+
+    let capturedBody: any = {};
+    vi.mocked(global.fetch).mockImplementationOnce(async (_url: any, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body));
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: async () => ({
+          success: true,
+          organization: { id: "org_rose", slug: "rose", name: "Rose Store" },
+          deployment: { url: "https://rose.convex.cloud" },
+          user: { role: "admin", status: "active" },
+        }),
+      } as Response;
+    });
+
+    const req = new Request(
+      "http://localhost:3000/api/auth/resolve-store?convexUrl=https%3A%2F%2Frose.convex.cloud&slug=rose"
+    );
+
+    const res = await GET(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.organization.slug).toBe("rose");
+    expect(data.deploymentUrl).toBe("https://rose.convex.cloud");
+
+    expect(capturedBody.defaultClerkId).toBe("user_clerk_b_target");
+    expect(capturedBody.convexUrl).toBe("https://rose.convex.cloud");
+    expect(capturedBody.slug).toBe("rose");
+  });
 });

@@ -5,7 +5,7 @@ import crypto from "crypto";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function resolveStoreForAuthenticatedUser() {
+export async function resolveStoreForAuthenticatedUser(request?: Request) {
   const { userId } = await auth();
 
   console.log("Bridge secret:", process.env.BRIDGE_SECRET);
@@ -19,6 +19,22 @@ export async function resolveStoreForAuthenticatedUser() {
       },
       { status: 401 },
     );
+  }
+
+  let convexUrl: string | undefined;
+  let slug: string | undefined;
+  let organizationId: string | undefined;
+
+  if (request) {
+    try {
+      const url = new URL(request.url);
+      convexUrl = url.searchParams.get("convexUrl") || undefined;
+      slug = url.searchParams.get("slug") || url.searchParams.get("store") || undefined;
+      organizationId =
+        url.searchParams.get("organizationId") ||
+        url.searchParams.get("orgId") ||
+        undefined;
+    } catch {}
   }
 
   const bridgeSecret = process.env.BRIDGE_SECRET;
@@ -79,6 +95,13 @@ export async function resolveStoreForAuthenticatedUser() {
     .update(`${userId}:${timestamp}`)
     .digest("hex");
 
+  const bridgePayload: Record<string, unknown> = {
+    defaultClerkId: userId,
+  };
+  if (convexUrl) bridgePayload.convexUrl = convexUrl;
+  if (slug) bridgePayload.slug = slug;
+  if (organizationId) bridgePayload.organizationId = organizationId;
+
   console.log("[BRIDGE_DEBUG] calling master bridge:", {
     url: bridgeUrl,
     method: "POST",
@@ -86,6 +109,8 @@ export async function resolveStoreForAuthenticatedUser() {
     payload: {
       defaultClerkId_present: Boolean(userId),
       defaultClerkId_prefix: userId ? userId.substring(0, 8) + "..." : "none",
+      convexUrl_present: Boolean(convexUrl),
+      slug_present: Boolean(slug),
     },
   });
 
@@ -97,7 +122,7 @@ export async function resolveStoreForAuthenticatedUser() {
         "x-bridge-signature": signature,
         "x-bridge-timestamp": timestamp.toString(),
       },
-      body: JSON.stringify({ defaultClerkId: userId }),
+      body: JSON.stringify(bridgePayload),
       // Short cache lifetime / no-store to prevent stale deployment resolutions
       cache: "no-store",
     });
@@ -149,10 +174,10 @@ export async function resolveStoreForAuthenticatedUser() {
   }
 }
 
-export async function GET() {
-  return resolveStoreForAuthenticatedUser();
+export async function GET(request?: Request) {
+  return resolveStoreForAuthenticatedUser(request);
 }
 
-export async function POST() {
-  return resolveStoreForAuthenticatedUser();
+export async function POST(request?: Request) {
+  return resolveStoreForAuthenticatedUser(request);
 }

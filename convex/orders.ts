@@ -209,7 +209,14 @@ export const createOrder = mutation({
 
     // 0. Postpaid QR Verification Guard
     const reqTableId = args.tableId;
-    if (reqTableId && !args.cashierUserId && !args.waiterUserId) {
+    const isOnlinePayment =
+      args.paymentMode === "Razorpay" ||
+      args.paymentMode === "Online" ||
+      args.paymentMode === "Stripe" ||
+      args.paymentMode === "UPI" ||
+      args.paymentMode === "Card";
+
+    if (!isOnlinePayment && reqTableId && !args.cashierUserId && !args.waiterUserId) {
       if (org && org.dineinPospaid) {
         const identity = await ctx.auth.getUserIdentity();
         if (identity) {
@@ -525,7 +532,7 @@ export const createOrder = mutation({
         if (directQr && directQr.deletedAt === undefined) {
           autoQrId = directQr._id;
         }
-      } catch {}
+      } catch { }
     }
 
     if (!autoQrId && args.tableId) {
@@ -1286,11 +1293,11 @@ export const completeOrder = mutation({
         postpaidByOrder.length > 0
           ? postpaidByOrder
           : await ctx.db
-              .query("postpaidOrderRequests")
-              .withIndex("by_table_and_status", (q) =>
-                q.eq("tableId", orderTableId).eq("status", "approved")
-              )
-              .collect();
+            .query("postpaidOrderRequests")
+            .withIndex("by_table_and_status", (q) =>
+              q.eq("tableId", orderTableId).eq("status", "approved")
+            )
+            .collect();
 
       for (const req of toComplete) {
         if (
