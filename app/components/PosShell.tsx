@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { UserButton, useClerk } from "@clerk/nextjs";
 import { ReactNode, useState, useEffect } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
 // ==========================================
@@ -407,6 +407,13 @@ export function PosShell({
   const { signOut } = useClerk();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const currentMembership = useQuery(
+    api.organizationUsers.getCurrentMembership,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
+  const acceptInvitationMutation = useMutation(api.organizationUsers.acceptInvitation);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
   const isDineInActive = activeOrg?.isDineIn !== false;
   const branchName = activeOrg?.name || "Flagship Main Store";
 
@@ -438,6 +445,78 @@ export function PosShell({
             <button
               onClick={() => signOut({ redirectUrl: "/sign-in" })}
               className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentMembership && (currentMembership as any).status === "invited") {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+        <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 mb-3">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            Invitation Pending
+          </span>
+          <h2 className="text-xl font-bold text-stone-900">
+            Welcome to {branchName}
+          </h2>
+          <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+            You have been invited to join this store team. Please accept the invitation to access the point-of-sale system and start working.
+          </p>
+
+          {acceptError && (
+            <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+              {acceptError}
+            </div>
+          )}
+
+          <div className="mt-6 flex flex-col gap-3">
+            <button
+              type="button"
+              disabled={isAccepting}
+              onClick={async () => {
+                if (!activeOrg) return;
+                setIsAccepting(true);
+                setAcceptError(null);
+                try {
+                  await acceptInvitationMutation({ organizationId: activeOrg._id });
+                } catch (err: any) {
+                  setAcceptError(
+                    err?.message || "Failed to accept invitation. Please try again."
+                  );
+                } finally {
+                  setIsAccepting(false);
+                }
+              }}
+              className="w-full inline-flex items-center justify-center rounded-xl bg-stone-900 py-3 text-sm font-semibold text-white shadow hover:bg-stone-800 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {isAccepting ? "Activating account..." : "Accept Invitation & Enter Store"}
+            </button>
+            <button
+              type="button"
+              onClick={() => signOut({ redirectUrl: "/sign-in" })}
+              className="w-full rounded-xl border border-stone-200 bg-white py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50 transition-colors cursor-pointer"
             >
               Sign Out
             </button>

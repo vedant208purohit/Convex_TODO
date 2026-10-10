@@ -399,34 +399,24 @@ export async function requireMember(
   }
 
   if (!callerMember && isOwnerOrUnowned) {
-    if ("insert" in ctx.db) {
-      const now = Date.now();
-      const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
-        organizationId: org._id,
-        userId: identity.subject,
-        email: identity.email,
-        userType: ["admin"],
-        userPermission: {
-          admin: { create: true, read: true, update: true, delete: true },
-        },
-        createdAt: now,
-        updatedAt: now,
-      });
-      callerMember = await ctx.db.get(newId);
-    } else {
-      callerMember = {
-        _id: `temp_${identity.subject}` as any,
-        _creationTime: Date.now(),
-        organizationId: org._id,
-        userId: identity.subject,
-        email: identity.email,
-        userType: ["admin"],
-        userPermission: {
-          admin: { create: true, read: true, update: true, delete: true },
-        },
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      } as Doc<"organizationUsers">;
+    // Only store owners can be auto-bootstrapped as admin
+    if (org.ownerClerkId === identity.subject || !org.ownerClerkId) {
+      if ("insert" in ctx.db) {
+        const now = Date.now();
+        const newId = await (ctx as MutationCtx).db.insert("organizationUsers", {
+          organizationId: org._id,
+          userId: identity.subject,
+          email: identity.email,
+          userType: ["admin"],
+          status: "active",
+          userPermission: {
+            admin: { create: true, read: true, update: true, delete: true },
+          },
+          createdAt: now,
+          updatedAt: now,
+        });
+        callerMember = await ctx.db.get(newId);
+      }
     }
   }
 
@@ -572,6 +562,7 @@ export const getCurrentMembership = query({
         _id: org._id as any,
         organizationId: org._id,
         userId: identity.subject,
+        status: "active",
         userType: ["admin"],
         userPermission: {
           admin: { create: true, read: true, update: true, delete: true },
@@ -945,6 +936,7 @@ export const remove = mutation({
 
     const now = Date.now();
     await ctx.db.patch(args.id, {
+      status: "inactive",
       deletedAt: now,
       updatedAt: now,
     });
@@ -977,6 +969,7 @@ export const syncStaffFromMaster = mutation({
 
     // Master Role & Permissions
     role: v.string(),
+    status: v.optional(v.string()),
     userType: v.optional(v.array(v.string())),
     userPermission: v.optional(v.any()),
   },
@@ -1072,5 +1065,42 @@ export const syncStaffFromMaster = mutation({
       isExisting: false,
       wasReactivated: false,
     };
+  },
+});
+
+/**
+ * Allows an invited staff member to accept their invitation and transition to "active" status.
+ */
+export const acceptInvitation = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    const member = await getCallerMembership(
+      ctx,
+      identity.subject,
+      org._id,
+      identity.email
+    );
+
+    if (!member) {
+      throw new Error("No pending invitation found for your account.");
+    }
+
+    if (member.deletedAt !== undefined || member.status === "inactive") {
+      throw new Error("This store invitation has been revoked.");
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(member._id, {
+      status: "active",
+      userId: identity.subject,
+      updatedAt: now,
+    });
+
+    return { success: true, status: "active" };
   },
 });
