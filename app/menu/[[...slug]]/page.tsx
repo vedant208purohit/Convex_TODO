@@ -1257,7 +1257,7 @@ export default function MenuPage() {
       const dt = (item.dietaryType || "").toLowerCase();
       if (dt.includes("non") || dt.includes("egg")) return false;
       if (item.itemTypeIds && item.itemTypeIds.length > 0 && rawItemTypes) {
-        const hasNonVegOrEgg = item.itemTypeIds.some((typeId) => {
+        const hasNonVegOrEgg = item.itemTypeIds.some((typeId: any) => {
           const matched = rawItemTypes.find((t) => t._id === typeId);
           if (matched) {
             const name = matched.name.toLowerCase();
