@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { DynamicQrCode } from "./DynamicQrCode";
@@ -866,6 +866,52 @@ export function OrganizationQrManagement() {
     );
   }, [tablesList, selectedTableIdInModal]);
 
+  const existingTakeawayQr = useMemo(() => {
+    return convexQrCodes?.find(
+      (q) => !q.tableId && q.deletedAt === undefined && (q.qrType === "TakeAway" || q.qrType === "takeaway"),
+    );
+  }, [convexQrCodes]);
+
+  const existingDeliveryQr = useMemo(() => {
+    return convexQrCodes?.find(
+      (q) => !q.tableId && q.deletedAt === undefined && (q.qrType === "Delivery" || q.qrType === "delivery"),
+    );
+  }, [convexQrCodes]);
+
+  const currentExistingQr =
+    selectedQrTypeInModal === "TakeAway"
+      ? existingTakeawayQr
+      : selectedQrTypeInModal === "Delivery"
+        ? existingDeliveryQr
+        : null;
+
+  const hasStatusChanged = Boolean(
+    currentExistingQr && currentExistingQr.status !== selectedStatusInModal,
+  );
+
+  // Synchronize modal status with existing Takeaway / Delivery QR status
+  useEffect(() => {
+    if (selectedQrTypeInModal === "TakeAway" && existingTakeawayQr) {
+      setSelectedStatusInModal(
+        existingTakeawayQr.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+      );
+      if (existingTakeawayQr.displayName || existingTakeawayQr.name) {
+        setNewTableName(
+          existingTakeawayQr.displayName || existingTakeawayQr.name,
+        );
+      }
+    } else if (selectedQrTypeInModal === "Delivery" && existingDeliveryQr) {
+      setSelectedStatusInModal(
+        existingDeliveryQr.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+      );
+      if (existingDeliveryQr.displayName || existingDeliveryQr.name) {
+        setNewTableName(
+          existingDeliveryQr.displayName || existingDeliveryQr.name,
+        );
+      }
+    }
+  }, [selectedQrTypeInModal, existingTakeawayQr, existingDeliveryQr]);
+
   // Check if selected QR channel type in modal already has an active generated QR
   const isTypeAlreadyExists = useMemo(() => {
     if (selectedQrTypeInModal === "TakeAway" && takeAwayCount >= 1) return true;
@@ -992,6 +1038,40 @@ export function OrganizationQrManagement() {
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // If Takeaway or Delivery QR already exists and user changed status in modal, update it
+    if (selectedQrTypeInModal === "TakeAway" && existingTakeawayQr) {
+      try {
+        if (selectedStatusInModal === "ACTIVE" && existingTakeawayQr.status !== "ACTIVE") {
+          await enableMutation({ id: existingTakeawayQr._id });
+          showToast("Takeaway QR status updated to Active.");
+        } else if (selectedStatusInModal === "INACTIVE" && existingTakeawayQr.status !== "INACTIVE") {
+          await disableMutation({ id: existingTakeawayQr._id });
+          showToast("Takeaway QR status updated to Inactive.");
+        }
+      } catch (err: any) {
+        showToast(`Failed to update Takeaway QR: ${err?.message || "Error"}`);
+      }
+      setIsModalOpen(false);
+      return;
+    }
+
+    if (selectedQrTypeInModal === "Delivery" && existingDeliveryQr) {
+      try {
+        if (selectedStatusInModal === "ACTIVE" && existingDeliveryQr.status !== "ACTIVE") {
+          await enableMutation({ id: existingDeliveryQr._id });
+          showToast("Delivery QR status updated to Active.");
+        } else if (selectedStatusInModal === "INACTIVE" && existingDeliveryQr.status !== "INACTIVE") {
+          await disableMutation({ id: existingDeliveryQr._id });
+          showToast("Delivery QR status updated to Inactive.");
+        }
+      } catch (err: any) {
+        showToast(`Failed to update Delivery QR: ${err?.message || "Error"}`);
+      }
+      setIsModalOpen(false);
+      return;
+    }
+
     const isDineIn = selectedQrTypeInModal === "DineIn";
     const targetTableObj = isDineIn
       ? realTables?.find((t) => t._id === selectedTableIdInModal)
@@ -2513,10 +2593,24 @@ export function OrganizationQrManagement() {
                     <span className="font-semibold text-[#141010] tracking-tight">
                       PREST DINE
                     </span>
-                    <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#8d4b00] bg-[#fff9f2] px-2.5 py-0.5 rounded-full border border-[#ffe4cc]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      Pending Creation
-                    </span>
+                    {currentExistingQr ? (
+                      selectedStatusInModal === "ACTIVE" ? (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Active
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-stone-700 bg-stone-100 px-2.5 py-0.5 rounded-full border border-stone-300">
+                          <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                          Inactive
+                        </span>
+                      )
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[#8d4b00] bg-[#fff9f2] px-2.5 py-0.5 rounded-full border border-[#ffe4cc]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                        Pending Creation
+                      </span>
+                    )}
                   </div>
 
                   {/* Physical Standee Card */}
@@ -2525,13 +2619,18 @@ export function OrganizationQrManagement() {
                       Scan to browse & order
                     </span>
 
-                    {/* Pending Generation Placeholder — Dummy QR removed */}
-                    <div className="w-32 h-32 relative bg-[#fdf8f7] rounded-xl p-2 shadow-xs border border-dashed border-[#e7e5e4] flex flex-col items-center justify-center text-center gap-1.5">
-                      <QrCodeIcon className="w-7 h-7 text-[#8c857b]" />
-                      <span className="text-[9px] font-bold text-[#5e5e5e] leading-tight uppercase tracking-wider">
-                        Generated Upon Creation
-                      </span>
-                    </div>
+                    {currentExistingQr?.qrUrl ? (
+                      <div className="w-32 h-32 relative bg-white rounded-xl p-2 shadow-xs border border-[#e7e5e4] flex items-center justify-center">
+                        <DynamicQrCode value={currentExistingQr.qrUrl} />
+                      </div>
+                    ) : (
+                      <div className="w-32 h-32 relative bg-[#fdf8f7] rounded-xl p-2 shadow-xs border border-dashed border-[#e7e5e4] flex flex-col items-center justify-center text-center gap-1.5">
+                        <QrCodeIcon className="w-7 h-7 text-[#8c857b]" />
+                        <span className="text-[9px] font-bold text-[#5e5e5e] leading-tight uppercase tracking-wider">
+                          Generated Upon Creation
+                        </span>
+                      </div>
+                    )}
 
                     <div className="flex flex-col">
                       <span className="font-garamond text-base font-medium text-[#141010]">
@@ -2561,9 +2660,13 @@ export function OrganizationQrManagement() {
                       }`}
                     />
                     <span>
-                      {selectedStatusInModal === "ACTIVE"
-                        ? "Will be activated upon creation"
-                        : "Will be created as Inactive (disabled)"}
+                      {currentExistingQr
+                        ? selectedStatusInModal === "ACTIVE"
+                          ? "Active — Ready for customer orders"
+                          : "Inactive — Customer orders blocked"
+                        : selectedStatusInModal === "ACTIVE"
+                          ? "Will be activated upon creation"
+                          : "Will be created as Inactive (disabled)"}
                     </span>
                   </div>
                 </div>
@@ -2588,27 +2691,39 @@ export function OrganizationQrManagement() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isTypeAlreadyExists}
+                    disabled={isTypeAlreadyExists && !hasStatusChanged}
                     className={`px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 ${
-                      isTypeAlreadyExists
+                      isTypeAlreadyExists && !hasStatusChanged
                         ? "bg-[#a8a29e] text-[#f5f5f4] opacity-50 cursor-not-allowed pointer-events-none shadow-none"
                         : "bg-[#141010] text-white hover:bg-[#2d2622] cursor-pointer"
                     }`}
                     style={
-                      !isTypeAlreadyExists
+                      !(isTypeAlreadyExists && !hasStatusChanged)
                         ? { backgroundColor: "#141010", color: "#ffffff" }
                         : { backgroundColor: "#a8a29e", color: "#f5f5f4" }
                     }
                   >
-                    <PlusIcon
-                      className="w-4 h-4 text-white"
-                      style={{ color: "#ffffff", stroke: "#ffffff" }}
-                    />
+                    {hasStatusChanged ? (
+                      <CheckCircleIcon className="w-4 h-4 text-white" />
+                    ) : (
+                      <PlusIcon
+                        className="w-4 h-4 text-white"
+                        style={{ color: "#ffffff", stroke: "#ffffff" }}
+                      />
+                    )}
                     <span
                       className="font-bold"
-                      style={!isTypeAlreadyExists ? { color: "#ffffff" } : { color: "#f5f5f4" }}
+                      style={
+                        !(isTypeAlreadyExists && !hasStatusChanged)
+                          ? { color: "#ffffff" }
+                          : { color: "#f5f5f4" }
+                      }
                     >
-                      {isTypeAlreadyExists ? "QR Already Exists" : "Create QR"}
+                      {hasStatusChanged
+                        ? "Update QR Status"
+                        : isTypeAlreadyExists
+                          ? "QR Already Exists"
+                          : "Create QR"}
                     </span>
                   </button>
                 </div>

@@ -349,7 +349,7 @@ export default function CustomersPage() {
       if (!entry.lastOrderDate || ord.createdAt > entry.lastOrderDate) {
         entry.lastOrderDate = ord.createdAt;
         entry.lastOrderDisplay = formatStoreDateTime(ord.createdAt, activeOrg?.country, storeTimezone);
-        entry.lastOrderNumber = `ORD-${(ord._id || "").slice(-4).toUpperCase()}`;
+        entry.lastOrderNumber = ord.orderNumber || (ord._id ? `#${ord._id.slice(-4).toUpperCase()}` : "—");
       }
 
       // Track order source frequency

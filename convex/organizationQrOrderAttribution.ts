@@ -146,8 +146,7 @@ export const getOrderAttributionStats = query({
       (o) =>
         !o.isRejected &&
         o.paymentStatus !== "Refunded" &&
-        o.paymentStatus !== "Failed" &&
-        (o.paymentStatus === "Paid" || o.isCompleted),
+        o.paymentStatus !== "Failed",
     );
 
     const cancelledOrders = attributedOrders.filter(
@@ -155,7 +154,7 @@ export const getOrderAttributionStats = query({
     );
 
     // Sum net revenue from source of truth totalAmount
-    const totalRevenue = validOrders.reduce((sum, o) => sum + computeOrderNetRevenue(o), 0);
+    const totalRevenue = validOrders.reduce((sum, o) => sum + Math.round(computeOrderNetRevenue(o) * 100), 0);
 
     // 2. Fetch sessions and carts for conversion rates
     const sessions = await ctx.db

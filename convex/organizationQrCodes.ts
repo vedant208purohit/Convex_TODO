@@ -317,7 +317,7 @@ export const resolveCustomerSession = query({
     organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
-    const rawId = args.identifier || args.qrId || args.tableId || args.tableNumber;
+    const rawId = args.qrId || args.identifier || args.tableId || args.tableNumber;
     if (!rawId) return null;
 
     let qr: Doc<"organizationQrCodes"> | null = null;
@@ -358,6 +358,9 @@ export const resolveCustomerSession = query({
       return null;
     }
 
+    const qrStatus = qr.status ?? "ACTIVE";
+    const isInactive = qrStatus === "INACTIVE";
+
     return {
       _id: qr._id,
       qrId: qr._id,
@@ -371,7 +374,10 @@ export const resolveCustomerSession = query({
       counter: qr.counter,
       tableNumber: qr.tableNumber,
       tableId: qr.tableId,
-      status: qr.status ?? "ACTIVE",
+      status: isInactive ? "INACTIVE" : "ACTIVE",
+      valid: !isInactive,
+      errorCode: isInactive ? "QR_INACTIVE" : undefined,
+      error: isInactive ? "This QR code is currently inactive. Ordering is temporarily paused." : undefined,
     };
   },
 });

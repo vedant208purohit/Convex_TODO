@@ -6200,12 +6200,14 @@ function CashierPosContent() {
 
               <button
                 type="button"
-                onClick={() => {
-                  window.print();
-                }}
-                className="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-[#141010] rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                disabled
+                title="Thermal print feature coming soon"
+                className="flex-1 py-2.5 bg-stone-100 text-stone-400 border border-stone-200 rounded-xl text-xs font-semibold cursor-not-allowed opacity-75 flex items-center justify-center gap-1.5"
               >
-                Thermal Print
+                <span>Thermal Print</span>
+                <span className="px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full whitespace-nowrap">
+                  Coming Soon
+                </span>
               </button>
 
               <button

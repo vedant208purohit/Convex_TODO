@@ -28,7 +28,6 @@ export const recordScan = mutation({
   args: {
     qrId: v.string(),
     sessionId: v.optional(v.string()),
-    existingSessionId: v.optional(v.string()),
     ipAddress: v.optional(v.string()),
     userAgent: v.optional(v.string()),
     deviceType: v.optional(v.string()),
@@ -68,58 +67,78 @@ export const recordScan = mutation({
     }
 
     if (!qr || qr.deletedAt !== undefined) {
-      throw new Error("QR_NOT_FOUND");
+      return {
+        success: false,
+        status: "NOT_FOUND",
+        error: "QR_NOT_FOUND",
+      };
     }
 
     const currentStatus = qr.status ?? "ACTIVE";
     if (currentStatus === "INACTIVE") {
-      throw new Error("QR_INACTIVE");
+      return {
+        success: false,
+        status: "INACTIVE",
+        error: "QR_INACTIVE",
+        qrId: qr._id,
+        organizationId: qr.organizationId,
+        tableId: qr.tableId,
+        sessionId: null,
+      };
     }
 
     const now = Date.now();
 
-    const requestedSessionId = (args.sessionId || args.existingSessionId || "").trim();
+    // 1. Increment QR scan counter
+    await ctx.db.patch(qr._id, {
+      counter: (qr.counter ?? 0) + 1,
+      updatedAt: now,
+    });
+
+    let effectiveSessionId: string | null = null;
     let existingSession: Doc<"organizationOrderingSessions"> | null = null;
 
-    // 1. Direct Convex ID lookup for requestedSessionId
-    if (requestedSessionId) {
-      try {
-        const doc = await ctx.db.get(requestedSessionId as Id<"organizationOrderingSessions">);
-        if (
-          doc &&
-          doc.deletedAt === undefined &&
-          (doc.qrId === qr._id || (qr.tableId && doc.tableId === qr.tableId)) &&
-          (doc.status === "ACTIVE" || (doc.status as string) === "active") &&
-          now - (doc.lastActivityAt || doc.startedAt || 0) <= SESSION_ACTIVITY_WINDOW_MS
-        ) {
-          existingSession = doc;
-        }
-      } catch {}
-    }
-
-    // 2. Lookup by sessionId index
-    if (!existingSession && requestedSessionId) {
+    // 2. Check provided sessionId or find active existing session
+    if (args.sessionId) {
       const sessions = await ctx.db
         .query("organizationOrderingSessions")
-        .withIndex("by_session_id", (q) => q.eq("sessionId", requestedSessionId))
+        .withIndex("by_session_id", (q) => q.eq("sessionId", args.sessionId!))
         .collect();
 
       const activeMatch = sessions.find(
-        (s) =>
-          (s.qrId === qr._id || (qr.tableId && s.tableId === qr.tableId)) &&
-          s.deletedAt === undefined &&
-          (s.status === "ACTIVE" || (s.status as string) === "active") &&
-          now - (s.lastActivityAt || s.startedAt || 0) <= SESSION_ACTIVITY_WINDOW_MS
+        (s) => s.qrId === qr._id && s.deletedAt === undefined && s.status === "ACTIVE",
       );
 
       if (activeMatch) {
         existingSession = activeMatch;
+        effectiveSessionId = activeMatch.sessionId;
       }
     }
 
-    let effectiveSessionId: string;
-    if (!existingSession) {
-      effectiveSessionId = requestedSessionId || generateId("session");
+    // If no session ID passed or previous session expired, check recent session for QR
+    if (!effectiveSessionId) {
+      const recentSessions = await ctx.db
+        .query("organizationOrderingSessions")
+        .withIndex("by_qr", (q) => q.eq("qrId", qr._id))
+        .collect();
+
+      const validRecent = recentSessions.find(
+        (s) =>
+          s.deletedAt === undefined &&
+          s.status === "ACTIVE" &&
+          now - s.lastActivityAt <= SESSION_ACTIVITY_WINDOW_MS,
+      );
+
+      if (validRecent) {
+        existingSession = validRecent;
+        effectiveSessionId = validRecent.sessionId;
+      }
+    }
+
+    // Create a new session if none can be reused
+    if (!effectiveSessionId || !existingSession) {
+      effectiveSessionId = args.sessionId || generateId("session");
+
       await ctx.db.insert("organizationOrderingSessions", {
         sessionId: effectiveSessionId,
         qrId: qr._id,
@@ -127,82 +146,42 @@ export const recordScan = mutation({
         tableId: qr.tableId,
         status: "ACTIVE",
         startedAt: now,
-        firstScanAt: now,
         lastActivityAt: now,
-        updatedAt: now,
       });
     } else {
-      effectiveSessionId = existingSession.sessionId;
+      // Update activity timestamp on existing session
       await ctx.db.patch(existingSession._id, {
         lastActivityAt: now,
-        updatedAt: now,
       });
     }
 
-    // 15-Minute Scan Deduplication: Page refreshes & scans within 15 min do NOT inflate scan count
-    const SCAN_DEDUPE_WINDOW_MS = 15 * 60 * 1000;
-    let isDuplicateScan = false;
-    let scanDocId: Id<"organizationQrScans">;
-
-    if (existingSession || requestedSessionId) {
-      const recentScans = await ctx.db
-        .query("organizationQrScans")
-        .withIndex("by_qr", (q) => q.eq("qrId", qr._id))
-        .collect();
-
-      const existingScan = recentScans.find((s) => {
-        if (s.deletedAt !== undefined) return false;
-        const matchesSession =
-          s.sessionId === effectiveSessionId ||
-          (requestedSessionId && s.sessionId === requestedSessionId) ||
-          (existingSession && s.sessionId === existingSession.sessionId);
-        const withinWindow = now - s.scannedAt <= SCAN_DEDUPE_WINDOW_MS;
-        return matchesSession && withinWindow;
-      });
-
-      if (existingScan) {
-        isDuplicateScan = true;
-        scanDocId = existingScan._id;
-      }
-    }
-
-    if (!isDuplicateScan) {
-      // Increment physical scan counter and insert scan telemetry ONLY for new scans
-      await ctx.db.patch(qr._id, {
-        counter: (qr.counter ?? 0) + 1,
-        updatedAt: now,
-      });
-
-      scanDocId = await ctx.db.insert("organizationQrScans", {
-        qrId: qr._id,
-        organizationId: qr.organizationId,
-        tableId: qr.tableId,
-        sessionId: effectiveSessionId,
-        scannedAt: now,
-        ipAddress: args.ipAddress,
-        userAgent: args.userAgent,
-        deviceType: args.deviceType,
-        os: args.os,
-        browser: args.browser,
-        city: args.city,
-        country: args.country,
-        region: args.region,
-        latitude: args.latitude,
-        longitude: args.longitude,
-        referrer: args.referrer,
-        screenResolution: args.screenResolution,
-        language: args.language,
-      });
-    }
-
-    return {
-      success: true,
-      scanId: scanDocId,
+    // 3. Log scan telemetry event with rich telemetry
+    const scanDocId = await ctx.db.insert("organizationQrScans", {
       qrId: qr._id,
       organizationId: qr.organizationId,
+      tableId: qr.tableId,
+      sessionId: effectiveSessionId,
+      scannedAt: now,
+      ipAddress: args.ipAddress,
+      userAgent: args.userAgent,
+      deviceType: args.deviceType,
+      os: args.os,
+      browser: args.browser,
+      city: args.city,
+      country: args.country,
+      region: args.region,
+      latitude: args.latitude,
+      longitude: args.longitude,
+      referrer: args.referrer,
+      screenResolution: args.screenResolution,
+      language: args.language,
+    });
+
+    return {
+      scanId: scanDocId,
+      qrId: qr._id,
       sessionId: effectiveSessionId,
       tableId: qr.tableId,
-      qrType: qr.qrType,
       scannedAt: new Date(now).toISOString(),
     };
   },
@@ -219,9 +198,6 @@ export const recordCartActivity = mutation({
     sessionId: v.string(),
     cartId: v.optional(v.string()),
     itemCount: v.number(),
-    tableId: v.optional(v.string()),
-    qrId: v.optional(v.string()),
-    organizationId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -233,7 +209,9 @@ export const recordCartActivity = mutation({
       if (doc && doc.deletedAt === undefined) {
         activeSession = doc;
       }
-    } catch {}
+    } catch {
+      // Ignore if string is not a valid Convex Id format
+    }
 
     // 2. Fallback to index search by sessionId string field
     if (!activeSession) {
@@ -257,67 +235,19 @@ export const recordCartActivity = mutation({
         ) ?? null;
     }
 
-    // 4. Fallback to match by tableId or qrId if provided
-    if (!activeSession && (args.tableId || args.qrId)) {
-      const allSessions = await ctx.db
-        .query("organizationOrderingSessions")
-        .collect();
-      const matching = allSessions.filter((s) => {
-        if (s.deletedAt !== undefined) return false;
-        if (args.tableId && s.tableId === args.tableId) return true;
-        if (args.qrId && (String(s.qrId) === args.qrId || (s as any).qrId === args.qrId)) return true;
-        return false;
-      });
-      matching.sort((a, b) => (b.lastActivityAt || b.startedAt || 0) - (a.lastActivityAt || a.startedAt || 0));
-      if (matching.length > 0) {
-        activeSession = matching[0];
-      }
+    if (!activeSession) {
+      return { cartId: args.cartId || `cart_${args.sessionId}`, itemCount: args.itemCount, hasItems: args.itemCount > 0 };
     }
 
-    // 5. If STILL no session, create one for table / QR so cart count is never lost
-    if (!activeSession && (args.tableId || args.qrId)) {
-      let resolvedQr: Doc<"organizationQrCodes"> | null = null;
-      if (args.qrId) {
-        try {
-          const q = await ctx.db.get(args.qrId as Id<"organizationQrCodes">);
-          if (q) resolvedQr = q;
-        } catch {}
-      }
-      if (!resolvedQr && args.tableId) {
-        const tableQrs = await ctx.db
-          .query("organizationQrCodes")
-          .withIndex("by_table", (q) => q.eq("tableId", args.tableId))
-          .collect();
-        resolvedQr = tableQrs.find((q) => q.deletedAt === undefined) ?? null;
-      }
+    // Patch ordering session with cartItemCount and activity time
+    await ctx.db.patch(activeSession._id, {
+      cartItemCount: Math.max(0, args.itemCount),
+      lastActivityAt: now,
+      updatedAt: now,
+    });
 
-      if (resolvedQr) {
-        const newSessionId = await ctx.db.insert("organizationOrderingSessions", {
-          sessionId: args.sessionId,
-          qrId: resolvedQr._id,
-          organizationId: resolvedQr.organizationId,
-          tableId: args.tableId || resolvedQr.tableId,
-          status: "ACTIVE",
-          startedAt: now,
-          firstScanAt: now,
-          lastActivityAt: now,
-          cartItemCount: Math.max(0, args.itemCount),
-          updatedAt: now,
-        });
-        activeSession = await ctx.db.get(newSessionId);
-      }
-    }
-
-    if (activeSession) {
-      await ctx.db.patch(activeSession._id, {
-        cartItemCount: Math.max(0, args.itemCount),
-        lastActivityAt: now,
-        updatedAt: now,
-      });
-    }
-
-    // Always upsert organizationCarts
     const effectiveCartId = args.cartId || `cart_${args.sessionId}`;
+
     const existingCarts = await ctx.db
       .query("organizationCarts")
       .withIndex("by_cart_id", (q) => q.eq("cartId", effectiveCartId))
@@ -325,24 +255,20 @@ export const recordCartActivity = mutation({
 
     const existing = existingCarts.find((c) => c.deletedAt === undefined);
     const hasItems = args.itemCount > 0;
-    const effectiveQrId = activeSession?.qrId || (args.qrId as any);
-    const effectiveOrgId = activeSession?.organizationId || (args.organizationId as any);
-    const effectiveTableId = activeSession?.tableId || args.tableId;
 
     if (existing) {
       await ctx.db.patch(existing._id, {
         itemCount: args.itemCount,
         hasItems,
-        tableId: effectiveTableId || existing.tableId,
         updatedAt: now,
       });
-    } else if (effectiveQrId) {
+    } else {
       await ctx.db.insert("organizationCarts", {
         cartId: effectiveCartId,
-        sessionId: activeSession ? ((activeSession as any).sessionId || String(activeSession._id)) : args.sessionId,
-        qrId: effectiveQrId,
-        organizationId: effectiveOrgId,
-        tableId: effectiveTableId,
+        sessionId: (activeSession as any).sessionId || String(activeSession._id),
+        qrId: activeSession.qrId,
+        organizationId: activeSession.organizationId,
+        tableId: activeSession.tableId,
         itemCount: args.itemCount,
         hasItems,
         createdAt: now,
@@ -352,14 +278,18 @@ export const recordCartActivity = mutation({
 
     return {
       cartId: effectiveCartId,
-      sessionId: activeSession ? ((activeSession as any).sessionId || String(activeSession._id)) : args.sessionId,
-      qrId: effectiveQrId,
-      tableId: effectiveTableId,
+      sessionId: (activeSession as any).sessionId || String(activeSession._id),
+      qrId: activeSession.qrId,
+      tableId: activeSession.tableId,
       itemCount: args.itemCount,
       hasItems,
     };
   },
 });
+
+// ----------------------------------------------------
+// QUERIES
+// ----------------------------------------------------
 
 /**
  * Fetches session and scan journey stats for a given QR code.
@@ -413,6 +343,10 @@ export const getQrJourneyStats = query({
   },
 });
 
+/**
+ * 3. Record Order Conversion (Backward-Compatible Alias)
+ * Attributes an order to a customer ordering session and QR code.
+ */
 export const recordOrderConversion = mutation({
   args: {
     sessionId: v.optional(v.string()),
