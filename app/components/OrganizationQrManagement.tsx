@@ -868,13 +868,13 @@ export function OrganizationQrManagement() {
 
   const existingTakeawayQr = useMemo(() => {
     return convexQrCodes?.find(
-      (q) => !q.tableId && q.deletedAt === undefined && (q.qrType === "TakeAway" || q.qrType === "takeaway"),
+      (q) => !q.tableId && q.deletedAt === undefined && (q.qrType === "TakeAway" || (q.qrType as string) === "takeaway" || q.qrType === "TAKEAWAY"),
     );
   }, [convexQrCodes]);
 
   const existingDeliveryQr = useMemo(() => {
     return convexQrCodes?.find(
-      (q) => !q.tableId && q.deletedAt === undefined && (q.qrType === "Delivery" || q.qrType === "delivery"),
+      (q) => !q.tableId && q.deletedAt === undefined && (q.qrType === "Delivery" || (q.qrType as string) === "delivery" || q.qrType === "DELIVERY"),
     );
   }, [convexQrCodes]);
 
@@ -895,18 +895,18 @@ export function OrganizationQrManagement() {
       setSelectedStatusInModal(
         existingTakeawayQr.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
       );
-      if (existingTakeawayQr.displayName || existingTakeawayQr.name) {
+      if ((existingTakeawayQr as any).displayName || existingTakeawayQr.name) {
         setNewTableName(
-          existingTakeawayQr.displayName || existingTakeawayQr.name,
+          (existingTakeawayQr as any).displayName || existingTakeawayQr.name,
         );
       }
     } else if (selectedQrTypeInModal === "Delivery" && existingDeliveryQr) {
       setSelectedStatusInModal(
         existingDeliveryQr.status === "INACTIVE" ? "INACTIVE" : "ACTIVE",
       );
-      if (existingDeliveryQr.displayName || existingDeliveryQr.name) {
+      if ((existingDeliveryQr as any).displayName || existingDeliveryQr.name) {
         setNewTableName(
-          existingDeliveryQr.displayName || existingDeliveryQr.name,
+          (existingDeliveryQr as any).displayName || existingDeliveryQr.name,
         );
       }
     }

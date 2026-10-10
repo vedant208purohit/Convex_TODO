@@ -84,7 +84,7 @@ export const recordScan = mutation({
         qrId: qr._id,
         organizationId: qr.organizationId,
         tableId: qr.tableId,
-        sessionId: null,
+        sessionId: undefined,
       };
     }
 

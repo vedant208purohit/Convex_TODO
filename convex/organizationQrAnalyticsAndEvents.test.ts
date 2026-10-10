@@ -36,7 +36,7 @@ describe("Subtickets 04, 05, 06: QR Analytics, Dashboard & Webhook Event Integra
     });
 
     await t.mutation(api.organizationQrCustomerJourney.recordCartActivity, {
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
       itemCount: 2,
     });
 
@@ -80,7 +80,7 @@ describe("Subtickets 04, 05, 06: QR Analytics, Dashboard & Webhook Event Integra
     await asAdmin.mutation(api.organizationQrOrderAttribution.attributeOrderToQr, {
       orderId,
       qrId: qr.qrId,
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
     });
 
     const analytics = await asAdmin.query(api.organizationQrAnalytics.getIndividualAnalytics, {
