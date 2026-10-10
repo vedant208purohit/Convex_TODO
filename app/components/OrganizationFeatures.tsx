@@ -336,7 +336,7 @@ export function OrganizationFeatures() {
 
   // Count active modes (Dine in, Takeaway, Delivery, Scheduled Delivery, Scheduled Pickup)
   const activeModesCount = [
-    org?.isDineIn,
+    org?.isDineIn !== false,
     org?.isTakeAway,
     org?.isDelivery,
     org?.scheduledDelivery,
@@ -394,7 +394,7 @@ export function OrganizationFeatures() {
   const handleChannelToggle = async (key: "isDineIn" | "isTakeAway" | "isDelivery", currentValue: boolean) => {
     if (!org?._id) return;
     if (currentValue) {
-      const dineIn = key === "isDineIn" ? false : Boolean(org.isDineIn);
+      const dineIn = key === "isDineIn" ? false : Boolean(org.isDineIn !== false);
       const takeaway = key === "isTakeAway" ? false : Boolean(org.isTakeAway);
       const delivery = key === "isDelivery" ? false : Boolean(org.isDelivery);
 
@@ -846,8 +846,8 @@ function ServiceModesSection({
           </div>
           <div className="flex items-center gap-4">
             <Switch
-              checked={org?.isDineIn ?? false}
-              onChange={() => handleChannelToggle("isDineIn", org?.isDineIn ?? false)}
+              checked={org?.isDineIn !== false}
+              onChange={() => handleChannelToggle("isDineIn", org?.isDineIn !== false)}
             />
             <button type="button" className="text-[#5e5e5e] hover:text-[#141010] transition-colors">
               {openDineIn ? <ChevronUpIcon className="w-5 h-5" /> : <ChevronDownIcon className="w-5 h-5" />}

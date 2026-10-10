@@ -992,12 +992,12 @@ export const create = mutation({
       (args.country?.trim() ? getTimezoneForCountry(args.country) : "UTC");
 
     // Service Mode Defaults
-    const isDineIn = args.isDineIn ?? false;
+    const isDineIn = args.isDineIn ?? true;
     const isTakeAway = args.isTakeAway ?? true;
     const isDelivery = args.isDelivery ?? false;
 
     // Dine-In Prepaid / Postpaid Exclusivity
-    let dineinPrepaid = args.dineinPrepaid ?? false;
+    let dineinPrepaid = args.dineinPrepaid ?? (isDineIn ? true : false);
     let dineinPospaid = args.dineinPospaid ?? false;
     if (dineinPrepaid && dineinPospaid) {
       dineinPospaid = false;

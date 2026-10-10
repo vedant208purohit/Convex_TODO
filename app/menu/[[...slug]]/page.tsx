@@ -945,8 +945,9 @@ export default function MenuPage() {
   }, [organization?._id, rawItemTypes, ensureItemTypesMutation]);
 
   const availableItemTypes = useMemo(() => {
+    let types: Array<{ id: string; name: string; label: string; icon: string }> = [];
     if (rawItemTypes && rawItemTypes.length > 0) {
-      return rawItemTypes.map((t) => ({
+      types = rawItemTypes.map((t) => ({
         id: t._id,
         name: t.name,
         label: t.name,
@@ -962,15 +963,23 @@ export default function MenuPage() {
                   ? "🥚"
                   : "🟢"),
       }));
+    } else {
+      types = [
+        { id: "veg", name: "Vegetarian", label: "Vegetarian", icon: "🟢" },
+        { id: "non_veg", name: "Non-Veg", label: "Non-Veg", icon: "🔴" },
+        { id: "vegan", name: "Vegan", label: "Vegan", icon: "🌿" },
+        { id: "jain", name: "Jain", label: "Jain", icon: "🟡" },
+        { id: "egg", name: "Contains Egg", label: "Contains Egg", icon: "🥚" },
+      ];
     }
-    return [
-      { id: "veg", name: "Vegetarian", label: "Vegetarian", icon: "🟢" },
-      { id: "non_veg", name: "Non-Veg", label: "Non-Veg", icon: "🔴" },
-      { id: "vegan", name: "Vegan", label: "Vegan", icon: "🌿" },
-      { id: "jain", name: "Jain", label: "Jain", icon: "🟡" },
-      { id: "egg", name: "Contains Egg", label: "Contains Egg", icon: "🥚" },
-    ];
-  }, [rawItemTypes]);
+    if (organization?.isVeg) {
+      types = types.filter((t) => {
+        const lower = (t.name || t.label || t.id || "").toLowerCase();
+        return !lower.includes("non") && !lower.includes("egg");
+      });
+    }
+    return types;
+  }, [rawItemTypes, organization?.isVeg]);
 
   // Standard Notification Toast State
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -1235,10 +1244,32 @@ export default function MenuPage() {
   }, [categories, selectedCategoryId]);
 
   // Category Items query
-  const categoryItems = useQuery(
+  const rawCategoryItems = useQuery(
     api.menu.listCategoryItems,
     activeCategory?._id ? { categoryId: activeCategory._id } : "skip",
   );
+
+  const categoryItems = useMemo(() => {
+    if (!rawCategoryItems) return undefined;
+    if (!organization?.isVeg) return rawCategoryItems;
+    return rawCategoryItems.filter(({ item }) => {
+      if (item.isVeg === false) return false;
+      const dt = (item.dietaryType || "").toLowerCase();
+      if (dt.includes("non") || dt.includes("egg")) return false;
+      if (item.itemTypeIds && item.itemTypeIds.length > 0 && rawItemTypes) {
+        const hasNonVegOrEgg = item.itemTypeIds.some((typeId) => {
+          const matched = rawItemTypes.find((t) => t._id === typeId);
+          if (matched) {
+            const name = matched.name.toLowerCase();
+            return name.includes("non") || name.includes("egg");
+          }
+          return false;
+        });
+        if (hasNonVegOrEgg) return false;
+      }
+      return true;
+    });
+  }, [rawCategoryItems, organization?.isVeg, rawItemTypes]);
 
   // Active selected item for customizations view
   const activeItem = useMemo(() => {
@@ -1279,14 +1310,23 @@ export default function MenuPage() {
 
   const filteredChoices = useMemo(() => {
     if (!activeCustomization?.items) return [];
-    if (!choiceSearchQuery.trim()) return activeCustomization.items;
+    let items = activeCustomization.items;
+    if (organization?.isVeg) {
+      items = items.filter((c: any) => {
+        if (c.isVeg === false) return false;
+        const dt = (c.dietaryType || "").toLowerCase();
+        if (dt.includes("non") || dt.includes("egg")) return false;
+        return true;
+      });
+    }
+    if (!choiceSearchQuery.trim()) return items;
     const q = choiceSearchQuery.toLowerCase();
-    return activeCustomization.items.filter(
+    return items.filter(
       (c: any) =>
         c.name.toLowerCase().includes(q) ||
         (c.description && c.description.toLowerCase().includes(q)),
     );
-  }, [activeCustomization, choiceSearchQuery]);
+  }, [activeCustomization, choiceSearchQuery, organization?.isVeg]);
 
   // All existing items for 'Add Existing Item' Drawer
   const allExistingItems = useQuery(
@@ -1555,6 +1595,20 @@ export default function MenuPage() {
     },
     [selectedDietaryType],
   );
+
+  // Keep dietary type normalized to veg if pure vegetarian restaurant is active
+  useEffect(() => {
+    if (organization?.isVeg) {
+      const lower = (selectedDietaryType || "").toLowerCase();
+      if (lower.includes("non") || lower.includes("egg")) {
+        setSelectedDietaryType("veg");
+      }
+      const choiceLower = (choiceDietaryType || "").toLowerCase();
+      if (choiceLower.includes("non") || choiceLower.includes("egg")) {
+        setChoiceDietaryType("veg");
+      }
+    }
+  }, [organization?.isVeg, selectedDietaryType, choiceDietaryType]);
   const [itemShowItemType, setItemShowItemType] = useState(true);
   const [itemIsSpicy, setItemIsSpicy] = useState(false);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
@@ -2248,14 +2302,22 @@ export default function MenuPage() {
     setItemName(item.name);
     setItemPrice((item.price / 100).toFixed(2));
     setItemDescription(item.description || "");
-    setItemIsVeg(item.isVeg ?? true);
+    setItemIsVeg(organization?.isVeg ? true : (item.isVeg ?? true));
+    let initialDietary = "veg";
     if (item.itemTypeIds && item.itemTypeIds.length > 0) {
-      setSelectedDietaryType(item.itemTypeIds[0]);
+      initialDietary = item.itemTypeIds[0];
     } else if (item.dietaryType) {
-      setSelectedDietaryType(item.dietaryType);
+      initialDietary = item.dietaryType;
     } else {
-      setSelectedDietaryType(item.isVeg === false ? "non_veg" : "veg");
+      initialDietary = item.isVeg === false ? "non_veg" : "veg";
     }
+    if (organization?.isVeg) {
+      const lower = String(initialDietary || "").toLowerCase();
+      if (lower.includes("non") || lower.includes("egg") || item.isVeg === false) {
+        initialDietary = "veg";
+      }
+    }
+    setSelectedDietaryType(initialDietary);
     setItemShowItemType(item.showItemType ?? true);
     setItemIsSpicy(item.isSpicy ?? false);
     setItemIsAvailable(item.isAvailable ?? true);
@@ -2661,6 +2723,7 @@ export default function MenuPage() {
     const trimmedItemName = itemName.trim();
     try {
       const isVegBool = (() => {
+        if (organization?.isVeg) return true;
         const matchedType = availableItemTypes.find((t) =>
           isDietaryTypeSelected(t),
         );
@@ -2932,14 +2995,35 @@ export default function MenuPage() {
   };
 
   const filteredExistingItems = useMemo(() => {
-    if (!allExistingItems || !existingItemSearchQuery.trim()) return [];
+    if (!allExistingItems) return [];
+    let items = allExistingItems;
+    if (organization?.isVeg) {
+      items = items.filter((item: any) => {
+        if (item.isVeg === false) return false;
+        const dt = (item.dietaryType || "").toLowerCase();
+        if (dt.includes("non") || dt.includes("egg")) return false;
+        if (item.itemTypeIds && item.itemTypeIds.length > 0 && rawItemTypes) {
+          const hasNonVegOrEgg = item.itemTypeIds.some((typeId: string) => {
+            const matched = rawItemTypes.find((t) => t._id === typeId);
+            if (matched) {
+              const name = matched.name.toLowerCase();
+              return name.includes("non") || name.includes("egg");
+            }
+            return false;
+          });
+          if (hasNonVegOrEgg) return false;
+        }
+        return true;
+      });
+    }
+    if (!existingItemSearchQuery.trim()) return [];
     const query = existingItemSearchQuery.toLowerCase();
-    return allExistingItems.filter(
+    return items.filter(
       (item) =>
         item.name.toLowerCase().includes(query) ||
         (item.categoryName && item.categoryName.toLowerCase().includes(query)),
     );
-  }, [allExistingItems, existingItemSearchQuery]);
+  }, [allExistingItems, existingItemSearchQuery, organization?.isVeg, rawItemTypes]);
 
   // Add Existing Customization Handlers
   const handleOpenAddExistingCustomizationDrawer = () => {
@@ -3355,9 +3439,14 @@ export default function MenuPage() {
     setChoicePrice((choice.price / 100).toFixed(2));
     setChoiceDescription(choice.description || "");
     setChoiceIsAvailable(choice.isAvailable ?? true);
-    setChoiceDietaryType(
-      choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg"),
-    );
+    let initialChoiceDietary = choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg");
+    if (organization?.isVeg) {
+      const lower = String(initialChoiceDietary || "").toLowerCase();
+      if (lower.includes("non") || lower.includes("egg") || choice.isVeg === false) {
+        initialChoiceDietary = "veg";
+      }
+    }
+    setChoiceDietaryType(initialChoiceDietary);
     setChoiceShowQuantity(!!choice.showQuantity);
     setChoiceQuantity(choice.quantity ? String(choice.quantity) : "");
     setChoiceQuantityUnit(choice.quantityUnit || "g");
@@ -3397,6 +3486,7 @@ export default function MenuPage() {
         ? parseFloat(choiceQuantity)
         : undefined;
     const isVeg =
+      organization?.isVeg ||
       choiceDietaryType === "veg" ||
       choiceDietaryType === "vegan" ||
       choiceDietaryType === "jain";

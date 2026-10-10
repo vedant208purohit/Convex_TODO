@@ -407,7 +407,7 @@ export function PosShell({
   const { signOut } = useClerk();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
-  const isDineInActive = Boolean(activeOrg?.isDineIn);
+  const isDineInActive = activeOrg?.isDineIn !== false;
   const branchName = activeOrg?.name || "Flagship Main Store";
 
   if (organizations !== undefined && organizations.length === 0) {
