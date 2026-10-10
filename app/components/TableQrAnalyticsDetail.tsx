@@ -848,18 +848,24 @@ export function TableQrAnalyticsDetail({
             </div>
           </div>
 
-          {/* Step 3 */}
-          <div className="p-4 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] flex flex-col justify-between gap-3 min-w-0">
+          {/* Step 3: Coming Soon */}
+          <div className="p-4 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] flex flex-col justify-between gap-3 min-w-0 opacity-90">
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] font-bold text-[#5e5e5e] uppercase">3. Cart Created</span>
-              <span className="font-garamond text-3xl font-normal text-[#141010]">{metrics.carts.toLocaleString()}</span>
-              <span className="text-xs text-[#5e5e5e] truncate">Items added to cart</span>
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[10px] font-bold text-[#5e5e5e] uppercase">3. Cart Created</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-[#fffbeb] text-[#b45309] border border-[#fde68a]">
+                  <span className="w-1 h-1 rounded-full bg-[#f59e0b]" />
+                  Coming Soon
+                </span>
+              </div>
+              <span className="font-garamond text-3xl font-normal text-[#8c827a]">—</span>
+              <span className="text-xs text-[#8c827a] truncate">Cart telemetry tracking</span>
             </div>
             <div>
               <div className="w-full bg-[#e7e5e4] h-1.5 rounded-full overflow-hidden mb-1">
-                <div className="bg-[#141010] h-full rounded-full" style={{ width: `${metrics.cartConversion}%` }} />
+                <div className="bg-[#d6d3d1] h-full rounded-full" style={{ width: `0%` }} />
               </div>
-              <span className="text-[11px] font-bold text-emerald-700 whitespace-nowrap">{metrics.cartConversion}% of sessions</span>
+              <span className="text-[11px] font-bold text-[#8c827a] whitespace-nowrap">Coming Soon</span>
             </div>
           </div>
 
@@ -872,9 +878,9 @@ export function TableQrAnalyticsDetail({
             </div>
             <div>
               <div className="w-full bg-[#e7e5e4] h-1.5 rounded-full overflow-hidden mb-1">
-                <div className="bg-[#141010] h-full rounded-full" style={{ width: `${metrics.cartToOrderConversion}%` }} />
+                <div className="bg-[#141010] h-full rounded-full" style={{ width: `${metrics.orderConversion}%` }} />
               </div>
-              <span className="text-[11px] font-bold text-emerald-700 whitespace-nowrap">{metrics.cartToOrderConversion}% of carts</span>
+              <span className="text-[11px] font-bold text-emerald-700 whitespace-nowrap">{metrics.orderConversion}% of sessions</span>
             </div>
           </div>
         </div>
