@@ -94,7 +94,7 @@ export function EditCustomerModal({
             <h2 className="font-serif text-xl font-medium text-stone-900">
               Edit Customer Profile
             </h2>
-            <p className="text-xs text-stone-500 font-mono uppercase tracking-wider mt-0.5">
+            <p className="text-xs text-stone-500 uppercase tracking-wider mt-0.5">
               Customer ID: {customer._id}
             </p>
           </div>
@@ -147,7 +147,7 @@ export function EditCustomerModal({
               <select
                 value={countryCode}
                 onChange={(e) => setCountryCode(e.target.value)}
-                className="bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-2.5 py-2 text-xs font-mono font-medium text-stone-900 outline-none shrink-0"
+                className="bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-2.5 py-2 text-xs font-medium text-stone-900 outline-none shrink-0"
               >
                 {COUNTRY_DIAL_OPTIONS.map((opt) => (
                   <option key={opt.code} value={opt.code}>
@@ -160,7 +160,7 @@ export function EditCustomerModal({
                 required
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
-                className="flex-1 bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-3 py-2 text-sm font-mono text-stone-900 outline-none transition-colors"
+                className="flex-1 bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-3 py-2 text-sm text-stone-900 outline-none transition-colors"
               />
             </div>
           </div>
@@ -186,7 +186,7 @@ export function EditCustomerModal({
               value={razorpayCustomerId}
               onChange={(e) => setRazorpayCustomerId(e.target.value)}
               placeholder="e.g. cust_K93js8dks92"
-              className="w-full bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-3 py-2 text-sm font-mono text-stone-900 outline-none transition-colors"
+              className="w-full bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-lg px-3 py-2 text-sm text-stone-900 outline-none transition-colors"
             />
           </div>
 

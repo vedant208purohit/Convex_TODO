@@ -71,7 +71,7 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
           let errorMsg = data.error || "Failed to resolve your store database.";
           if (data.code === "STORE_NOT_ASSIGNED") {
             errorMsg =
-              "Your staff account is not assigned to an active store. Please contact your store owner.";
+              "You do not have any assigned store. Please contact the store owner.";
           } else if (data.code === "ACCOUNT_INACTIVE") {
             errorMsg =
               "Your staff account has been deactivated. Please contact your administrator.";
@@ -184,7 +184,7 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-stone-900">Store Access Denied</h2>
+          <h2 className="text-xl font-semibold text-stone-900">{resolutionState.errorCode === "STORE_NOT_ASSIGNED" ? "No Store Assigned" : "Store Access Denied"}</h2>
           <p className="mt-2 text-sm text-stone-600 leading-relaxed">
             {resolutionState.error || "Unable to locate an authorized store database for your account."}
           </p>

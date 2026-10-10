@@ -50,7 +50,7 @@ export function DeleteCustomerModal({
             <h2 className="font-serif text-lg font-medium text-red-900">
               Delete Customer
             </h2>
-            <p className="text-xs text-stone-500 uppercase tracking-wider font-mono">
+            <p className="text-xs text-stone-500 uppercase tracking-wider">
               Soft Deletion Confirmation
             </p>
           </div>

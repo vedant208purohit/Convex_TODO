@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect, ReactNode } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo, ReactNode } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { useAuth } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
@@ -299,10 +299,32 @@ export function OrganizationTablesSettings() {
   const removeTable = useMutation(api.organizationTables.remove);
 
   // Organization QR Codes query for previewing table QR
+  const allQrCodes = useQuery(
+    api.organizationQrCodes.list,
+    isAuthReady ? {} : "skip",
+  );
   const previewTableQr = useQuery(
     api.organizationQrCodes.getByTable,
     previewTable && isAuthReady ? { tableId: previewTable._id } : "skip",
   );
+
+  const effectiveTableQr = useMemo(() => {
+    if (!previewTable) return null;
+    if (previewTableQr && previewTableQr.qrUrl) return previewTableQr;
+    if (allQrCodes && allQrCodes.length > 0) {
+      const match = allQrCodes.find(
+        (q: any) =>
+          q.deletedAt === undefined &&
+          (q.tableId === previewTable._id ||
+            (q.name &&
+              q.name.trim().toLowerCase() === `table ${previewTable.tableNumber}`.trim().toLowerCase()) ||
+            (q.name &&
+              q.name.trim().toLowerCase() === previewTable.tableNumber.trim().toLowerCase())),
+      );
+      if (match) return match;
+    }
+    return null;
+  }, [previewTable, previewTableQr, allQrCodes]);
 
   const isLoadingLayouts = layouts === undefined;
   const isLoadingTables = allTables === undefined;
@@ -510,14 +532,35 @@ export function OrganizationTablesSettings() {
       return;
     }
 
+    const targetLayoutId = tableLayoutIdInput
+      ? (tableLayoutIdInput as Id<"organizationLayouts">)
+      : undefined;
+
+    // Client-side pre-validation: Check for duplicate table name in selected layout
+    const normalizedInput = tableNumberInput.trim().toLowerCase();
+    const isDuplicate = (allTables || []).some(
+      (t) =>
+        t.deletedAt === undefined &&
+        (!editingTable || t._id !== editingTable._id) &&
+        t.layoutId === targetLayoutId &&
+        t.tableNumber.trim().toLowerCase() === normalizedInput
+    );
+
+    if (isDuplicate) {
+      setTableErrorMessage(
+        `This table name "${tableNumberInput.trim()}" is already taken. Please choose a different table number.`
+      );
+      setTablePendingFields({ tableNumber: true });
+      if (tableNumberInputRef.current) {
+        tableNumberInputRef.current.focus();
+      }
+      return;
+    }
+
     setIsTableSubmitting(true);
     setTablePendingErrors([]);
     setTablePendingFields({});
     setTableErrorMessage(null);
-
-    const targetLayoutId = tableLayoutIdInput
-      ? (tableLayoutIdInput as Id<"organizationLayouts">)
-      : undefined;
 
     try {
       if (editingTable) {
@@ -543,7 +586,23 @@ export function OrganizationTablesSettings() {
         setShowAddTableDrawer(false);
       }
     } catch (err: any) {
-      setTableErrorMessage(err?.message || "Failed to save table.");
+      const rawMsg = err?.message || "";
+      if (rawMsg.toLowerCase().includes("already taken")) {
+        setTableErrorMessage(
+          `This table name "${tableNumberInput.trim()}" is already taken. Please choose a different table number.`
+        );
+        setTablePendingFields({ tableNumber: true });
+      } else {
+        // Strip Convex RPC wrapper prefixes and stack traces
+        let cleanMsg = rawMsg;
+        const match = rawMsg.match(/Uncaught Error:\s*([^\n\r]+)/);
+        if (match && match[1]) {
+          cleanMsg = match[1].replace(/at\s+.*$/, "").trim();
+        } else if (cleanMsg.includes("Server Error")) {
+          cleanMsg = cleanMsg.replace(/^\[.*?\]\s*/g, "").replace(/Server Error.*?:/i, "").trim();
+        }
+        setTableErrorMessage(cleanMsg || "Failed to save table.");
+      }
     } finally {
       setIsTableSubmitting(false);
     }
@@ -2204,6 +2263,9 @@ export function OrganizationTablesSettings() {
                     onChange={(e) => {
                       const val = e.target.value;
                       setTableNumberInput(val);
+                      if (tableErrorMessage) {
+                        setTableErrorMessage(null);
+                      }
                       if (tablePendingFields["tableNumber"]) {
                         setTablePendingFields((prev) => {
                           const copy = { ...prev };
@@ -2615,44 +2677,85 @@ export function OrganizationTablesSettings() {
 
               {/* Table QR Code Container */}
               <div className="pt-2">
-                <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center shadow-sm">
-                  {(() => {
-                    const storeSlug = organization?.slug || "balwant-new";
-                    const customerBaseUrl =
-                      process.env.NEXT_PUBLIC_DIGITAL_STORE_BASE_URL ||
-                      "https://dev-pos-user.get-prest.com/store";
-                    const base = customerBaseUrl.split("?")[0];
-
-                    let qrUrlStr = "";
-                    if (previewTableQr && previewTableQr.qrUrl) {
-                      if (
-                        previewTableQr.qrUrl.startsWith("http://") ||
-                        previewTableQr.qrUrl.startsWith("https://")
-                      ) {
-                        qrUrlStr = previewTableQr.qrUrl;
-                      } else {
-                        const path = previewTableQr.qrUrl.startsWith("/")
-                          ? previewTableQr.qrUrl
-                          : `/${previewTableQr.qrUrl}`;
-                        const origin = base.replace(/\/store\/?$/, "");
-                        qrUrlStr = `${origin}${path}`;
-                      }
-                    } else {
-                      const params = new URLSearchParams();
-                      if (storeSlug) params.set("store", storeSlug);
-                      params.set("type", "DineIn");
-                      params.set("qr_name", `Table ${previewTable.tableNumber}`);
-                      params.set("table_id", previewTable._id);
-                      qrUrlStr = `${base}?${params.toString()}`;
-                    }
-
+                {(() => {
+                  if (allQrCodes === undefined || (previewTable && previewTableQr === undefined && !allQrCodes)) {
                     return (
+                      <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center shadow-xs min-h-[220px]">
+                        <div className="w-5 h-5 border-2 border-stone-300 border-t-stone-800 rounded-full animate-spin mb-2" />
+                        <span className="text-xs text-[#78716c] font-medium">Checking QR status...</span>
+                      </div>
+                    );
+                  }
+
+                  if (!effectiveTableQr || !effectiveTableQr.qrUrl) {
+                    return (
+                      <div className="bg-[#faf9f8] border-2 border-dashed border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center text-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-[#f1edec] flex items-center justify-center text-[#78716c]">
+                          <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+                            <rect width="18" height="18" x="3" y="3" rx="2" />
+                            <path d="M7 7h.01M7 17h.01M17 7h.01M17 17h.01" strokeWidth="2.5" strokeLinecap="round" />
+                            <line x1="9" y1="9" x2="15" y2="15" strokeLinecap="round" />
+                          </svg>
+                        </div>
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            PENDING QR
+                          </span>
+                          <h4 className="font-garamond text-lg font-medium text-[#141010] mt-1">
+                            QR Code Not Generated
+                          </h4>
+                          <p className="text-xs text-[#78716c] max-w-[260px] leading-relaxed">
+                            No digital QR code has been generated for Table {previewTable.tableNumber} yet.
+                          </p>
+                        </div>
+                        <a
+                          href="/qr-codes"
+                          className="mt-1 px-4 py-2 text-xs font-medium text-white bg-[#141010] hover:bg-black rounded-full transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                        >
+                          <span>Generate in QR Management</span>
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M5 12h14M12 5l7 7-7 7" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </a>
+                      </div>
+                    );
+                  }
+
+                  const storeSlug = organization?.slug || "balwant-new";
+                  const customerBaseUrl =
+                    process.env.NEXT_PUBLIC_DIGITAL_STORE_BASE_URL ||
+                    "https://dev-pos-user.get-prest.com/store";
+                  const base = customerBaseUrl.split("?")[0];
+
+                  let qrUrlStr = "";
+                  if (
+                    effectiveTableQr.qrUrl.startsWith("http://") ||
+                    effectiveTableQr.qrUrl.startsWith("https://")
+                  ) {
+                    qrUrlStr = effectiveTableQr.qrUrl;
+                  } else {
+                    const path = effectiveTableQr.qrUrl.startsWith("/")
+                      ? effectiveTableQr.qrUrl
+                      : `/${effectiveTableQr.qrUrl}`;
+                    const origin = base.replace(/\/store\/?$/, "");
+                    qrUrlStr = `${origin}${path}`;
+                  }
+
+                  return (
+                    <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 flex flex-col items-center justify-center shadow-xs">
                       <div className="w-64 h-64 flex items-center justify-center p-2 bg-white rounded-xl">
                         <DynamicQrCode value={qrUrlStr} size={240} />
                       </div>
-                    );
-                  })()}
-                </div>
+                      <div className="mt-3 flex items-center gap-2">
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          Active Table QR
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </div>

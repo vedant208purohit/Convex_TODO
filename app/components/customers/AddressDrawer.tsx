@@ -217,7 +217,7 @@ export function AddressDrawer({
         {/* Drawer Header */}
         <div className="px-6 pt-6 pb-4 bg-[#faf2ee]/70 border-b border-[#e9e1dd] flex items-start justify-between shrink-0">
           <div className="flex flex-col">
-            <div className="flex items-center gap-1.5 text-stone-500 font-mono text-[10px] uppercase tracking-wider font-semibold">
+            <div className="flex items-center gap-1.5 text-stone-500 text-[11px] uppercase tracking-wider font-semibold">
               <svg
                 className="w-3.5 h-3.5 text-stone-600"
                 fill="none"
@@ -285,7 +285,7 @@ export function AddressDrawer({
               )}
 
               <div>
-                <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                   Address Type
                 </label>
                 <div className="flex gap-2">
@@ -307,7 +307,7 @@ export function AddressDrawer({
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                   Address Line 1 <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -321,7 +321,7 @@ export function AddressDrawer({
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                   Address Line 2
                 </label>
                 <input
@@ -335,7 +335,7 @@ export function AddressDrawer({
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                     Landmark
                   </label>
                   <input
@@ -347,7 +347,7 @@ export function AddressDrawer({
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                     City <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -362,7 +362,7 @@ export function AddressDrawer({
 
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                     Zip / PIN Code <span className="text-rose-500">*</span>
                   </label>
                   <input
@@ -371,7 +371,7 @@ export function AddressDrawer({
                     value={zipCode}
                     onChange={(e) => setZipCode(e.target.value)}
                     placeholder="380054"
-                    className="w-full bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-xl px-3 py-2 text-xs font-mono text-stone-900 outline-none"
+                    className="w-full bg-stone-50 border border-stone-200 focus:border-stone-900 rounded-xl px-3 py-2 text-xs text-stone-900 outline-none"
                   />
                 </div>
                 <div className="flex items-end pb-2">
@@ -388,7 +388,7 @@ export function AddressDrawer({
               </div>
 
               <div>
-                <label className="block text-[10px] font-mono font-semibold text-stone-500 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-semibold text-stone-500 uppercase tracking-wider mb-1">
                   Delivery Instructions
                 </label>
                 <textarea
@@ -506,7 +506,7 @@ export function AddressDrawer({
                         </div>
 
                         {isDef ? (
-                          <span className="px-2 py-0.5 rounded bg-stone-900 text-white font-mono text-[9px] uppercase font-bold tracking-wider">
+                          <span className="px-2 py-0.5 rounded bg-stone-900 text-white text-[9px] uppercase font-bold tracking-wider">
                             DEFAULT
                           </span>
                         ) : (
@@ -524,21 +524,21 @@ export function AddressDrawer({
                               addr.landmark ? ", Near " + addr.landmark : ""
                             }`}
                         </p>
-                        <p className="font-mono text-stone-500 text-xs mt-0.5">
+                        <p className="text-stone-500 text-xs mt-0.5">
                           {addr.city}, {addr.state || "Gujarat"} —{" "}
                           {addr.zipCode}
                         </p>
                       </div>
 
                       {addr.deliveryInstructions && (
-                        <p className="text-[11px] text-amber-900 bg-amber-50/80 p-2 rounded-xl font-mono border border-amber-200/60">
+                        <p className="text-[11px] text-amber-900 bg-amber-50/80 p-2 rounded-xl border border-amber-200/60">
                           📌 {addr.deliveryInstructions}
                         </p>
                       )}
 
                       {/* Footer Info & Edit/Delete Actions */}
                       <div className="pt-2 border-t border-stone-200/50 flex items-center justify-between text-xs">
-                        <span className="font-mono text-stone-900 text-[11px]">
+                        <span className="text-stone-900 text-[11px]">
                           {customerPhone || "-"}
                         </span>
                         <div className="flex items-center gap-3">

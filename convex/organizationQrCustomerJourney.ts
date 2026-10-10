@@ -28,6 +28,7 @@ export const recordScan = mutation({
   args: {
     qrId: v.string(),
     sessionId: v.optional(v.string()),
+    existingSessionId: v.optional(v.string()),
     ipAddress: v.optional(v.string()),
     userAgent: v.optional(v.string()),
     deviceType: v.optional(v.string()),
@@ -67,30 +68,37 @@ export const recordScan = mutation({
     }
 
     if (!qr || qr.deletedAt !== undefined) {
-      throw new Error("QR_NOT_FOUND");
+      return {
+        success: false,
+        status: "NOT_FOUND",
+        error: "QR_NOT_FOUND",
+      };
     }
 
     const currentStatus = qr.status ?? "ACTIVE";
     if (currentStatus === "INACTIVE") {
-      throw new Error("QR_INACTIVE");
+      return {
+        success: false,
+        status: "INACTIVE",
+        error: "QR_INACTIVE",
+        qrId: qr._id,
+        organizationId: qr.organizationId,
+        tableId: qr.tableId,
+        sessionId: null,
+      };
     }
 
     const now = Date.now();
 
-    // 1. Increment QR scan counter
-    await ctx.db.patch(qr._id, {
-      counter: (qr.counter ?? 0) + 1,
-      updatedAt: now,
-    });
-
     let effectiveSessionId: string | null = null;
     let existingSession: Doc<"organizationOrderingSessions"> | null = null;
 
-    // 2. Check provided sessionId or find active existing session
-    if (args.sessionId) {
+    // Check provided sessionId (from args.sessionId or args.existingSessionId)
+    const targetSessionId = (args as any).existingSessionId || args.sessionId;
+    if (targetSessionId) {
       const sessions = await ctx.db
         .query("organizationOrderingSessions")
-        .withIndex("by_session_id", (q) => q.eq("sessionId", args.sessionId!))
+        .withIndex("by_session_id", (q) => q.eq("sessionId", targetSessionId))
         .collect();
 
       const activeMatch = sessions.find(
@@ -103,7 +111,7 @@ export const recordScan = mutation({
       }
     }
 
-    // If no session ID passed or previous session expired, check recent session for QR
+    // Check recent session for this device/QR within active window
     if (!effectiveSessionId) {
       const recentSessions = await ctx.db
         .query("organizationOrderingSessions")
@@ -123,12 +131,21 @@ export const recordScan = mutation({
       }
     }
 
-    // Create a new session if none can be reused
-    if (!effectiveSessionId || !existingSession) {
-      effectiveSessionId = args.sessionId || generateId("session");
+    let scanDocId: any = null;
 
+    if (!existingSession) {
+      // 1. BRAND NEW SCAN: Increment physical scan counter
+      await ctx.db.patch(qr._id, {
+        counter: (qr.counter ?? 0) + 1,
+        updatedAt: now,
+      });
+
+      const newSessionId: string = targetSessionId || generateId("session");
+      effectiveSessionId = newSessionId;
+
+      // 2. Create new active ordering session
       await ctx.db.insert("organizationOrderingSessions", {
-        sessionId: effectiveSessionId,
+        sessionId: newSessionId,
         qrId: qr._id,
         organizationId: qr.organizationId,
         tableId: qr.tableId,
@@ -136,36 +153,38 @@ export const recordScan = mutation({
         startedAt: now,
         lastActivityAt: now,
       });
+
+      // 3. Log scan telemetry event ONLY on new scan
+      scanDocId = await ctx.db.insert("organizationQrScans", {
+        qrId: qr._id,
+        organizationId: qr.organizationId,
+        tableId: qr.tableId,
+        sessionId: newSessionId,
+        scannedAt: now,
+        ipAddress: args.ipAddress,
+        userAgent: args.userAgent,
+        deviceType: args.deviceType,
+        os: args.os,
+        browser: args.browser,
+        city: args.city,
+        country: args.country,
+        region: args.region,
+        latitude: args.latitude,
+        longitude: args.longitude,
+        referrer: args.referrer,
+        screenResolution: args.screenResolution,
+        language: args.language,
+      });
     } else {
-      // Update activity timestamp on existing session
+      // EXISTING ACTIVE SESSION (e.g. page refresh):
+      // Keep session alive, but DO NOT increment scan counter or duplicate scan event!
       await ctx.db.patch(existingSession._id, {
         lastActivityAt: now,
       });
     }
 
-    // 3. Log scan telemetry event with rich telemetry
-    const scanDocId = await ctx.db.insert("organizationQrScans", {
-      qrId: qr._id,
-      organizationId: qr.organizationId,
-      tableId: qr.tableId,
-      sessionId: effectiveSessionId,
-      scannedAt: now,
-      ipAddress: args.ipAddress,
-      userAgent: args.userAgent,
-      deviceType: args.deviceType,
-      os: args.os,
-      browser: args.browser,
-      city: args.city,
-      country: args.country,
-      region: args.region,
-      latitude: args.latitude,
-      longitude: args.longitude,
-      referrer: args.referrer,
-      screenResolution: args.screenResolution,
-      language: args.language,
-    });
-
     return {
+      success: true,
       scanId: scanDocId,
       qrId: qr._id,
       sessionId: effectiveSessionId,

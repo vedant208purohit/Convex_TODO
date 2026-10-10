@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useClerk } from "@clerk/nextjs";
 import { ReactNode, useState, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -169,6 +169,7 @@ type NavItem = {
   icon: ReactNode;
   disabled?: boolean;
   disabledTooltip?: string;
+  badge?: string;
 };
 
 const navItems: NavItem[] = [
@@ -176,6 +177,7 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: <DashboardIcon className="w-4 h-4" />,
+    badge: "Coming Soon",
   },
   {
     href: "/menu",
@@ -206,6 +208,7 @@ const navItems: NavItem[] = [
     href: "/queue",
     label: "Queue",
     icon: <QueueNavIcon className="w-4 h-4" />,
+    badge: "Coming Soon",
   },
   {
     href: "/inventory",
@@ -216,6 +219,7 @@ const navItems: NavItem[] = [
     href: "/kds",
     label: "KDS",
     icon: <KdsIcon className="w-4 h-4" />,
+    badge: "Coming Soon",
   },
   {
     href: "/qr-codes",
@@ -251,6 +255,7 @@ function NavLink({
   href,
   label,
   icon,
+  badge,
   isCollapsed,
   disabled,
   disabledTooltip,
@@ -277,7 +282,7 @@ function NavLink({
   if (isCollapsed) {
     return (
       <div className="relative group flex items-center justify-center my-0.5">
-        disabled ? (
+        {disabled ? (
           <div
             className="flex items-center justify-center w-12 h-12 mx-auto rounded-xl opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
             title={disabledTooltip || "Disabled in settings"}
@@ -295,10 +300,15 @@ function NavLink({
           >
             <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
           </Link>
-        )
+        )}
         <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
-          <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap">
-            {label}
+          <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap flex items-center gap-1.5">
+            <span>{label}</span>
+            {badge && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] rounded-full">
+                {badge}
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -311,8 +321,16 @@ function NavLink({
         className="flex items-center gap-3 px-6 py-3 text-[15px] opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
         title={disabledTooltip || "Disabled in settings"}
       >
-        <span className="w-5 text-center flex items-center justify-center">{icon}</span>
-        <span className="font-medium text-[15px]">{label}</span>
+        <span className="w-5 text-center flex items-center justify-center shrink-0">{icon}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-medium text-[15px] shrink-0">{label}</span>
+          {badge && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+              {badge}
+            </span>
+          )}
+        </div>
       </div>
     );
   }
@@ -326,8 +344,16 @@ function NavLink({
           : "text-[#5e5e5e] hover:bg-[#f1edec]"
       }`}
     >
-      <span className="w-5 text-center flex items-center justify-center">{icon}</span>
-      <span className="font-medium text-[15px]">{label}</span>
+      <span className="w-5 text-center flex items-center justify-center shrink-0">{icon}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="font-medium text-[15px] shrink-0">{label}</span>
+        {badge && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+            {badge}
+          </span>
+        )}
+      </div>
     </Link>
   );
 }
@@ -378,10 +404,48 @@ export function PosShell({
     }
   }, [isInventoryPage]);
 
+  const { signOut } = useClerk();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
   const isDineInActive = Boolean(activeOrg?.isDineIn);
   const branchName = activeOrg?.name || "Flagship Main Store";
+
+  if (organizations !== undefined && organizations.length === 0) {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-stone-900">No Store Assigned</h2>
+          <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+            You do not have any assigned store. Please contact the store owner.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => signOut({ redirectUrl: "/sign-in" })}
+              className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">

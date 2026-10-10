@@ -465,6 +465,36 @@ export const resolveCustomerSession = query({
       }
 
       if (qrDoc) {
+        if (!activeOrg && qrDoc.organizationId) {
+          const org = await ctx.db.get(qrDoc.organizationId);
+          if (org && org.deletedAt === undefined) {
+            activeOrg = org;
+          }
+        }
+
+        const isQrInactive = qrDoc.status === "INACTIVE";
+        if (isQrInactive) {
+          return {
+            valid: false,
+            error: "This QR code is currently inactive. Ordering is temporarily paused.",
+            errorCode: "QR_INACTIVE" as const,
+            organization: activeOrg
+              ? {
+                  _id: activeOrg._id,
+                  name: activeOrg.name,
+                  slug: activeOrg.slug,
+                  logoUrl: activeOrg.logoUrl,
+                  isVeg: activeOrg.isVeg ?? false,
+                  isDineIn: activeOrg.isDineIn ?? true,
+                  isTakeAway: activeOrg.isTakeAway ?? true,
+                  isDelivery: activeOrg.isDelivery ?? true,
+                  defaultCurrencySymbol: activeOrg.defaultCurrencySymbol ?? "₹",
+                  defaultCurrency: activeOrg.defaultCurrency ?? "INR",
+                }
+              : undefined,
+          };
+        }
+
         if (!targetTableId && qrDoc.tableId) {
           targetTableId = qrDoc.tableId;
         }

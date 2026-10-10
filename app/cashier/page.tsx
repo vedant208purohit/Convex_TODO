@@ -130,10 +130,10 @@ function CashierPosContent() {
     return orgs[0];
   }, [orgs]);
 
-  // Dynamic Country Dial Code resolved from Store Organization Country
+  // Dynamic Country Dial Code resolved from Store Organization Country via countries.ts
   const defaultOrgCountryCode = useMemo(() => {
-    return getPhoneCodeForCountry(activeOrg?.country || "India");
-  }, [activeOrg?.country]);
+    return (activeOrg as any)?.phoneCountryCode || (activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+1");
+  }, [activeOrg]);
 
   // 2. Query Multi-Menu Data & Categories
   const [selectedMenuId, setSelectedMenuId] = useState<string>("all");
@@ -169,13 +169,9 @@ function CashierPosContent() {
     activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : undefined) ||
-    storeTaxSettings?.currencySymbol ||
-    "$";
+  const currencySymbol = useMemo(() => {
+    return activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country)?.symbol : "$") || "$";
+  }, [activeOrg]);
 
   // 4. Query Tables, Staff (Employees), Customers, Payment Modes, and Printers
   const tables = useQuery(api.organizationTables.list, {});
@@ -288,6 +284,19 @@ function CashierPosContent() {
       specialNotes: "",
     },
   ]);
+
+  // Sync active cart phone country code with store organization default
+  useEffect(() => {
+    if (!defaultOrgCountryCode) return;
+    setCartTabs((prev) =>
+      prev.map((c) => {
+        if (!c.customerCountryCode || (!c.customerPhone && c.customerCountryCode !== defaultOrgCountryCode)) {
+          return { ...c, customerCountryCode: defaultOrgCountryCode };
+        }
+        return c;
+      })
+    );
+  }, [defaultOrgCountryCode]);
 
   const [activeCartId, setActiveCartId] = useState<string>(() => {
     if (typeof window !== "undefined") {
@@ -6191,12 +6200,14 @@ function CashierPosContent() {
 
               <button
                 type="button"
-                onClick={() => {
-                  window.print();
-                }}
-                className="flex-1 py-2.5 bg-stone-100 hover:bg-stone-200 text-[#141010] rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                disabled
+                title="Thermal print feature coming soon"
+                className="flex-1 py-2.5 bg-stone-100 text-stone-400 border border-stone-200 rounded-xl text-xs font-semibold cursor-not-allowed opacity-75 flex items-center justify-center gap-1.5"
               >
-                Thermal Print
+                <span>Thermal Print</span>
+                <span className="px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full whitespace-nowrap">
+                  Coming Soon
+                </span>
               </button>
 
               <button

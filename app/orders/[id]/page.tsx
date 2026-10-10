@@ -1399,16 +1399,19 @@ export default function OrderDetailsDynamicPage() {
                       );
                     })()}
 
-                    {/* Print Receipt */}
+                    {/* Print Receipt (Coming Soon) */}
                     <button
                       type="button"
-                      onClick={handlePrintReceipt}
-                      style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                      className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                      disabled
+                      title="Print receipt feature coming soon"
+                      className="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#f5f5f4] text-[#a8a29e] border border-[#e7e5e4] text-xs font-semibold rounded-lg cursor-not-allowed opacity-80"
                     >
-                      <PrintIcon className="w-3.5 h-3.5 !text-white text-white" />
-                      <span className="!text-white text-white font-semibold text-xs">
+                      <PrintIcon className="w-3.5 h-3.5 text-[#a8a29e]" />
+                      <span className="text-[#78716c] font-semibold text-xs">
                         Print Receipt
+                      </span>
+                      <span className="px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full whitespace-nowrap">
+                        Coming Soon
                       </span>
                     </button>
 

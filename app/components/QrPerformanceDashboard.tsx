@@ -3,6 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { formatCurrencyAmount, getCurrencyForCountry, isIndiaCountry } from "@/lib/constants/countries";
 
 interface TableItem {
   id: string;
@@ -16,6 +17,81 @@ interface TableItem {
   qrType?: string;
   scansToday?: number;
   avgDwellMinutes?: number;
+}
+
+// Resolves store operational hour window from weekly schedule
+function parseOperationalHourRange(operationTiming: any, activeHours?: number[]) {
+  let minHour = 24;
+  let maxHour = -1;
+
+  const parseH = (str?: string): number | null => {
+    if (!str || typeof str !== "string") return null;
+    const clean = str.trim();
+    if (clean.includes("T")) {
+      const timePart = clean.split("T")[1];
+      const h = parseInt(timePart.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    if (clean.includes(":")) {
+      const h = parseInt(clean.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    const h = parseInt(clean, 10);
+    return isNaN(h) ? null : h;
+  };
+
+  if (operationTiming && typeof operationTiming === "object") {
+    for (const key of Object.keys(operationTiming)) {
+      const day = operationTiming[key];
+      if (!day || typeof day !== "object") continue;
+      const isActive = day.active ?? day.is_open ?? true;
+      if (!isActive) continue;
+
+      if (day.is_open_all_day) {
+        minHour = Math.min(minHour, 0);
+        maxHour = Math.max(maxHour, 23);
+        continue;
+      }
+
+      if (day.open) {
+        const oh = parseH(day.open);
+        if (oh !== null) minHour = Math.min(minHour, oh);
+      }
+      if (day.close) {
+        const ch = parseH(day.close);
+        if (ch !== null) maxHour = Math.max(maxHour, Math.min(23, ch));
+      }
+
+      if (Array.isArray(day.hours)) {
+        for (const slot of day.hours) {
+          if (!slot) continue;
+          const sh = parseH(slot.start_time || slot.open || slot.start);
+          const eh = parseH(slot.end_time || slot.close || slot.end);
+          if (sh !== null) minHour = Math.min(minHour, sh);
+          if (eh !== null) maxHour = Math.max(maxHour, Math.min(23, eh));
+        }
+      }
+    }
+  }
+
+  if (minHour > maxHour) {
+    minHour = 10;
+    maxHour = 23;
+  }
+
+  if (activeHours && activeHours.length > 0) {
+    for (const h of activeHours) {
+      if (typeof h === "number" && h >= 0 && h <= 23) {
+        minHour = Math.min(minHour, h);
+        maxHour = Math.max(maxHour, h);
+      }
+    }
+  }
+
+  minHour = Math.max(0, Math.min(23, minHour));
+  maxHour = Math.max(minHour, Math.min(23, maxHour));
+
+  return { startHour: minHour, endHour: maxHour };
 }
 
 interface QrPerformanceDashboardProps {
@@ -239,7 +315,10 @@ export function QrPerformanceDashboard({
   showToast,
   onSelectTable,
 }: QrPerformanceDashboardProps) {
-  const [selectedChannel, setSelectedChannel] = useState<"all" | "dine-in" | "takeaway" | "delivery">("all");
+  const currencySymbol = useMemo(() => {
+    return activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country)?.symbol : "$") || "$";
+  }, [activeOrg]);
+    const [selectedChannel, setSelectedChannel] = useState<"all" | "dine-in" | "takeaway" | "delivery">("all");
   const [tableSearchQuery, setTableSearchQuery] = useState("");
 
   // Applied Date Filter
@@ -532,6 +611,37 @@ export function QrPerformanceDashboard({
       };
     });
   }, [tablesList, overallPerformance]);
+
+  // Dynamic Store Shift Range & Chart Ticks based on store operational hours
+  const shiftRange = useMemo(() => {
+    const activeHours: number[] = [];
+    if (overallPerformance?.summary?.hourlyScans) {
+      overallPerformance.summary.hourlyScans.forEach((cnt: number, hr: number) => {
+        if (cnt > 0) activeHours.push(hr);
+      });
+    }
+    if (overallPerformance?.summary?.hourlyOrders) {
+      overallPerformance.summary.hourlyOrders.forEach((cnt: number, hr: number) => {
+        if (cnt > 0) activeHours.push(hr);
+      });
+    }
+    return parseOperationalHourRange(activeOrg?.operationTiming, activeHours);
+  }, [overallPerformance?.summary, activeOrg?.operationTiming]);
+
+  const chartTicks = useMemo(() => {
+    const total = Math.max(1, shiftRange.endHour - shiftRange.startHour);
+    const step = total <= 6 ? 1 : total <= 12 ? 2 : total <= 18 ? 3 : 4;
+    const ticks: Array<{ hr: number; label: string }> = [];
+    for (let h = shiftRange.startHour; h <= shiftRange.endHour; h += step) {
+      ticks.push({ hr: h, label: `${String(h).padStart(2, "0")}:00` });
+    }
+    if (ticks.length > 0 && ticks[ticks.length - 1].hr < shiftRange.endHour) {
+      if (shiftRange.endHour - ticks[ticks.length - 1].hr >= 2) {
+        ticks.push({ hr: shiftRange.endHour, label: `${String(shiftRange.endHour).padStart(2, "0")}:00` });
+      }
+    }
+    return ticks;
+  }, [shiftRange]);
 
   // Compute aggregated metric statistics strictly from real live Convex data
   const stats = useMemo(() => {
@@ -867,7 +977,7 @@ export function QrPerformanceDashboard({
           </div>
           <div className="pt-2 bg-[#fdf8f7] rounded-xl px-3 py-2 border border-[#e7e5e4] flex items-center justify-between text-xs gap-1 min-w-0">
             <span className="text-[#5e5e5e] font-medium whitespace-nowrap">Avg Ticket Val</span>
-            <span className="font-mono font-bold text-[#141010] shrink-0 ml-1">₹{stats.avgTicketVal}</span>
+            <span className="font-mono font-bold text-[#141010] shrink-0 ml-1">{currencySymbol}{formatCurrencyAmount(stats.avgTicketVal, activeOrg?.country)}</span>
           </div>
         </div>
 
@@ -875,18 +985,18 @@ export function QrPerformanceDashboard({
         <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#e7e5e4] shadow-xs flex flex-col justify-between gap-3 min-w-[220px] flex-1 shrink-0">
           <div className="flex items-center justify-between text-[#5e5e5e]">
             <span className="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap">Total Revenue</span>
-            <CurrencyRupeeIcon className="w-4 h-4 text-[#141010] shrink-0" />
+            <span className="font-bold text-xs text-[#141010] shrink-0 font-sans border border-[#e7e5e4] rounded px-1 py-0.5 bg-[#fdf8f7]">{currencySymbol}</span>
           </div>
           <div className="flex flex-col mt-1">
             <div className="flex items-baseline justify-between gap-2">
               <span className="font-garamond text-3xl sm:text-4xl font-normal text-[#141010]">
-                ₹{stats.totalRevenue > 100000 ? `${(stats.totalRevenue / 100000).toFixed(2)}L` : stats.totalRevenue.toLocaleString()}
+                {currencySymbol}{stats.totalRevenue > 100000 && isIndiaCountry(activeOrg?.country) ? `${(stats.totalRevenue / 100000).toFixed(2)}L` : formatCurrencyAmount(stats.totalRevenue, activeOrg?.country)}
               </span>
               <span className="font-mono text-xs font-semibold text-emerald-700 flex items-center gap-0.5 shrink-0">
                 <ArrowUpwardIcon className="w-3.5 h-3.5" /> Live
               </span>
             </div>
-            <span className="font-mono text-[11px] text-[#5e5e5e]">₹{stats.totalRevenue.toLocaleString()} exact</span>
+            <span className="font-mono text-[11px] text-[#5e5e5e]">{currencySymbol}{formatCurrencyAmount(stats.totalRevenue, activeOrg?.country)} exact</span>
           </div>
           <div className="pt-2 bg-[#fdf8f7] rounded-xl px-3 py-2 border border-[#e7e5e4] flex items-center justify-between text-xs gap-1 min-w-0">
             <span className="text-[#5e5e5e] font-medium whitespace-nowrap">Settled via KDS</span>
@@ -951,15 +1061,18 @@ export function QrPerformanceDashboard({
               {/* Baseline Zero Path */}
               <path d="M 20 110 L 580 110" stroke="#141010" strokeDasharray="3 3" strokeOpacity="0.4" strokeWidth="1.5" />
 
-              {/* Dynamic 24-Hour Velocity Bars from Live Backend Database */}
+              {/* Dynamic Velocity Bars from Live Backend Database across Operating Shift */}
               {overallPerformance?.summary?.hourlyScans && (
                 <>
-                  {overallPerformance.summary.hourlyScans.map((scanCnt: number, hr: number) => {
+                  {Array.from({ length: shiftRange.endHour - shiftRange.startHour + 1 }).map((_, idx) => {
+                    const hr = shiftRange.startHour + idx;
+                    const scanCnt = overallPerformance.summary.hourlyScans?.[hr] || 0;
                     const orderCnt = overallPerformance.summary?.hourlyOrders?.[hr] || 0;
                     if (scanCnt === 0 && orderCnt === 0) return null;
 
                     const maxVal = Math.max(1, ...overallPerformance.summary.hourlyScans, ...(overallPerformance.summary.hourlyOrders || []));
-                    const x = 20 + (hr / 23) * 560;
+                    const totalHours = Math.max(1, shiftRange.endHour - shiftRange.startHour);
+                    const x = 20 + ((hr - shiftRange.startHour) / totalHours) * 560;
 
                     const scanHeight = Math.min(90, (scanCnt / maxVal) * 90);
                     const orderHeight = Math.min(90, (orderCnt / maxVal) * 90);
@@ -995,17 +1108,9 @@ export function QrPerformanceDashboard({
           </div>
 
           <div className="relative w-full h-5 text-[#5e5e5e] font-mono text-[10px] font-semibold pt-1 border-t border-[#e7e5e4]/60 whitespace-nowrap overflow-hidden">
-            {[
-              { hr: 0, label: "00:00" },
-              { hr: 4, label: "04:00" },
-              { hr: 8, label: "08:00" },
-              { hr: 12, label: "12:00" },
-              { hr: 16, label: "16:00" },
-              { hr: 18, label: "18:00" },
-              { hr: 20, label: "20:00" },
-              { hr: 23, label: "23:00" },
-            ].map((tick) => {
-              const pct = ((20 + (tick.hr / 23) * 560) / 600) * 100;
+            {chartTicks.map((tick) => {
+              const totalHours = Math.max(1, shiftRange.endHour - shiftRange.startHour);
+              const pct = ((20 + ((tick.hr - shiftRange.startHour) / totalHours) * 560) / 600) * 100;
               return (
                 <span
                   key={tick.hr}
@@ -1090,7 +1195,7 @@ export function QrPerformanceDashboard({
               {topTiles?.highestRevenue ? topTiles.highestRevenue.name : "—"}
             </span>
             <span className="font-garamond text-3xl font-medium text-[#141010] mt-0.5">
-              {topTiles?.highestRevenue ? `₹${topTiles.highestRevenue.revenue.toLocaleString()}` : "₹0"}
+              {topTiles?.highestRevenue ? `${currencySymbol}${formatCurrencyAmount(topTiles.highestRevenue.revenue, activeOrg?.country)}` : `${currencySymbol}0.00`}
             </span>
           </div>
           <div className="pt-2 border-t border-[#e7e5e4] flex items-center justify-between text-xs gap-1 min-w-0">
@@ -1261,7 +1366,7 @@ export function QrPerformanceDashboard({
                     <td className="py-4 px-4 text-center font-mono text-xs">{row.sessions}</td>
                     <td className="py-4 px-4 text-center font-mono text-xs">{row.orders}</td>
                     <td className="py-4 px-4 text-center font-mono text-xs font-bold text-emerald-700">{row.conversion}</td>
-                    <td className="py-4 px-4 text-right font-mono text-xs font-bold text-[#141010]">₹{row.revenue.toLocaleString()}</td>
+                    <td className="py-4 px-4 text-right font-mono text-xs font-bold text-[#141010]">{currencySymbol}{formatCurrencyAmount(row.revenue, activeOrg?.country)}</td>
                     <td className="py-4 pr-5 pl-4 text-center whitespace-nowrap">
                       {(() => {
                         const isAnalyticsAvailable = Boolean(
