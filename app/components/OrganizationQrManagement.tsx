@@ -593,6 +593,26 @@ export function OrganizationQrManagement() {
     string | null
   >(null);
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null);
+  const [dropdownDirection, setDropdownDirection] = useState<"up" | "down">("down");
+
+  const toggleDropdown = (id: string, buttonEl: HTMLElement) => {
+    if (activeDropdown === id) {
+      setActiveDropdown(null);
+    } else {
+      const rect = buttonEl.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const spaceAbove = rect.top;
+      setDropdownDirection(spaceBelow < 190 && spaceAbove > spaceBelow ? "up" : "down");
+      setActiveDropdown(id);
+    }
+  };
+
+  useEffect(() => {
+    if (!activeDropdown) return;
+    const handleClose = () => setActiveDropdown(null);
+    window.addEventListener("click", handleClose);
+    return () => window.removeEventListener("click", handleClose);
+  }, [activeDropdown]);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1543,7 +1563,7 @@ export function OrganizationQrManagement() {
                           </td>
                         </tr>
                       ) : (
-                        filteredTables.map((table, index) => {
+                        filteredTables.map((table) => {
                           const isActive = table.status === "Active";
                           const isPending = table.status === "Pending QR";
                           const isLastTwo = filteredTables.length > 3 && index >= 2 && index >= filteredTables.length - 2;
@@ -1668,11 +1688,7 @@ export function OrganizationQrManagement() {
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setActiveDropdown(
-                                          activeDropdown === table.id
-                                            ? null
-                                            : table.id,
-                                        );
+                                        toggleDropdown(table.id, e.currentTarget);
                                       }}
                                       className="p-1.5 rounded-lg hover:bg-[#f1edec] text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
                                     >
@@ -1683,7 +1699,7 @@ export function OrganizationQrManagement() {
                                       <div
                                         onClick={(e) => e.stopPropagation()}
                                         className={`absolute right-0 ${
-                                          isLastTwo ? "bottom-full mb-1.5" : "top-full mt-1.5"
+                                          dropdownDirection === "up" ? "bottom-full mb-1.5" : "top-full mt-1.5"
                                         } w-44 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1.5 flex flex-col text-left animate-in fade-in zoom-in-95`}
                                       >
                                         {table.isGenerated ? (
@@ -1902,7 +1918,7 @@ export function OrganizationQrManagement() {
                     </div>
                   )
                 ) : (
-                  filteredTables.map((table, index) => {
+                  filteredTables.map((table) => {
                     const isActive = table.status === "Active";
                     const isPending = table.status === "Pending QR";
                     const isLastTwoInGrid = filteredTables.length > 4 && index >= 2 && index >= filteredTables.length - 2;
@@ -2112,9 +2128,7 @@ export function OrganizationQrManagement() {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setActiveDropdown(
-                                  activeDropdown === table.id ? null : table.id,
-                                );
+                                toggleDropdown(table.id, e.currentTarget);
                               }}
                               className="p-2 rounded-lg hover:bg-[#f1edec] text-[#5e5e5e] hover:text-[#141010] transition-colors flex items-center cursor-pointer"
                             >
@@ -2125,7 +2139,7 @@ export function OrganizationQrManagement() {
                               <div
                                 onClick={(e) => e.stopPropagation()}
                                 className={`absolute right-0 ${
-                                  isLastTwoInGrid ? "bottom-full mb-1.5" : "top-full mt-1"
+                                  dropdownDirection === "up" ? "bottom-full mb-1.5" : "top-full mt-1"
                                 } w-48 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1.5 flex flex-col`}
                               >
                                 {table.isGenerated ? (

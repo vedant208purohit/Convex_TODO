@@ -714,6 +714,9 @@ export const getOrganizationMenu = query({
       .filter((c) => c.published !== false)
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
+    const org = await ctx.db.get(args.organizationId);
+    const isPureVegOrg = org?.isVeg === true;
+
     const resultMenu: Array<any> = [];
     const searchQuery = args.search?.trim().toLowerCase();
 
@@ -734,6 +737,9 @@ export const getOrganizationMenu = query({
       for (const ci of activeCatItems) {
         const item = await ctx.db.get(ci.itemId);
         if (!item || item.deletedAt !== undefined || item.published === false || item.isAvailable === false) continue;
+
+        // Pure Vegetarian Restaurant filter (conservative: only strictly true is allowed)
+        if (isPureVegOrg && item.isVeg !== true) continue;
 
         // Apply attribute filters
         if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
