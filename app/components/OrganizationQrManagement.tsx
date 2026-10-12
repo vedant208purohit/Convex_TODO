@@ -1563,7 +1563,7 @@ export function OrganizationQrManagement() {
                           </td>
                         </tr>
                       ) : (
-                        filteredTables.map((table) => {
+                        filteredTables.map((table, index) => {
                           const isActive = table.status === "Active";
                           const isPending = table.status === "Pending QR";
                           const isLastTwo = filteredTables.length > 3 && index >= 2 && index >= filteredTables.length - 2;
@@ -1918,7 +1918,7 @@ export function OrganizationQrManagement() {
                     </div>
                   )
                 ) : (
-                  filteredTables.map((table) => {
+                  filteredTables.map((table, index) => {
                     const isActive = table.status === "Active";
                     const isPending = table.status === "Pending QR";
                     const isLastTwoInGrid = filteredTables.length > 4 && index >= 2 && index >= filteredTables.length - 2;
