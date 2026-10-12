@@ -99,6 +99,252 @@ async function resolveWaiterInfo(ctx: any, waiterUserId?: string) {
 }
 
 // ==========================================
+// SCHEDULING TIMING & SLOT VALIDATION HELPERS
+// ==========================================
+
+export function parseTimeToMinutes(timeStr?: string | null): number | null {
+  if (!timeStr || typeof timeStr !== "string") return null;
+  const trimmed = timeStr.trim();
+
+  // 12-hour format: e.g. "11:00 AM", "2:30 PM", "12:39 PM"
+  const match12h = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (match12h) {
+    let h = parseInt(match12h[1], 10);
+    const m = parseInt(match12h[2], 10);
+    const period = match12h[3].toUpperCase();
+    if (period === "PM" && h < 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // 24-hour format: e.g. "11:00", "23:59"
+  const match24h = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24h) {
+    const h = parseInt(match24h[1], 10);
+    const m = parseInt(match24h[2], 10);
+    return h * 60 + m;
+  }
+
+  // Full date string format
+  const parsedDate = new Date(trimmed);
+  if (!isNaN(parsedDate.getTime())) {
+    return parsedDate.getHours() * 60 + parsedDate.getMinutes();
+  }
+
+  return null;
+}
+
+export function parseLeadTimeMinutes(limit?: string | number | null): number {
+  if (typeof limit === "number" && limit >= 0) {
+    if (limit <= 72) return limit * 60;
+    return limit;
+  }
+  if (!limit || typeof limit !== "string") return 30;
+
+  const trimmed = limit.trim().toLowerCase();
+  const matchNum = trimmed.match(/\d+/);
+  if (!matchNum) return 30;
+
+  const num = parseInt(matchNum[0], 10);
+  if (trimmed.includes("day")) return num * 24 * 60;
+  if (trimmed.includes("hour") || trimmed.includes("hr")) return num * 60;
+  if (trimmed.includes("min") || trimmed.includes("m")) return num;
+  if (num > 0 && num <= 72) return num * 60;
+  return num;
+}
+
+export function parseAdvanceDaysCount(
+  limit?: number | string | null,
+  limitType?: string | null
+): number {
+  const num = typeof limit === "number" ? limit : parseInt(String(limit || 7), 10);
+  const count = isNaN(num) || num <= 0 ? 7 : num;
+  const type = (limitType || "days").trim().toLowerCase();
+
+  if (type.startsWith("month")) {
+    return count * 30;
+  }
+  if (type.startsWith("week")) {
+    return count * 7;
+  }
+  return count;
+}
+
+export function getStoreTimeContext(timestamp: number, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timeZone || "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    weekday: "long",
+  });
+
+  const parts = formatter.formatToParts(new Date(timestamp));
+  let year = "", month = "", day = "", hour = "0", minute = "0", weekday = "";
+  for (const p of parts) {
+    if (p.type === "year") year = p.value;
+    if (p.type === "month") month = p.value;
+    if (p.type === "day") day = p.value;
+    if (p.type === "hour") hour = p.value === "24" ? "00" : p.value;
+    if (p.type === "minute") minute = p.value;
+    if (p.type === "weekday") weekday = p.value;
+  }
+
+  const ymd = `${year}-${month}-${day}`;
+  const totalMinutes = parseInt(hour, 10) * 60 + parseInt(minute, 10);
+
+  return {
+    ymd,
+    weekday,
+    totalMinutes,
+  };
+}
+
+export function normalizeTargetDateYMD(dateStr: string, timeZone: string): { ymd: string; weekday: string } {
+  const trimmed = dateStr.trim();
+  // If in YYYY-MM-DD format
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymdMatch) {
+    const d = new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10), 12, 0, 0);
+    const dayFormatter = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "long" });
+    return { ymd: trimmed, weekday: dayFormatter.format(d) };
+  }
+
+  // Clean conversational prefixes: e.g. "Today (Fri, Oct 9)" -> "Fri, Oct 9"
+  const cleaned = trimmed.replace(/^(today|tomorrow)\s*\(/i, "").replace(/\)$/, "").trim();
+
+  // If missing 4-digit year, attach current store year
+  let parseTarget = cleaned;
+  if (!/\b\d{4}\b/.test(cleaned)) {
+    const currentStoreContext = getStoreTimeContext(Date.now(), timeZone);
+    const currentYear = currentStoreContext.ymd.split("-")[0];
+    parseTarget = `${cleaned}, ${currentYear}`;
+  }
+
+  const parsed = new Date(parseTarget);
+  if (!isNaN(parsed.getTime())) {
+    const ctx = getStoreTimeContext(parsed.getTime(), timeZone);
+    return { ymd: ctx.ymd, weekday: ctx.weekday };
+  }
+
+  return { ymd: trimmed, weekday: "Monday" };
+}
+
+export function validateScheduledOrderSlot(args: {
+  dateStr: string;
+  timeSlotStr: string;
+  isPickup: boolean;
+  scheduleConfig?: any;
+  timeZone: string;
+  currentTimeMs?: number;
+}) {
+  const now = args.currentTimeMs ?? Date.now();
+  const currentStoreTime = getStoreTimeContext(now, args.timeZone);
+  const targetDate = normalizeTargetDateYMD(args.dateStr, args.timeZone);
+
+  // 1. Check Date is not in the past
+  if (targetDate.ymd < currentStoreTime.ymd) {
+    throw new Error("Selected schedule date cannot be in the past.");
+  }
+
+  // 1.5 Check Date does not exceed configured advance booking horizon
+  const advanceLimit = args.isPickup
+    ? args.scheduleConfig?.advancePickupLimit
+    : args.scheduleConfig?.advanceDeliveryLimit;
+  const advanceLimitType = args.isPickup
+    ? args.scheduleConfig?.advancePickupLimitType
+    : args.scheduleConfig?.advanceDeliveryLimitType;
+  const horizonDays = parseAdvanceDaysCount(advanceLimit, advanceLimitType);
+
+  const [cYear, cMonth, cDay] = currentStoreTime.ymd.split("-").map(Number);
+  const maxDate = new Date(cYear, cMonth - 1, cDay + horizonDays, 23, 59, 59);
+  const maxYear = maxDate.getFullYear();
+  const maxM = String(maxDate.getMonth() + 1).padStart(2, "0");
+  const maxD = String(maxDate.getDate()).padStart(2, "0");
+  const maxYMD = `${maxYear}-${maxM}-${maxD}`;
+
+  if (targetDate.ymd > maxYMD) {
+    throw new Error(`Selected date is beyond the maximum advance booking limit (${horizonDays} days).`);
+  }
+
+  // 2. Parse slot window: e.g. "12:00 PM – 12:30 PM" or "12:00 PM - 12:30 PM"
+  const slotParts = args.timeSlotStr.split(/[–\-]/);
+  let slotStartMinutes: number | null = null;
+  let slotEndMinutes: number | null = null;
+
+  if (slotParts.length >= 2) {
+    slotStartMinutes = parseTimeToMinutes(slotParts[0]);
+    slotEndMinutes = parseTimeToMinutes(slotParts[1]);
+  } else {
+    slotStartMinutes = parseTimeToMinutes(args.timeSlotStr);
+    slotEndMinutes = slotStartMinutes !== null ? slotStartMinutes + 30 : null;
+  }
+
+  if (slotStartMinutes === null || slotEndMinutes === null) {
+    throw new Error(`Invalid scheduled time slot format: ${args.timeSlotStr}`);
+  }
+
+  // 3. Resolve lead time buffer
+  const rawLeadTime = args.isPickup
+    ? args.scheduleConfig?.advanceOrderTimeLimit
+    : args.scheduleConfig?.advanceScheduleDeliveryOrderTimeLimit;
+  const leadTimeMinutes = parseLeadTimeMinutes(rawLeadTime);
+
+  // 4. Real-time filtering for today: past slots or slots that have already started are rejected
+  const isToday = targetDate.ymd === currentStoreTime.ymd;
+  if (isToday) {
+    // A slot within minimum preparation lead time buffer cannot be booked
+    if (slotStartMinutes < currentStoreTime.totalMinutes + leadTimeMinutes) {
+      throw new Error("Selected time slot does not meet the minimum advance preparation lead time.");
+    }
+
+    // A slot that has ended (slotEnd <= currentStoreTime) is strictly expired
+    if (slotEndMinutes <= currentStoreTime.totalMinutes) {
+      throw new Error("Selected time slot has already ended. Please select an upcoming slot.");
+    }
+
+    // A slot that has already started (slotStart <= currentStoreTime) cannot be booked
+    if (slotStartMinutes <= currentStoreTime.totalMinutes) {
+      throw new Error("Selected time slot is no longer available. Please select an upcoming slot.");
+    }
+  }
+
+  // 5. Operating Hours & Weekly Schedule validation
+  const weeklyTimings = args.isPickup
+    ? args.scheduleConfig?.pickupTimings
+    : args.scheduleConfig?.deliveryTimings;
+
+  if (weeklyTimings) {
+    const daySchedule = weeklyTimings[targetDate.weekday];
+    if (daySchedule && !daySchedule.is_open) {
+      throw new Error(`The store is closed for ${args.isPickup ? "pickup" : "delivery"} on ${targetDate.weekday}.`);
+    }
+
+    if (daySchedule && Array.isArray(daySchedule.hours) && daySchedule.hours.length > 0) {
+      let isWithinAnyShift = false;
+      for (const shift of daySchedule.hours) {
+        const shiftStart = parseTimeToMinutes(shift.start_time);
+        const shiftEnd = parseTimeToMinutes(shift.end_time);
+        if (shiftStart !== null && shiftEnd !== null) {
+          if (slotStartMinutes >= shiftStart && slotEndMinutes <= shiftEnd) {
+            isWithinAnyShift = true;
+            break;
+          }
+        }
+      }
+
+      if (!isWithinAnyShift) {
+        throw new Error("Selected time slot is outside the store's configured operating hours.");
+      }
+    }
+  }
+}
+
+// ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
 // ==========================================
 
@@ -196,15 +442,90 @@ export const createOrder = mutation({
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
     const org = await ctx.db.get(args.organizationId);
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found or inactive.");
+    }
     const orgTimeZone = org?.organizationTimeZone || "Asia/Kolkata";
 
-    // Validation for Scheduled Delivery timing fields
+    // 0. Service-Mode Feature Toggle Enforcement
+    if (
+      args.orderSource === "PREST-QR" ||
+      args.orderSource === "PREST-DIGITAL-STORE" ||
+      args.orderSource === "PREST-ONLINE" ||
+      args.orderSource === "Prest-Online" ||
+      args.orderSource === "ONLINE"
+    ) {
+      if (args.orderType === "DineIn" && org.isDineIn === false) {
+        throw new Error("Dine In service is currently disabled for this store.");
+      }
+      if (args.orderType === "TakeAway" && org.isTakeAway === false) {
+        throw new Error("Takeaway service is currently disabled for this store.");
+      }
+      if (args.orderType === "ScheduledPickup") {
+        if (org.isTakeAway === false) {
+          throw new Error("Takeaway service is currently disabled for this store.");
+        }
+        if (org.scheduledPickup === false) {
+          throw new Error("Scheduled pickup is currently disabled for this store.");
+        }
+      }
+      if (args.orderType === "Delivery" && org.isDelivery === false) {
+        throw new Error("Delivery service is currently disabled for this store.");
+      }
+      if (args.orderType === "ScheduledDelivery") {
+        if (org.isDelivery === false) {
+          throw new Error("Delivery service is currently disabled for this store.");
+        }
+        if (org.scheduledDelivery === false) {
+          throw new Error("Scheduled delivery is currently disabled for this store.");
+        }
+      }
+    } else {
+      if (args.orderType === "ScheduledPickup" && org.scheduledPickup === false) {
+        throw new Error("Scheduled pickup is currently disabled for this store.");
+      }
+      if (args.orderType === "ScheduledDelivery" && org.scheduledDelivery === false) {
+        throw new Error("Scheduled delivery is currently disabled for this store.");
+      }
+    }
+
+    // Validation for Scheduled Delivery timing fields & operating hours slot
     if (args.orderType === "ScheduledDelivery") {
       if (!args.scheduledDeliveryDate || !args.scheduledDeliveryTime) {
         throw new Error(
           "Scheduled delivery requires scheduledDeliveryDate and scheduledDeliveryTime."
         );
       }
+    }
+
+    // Validation for Scheduled Pickup timing fields
+    if (args.orderType === "ScheduledPickup") {
+      const pickupDate = args.scheduledPickupDate || args.scheduledDeliveryDate;
+      const pickupTime = args.scheduledPickupTime || args.scheduledDeliveryTime;
+      if (!pickupDate || !pickupTime) {
+        throw new Error(
+          "Scheduled pickup requires scheduledPickupDate and scheduledPickupTime."
+        );
+      }
+    }
+
+    // Validate scheduled slot against organization operating schedule
+    if (args.orderType === "ScheduledDelivery" || args.orderType === "ScheduledPickup") {
+      const isPickup = args.orderType === "ScheduledPickup";
+      const targetDate = (isPickup ? args.scheduledPickupDate || args.scheduledDeliveryDate : args.scheduledDeliveryDate)!;
+      const targetSlot = (isPickup ? args.scheduledPickupTime || args.scheduledDeliveryTime : args.scheduledDeliveryTime)!;
+
+      const scheduleConfigs = await ctx.db.query("organizationSchedulePickups").collect();
+      const activeSchedule = scheduleConfigs.find((c) => c.deletedAt === undefined);
+
+      validateScheduledOrderSlot({
+        dateStr: targetDate,
+        timeSlotStr: targetSlot,
+        isPickup,
+        scheduleConfig: activeSchedule,
+        timeZone: orgTimeZone,
+        currentTimeMs: now,
+      });
     }
 
     // 0. Postpaid QR Verification Guard
@@ -806,7 +1127,10 @@ export const listLiveOrders = query({
 });
 
 export const getOrderDetails = query({
-  args: { id: v.union(v.id("orders"), v.string()) },
+  args: {
+    id: v.union(v.id("orders"), v.string()),
+    sessionOrderId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     let order = null;
     const normalizedId = ctx.db.normalizeId("orders", args.id);
@@ -899,8 +1223,45 @@ export const getOrderDetails = query({
       }
     }
 
+    const org = await ctx.db.get(order.organizationId);
+    let restaurantInfo: any = null;
+    if (org && org.deletedAt === undefined) {
+      const addressParts = [
+        org.addressLine1,
+        org.addressLine2,
+        org.landmark,
+        org.city,
+        org.state,
+        org.zipCode,
+        org.country,
+      ].filter((p): p is string => Boolean(p && typeof p === "string" && p.trim().length > 0));
+
+      const formattedAddress = addressParts.join(", ");
+
+      restaurantInfo = {
+        _id: org._id,
+        name: org.name,
+        slug: org.slug,
+        phone: org.phone || org.mobile,
+        mobile: org.mobile,
+        address: formattedAddress || undefined,
+        addressLine1: org.addressLine1,
+        addressLine2: org.addressLine2,
+        landmark: org.landmark,
+        city: org.city,
+        state: org.state,
+        zipCode: org.zipCode,
+        country: org.country,
+        latitude: org.latitude,
+        longitude: org.longitude,
+      };
+    }
+
     return {
       ...order,
+      restaurant: restaurantInfo,
+      scheduledPickupDate: (order as any).scheduledPickupDate || order.scheduledDeliveryDate || null,
+      scheduledPickupTime: (order as any).scheduledPickupTime || order.scheduledDeliveryTime || null,
       paymentStatus: effectivePaymentStatus,
       orderStatusName: effectiveOrderStatusName,
       surveyQrUrl,
@@ -1093,6 +1454,11 @@ export const getCustomerStats = query({
       createdAt: number;
       totalAmount: number;
       orderType: string;
+      scheduledDeliveryDate?: string;
+      scheduledDeliveryTime?: string;
+      paymentStatus?: string;
+      orderStatusName?: string;
+      isCompleted?: boolean;
       itemsSummary: string;
       items: Array<{ itemName: string; quantity: number }>;
     }> = [];
@@ -1113,6 +1479,11 @@ export const getCustomerStats = query({
         createdAt: ord.createdAt,
         totalAmount: ord.totalAmount,
         orderType: ord.orderType,
+        scheduledDeliveryDate: ord.scheduledDeliveryDate,
+        scheduledDeliveryTime: ord.scheduledDeliveryTime,
+        paymentStatus: ord.paymentStatus,
+        orderStatusName: ord.orderStatusName,
+        isCompleted: ord.isCompleted,
         itemsSummary,
         items: items.map((it) => ({ itemName: it.itemName, quantity: it.quantity })),
       });
