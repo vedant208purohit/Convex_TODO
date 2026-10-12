@@ -417,7 +417,52 @@ export function PosShell({
   const isDineInActive = activeOrg?.isDineIn !== false;
   const branchName = activeOrg?.name || "Flagship Main Store";
 
-  if (organizations !== undefined && organizations.length === 0) {
+  const isOwner = Boolean(
+    activeOrg?.ownerClerkId &&
+    currentMembership?.userId &&
+    currentMembership.userId === activeOrg.ownerClerkId
+  );
+  const isPendingInvitation = !isOwner && Boolean(
+    currentMembership && (
+      (currentMembership as any).status === "invited" ||
+      (!(currentMembership as any).status && !(currentMembership as any).userType?.includes("admin"))
+    )
+  );
+
+  const [hasTicket, setHasTicket] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const search = window.location.search;
+      if (search.includes("__clerk_ticket") || search.includes("__clerk_status=sign_in")) {
+        setHasTicket(true);
+      }
+    }
+  }, []);
+
+  // Only auto-sync invitation acceptance IF user came directly from email invitation ticket
+  useEffect(() => {
+    let isMounted = true;
+    if (isPendingInvitation && hasTicket && activeOrg?._id && !isAccepting && !acceptError) {
+      setIsAccepting(true);
+      acceptInvitationMutation({ organizationId: activeOrg._id })
+        .catch((err: any) => {
+          if (isMounted) {
+            console.error("Auto-sync invitation error:", err);
+            setAcceptError(err?.message || "Failed to sync invitation. Please try again.");
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsAccepting(false);
+          }
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isPendingInvitation, hasTicket, activeOrg?._id, acceptError, isAccepting]);
+
+  if (organizations !== undefined && (organizations.length === 0 || currentMembership === null)) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
         <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
@@ -439,12 +484,12 @@ export function PosShell({
           </div>
           <h2 className="text-xl font-semibold text-stone-900">No Store Assigned</h2>
           <p className="mt-2 text-sm text-stone-600 leading-relaxed">
-            You do not have any assigned store. Please contact the store owner.
+            You do not have any assigned store or your access has been revoked. Please contact the store owner.
           </p>
           <div className="mt-6 flex flex-col gap-2">
             <button
               onClick={() => signOut({ redirectUrl: "/sign-in" })}
-              className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50"
+              className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 cursor-pointer"
             >
               Sign Out
             </button>
@@ -454,7 +499,69 @@ export function PosShell({
     );
   }
 
-  if (currentMembership && (currentMembership as any).status === "invited") {
+  if (currentMembership && currentMembership.status === "inactive") {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-stone-900">Account Deactivated</h2>
+          <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+            Your staff account for {branchName} has been deactivated. Please contact your store administrator.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => signOut({ redirectUrl: "/sign-in" })}
+              className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPendingInvitation) {
+    if (hasTicket && !acceptError) {
+      return (
+        <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+          <div className="w-full max-w-md rounded-2xl border border-amber-100 bg-white p-8 shadow-sm text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <svg className="h-7 w-7 animate-spin text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+              </svg>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-3">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Invitation Verified
+            </span>
+            <h2 className="text-xl font-bold text-stone-900">
+              Welcome to {branchName}
+            </h2>
+            <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+              Activating your workspace and entering store...
+            </p>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
         <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-8 shadow-sm text-center">
@@ -485,11 +592,9 @@ export function PosShell({
             You have been invited to join this store team. Please accept the invitation to access the point-of-sale system and start working.
           </p>
 
-          {acceptError && (
-            <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200">
-              {acceptError}
-            </div>
-          )}
+          <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+            {acceptError}
+          </div>
 
           <div className="mt-6 flex flex-col gap-3">
             <button

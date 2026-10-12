@@ -1016,6 +1016,7 @@ export function OrganizationEmployees() {
             lastName: formLastName.trim(),
             email: effectiveUserId,
             userId: effectiveUserId,
+            status: "invited",
             userType: formRoles,
             userPermission: permissionPayload,
           });
@@ -1312,7 +1313,7 @@ export function OrganizationEmployees() {
 
                         {/* STATUS COLUMN */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap align-middle">
-                          {emp.status === "invited" ? (
+                          {emp.status === "invited" || (!emp.status && !emp.userType?.includes("admin")) ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
                               Invited
@@ -1482,7 +1483,7 @@ export function OrganizationEmployees() {
                             <h3 className="text-base font-extrabold text-neutral-900 tracking-tight">
                               {meta.name}
                             </h3>
-                            {activeViewingDoc?.status === "invited" ? (
+                            {activeViewingDoc?.status === "invited" || (!activeViewingDoc?.status && !activeViewingDoc?.userType?.includes("admin")) ? (
                               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold rounded-full">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
                                 Invited Employee

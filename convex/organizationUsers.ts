@@ -534,7 +534,7 @@ export const getCurrentMembership = query({
       return null;
     }
 
-    const member = await getCallerMembership(ctx, identity.subject, org._id);
+    const member = await getCallerMembership(ctx, identity.subject, org._id, identity.email);
     if (member) {
       // Normalize userType if stored as a single string in legacy records
       const normalizedUserType = Array.isArray(member.userType)
@@ -542,8 +542,10 @@ export const getCurrentMembership = query({
         : typeof member.userType === "string"
           ? [member.userType]
           : ["admin"];
+      const memberStatus = member.status || (member.userType?.includes("admin") ? "active" : "invited");
       return {
         ...member,
+        status: memberStatus,
         userType: normalizedUserType,
       };
     }
@@ -692,6 +694,7 @@ export const create = mutation({
     email: v.optional(v.string()),
     phone: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    status: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
   },
@@ -721,20 +724,36 @@ export const create = mutation({
     }
 
     const normalizedTypes = validateAndNormalizeUserTypes(args.userType);
-
-    // Check for duplicate active membership
-    const existing = await getCallerMembership(ctx, args.userId.trim(), org._id);
-    if (existing) {
-      throw new Error(
-        `User "${args.userId}" is already a member of ${org.name}.`
-      );
-    }
-
     const now = Date.now();
     const finalPermissions = syncPermissions(
       normalizedTypes,
       args.userPermission
     );
+
+    // Check for duplicate membership in store (by userId or email)
+    const existing = await getCallerMembership(ctx, args.userId.trim(), org._id, args.email);
+    if (existing) {
+      if (existing.deletedAt !== undefined || existing.status === "inactive") {
+        // Reactivate soft-deleted or inactive member
+        await ctx.db.patch(existing._id, {
+          userId: args.userId.trim(),
+          ...(args.firstName !== undefined ? { firstName: args.firstName.trim() } : {}),
+          ...(args.lastName !== undefined ? { lastName: args.lastName.trim() } : {}),
+          ...(args.email !== undefined ? { email: args.email.trim() } : {}),
+          ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
+          ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
+          status: args.status || "invited",
+          userType: normalizedTypes,
+          userPermission: finalPermissions,
+          deletedAt: undefined,
+          updatedAt: now,
+        });
+        return existing._id;
+      }
+      throw new Error(
+        `User "${args.userId}" is already a member of ${org.name}.`
+      );
+    }
 
     const newId = await ctx.db.insert("organizationUsers", {
       organizationId: org._id,
@@ -744,6 +763,7 @@ export const create = mutation({
       ...(args.email !== undefined ? { email: args.email.trim() } : {}),
       ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
       ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
+      status: args.status || "invited",
       userType: normalizedTypes,
       userPermission: finalPermissions,
       createdAt: now,
@@ -1007,19 +1027,35 @@ export const syncStaffFromMaster = mutation({
 
     const now = Date.now();
 
-    // 5. Check if Member already exists in this store
-    const existingMember = await ctx.db
+    // 5. Check if Member already exists in this store (by Clerk ID or by Email)
+    let existingMember = await ctx.db
       .query("organizationUsers")
       .withIndex("by_user_and_org", (q) =>
         q.eq("userId", defaultClerkId).eq("organizationId", org._id)
       )
       .first();
 
+    if (!existingMember && args.email) {
+      const allMembers = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+      existingMember = allMembers.find(
+        (m) => m.email?.toLowerCase() === args.email?.trim().toLowerCase()
+      ) || null;
+    }
+
     if (existingMember) {
       // Idempotent Update / Reactivation
+      const wasInactiveOrDeleted =
+        existingMember.deletedAt !== undefined || existingMember.status === "inactive";
+
       const patchData: Record<string, any> = {
+        userId: defaultClerkId,
         userType: normalizedTypes,
         userPermission: finalPermissions,
+        status: args.status || "invited",
+        deletedAt: undefined,
         updatedAt: now,
       };
 
@@ -1029,18 +1065,13 @@ export const syncStaffFromMaster = mutation({
       if (args.phone !== undefined) patchData.phone = args.phone.trim();
       if (args.avatarUrl !== undefined) patchData.avatarUrl = args.avatarUrl.trim();
 
-      // Restore if soft-deleted
-      if (existingMember.deletedAt !== undefined) {
-        patchData.deletedAt = undefined;
-      }
-
       await ctx.db.patch(existingMember._id, patchData);
 
       return {
         success: true,
         id: existingMember._id,
         isExisting: true,
-        wasReactivated: existingMember.deletedAt !== undefined,
+        wasReactivated: wasInactiveOrDeleted,
       };
     }
 
@@ -1053,6 +1084,7 @@ export const syncStaffFromMaster = mutation({
       ...(args.email !== undefined ? { email: args.email.trim() } : {}),
       ...(args.phone !== undefined ? { phone: args.phone.trim() } : {}),
       ...(args.avatarUrl !== undefined ? { avatarUrl: args.avatarUrl.trim() } : {}),
+      status: args.status || "invited",
       userType: normalizedTypes,
       userPermission: finalPermissions,
       createdAt: now,
@@ -1102,5 +1134,34 @@ export const acceptInvitation = mutation({
     });
 
     return { success: true, status: "active" };
+  },
+});
+
+
+/**
+ * Ensures any non-admin staff records with missing status are set to "invited"
+ */
+export const fixPendingInvitations = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const members = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+
+    let patchedCount = 0;
+    for (const m of members) {
+      if (m.deletedAt === undefined && !m.userType?.includes("admin") && !m.status) {
+        await ctx.db.patch(m._id, {
+          status: "invited",
+          updatedAt: Date.now(),
+        });
+        patchedCount++;
+      }
+    }
+    return { success: true, patchedCount };
   },
 });

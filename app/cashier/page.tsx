@@ -174,10 +174,13 @@ function CashierPosContent() {
   }, [activeOrg]);
 
   // 4. Query Tables, Staff (Employees), Customers, Payment Modes, and Printers
-  const tables = useQuery(api.organizationTables.list, {});
+  const tables = useQuery(
+    api.organizationTables.list,
+    activeOrg ? {} : "skip",
+  );
   const employeesList = useQuery(
     api.organizationUsers.list,
-    activeOrg ? { organizationId: activeOrg._id } : {},
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
   const customersList = useQuery(
     api.organizationUsers.list,
@@ -187,12 +190,15 @@ function CashierPosContent() {
   );
   const paymentModesList = useQuery(
     api.paymentModes.list,
-    activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : {},
+    activeOrg ? { organizationId: activeOrg._id, activeOnly: true } : "skip",
   );
-  const printers = useQuery(api.organizationPrinters.list, {});
+  const printers = useQuery(
+    api.organizationPrinters.list,
+    activeOrg ? {} : "skip",
+  );
   const orgFeatures = useQuery(
     api.organizationFeatures.list,
-    activeOrg ? { organizationId: activeOrg._id } : {}
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
   const showTableTabInCashier = useMemo(() => {
     const feat = orgFeatures?.find((f) => f.featureKey === "show_table_tab_in_cashier");
