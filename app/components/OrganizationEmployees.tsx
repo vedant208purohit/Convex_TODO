@@ -653,7 +653,9 @@ export function OrganizationEmployees() {
     id: Id<"organizationUsers">;
     userId: string;
     name?: string;
+    email?: string;
   } | null>(null);
+  const [formStatus, setFormStatus] = useState<string>("active");
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Pagination State
@@ -776,6 +778,7 @@ export function OrganizationEmployees() {
   const handleOpenAddDrawer = () => {
     setDrawerMode("add");
     setEditingId(null);
+    setFormStatus("invited");
     setFormFirstName("");
     setFormLastName("");
     setFormUserIdentifier("");
@@ -799,6 +802,7 @@ export function OrganizationEmployees() {
   const handleOpenEditDrawer = (emp: Doc<"organizationUsers">) => {
     setDrawerMode("edit");
     setEditingId(emp._id);
+    setFormStatus(emp.status || "active");
     const meta = getEmployeeDisplayMeta(emp);
 
     if (emp.firstName || emp.lastName) {
@@ -1012,6 +1016,7 @@ export function OrganizationEmployees() {
             lastName: formLastName.trim(),
             email: effectiveUserId,
             userId: effectiveUserId,
+            status: "invited",
             userType: formRoles,
             userPermission: permissionPayload,
           });
@@ -1060,11 +1065,31 @@ export function OrganizationEmployees() {
     setIsDeleting(true);
 
     try {
-      await removeEmployeeMutation({ id: deleteTarget.id });
+      const res = await fetch("/api/staff/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: deleteTarget.id,
+          defaultClerkId: deleteTarget.userId,
+          email: deleteTarget.email,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        await removeEmployeeMutation({ id: deleteTarget.id });
+      }
+
       setToast({ message: "Employee removed successfully.", type: "success" });
       setDeleteTarget(null);
     } catch (err: any) {
-      setToast({ message: err?.message || "Failed to remove employee.", type: "error" });
+      try {
+        await removeEmployeeMutation({ id: deleteTarget.id });
+        setToast({ message: "Employee removed successfully.", type: "success" });
+      } catch (fallbackErr: any) {
+        setToast({ message: err?.message || "Failed to remove employee.", type: "error" });
+      }
       setDeleteTarget(null);
     } finally {
       setIsDeleting(false);
@@ -1288,10 +1313,17 @@ export function OrganizationEmployees() {
 
                         {/* STATUS COLUMN */}
                         <td className="py-3.5 px-3.5 whitespace-nowrap align-middle">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                            Active
-                          </span>
+                          {emp.status === "invited" || (!emp.status && !emp.userType?.includes("admin")) ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                              Invited
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                              Active
+                            </span>
+                          )}
                         </td>
 
                         {/* ACTION COLUMN */}
@@ -1451,10 +1483,17 @@ export function OrganizationEmployees() {
                             <h3 className="text-base font-extrabold text-neutral-900 tracking-tight">
                               {meta.name}
                             </h3>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold rounded-full">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              Active Employee
-                            </span>
+                            {activeViewingDoc?.status === "invited" || (!activeViewingDoc?.status && !activeViewingDoc?.userType?.includes("admin")) ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                Invited Employee
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                Active Employee
+                              </span>
+                            )}
                           </div>
 
                           <div className="mt-1.5 space-y-1 text-xs text-neutral-600">
@@ -1720,6 +1759,7 @@ export function OrganizationEmployees() {
                         id: docToDel._id,
                         userId: docToDel.userId,
                         name: viewMeta.name,
+                        email: docToDel.email,
                       });
                     }}
                     title={
@@ -1802,10 +1842,17 @@ export function OrganizationEmployees() {
                     {drawerMode === "add" ? "Add employee" : "Edit employee"}
                   </h2>
                   {drawerMode === "edit" && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      Active
-                    </span>
+                    formStatus === "invited" ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        Invited
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Active
+                      </span>
+                    )
                   )}
                 </div>
                 <p className="text-xs text-neutral-500">

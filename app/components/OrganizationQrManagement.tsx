@@ -1540,7 +1540,7 @@ export function OrganizationQrManagement() {
             {/* Content View: Table format for "All QR" tab, Card format for individual channel tabs */}
             {typeFilter === "all" ? (
               <div className="w-full bg-white rounded-2xl shadow-xs border border-[#e7e5e4] overflow-visible">
-                <div className="overflow-x-auto sm:overflow-visible [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <div className="overflow-x-auto min-h-[300px] pb-14 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-[#fdf8f7] text-[#5e5e5e] border-b border-[#e7e5e4] text-[11px] font-bold uppercase tracking-wider">
@@ -1566,6 +1566,7 @@ export function OrganizationQrManagement() {
                         filteredTables.map((table) => {
                           const isActive = table.status === "Active";
                           const isPending = table.status === "Pending QR";
+                          const isLastTwo = filteredTables.length > 3 && index >= 2 && index >= filteredTables.length - 2;
 
                           return (
                             <tr
@@ -1920,6 +1921,7 @@ export function OrganizationQrManagement() {
                   filteredTables.map((table) => {
                     const isActive = table.status === "Active";
                     const isPending = table.status === "Pending QR";
+                    const isLastTwoInGrid = filteredTables.length > 4 && index >= 2 && index >= filteredTables.length - 2;
 
                     return (
                       <div

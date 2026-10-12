@@ -717,11 +717,60 @@ export const getBySlug = query({
 
 export const list = query({
   handler: async (ctx) => {
-    const orgs = await ctx.db.query("organizations").collect();
+    const identity = await ctx.auth.getUserIdentity();
+    const allOrgs = await ctx.db.query("organizations").collect();
+    const activeOrgs = allOrgs.filter((org) => org.deletedAt === undefined);
+
+    if (!identity) {
+      return [];
+    }
+
+    // 1. Stores owned by this user
+    const ownedOrgIds = new Set(
+      activeOrgs
+        .filter(
+          (org) => org.ownerClerkId && org.ownerClerkId === identity.subject
+        )
+        .map((org) => org._id)
+    );
+
+    // 2. Active memberships in organizationUsers by userId (Clerk ID)
+    const userMemberships = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+
+    // 3. Fallback active memberships by email
+    if (identity.email) {
+      const normEmail = identity.email.toLowerCase();
+      const allMembers = await ctx.db.query("organizationUsers").collect();
+      const matched = allMembers.filter(
+        (m) =>
+          m.email &&
+          m.email.toLowerCase() === normEmail &&
+          m.userId !== identity.subject
+      );
+      for (const m of matched) {
+        userMemberships.push(m);
+      }
+    }
+
+    const activeMemberships = userMemberships.filter(
+      (m) =>
+        m.deletedAt === undefined &&
+        m.status !== "inactive" &&
+        m.status !== "suspended"
+    );
+
+    const memberOrgIds = new Set(activeMemberships.map((m) => m.organizationId));
+
+    // Return only organizations the user owns or has an active membership in
+    const userOrgs = activeOrgs.filter(
+      (org) => ownedOrgIds.has(org._id) || memberOrgIds.has(org._id)
+    );
+
     const formatted = await Promise.all(
-      orgs
-        .filter((org) => org.deletedAt === undefined)
-        .map((org) => formatSafeOrgResponse(ctx, org))
+      userOrgs.map((org) => formatSafeOrgResponse(ctx, org))
     );
     return formatted.filter(Boolean);
   },

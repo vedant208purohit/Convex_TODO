@@ -223,13 +223,15 @@ export default defineSchema({
     avatarUrl: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
+    status: v.optional(v.string()), // "invited" | "active" | "inactive" | "suspended"
     createdAt: v.optional(v.number()),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_org", ["organizationId"])
-    .index("by_user_and_org", ["userId", "organizationId"]),
+    .index("by_user_and_org", ["userId", "organizationId"])
+    .index("by_email", ["email"]),
 
   // Customer Domain Table (Migrated from legacy Rails users where user_type includes 'customer')
   customers: defineTable({
