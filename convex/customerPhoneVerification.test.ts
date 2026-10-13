@@ -95,7 +95,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
       });
 
       // Step A: Send OTP
-      const sendRes = await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      const sendRes = await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876543210",
         countryCode: "+91",
         organizationId: orgId,
@@ -145,7 +145,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         name: "Rohit Test",
       });
 
-      await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876500001",
         countryCode: "+91",
         organizationId: orgId,
@@ -171,7 +171,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         email: "expired.test@example.com",
       });
 
-      const sendRes = await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      const sendRes = await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876500002",
         countryCode: "+91",
         organizationId: orgId,
@@ -204,7 +204,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         email: "singleuse@example.com",
       });
 
-      await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876500003",
         countryCode: "+91",
         organizationId: orgId,
@@ -240,7 +240,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         email: "cooldown@example.com",
       });
 
-      await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876500004",
         countryCode: "+91",
         organizationId: orgId,
@@ -248,7 +248,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
 
       // Immediate resend must be rejected with cooldown countdown
       await expect(
-        clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+        clerkUser.action(api.customers.sendCustomerPhoneOtp, {
           phone: "9876500004",
           countryCode: "+91",
           organizationId: orgId,
@@ -285,7 +285,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
       });
 
       // Send OTP to Ananya's phone
-      await ananyaUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await ananyaUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876511223",
         countryCode: "+91",
         organizationId: orgId,
@@ -324,7 +324,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
       });
 
       // 1st verification
-      await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876522334",
         countryCode: "+91",
         organizationId: orgId,
@@ -348,7 +348,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         }
       });
 
-      await clerkUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await clerkUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876522334",
         countryCode: "+91",
         organizationId: orgId,
@@ -397,7 +397,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         name: "Bob",
       });
 
-      await bobUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await bobUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876533445",
         countryCode: "+91",
         organizationId: orgId,
@@ -468,7 +468,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
       });
 
       // Verify phone
-      await vikramUser.mutation(api.customers.sendCustomerPhoneOtp, {
+      await vikramUser.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876544556",
         countryCode: "+91",
         organizationId: orgId,
@@ -503,7 +503,7 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
       });
 
       // Verify phone
-      await customer.mutation(api.customers.sendCustomerPhoneOtp, {
+      await customer.action(api.customers.sendCustomerPhoneOtp, {
         phone: "9876555667",
         countryCode: "+91",
         organizationId: orgId,

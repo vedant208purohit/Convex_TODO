@@ -1,4 +1,5 @@
-import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
+import { action, internalMutation, mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import {
@@ -677,19 +678,29 @@ export const getCurrentCustomer = query({
 /**
  * Sends a cryptographically secure OTP to customer phone.
  */
-export const sendCustomerPhoneOtp = mutation({
+/**
+ * Internal mutation to prepare OTP record, perform rate-limiting, and generate secure OTP.
+ */
+export const prepareCustomerPhoneOtp = internalMutation({
   args: {
     phone: v.string(),
     countryCode: v.optional(v.string()),
     organizationId: v.optional(v.id("organizations")),
+    clerkUserId: v.string(),
   },
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error("Authentication required. Please sign in before verifying your mobile number.");
-    }
-
-    const clerkUserId = identity.subject;
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    verificationId: Id<"customerPhoneVerifications">;
+    normalizedPhone: string;
+    otp: string;
+    storeName: string;
+    cooldownSeconds: number;
+    resendAvailableAt: number;
+    expiresAt: number;
+  }> => {
+    const clerkUserId = args.clerkUserId;
     const defaultCode = args.countryCode?.trim() || "+91";
     const normalizedPhone = normalizeToE164(args.phone, defaultCode);
     validatePhone(normalizedPhone, defaultCode);
@@ -742,17 +753,6 @@ export const sendCustomerPhoneOtp = mutation({
       if (org?.name) storeName = org.name;
     }
 
-    const provider = getSmsProvider();
-    const sendResult = await provider.sendOtp({
-      to: normalizedPhone,
-      otp,
-      storeName,
-    });
-
-    if (!sendResult.success) {
-      throw new Error(sendResult.error || "Failed to deliver OTP via SMS provider.");
-    }
-
     const resendAvailableAt = now + COOLDOWN_MS;
     const expiresAt = now + EXPIRY_MS;
 
@@ -771,11 +771,90 @@ export const sendCustomerPhoneOtp = mutation({
     });
 
     return {
-      success: true,
       verificationId,
+      normalizedPhone,
+      otp,
+      storeName,
       cooldownSeconds: 60,
       resendAvailableAt,
       expiresAt,
+    };
+  },
+});
+
+/**
+ * Internal mutation to remove verification record if external SMS dispatch fails.
+ */
+export const removeFailedCustomerPhoneOtp = internalMutation({
+  args: {
+    verificationId: v.id("customerPhoneVerifications"),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.delete(args.verificationId);
+  },
+});
+
+/**
+ * Sends a cryptographically secure OTP to customer phone.
+ * Runs as an action to allow external HTTP fetch() requests.
+ */
+export const sendCustomerPhoneOtp = action({
+  args: {
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    success: boolean;
+    verificationId: Id<"customerPhoneVerifications">;
+    cooldownSeconds: number;
+    resendAvailableAt: number;
+    expiresAt: number;
+  }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required. Please sign in before verifying your mobile number.");
+    }
+
+    const prep: {
+      verificationId: Id<"customerPhoneVerifications">;
+      normalizedPhone: string;
+      otp: string;
+      storeName: string;
+      cooldownSeconds: number;
+      resendAvailableAt: number;
+      expiresAt: number;
+    } = await ctx.runMutation(internal.customers.prepareCustomerPhoneOtp, {
+      phone: args.phone,
+      countryCode: args.countryCode,
+      organizationId: args.organizationId,
+      clerkUserId: identity.subject,
+    });
+
+    // Send OTP via SMS Provider (HTTP fetch call allowed in Convex actions)
+    const provider = getSmsProvider();
+    const sendResult = await provider.sendOtp({
+      to: prep.normalizedPhone,
+      otp: prep.otp,
+      storeName: prep.storeName,
+    });
+
+    if (!sendResult.success) {
+      await ctx.runMutation(internal.customers.removeFailedCustomerPhoneOtp, {
+        verificationId: prep.verificationId,
+      });
+      throw new Error(sendResult.error || "Failed to deliver OTP via SMS provider.");
+    }
+
+    return {
+      success: true,
+      verificationId: prep.verificationId,
+      cooldownSeconds: prep.cooldownSeconds,
+      resendAvailableAt: prep.resendAvailableAt,
+      expiresAt: prep.expiresAt,
     };
   },
 });
