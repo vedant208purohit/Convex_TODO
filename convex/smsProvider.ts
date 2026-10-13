@@ -1,15 +1,16 @@
 /**
- * SMS Provider Abstraction for Prest Customer Phone OTP Verification
+ * Combird SMS Provider Implementation for Prest Customer Mobile OTP Verification
  *
- * Implements clean multi-provider support:
- * 1. Twilio (International & India)
- * 2. MSG91 (India / DLT compliance)
- * 3. MockTestProvider (Used for local tests & Vitest runner)
+ * Implements integration with Combird (Edumarc SMS API):
+ * - API Endpoint: https://smsapi.edumarcsms.com/api/v1/sendsms
+ * - Authentication: "x-api-key" header using COMBIRD_API_KEY
+ * - Request Payload: { number, message, senderId, templateId }
+ * - DLT Template: Approved "Your Prest OTP for verification is: {otp}..."
  *
  * Security:
  * - Credentials only read from server-side environment variables.
- * - Raw OTP is never logged in logs or returned to client.
- * - Fails closed if SMS provider is not configured.
+ * - Raw OTP values and API keys are never logged or exposed.
+ * - Fails closed if Combird is unconfigured in production.
  */
 
 export interface SmsDeliveryResult {
@@ -63,148 +64,139 @@ export class MockTestSmsProvider implements SmsProvider {
 }
 
 /**
- * Twilio SMS Gateway Implementation
+ * Combird / Edumarc SMS Gateway Implementation
  */
-export class TwilioSmsProvider implements SmsProvider {
-  name = "twilio";
-  private accountSid: string;
-  private authToken: string;
-  private fromNumber?: string;
-  private messagingServiceSid?: string;
+export class CombirdSmsProvider implements SmsProvider {
+  name = "combird";
+  private apiKey: string;
+  private templateId: string;
+  private apiUrl: string;
+  private senderId: string;
 
-  constructor() {
-    this.accountSid = process.env.TWILIO_ACCOUNT_SID || "";
-    this.authToken = process.env.TWILIO_AUTH_TOKEN || "";
-    this.fromNumber = process.env.TWILIO_PHONE_NUMBER || process.env.TWILIO_FROM_NUMBER;
-    this.messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID;
+  constructor(options?: {
+    apiKey?: string;
+    templateId?: string;
+    apiUrl?: string;
+    senderId?: string;
+  }) {
+    this.apiKey =
+      options?.apiKey ||
+      process.env.COMBIRD_API_KEY ||
+      process.env.COMBIRDS_API_KEY ||
+      "";
+    this.templateId =
+      options?.templateId ||
+      process.env.COMBIRD_TEMPLATE_ID ||
+      "1707168926925165526";
+    this.apiUrl =
+      options?.apiUrl ||
+      process.env.COMBIRD_API_URL ||
+      process.env.COMBIRD_API_BASE_URL ||
+      "https://smsapi.edumarcsms.com/api/v1/sendsms";
+    this.senderId =
+      options?.senderId ||
+      process.env.COMBIRD_SENDER_ID ||
+      "EDUMRC";
   }
 
   isConfigured(): boolean {
-    return Boolean(this.accountSid && this.authToken && (this.fromNumber || this.messagingServiceSid));
+    return Boolean(this.apiKey && this.templateId);
+  }
+
+  /**
+   * Normalizes destination number into pure digits with country code, without '+'
+   * E.g. "+919876543210" -> "919876543210"
+   */
+  formatNumber(phone: string): string {
+    const cleaned = phone.replace(/\D/g, "");
+    if (cleaned.length === 10) {
+      return `91${cleaned}`;
+    }
+    return cleaned;
+  }
+
+  /**
+   * Formats the DLT-registered message template for Prest OTP verification
+   */
+  formatMessage(otp: string): string {
+    return `Your Prest OTP for verification is: ${otp}. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies`;
   }
 
   async sendOtp(params: { to: string; otp: string; storeName?: string }): Promise<SmsDeliveryResult> {
     if (!this.isConfigured()) {
       return {
         success: false,
-        error: "Twilio SMS provider is misconfigured. Missing TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, or sender ID.",
-        provider: "twilio",
+        error: "Combird SMS provider is misconfigured. Missing COMBIRD_API_KEY or COMBIRD_TEMPLATE_ID.",
+        provider: "combird",
       };
     }
 
-    const brand = params.storeName || "Prest";
-    const body = `Your ${brand} verification code is: ${params.otp}. Valid for 5 minutes. Do not share this code with anyone.`;
-
-    const formData = new URLSearchParams();
-    formData.append("To", params.to);
-    formData.append("Body", body);
-
-    if (this.messagingServiceSid) {
-      formData.append("MessagingServiceSid", this.messagingServiceSid);
-    } else if (this.fromNumber) {
-      formData.append("From", this.fromNumber);
+    const toNumber = this.formatNumber(params.to);
+    if (!toNumber || toNumber.length < 10) {
+      return {
+        success: false,
+        error: "Invalid phone number format for Combird SMS delivery.",
+        provider: "combird",
+      };
     }
 
-    try {
-      const basicAuth = Buffer.from(`${this.accountSid}:${this.authToken}`).toString("base64");
-      const url = `https://api.twilio.com/2010-04-01/Accounts/${this.accountSid}/Messages.json`;
+    const message = this.formatMessage(params.otp);
 
-      const response = await fetch(url, {
+    const payload = {
+      number: toNumber,
+      message,
+      senderId: this.senderId,
+      templateId: this.templateId,
+    };
+
+    try {
+      const response = await fetch(this.apiUrl, {
         method: "POST",
         headers: {
-          Authorization: `Basic ${basicAuth}`,
-          "Content-Type": "application/x-www-form-urlencoded",
+          "x-api-key": this.apiKey,
+          "Content-Type": "application/json; charset=UTF-8",
         },
-        body: formData.toString(),
+        body: JSON.stringify(payload),
       });
 
-      const data = await response.json().catch(() => ({}));
+      const responseText = await response.text();
+      let responseData: any = {};
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { raw: responseText };
+      }
 
-      if (!response.ok) {
+      if (response.ok || (response.status >= 200 && response.status < 300)) {
+        const messageId =
+          responseData?.messageId ||
+          responseData?.id ||
+          responseData?.data?.id ||
+          `combird_${Date.now()}`;
+
         return {
-          success: false,
-          error: data?.message || `Twilio SMS dispatch failed with HTTP ${response.status}`,
-          provider: "twilio",
+          success: true,
+          messageId: String(messageId),
+          provider: "combird",
         };
       }
 
+      const errorMessage =
+        responseData?.message ||
+        responseData?.error ||
+        responseData?.raw ||
+        `Combird SMS delivery failed with HTTP status ${response.status}`;
+
       return {
-        success: true,
-        messageId: data.sid,
-        provider: "twilio",
+        success: false,
+        error: errorMessage,
+        provider: "combird",
       };
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || "Failed to dispatch SMS through Twilio",
-        provider: "twilio",
-      };
-    }
-  }
-}
-
-/**
- * MSG91 SMS Gateway Implementation (Common in India / DLT)
- */
-export class Msg91SmsProvider implements SmsProvider {
-  name = "msg91";
-  private authKey: string;
-  private templateId?: string;
-
-  constructor() {
-    this.authKey = process.env.MSG91_AUTH_KEY || "";
-    this.templateId = process.env.MSG91_TEMPLATE_ID || process.env.MSG91_FLOW_ID;
-  }
-
-  isConfigured(): boolean {
-    return Boolean(this.authKey && this.templateId);
-  }
-
-  async sendOtp(params: { to: string; otp: string; storeName?: string }): Promise<SmsDeliveryResult> {
-    if (!this.isConfigured()) {
-      return {
-        success: false,
-        error: "MSG91 SMS provider is misconfigured. Missing MSG91_AUTH_KEY or MSG91_TEMPLATE_ID.",
-        provider: "msg91",
-      };
-    }
-
-    // MSG91 mobile number without '+'
-    const cleanMobile = params.to.replace(/\+/g, "");
-    const brand = params.storeName || "Prest";
-
-    try {
-      const url = "https://control.msg91.com/api/v5/otp";
-      const response = await fetch(
-        `${url}?template_id=${this.templateId}&mobile=${cleanMobile}&authkey=${this.authKey}&otp=${params.otp}&company_name=${encodeURIComponent(brand)}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
-
-      const data = await response.json().catch(() => ({}));
-
-      if (!response.ok || data?.type === "error") {
-        return {
-          success: false,
-          error: data?.message || `MSG91 SMS dispatch failed with status ${response.status}`,
-          provider: "msg91",
-        };
-      }
-
-      return {
-        success: true,
-        messageId: data?.request_id || "msg91_sent",
-        provider: "msg91",
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        error: err?.message || "Failed to dispatch SMS through MSG91",
-        provider: "msg91",
+        error: err?.message || "Network error while connecting to Combird SMS gateway",
+        provider: "combird",
       };
     }
   }
@@ -212,8 +204,8 @@ export class Msg91SmsProvider implements SmsProvider {
 
 /**
  * Factory to retrieve the configured SMS provider.
- * In test environment or when explicitly configured, returns MockTestSmsProvider.
- * In production, fails closed if no provider is configured.
+ * - In test environment or when explicitly set to 'mock', returns MockTestSmsProvider.
+ * - In production and normal operation, returns CombirdSmsProvider.
  */
 export function getSmsProvider(): SmsProvider {
   const selected = (process.env.SMS_PROVIDER || "").toLowerCase().trim();
@@ -223,21 +215,6 @@ export function getSmsProvider(): SmsProvider {
     return new MockTestSmsProvider();
   }
 
-  if (selected === "msg91" || (!selected && process.env.MSG91_AUTH_KEY)) {
-    return new Msg91SmsProvider();
-  }
-
-  if (selected === "twilio" || (!selected && process.env.TWILIO_ACCOUNT_SID)) {
-    return new TwilioSmsProvider();
-  }
-
-  // Fails closed if not test and no credentials exist
-  return {
-    name: "none",
-    sendOtp: async () => ({
-      success: false,
-      error: "SMS provider is not configured on this server. Contact support or configure TWILIO/MSG91 environment variables.",
-      provider: "none",
-    }),
-  };
+  // Combird is the sole provider for phone OTP
+  return new CombirdSmsProvider();
 }
