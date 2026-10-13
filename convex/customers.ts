@@ -6,6 +6,7 @@ import {
   resolveStoreOrganization,
   getCallerMembership,
 } from "./organizationUsers";
+import { getSmsProvider } from "./smsProvider";
 
 // ----------------------------------------------------
 // VALIDATION & NORMALIZATION HELPERS
@@ -487,3 +488,481 @@ export const migrateLegacyCustomer = mutation({
     return { customerId, alreadyMigrated: false };
   },
 });
+
+// ----------------------------------------------------
+// CUSTOMER PHONE OTP & CLERK IDENTITY VERIFICATION
+// ----------------------------------------------------
+
+/**
+ * Normalizes a phone string to E.164 format.
+ */
+export function normalizeToE164(rawPhone: string, defaultCountryCode: string = "+91"): string {
+  if (!rawPhone) return "";
+  const trimmed = rawPhone.trim();
+
+  if (trimmed.startsWith("+")) {
+    const digits = trimmed.slice(1).replace(/\D/g, "");
+    return `+${digits}`;
+  }
+
+  const digits = trimmed.replace(/\D/g, "");
+  const cleanCode = defaultCountryCode.replace(/\D/g, "") || "91";
+
+  const cleanDigits = digits.startsWith("0") ? digits.slice(1) : digits;
+
+  if (cleanDigits.length > 10 && cleanDigits.startsWith(cleanCode)) {
+    return `+${cleanDigits}`;
+  }
+
+  return `+${cleanCode}${cleanDigits}`;
+}
+
+/**
+ * Cryptographically secure 6-digit OTP generation using Web Crypto.
+ */
+export function generateSecureOtp(): string {
+  const array = new Uint32Array(1);
+  crypto.getRandomValues(array);
+  const otpNumber = 100000 + (array[0] % 900000);
+  return otpNumber.toString();
+}
+
+/**
+ * Computes secure SHA-256 hash of normalized phone, OTP, and secret salt.
+ */
+export async function hashOtp(
+  phone: string,
+  otp: string,
+  salt: string = process.env.OTP_SECRET || "prest_customer_otp_secret_salt_v1"
+): Promise<string> {
+  const normalized = normalizeToE164(phone);
+  const data = new TextEncoder().encode(`${normalized}:${otp}:${salt}`);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Helper to find customer across E.164 and local phone representations.
+ */
+export async function findCustomerByPhoneHelper(
+  ctx: QueryCtx | MutationCtx,
+  rawPhone: string,
+  countryCode?: string
+): Promise<Doc<"customers"> | null> {
+  const e164 = normalizeToE164(rawPhone, countryCode || "+91");
+  const digits = normalizePhone(rawPhone);
+  if (!digits) return null;
+
+  // 1. Direct match on E.164 format (e.g. "+919876543210")
+  const e164Matches = await ctx.db
+    .query("customers")
+    .withIndex("by_phone", (q) => q.eq("phone", e164))
+    .collect();
+  const activeE164 = e164Matches.find((c) => c.deletedAt === undefined);
+  if (activeE164) return activeE164;
+
+  // 2. Direct match on digits (e.g. "9876543210" or "919876543210")
+  const digitMatches = await ctx.db
+    .query("customers")
+    .withIndex("by_phone", (q) => q.eq("phone", digits))
+    .collect();
+  const activeDigits = digitMatches.find((c) => c.deletedAt === undefined);
+  if (activeDigits) return activeDigits;
+
+  // 3. Trailing 10 digits match if input has country code
+  if (digits.length === 12 && digits.startsWith("91")) {
+    const tenDigit = digits.slice(2);
+    const tenMatches = await ctx.db
+      .query("customers")
+      .withIndex("by_phone", (q) => q.eq("phone", tenDigit))
+      .collect();
+    const activeTen = tenMatches.find((c) => c.deletedAt === undefined);
+    if (activeTen) return activeTen;
+  }
+
+  // 4. 91-prefixed match if input is 10 digits
+  if (digits.length === 10) {
+    const twelveDigit = `91${digits}`;
+    const twelveMatches = await ctx.db
+      .query("customers")
+      .withIndex("by_phone", (q) => q.eq("phone", twelveDigit))
+      .collect();
+    const activeTwelve = twelveMatches.find((c) => c.deletedAt === undefined);
+    if (activeTwelve) return activeTwelve;
+  }
+
+  return null;
+}
+
+/**
+ * Retrieves the current authenticated customer record linked to the Clerk session.
+ */
+export const getCurrentCustomer = query({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      return {
+        customer: null,
+        isPhoneVerified: false,
+        isAuthenticated: false,
+      };
+    }
+
+    const clerkUserId = identity.subject;
+    const userEmail = identity.email?.toLowerCase().trim();
+
+    // 1. Look up by clerkUserId index
+    const linked = await ctx.db
+      .query("customers")
+      .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", clerkUserId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .first();
+
+    if (linked) {
+      const addresses = await ctx.db
+        .query("userAddresses")
+        .withIndex("by_customer", (q) => q.eq("customerId", linked._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      return {
+        customer: linked,
+        customerId: linked._id,
+        isPhoneVerified: Boolean(linked.isPhoneVerified),
+        phone: linked.phone,
+        countryCode: linked.countryCode,
+        email: linked.email,
+        name: [linked.firstName, linked.lastName].filter(Boolean).join(" ") || identity.name,
+        addressesCount: addresses.length,
+        isAuthenticated: true,
+      };
+    }
+
+    // 2. Fallback check by email
+    if (userEmail) {
+      const emailMatches = await ctx.db
+        .query("customers")
+        .withIndex("by_email", (q) => q.eq("email", userEmail))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      const activeEmailCustomer = emailMatches[0];
+      if (activeEmailCustomer && activeEmailCustomer.isPhoneVerified) {
+        return {
+          customer: activeEmailCustomer,
+          customerId: activeEmailCustomer._id,
+          isPhoneVerified: Boolean(activeEmailCustomer.isPhoneVerified),
+          phone: activeEmailCustomer.phone,
+          countryCode: activeEmailCustomer.countryCode,
+          email: activeEmailCustomer.email,
+          name: [activeEmailCustomer.firstName, activeEmailCustomer.lastName].filter(Boolean).join(" ") || identity.name,
+          addressesCount: 0,
+          isAuthenticated: true,
+        };
+      }
+    }
+
+    return {
+      customer: null,
+      isPhoneVerified: false,
+      isAuthenticated: true,
+      email: userEmail,
+      name: identity.name,
+    };
+  },
+});
+
+/**
+ * Sends a cryptographically secure OTP to customer phone.
+ */
+export const sendCustomerPhoneOtp = mutation({
+  args: {
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required. Please sign in before verifying your mobile number.");
+    }
+
+    const clerkUserId = identity.subject;
+    const defaultCode = args.countryCode?.trim() || "+91";
+    const normalizedPhone = normalizeToE164(args.phone, defaultCode);
+    validatePhone(normalizedPhone, defaultCode);
+
+    const now = Date.now();
+    const COOLDOWN_MS = 60 * 1000;
+    const EXPIRY_MS = 5 * 60 * 1000;
+    const HOURLY_WINDOW_MS = 60 * 60 * 1000;
+    const MAX_HOURLY_REQUESTS = 5;
+
+    // Rate Limiting: Check resend cooldown
+    const recentUserVerifications = await ctx.db
+      .query("customerPhoneVerifications")
+      .withIndex("by_clerk_user", (q) => q.eq("clerkUserId", clerkUserId))
+      .order("desc")
+      .take(10);
+
+    const activeCooldown = recentUserVerifications.find(
+      (v) => v.phone === normalizedPhone && v.resendAvailableAt > now && !v.verifiedAt
+    );
+
+    if (activeCooldown) {
+      const waitSeconds = Math.ceil((activeCooldown.resendAvailableAt - now) / 1000);
+      throw new Error(`Please wait ${waitSeconds} seconds before requesting a new code.`);
+    }
+
+    // Rate Limiting: Check hourly requests
+    const oneHourAgo = now - HOURLY_WINDOW_MS;
+    const hourlyRequests = recentUserVerifications.filter(
+      (v) => v.phone === normalizedPhone && v.createdAt > oneHourAgo
+    );
+
+    if (hourlyRequests.length >= MAX_HOURLY_REQUESTS) {
+      throw new Error("Too many OTP requests. Please try again after an hour.");
+    }
+
+    // Invalidate prior unverified verification
+    for (const prior of recentUserVerifications) {
+      if (prior.phone === normalizedPhone && !prior.verifiedAt) {
+        await ctx.db.delete(prior._id);
+      }
+    }
+
+    const otp = generateSecureOtp();
+    const otpHash = await hashOtp(normalizedPhone, otp);
+
+    let storeName = "Prest";
+    if (args.organizationId) {
+      const org = await ctx.db.get(args.organizationId);
+      if (org?.name) storeName = org.name;
+    }
+
+    const provider = getSmsProvider();
+    const sendResult = await provider.sendOtp({
+      to: normalizedPhone,
+      otp,
+      storeName,
+    });
+
+    if (!sendResult.success) {
+      throw new Error(sendResult.error || "Failed to deliver OTP via SMS provider.");
+    }
+
+    const resendAvailableAt = now + COOLDOWN_MS;
+    const expiresAt = now + EXPIRY_MS;
+
+    const verificationId = await ctx.db.insert("customerPhoneVerifications", {
+      phone: normalizedPhone,
+      countryCode: defaultCode,
+      otpHash,
+      expiresAt,
+      attempts: 0,
+      maxAttempts: 5,
+      resendAvailableAt,
+      clerkUserId,
+      organizationId: args.organizationId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      verificationId,
+      cooldownSeconds: 60,
+      resendAvailableAt,
+      expiresAt,
+    };
+  },
+});
+
+/**
+ * Verifies customer OTP and links customer profile to authenticated Clerk session.
+ */
+export const verifyCustomerPhoneOtp = mutation({
+  args: {
+    phone: v.string(),
+    countryCode: v.optional(v.string()),
+    otp: v.string(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required. Please sign in to verify your mobile number.");
+    }
+
+    const clerkUserId = identity.subject;
+    const userEmail = identity.email?.toLowerCase().trim();
+    const defaultCode = args.countryCode?.trim() || "+91";
+    const normalizedPhone = normalizeToE164(args.phone, defaultCode);
+    const cleanOtp = args.otp.trim();
+
+    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
+      throw new Error("Please enter a valid 6-digit verification code.");
+    }
+
+    const now = Date.now();
+
+    const verifications = await ctx.db
+      .query("customerPhoneVerifications")
+      .withIndex("by_phone_and_user", (q) =>
+        q.eq("phone", normalizedPhone).eq("clerkUserId", clerkUserId)
+      )
+      .order("desc")
+      .take(1);
+
+    const verification = verifications[0];
+
+    if (!verification) {
+      throw new Error("No pending verification request found. Please request a new code.");
+    }
+
+    if (verification.verifiedAt !== undefined) {
+      throw new Error("This verification code has already been used.");
+    }
+
+    if (now > verification.expiresAt) {
+      throw new Error("Verification code has expired. Please request a new one.");
+    }
+
+    if (verification.attempts >= verification.maxAttempts) {
+      throw new Error("Maximum verification attempts exceeded. Please request a new OTP.");
+    }
+
+    const computedHash = await hashOtp(normalizedPhone, cleanOtp);
+    if (computedHash !== verification.otpHash) {
+      const newAttempts = verification.attempts + 1;
+      await ctx.db.patch(verification._id, {
+        attempts: newAttempts,
+        updatedAt: now,
+      });
+
+      const remaining = verification.maxAttempts - newAttempts;
+      if (remaining <= 0) {
+        throw new Error("Invalid code. Maximum attempts reached. Please request a new OTP.");
+      }
+      throw new Error(`Invalid verification code. ${remaining} attempt${remaining === 1 ? "" : "s"} remaining.`);
+    }
+
+    await ctx.db.patch(verification._id, {
+      verifiedAt: now,
+      updatedAt: now,
+    });
+
+    const existingCustomer = await findCustomerByPhoneHelper(ctx, normalizedPhone, defaultCode);
+
+    let customerId: Id<"customers">;
+    let isNewCustomer = false;
+
+    if (existingCustomer) {
+      if (
+        existingCustomer.email &&
+        userEmail &&
+        existingCustomer.email.toLowerCase() !== userEmail
+      ) {
+        return {
+          success: false,
+          conflict: "EMAIL_MISMATCH",
+          message: `This mobile number is already linked to another email account (${existingCustomer.email.replace(/(.{2})(.*)(@.*)/, "$1***$3")}). Please sign in with that email address.`,
+          customerId: null,
+          isPhoneVerified: false,
+        };
+      }
+
+      const updates: Record<string, any> = {
+        clerkUserId,
+        isPhoneVerified: true,
+        phoneVerifiedAt: now,
+        updatedAt: now,
+      };
+
+      if (!existingCustomer.email && userEmail) {
+        updates.email = userEmail;
+      }
+      if (!existingCustomer.firstName && (args.firstName || identity.name)) {
+        updates.firstName = (args.firstName || identity.name || "").trim();
+      }
+      if (args.lastName && !existingCustomer.lastName) {
+        updates.lastName = args.lastName.trim();
+      }
+      if (!existingCustomer.countryCode && defaultCode) {
+        updates.countryCode = defaultCode;
+      }
+
+      await ctx.db.patch(existingCustomer._id, updates);
+      customerId = existingCustomer._id;
+    } else {
+      isNewCustomer = true;
+      customerId = await ctx.db.insert("customers", {
+        firstName: (args.firstName || identity.name || "").trim() || undefined,
+        lastName: args.lastName?.trim() || undefined,
+        phone: normalizedPhone,
+        countryCode: defaultCode,
+        email: userEmail,
+        clerkUserId,
+        isPhoneVerified: true,
+        phoneVerifiedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const addresses = await ctx.db
+      .query("userAddresses")
+      .withIndex("by_customer", (q) => q.eq("customerId", customerId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    return {
+      success: true,
+      customerId,
+      created: isNewCustomer,
+      phone: normalizedPhone,
+      countryCode: defaultCode,
+      isPhoneVerified: true,
+      addressesCount: addresses.length,
+      message: isNewCustomer ? "Welcome to Prest!" : "Welcome back!",
+    };
+  },
+});
+
+/**
+ * Updates customer profile details for the authenticated user.
+ */
+export const updateCustomerProfile = mutation({
+  args: {
+    customerId: v.id("customers"),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) {
+      throw new Error("Authentication required.");
+    }
+
+    const customer = await ctx.db.get(args.customerId);
+    if (!customer || customer.deletedAt !== undefined) {
+      throw new Error("Customer record not found.");
+    }
+
+    if (customer.clerkUserId && customer.clerkUserId !== identity.subject) {
+      throw new Error("Forbidden. You cannot update another customer's profile.");
+    }
+
+    const updates: Record<string, any> = { updatedAt: Date.now() };
+    if (args.firstName !== undefined) updates.firstName = args.firstName.trim();
+    if (args.lastName !== undefined) updates.lastName = args.lastName.trim();
+
+    await ctx.db.patch(args.customerId, updates);
+    return { success: true };
+  },
+});
+
