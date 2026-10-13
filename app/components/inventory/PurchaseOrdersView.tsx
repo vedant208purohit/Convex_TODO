@@ -1434,8 +1434,7 @@ export function PurchaseOrdersView({
   }
 
   return (
-    <ComingSoonOverlay title="Purchase Orders">
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbfbfa] relative">
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbfbfa] relative">
       {/* Toast Notification */}
       {toastMessage && (
         <div
@@ -2350,6 +2349,5 @@ export function PurchaseOrdersView({
         </>
       )}
     </div>
-    </ComingSoonOverlay>
   );
 }

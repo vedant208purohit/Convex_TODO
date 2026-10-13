@@ -520,8 +520,7 @@ export function ItemLibraryView({
     const itemDeadLogs = deadStockLogsMap[selectedItemDetail._id] || [];
 
     return (
-      <ComingSoonOverlay title="Item Library">
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white p-8">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white p-8">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center space-x-2 text-xs text-stone-500 mb-4 font-sans">
           <button
@@ -1103,14 +1102,12 @@ export function ItemLibraryView({
           )}
         </aside>
       </div>
-    </ComingSoonOverlay>
-  );
+    );
 }
 
   // RENDER ITEM LIBRARY MAIN TABLE PAGE
   return (
-    <ComingSoonOverlay title="Item Library">
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8">
+    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8">
       {/* Page Title & Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
         <div>
@@ -1803,6 +1800,5 @@ export function ItemLibraryView({
         </div>
       </aside>
     </div>
-    </ComingSoonOverlay>
   );
 }

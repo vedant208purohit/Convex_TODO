@@ -563,6 +563,25 @@ export function OrganizationEmployees() {
     {},
   );
 
+  const isAdmin = useMemo(() => {
+    if (!currentMembership) return false;
+    const roles = Array.isArray(currentMembership.userType)
+      ? currentMembership.userType
+      : typeof currentMembership.userType === "string"
+        ? [currentMembership.userType]
+        : [];
+    return roles.some((r: string) => {
+      const lower = (r || "").toLowerCase();
+      return (
+        lower === "admin" ||
+        lower === "store_admin" ||
+        lower === "org_admin" ||
+        lower === "owner" ||
+        lower === "super_admin"
+      );
+    });
+  }, [currentMembership]);
+
   const roleModuleMapping = useMemo<Record<string, string[]>>(() => {
     return {
       admin: [
@@ -776,6 +795,13 @@ export function OrganizationEmployees() {
 
   // Drawer Handlers
   const handleOpenAddDrawer = () => {
+    if (!isAdmin) {
+      setToast({
+        message: "Forbidden: You do not have permission to add employees. Only store administrators can perform this action.",
+        type: "error",
+      });
+      return;
+    }
     setDrawerMode("add");
     setEditingId(null);
     setFormStatus("invited");
@@ -800,6 +826,13 @@ export function OrganizationEmployees() {
   };
 
   const handleOpenEditDrawer = (emp: Doc<"organizationUsers">) => {
+    if (!isAdmin) {
+      setToast({
+        message: "Forbidden: You do not have permission to edit employees. Only store administrators can perform this action.",
+        type: "error",
+      });
+      return;
+    }
     setDrawerMode("edit");
     setEditingId(emp._id);
     setFormStatus(emp.status || "active");
@@ -979,12 +1012,21 @@ export function OrganizationEmployees() {
           : undefined;
 
       if (drawerMode === "add") {
+        if (!isAdmin) {
+          const forbiddenErr = "Forbidden: You do not have permission to assign or add employees. Only store administrators can perform this action.";
+          setDrawerPendingErrors([forbiddenErr]);
+          setToast({ message: forbiddenErr, type: "error" });
+          drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+
         const primaryRole =
           formRoles.find((r) => STAFF_ROLE_CARDS.some((c) => c.key === r)) ||
           formRoles[0] ||
           "cashier";
 
         let createdViaApi = false;
+        let apiErrorMsg: string | null = null;
         try {
           const res = await fetch("/api/staff/create", {
             method: "POST",
@@ -1004,13 +1046,19 @@ export function OrganizationEmployees() {
           const data = await res.json().catch(() => ({}));
           if (res.ok && data.success) {
             createdViaApi = true;
+          } else {
+            apiErrorMsg = data.error || (res.status === 403 ? "Forbidden: You do not have permission to manage employees for this store. Admin access required." : "Failed to assign employee.");
           }
-        } catch {
-          createdViaApi = false;
+        } catch (fetchErr: any) {
+          apiErrorMsg = fetchErr?.message || "Failed to communicate with staff provisioning service.";
         }
 
         if (!createdViaApi) {
-          // Fallback direct store creation via Convex mutation
+          if (apiErrorMsg && (apiErrorMsg.includes("Forbidden") || apiErrorMsg.includes("Admin access required") || apiErrorMsg.includes("permission"))) {
+            throw new Error(apiErrorMsg);
+          }
+
+          // Fallback direct store creation via Convex mutation ONLY if not an authorization rejection
           await createEmployeeMutation({
             firstName: formFirstName.trim(),
             lastName: formLastName.trim(),
@@ -1027,6 +1075,14 @@ export function OrganizationEmployees() {
           type: "success",
         });
       } else if (editingId) {
+        if (!isAdmin) {
+          const forbiddenErr = "Forbidden: You do not have permission to edit employees. Only store administrators can perform this action.";
+          setDrawerPendingErrors([forbiddenErr]);
+          setToast({ message: forbiddenErr, type: "error" });
+          drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+
         await updateEmployeeMutation({
           id: editingId,
           firstName: formFirstName.trim(),
@@ -1040,7 +1096,17 @@ export function OrganizationEmployees() {
       handleCloseDrawer();
     } catch (err: any) {
       const errMsg = err?.message || "";
-      if (
+      const isForbidden =
+        errMsg.includes("Forbidden") ||
+        errMsg.includes("Admin access required") ||
+        errMsg.includes("permission");
+
+      if (isForbidden) {
+        const friendlyErr = "Forbidden: You do not have permission to assign or manage employees. Only store administrators can perform this action.";
+        setDrawerPendingErrors([friendlyErr]);
+        setToast({ message: friendlyErr, type: "error" });
+        drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      } else if (
         errMsg.toLowerCase().includes("already") ||
         errMsg.toLowerCase().includes("duplicate") ||
         errMsg.toLowerCase().includes("exists") ||
@@ -1051,8 +1117,11 @@ export function OrganizationEmployees() {
         setPendingFields({ email: true });
         setToast({ message: customErr, type: "error" });
         emailInputRef.current?.focus();
+        drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       } else {
+        setDrawerPendingErrors([errMsg || "Failed to save employee record."]);
         setToast({ message: errMsg || "Failed to save employee record.", type: "error" });
+        drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
       }
     } finally {
       setIsSaving(false);
@@ -1061,6 +1130,15 @@ export function OrganizationEmployees() {
 
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
+
+    if (!isAdmin) {
+      setToast({
+        message: "Forbidden: You do not have permission to delete employees. Only store administrators can perform this action.",
+        type: "error",
+      });
+      setDeleteTarget(null);
+      return;
+    }
 
     setIsDeleting(true);
 
@@ -1188,10 +1266,16 @@ export function OrganizationEmployees() {
           <button
             type="button"
             onClick={handleOpenAddDrawer}
-            className="flex items-center justify-center gap-1.5 bg-[#141010] text-white hover:bg-[#282320] active:scale-95 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer shrink-0 border border-[#282320]"
+            disabled={!isAdmin}
+            title={!isAdmin ? "Only store administrators can add employees" : undefined}
+            className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all shrink-0 border ${
+              isAdmin
+                ? "bg-[#141010] text-white hover:bg-[#282320] active:scale-95 cursor-pointer border-[#282320]"
+                : "bg-neutral-200 text-neutral-400 border-neutral-300 cursor-not-allowed opacity-60"
+            }`}
           >
-            <PlusIcon className="w-4 h-4 text-white" />
-            <span className="text-white font-semibold text-xs">
+            <PlusIcon className={`w-4 h-4 ${isAdmin ? "text-white" : "text-neutral-400"}`} />
+            <span className={`font-semibold text-xs ${isAdmin ? "text-white" : "text-neutral-400"}`}>
               Add employee
             </span>
           </button>
@@ -1339,16 +1423,18 @@ export function OrganizationEmployees() {
                               <EyeIcon className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* EDIT BUTTON - DISABLED FOR LOGGED IN ACCOUNT */}
+                            {/* EDIT BUTTON - DISABLED FOR LOGGED IN ACCOUNT OR NON-ADMIN */}
                             <button
                               type="button"
-                              disabled={isCurrentCaller}
+                              disabled={isCurrentCaller || !isAdmin}
                               onClick={() =>
-                                !isCurrentCaller && handleOpenEditDrawer(emp)
+                                !isCurrentCaller && isAdmin && handleOpenEditDrawer(emp)
                               }
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#e7e5e4] bg-[#faf8f7] text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
                               title={
-                                isCurrentCaller
+                                !isAdmin
+                                  ? "Only store administrators can edit employees"
+                                  : isCurrentCaller
                                   ? "You cannot edit your own account"
                                   : "Edit Employee Roles & Permissions"
                               }
@@ -1356,12 +1442,13 @@ export function OrganizationEmployees() {
                               <EditIcon className="w-3.5 h-3.5" />
                             </button>
 
-                            {/* DELETE BUTTON - DISABLED FOR LOGGED IN ACCOUNT */}
+                            {/* DELETE BUTTON - DISABLED FOR LOGGED IN ACCOUNT OR NON-ADMIN */}
                             <button
                               type="button"
-                              disabled={isCurrentCaller}
+                              disabled={isCurrentCaller || !isAdmin}
                               onClick={() =>
                                 !isCurrentCaller &&
+                                isAdmin &&
                                 setDeleteTarget({
                                   id: emp._id,
                                   userId: emp.userId,
@@ -1370,7 +1457,9 @@ export function OrganizationEmployees() {
                               }
                               className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200/80 bg-rose-50/50 text-rose-600 hover:bg-rose-100/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
                               title={
-                                isCurrentCaller
+                                !isAdmin
+                                  ? "Only store administrators can remove employees"
+                                  : isCurrentCaller
                                   ? "You cannot remove yourself"
                                   : "Remove Employee"
                               }
