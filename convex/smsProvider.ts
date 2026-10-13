@@ -87,6 +87,7 @@ export class CombirdSmsProvider implements SmsProvider {
     this.templateId =
       options?.templateId ||
       process.env.COMBIRD_TEMPLATE_ID ||
+      process.env.COMBIRDS_TEMPLATE_ID ||
       "1707168926925165526";
     this.apiUrl =
       options?.apiUrl ||
