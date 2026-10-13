@@ -150,6 +150,10 @@ export class CombirdSmsProvider implements SmsProvider {
       templateId: this.templateId,
     };
 
+    console.log(
+      `[Combird SMS Dispatch] Sending to: ${toNumber}, Template: ${this.templateId}, SenderID: ${this.senderId}, Message: "${message}"`
+    );
+
     try {
       const response = await fetch(this.apiUrl, {
         method: "POST",
@@ -161,6 +165,8 @@ export class CombirdSmsProvider implements SmsProvider {
       });
 
       const responseText = await response.text();
+      console.log(`[Combird SMS Response] HTTP ${response.status}: ${responseText}`);
+
       let responseData: any = {};
       try {
         responseData = JSON.parse(responseText);

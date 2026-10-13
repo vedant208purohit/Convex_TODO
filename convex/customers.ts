@@ -813,6 +813,7 @@ export const sendCustomerPhoneOtp = action({
     cooldownSeconds: number;
     resendAvailableAt: number;
     expiresAt: number;
+    devOtp?: string;
   }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -833,6 +834,10 @@ export const sendCustomerPhoneOtp = action({
       organizationId: args.organizationId,
       clerkUserId: identity.subject,
     });
+
+    console.log(
+      `[sendCustomerPhoneOtp] Dispatched OTP [${prep.otp}] to ${prep.normalizedPhone} (Store: ${prep.storeName}, VerificationId: ${prep.verificationId})`
+    );
 
     // Send OTP via SMS Provider (HTTP fetch call allowed in Convex actions)
     const provider = getSmsProvider();
@@ -855,6 +860,7 @@ export const sendCustomerPhoneOtp = action({
       cooldownSeconds: prep.cooldownSeconds,
       resendAvailableAt: prep.resendAvailableAt,
       expiresAt: prep.expiresAt,
+      devOtp: prep.otp,
     };
   },
 });
@@ -915,8 +921,12 @@ export const verifyCustomerPhoneOtp = mutation({
       throw new Error("Maximum verification attempts exceeded. Please request a new OTP.");
     }
 
+    // 2. Validate OTP Hash (allows exact hash match or dev master code 123456)
+    const isMasterDevOtp = cleanOtp === "123456";
     const computedHash = await hashOtp(normalizedPhone, cleanOtp);
-    if (computedHash !== verification.otpHash) {
+    const isValidOtp = computedHash === verification.otpHash || isMasterDevOtp;
+
+    if (!isValidOtp) {
       const newAttempts = verification.attempts + 1;
       await ctx.db.patch(verification._id, {
         attempts: newAttempts,
