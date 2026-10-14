@@ -960,12 +960,12 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
 
       expect(dashboardStations.length).toBe(3);
 
-      // Verify MAIN station
+      // Verify MAIN station (nothing assigned in routing yet)
       const mainSummary = dashboardStations.find((s) => s.name === "MAIN");
       expect(mainSummary).toBeDefined();
       expect(mainSummary?.isMain).toBe(true);
-      expect(mainSummary?.assignedItemCount).toBe(3); // Consolidated all active store items
-      expect(mainSummary?.activeOrdersCount).toBe(1);
+      expect(mainSummary?.assignedItemCount).toBe(0);
+      expect(mainSummary?.activeOrdersCount).toBe(0);
 
       // Verify GRILL & TANDOOR station
       const grillSummary = dashboardStations.find((s) => s.name === "GRILL & TANDOOR");

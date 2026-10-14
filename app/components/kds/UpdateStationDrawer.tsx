@@ -849,7 +849,7 @@ export function UpdateStationDrawer({
                                     <div className="flex items-center gap-2 shrink-0">
                                       <span className="text-xs text-[#7f7570] font-mono">
                                         {currencySymbol}
-                                        {item.price.toFixed(2)}
+                                        {(item.price / 100).toFixed(2)}
                                       </span>
                                       <span className="px-2 py-0.5 rounded-full bg-[#eae1da] text-[#1f1b17] text-[10px] font-medium tracking-wide">
                                         {category.name}

@@ -380,7 +380,7 @@ export const list = query({
           .collect();
 
         const activeMappings = stationMappings.filter((m) => m.deletedAt === undefined);
-        const assignedItemCount = st.isMain ? activeStoreItems.length : activeMappings.length;
+        const assignedItemCount = activeMappings.length;
 
         const sampleItems: string[] = [];
         const categoryNamesSet = new Set<string>();
@@ -401,25 +401,20 @@ export const list = query({
         const categoryNames = Array.from(categoryNamesSet);
 
         // Active orders count
-        let stationActiveOrdersCount = 0;
-        if (st.isMain) {
-          stationActiveOrdersCount = activeOrders.length;
-        } else {
-          const stationOrderItems = await ctx.db
-            .query("orderItems")
-            .withIndex("by_org_station", (q) =>
-              q.eq("organizationId", org._id).eq("stationId", st._id)
-            )
-            .collect();
+        const stationOrderItems = await ctx.db
+          .query("orderItems")
+          .withIndex("by_org_station", (q) =>
+            q.eq("organizationId", org._id).eq("stationId", st._id)
+          )
+          .collect();
 
-          const orderIdSetForStation = new Set<string>();
-          for (const oi of stationOrderItems) {
-            if (activeOrderIdSet.has(oi.orderId)) {
-              orderIdSetForStation.add(oi.orderId);
-            }
+        const orderIdSetForStation = new Set<string>();
+        for (const oi of stationOrderItems) {
+          if (activeOrderIdSet.has(oi.orderId)) {
+            orderIdSetForStation.add(oi.orderId);
           }
-          stationActiveOrdersCount = orderIdSetForStation.size;
         }
+        const stationActiveOrdersCount = orderIdSetForStation.size;
 
         // Printer association
         const linkedPrinter = activePrinters.find(
@@ -1150,6 +1145,27 @@ export const getStationOrders = query({
         }
       }
 
+      // Enrich items with live menu item name and price for guaranteed real-time sync with menu
+      const enrichedItems = await Promise.all(
+        itemsForStation.map(async (oi) => {
+          let liveItemName = oi.itemName;
+          let liveItemPrice = oi.itemPrice;
+          if (oi.itemId) {
+            const menuItem = await ctx.db.get(oi.itemId);
+            if (menuItem && menuItem.deletedAt === undefined) {
+              liveItemName = menuItem.name;
+              liveItemPrice = menuItem.price;
+            }
+          }
+          return {
+            ...oi,
+            itemName: liveItemName,
+            itemPrice: liveItemPrice,
+            displayPrice: ((liveItemPrice || 0) / 100).toFixed(2),
+          };
+        })
+      );
+
       // Fetch order activities with duration metrics
       const activities = await ctx.db
         .query("orderActivities")
@@ -1163,8 +1179,8 @@ export const getStationOrders = query({
       const latestActivity = sortedActivities[sortedActivities.length - 1];
       const currentDuration = latestActivity?.totalDuration ?? 0;
 
-      const allItemsReady = itemsForStation.length > 0 && itemsForStation.every((i) => i.isReady);
-      const someItemsReady = itemsForStation.some((i) => i.isReady);
+      const allItemsReady = enrichedItems.length > 0 && enrichedItems.every((i) => i.isReady);
+      const someItemsReady = enrichedItems.some((i) => i.isReady);
 
       const hasInProgressActivity = sortedActivities.some(
         (a) =>
@@ -1224,7 +1240,7 @@ export const getStationOrders = query({
           startedAt,
           readyAt,
         },
-        orderItems: itemsForStation,
+        orderItems: enrichedItems,
         allStationItemsReady: allItemsReady,
       });
     }
@@ -1241,6 +1257,7 @@ export const getStationOrders = query({
       },
       orders: stationOrders,
       activeOrdersCount,
+      currencySymbol: org.defaultCurrencySymbol || "₹",
     };
   },
 });
@@ -1299,12 +1316,13 @@ async function logStationOrderActivity(
 }
 
 /**
- * Advances a ticket from ACCEPTED to IN PROGRESS for the station.
+ * Advances a ticket from ACCEPTED to IN PROGRESS (or specified active process) for the station.
  */
 export const startPreparingStationTicket = mutation({
   args: {
     stationId: v.id("stations"),
     orderId: v.id("orders"),
+    targetProcessId: v.optional(v.id("organizationOrderProcesses")),
   },
   handler: async (ctx, args) => {
     const station = await ctx.db.get(args.stationId);
@@ -1342,37 +1360,45 @@ export const startPreparingStationTicket = mutation({
 
     const now = Date.now();
 
-    // Advance order to In Progress if currently at Accepted (sequence position 1)
-    const processes = await ctx.db
-      .query("organizationOrderProcesses")
-      .collect();
+    // Dynamically resolve active order process from Settings -> Order Statuses
+    let targetProc = args.targetProcessId ? await ctx.db.get(args.targetProcessId) : null;
+    if (!targetProc) {
+      const processes = await ctx.db
+        .query("organizationOrderProcesses")
+        .collect();
 
-    const inProgressProc = processes.find(
-      (p) =>
-        p.deletedAt === undefined &&
-        p.isSequence &&
-        (p.position === 2 ||
-          p.name.toLowerCase().includes("progress") ||
-          p.name.toLowerCase().includes("prepar"))
-    );
+      const activeSequence = processes
+        .filter((p) => p.deletedAt === undefined && p.published && p.isSequence)
+        .sort((a, b) => a.position - b.position);
+
+      targetProc =
+        activeSequence.find(
+          (p) =>
+            p.position === 2 ||
+            p.name.toLowerCase().includes("progress") ||
+            p.name.toLowerCase().includes("prepar")
+        ) ||
+        activeSequence[1] ||
+        activeSequence[0];
+    }
 
     await logStationOrderActivity(ctx, {
       organizationId: org._id,
       orderId: order._id,
-      processId: inProgressProc?._id,
-      processName: inProgressProc?.name || `In progress: ${station.name}`,
-      position: inProgressProc?.position ?? 2,
+      processId: targetProc?._id,
+      processName: targetProc?.name || `In progress: ${station.name}`,
+      position: targetProc?.position ?? 2,
       now,
     });
 
     const currentProc = order.orderStatusId ? await ctx.db.get(order.orderStatusId) : null;
     if (
-      inProgressProc &&
-      (!currentProc || (currentProc.isSequence && currentProc.position < inProgressProc.position))
+      targetProc &&
+      (!currentProc || (currentProc.isSequence && currentProc.position < targetProc.position))
     ) {
       await ctx.db.patch(order._id, {
-        orderStatusId: inProgressProc._id,
-        orderStatusName: inProgressProc.name,
+        orderStatusId: targetProc._id,
+        orderStatusName: targetProc.name,
         updatedAt: now,
       });
     }
@@ -1418,18 +1444,21 @@ export const toggleStationOrderItemReady = mutation({
         .query("organizationOrderProcesses")
         .collect();
 
-      const inProgressProc = processes.find(
-        (p) =>
-          p.deletedAt === undefined &&
-          p.isSequence &&
-          (p.position === 2 ||
-            p.name.toLowerCase().includes("progress") ||
-            p.name.toLowerCase().includes("prepar"))
-      );
+      const activeSequence = processes
+        .filter((p) => p.deletedAt === undefined && p.published && p.isSequence)
+        .sort((a, b) => a.position - b.position);
 
-      const acceptedProc = processes.find(
-        (p) => p.deletedAt === undefined && p.isSequence && p.position === 1
-      );
+      const inProgressProc =
+        activeSequence.find(
+          (p) =>
+            p.position === 2 ||
+            p.name.toLowerCase().includes("progress") ||
+            p.name.toLowerCase().includes("prepar")
+        ) ||
+        activeSequence[1] ||
+        activeSequence[0];
+
+      const acceptedProc = activeSequence.find((p) => p.position === 1) || activeSequence[0];
 
       if (inProgressProc && (!order.orderStatusId || order.orderStatusId === acceptedProc?._id)) {
         await ctx.db.patch(order._id, {
@@ -1455,12 +1484,13 @@ export const toggleStationOrderItemReady = mutation({
 
 /**
  * Marks all items for this station ready, moving ticket to READY column.
- * If all items across all stations are ready, advances overall order to READY.
+ * If all items across all stations are ready, advances overall order to READY (or specified active process).
  */
 export const markStationTicketReady = mutation({
   args: {
     stationId: v.id("stations"),
     orderId: v.id("orders"),
+    targetProcessId: v.optional(v.id("organizationOrderProcesses")),
   },
   handler: async (ctx, args) => {
     const station = await ctx.db.get(args.stationId);
@@ -1508,18 +1538,26 @@ export const markStationTicketReady = mutation({
       orderStationItems.some((si) => si._id === item._id) ? true : item.isReady
     );
 
-    // If all items for the whole order are ready, advance order to "Ready to deliver" (pos 3)
+    // If all items for the whole order are ready, advance order to active "Ready" process from Settings
     if (allReady) {
-      const processes = await ctx.db
-        .query("organizationOrderProcesses")
-        .collect();
+      let readyProc = args.targetProcessId ? await ctx.db.get(args.targetProcessId) : null;
+      if (!readyProc) {
+        const processes = await ctx.db
+          .query("organizationOrderProcesses")
+          .collect();
 
-      const readyProc = processes.find(
-        (p) =>
-          p.deletedAt === undefined &&
-          p.isSequence &&
-          (p.position === 3 || p.name.toLowerCase().includes("ready"))
-      );
+        const activeSequence = processes
+          .filter((p) => p.deletedAt === undefined && p.published && p.isSequence)
+          .sort((a, b) => a.position - b.position);
+
+        readyProc =
+          activeSequence.find(
+            (p) =>
+              p.position === 3 ||
+              p.name.toLowerCase().includes("ready")
+          ) ||
+          (activeSequence.length >= 3 ? activeSequence[2] : activeSequence[activeSequence.length - 1]);
+      }
 
       if (readyProc) {
         await logStationOrderActivity(ctx, {
@@ -1551,5 +1589,70 @@ export const markStationTicketReady = mutation({
       success: true,
       allOrderItemsReady: allReady,
     };
+  },
+});
+
+/**
+ * Advances a ticket/order to any active order process configured in Settings -> Order Statuses.
+ */
+export const advanceStationTicketProcess = mutation({
+  args: {
+    stationId: v.id("stations"),
+    orderId: v.id("orders"),
+    targetProcessId: v.id("organizationOrderProcesses"),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStaffMember(ctx, station.organizationId);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order || order.organizationId !== org._id) {
+      throw new Error("Order not found");
+    }
+
+    const process = await ctx.db.get(args.targetProcessId);
+    if (!process || process.deletedAt !== undefined) {
+      throw new Error("Order process not found");
+    }
+
+    const now = Date.now();
+
+    // If moving to ready, also mark station items ready
+    if (process.name.toLowerCase().includes("ready") || process.position >= 3) {
+      const stationItems = await ctx.db
+        .query("orderItems")
+        .withIndex("by_org_station", (q) =>
+          q.eq("organizationId", org._id).eq("stationId", station._id)
+        )
+        .collect();
+
+      const orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+      for (const item of orderStationItems) {
+        if (!item.isReady) {
+          await ctx.db.patch(item._id, { isReady: true });
+        }
+      }
+    }
+
+    await logStationOrderActivity(ctx, {
+      organizationId: org._id,
+      orderId: order._id,
+      processId: process._id,
+      processName: process.name,
+      position: process.position,
+      now,
+    });
+
+    await ctx.db.patch(order._id, {
+      orderStatusId: process._id,
+      orderStatusName: process.name,
+      updatedAt: now,
+    });
+
+    return { success: true, processName: process.name };
   },
 });

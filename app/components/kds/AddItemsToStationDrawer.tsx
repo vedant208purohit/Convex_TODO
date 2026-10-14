@@ -514,7 +514,7 @@ export function AddItemsToStationDrawer({
                                   )}
                                   <div className="text-[11px] font-medium text-[#7f7570]">
                                     {currencySymbol}
-                                    {item.price.toFixed(2)}
+                                    {(item.price / 100).toFixed(2)}
                                   </div>
                                 </div>
                               </div>
