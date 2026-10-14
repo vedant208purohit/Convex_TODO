@@ -1009,4 +1009,120 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
       expect(list.some((s) => s.name === "TEMP LINE")).toBe(false);
     });
   });
+
+  // 8. Screen 2 Create Station Drawer Parity Tests
+  describe("8. Screen 2 Create Station Drawer Parity Tests", () => {
+    test("Re-using soft-deleted station name is allowed (legacy Rails scope parity)", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create station
+      const st1 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Pastry & Garde Manger",
+      });
+      expect(st1.success).toBe(true);
+
+      // Soft delete it
+      await asAdmin.mutation(api.stations.remove, { id: st1.id });
+
+      // Creating a new station with the same name should SUCCEED because the previous one is soft-deleted
+      const st2 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Pastry & Garde Manger",
+      });
+      expect(st2.success).toBe(true);
+      expect(st2.id).not.toBe(st1.id);
+
+      // Verify active station in list
+      const list = await asAdmin.query(api.stations.list, { organizationId: orgId });
+      const activePastry = list.filter((s) => s.name === "Pastry & Garde Manger");
+      expect(activePastry.length).toBe(1);
+      expect(activePastry[0]._id).toBe(st2.id);
+    });
+
+    test("Station name is trimmed of leading and trailing whitespace on creation", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const created = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "   Salad & Cold Station   ",
+      });
+      expect(created.success).toBe(true);
+
+      const doc = await asAdmin.query(api.stations.get, { id: created.id });
+      expect(doc?.name).toBe("Salad & Cold Station");
+    });
+
+    test("Station creation rejects whitespace-only names and duplicate active names", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Whitespace rejection
+      await expect(
+        asAdmin.mutation(api.stations.create, {
+          organizationId: orgId,
+          name: "    \t\n  ",
+        })
+      ).rejects.toThrow("Station name is required");
+
+      // Create station
+      await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Wok Line 01",
+      });
+
+      // Duplicate rejection with exact legacy Rails error
+      await expect(
+        asAdmin.mutation(api.stations.create, {
+          organizationId: orgId,
+          name: "WOK LINE 01",
+        })
+      ).rejects.toThrow("Hey! WOK LINE 01 is already taken.");
+    });
+
+    test("Cross-organization protection: User of Org A cannot create a station in Org B", async () => {
+      const { t, orgId: orgAId, asAdmin: asAdminA } = await setupStoreWithAdmin("user_admin_org_a");
+
+      // Setup Org B
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Kitchen Store B",
+        ownerClerkId: "user_admin_org_b",
+        isDelivery: true,
+        deliveryCashOnDelivery: true,
+      });
+
+      // Org A admin attempts to create station in Org B -> Rejected
+      await expect(
+        asAdminA.mutation(api.stations.create, {
+          organizationId: orgBId,
+          name: "Malicious Station in Org B",
+        })
+      ).rejects.toThrow("Forbidden");
+    });
+
+    test("Newly created station defaults to isMain: false and is immediately reactive with zero summary metrics", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const res = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Dessert Station",
+      });
+      expect(res.success).toBe(true);
+
+      const doc = await asAdmin.query(api.stations.get, { id: res.id });
+      expect(doc?.isMain).toBe(false);
+
+      const listWithSummary = (await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      })) as any[];
+
+      const dessertSummary = listWithSummary.find((s) => s.name === "Dessert Station");
+      expect(dessertSummary).toBeDefined();
+      expect(dessertSummary?.assignedItemCount).toBe(0);
+      expect(dessertSummary?.categoryCount).toBe(0);
+      expect(dessertSummary?.activeOrdersCount).toBe(0);
+      expect(dessertSummary?.sampleCategories).toEqual([]);
+      expect(dessertSummary?.sampleItems).toEqual([]);
+    });
+  });
 });

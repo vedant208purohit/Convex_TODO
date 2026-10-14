@@ -1,14 +1,17 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
+import { CreateStationDrawer } from "../components/kds/CreateStationDrawer";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
 export default function KdsStationDashboardPage() {
   const router = useRouter();
+  const addStationBtnRef = useRef<HTMLButtonElement>(null);
+  const emptyAddStationBtnRef = useRef<HTMLButtonElement>(null);
 
   // 1. Organization & Store Context
   const organizations = useQuery(api.organizations.list);
@@ -138,64 +141,15 @@ export default function KdsStationDashboardPage() {
   return (
     <PosShell title="KDS" subtitle="Station Management">
       <div className="flex-1 min-h-0 overflow-y-auto bg-[#fff8f5] flex flex-col">
-        {/* Top Switcher & Viewport Header */}
+        {/* Top Bar with Live Network & Clock */}
         <div className="px-6 lg:px-8 py-3 bg-[#f4ece8] border-b border-[#e9e1dd] shrink-0 shadow-xs">
-          <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-wider text-[#7f7570]">
-                KDS Viewport:
+                Station Management Console
               </span>
-              <div className="inline-flex p-1 bg-[#eae1da] rounded-full gap-1">
-                <button
-                  type="button"
-                  onClick={handleCloseDrawer}
-                  className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    activeDrawer === null
-                      ? "bg-[#000000] text-white shadow-xs"
-                      : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#eee7e3]"
-                  }`}
-                >
-                  1. KDS Dashboard
-                </button>
-                <button
-                  type="button"
-                  onClick={handleOpenCreateDrawer}
-                  className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    activeDrawer === "create"
-                      ? "bg-[#000000] text-white shadow-xs"
-                      : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#eee7e3]"
-                  }`}
-                >
-                  2. Create Station Drawer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleOpenItemsDrawer()}
-                  className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    activeDrawer === "items"
-                      ? "bg-[#000000] text-white shadow-xs"
-                      : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#eee7e3]"
-                  }`}
-                >
-                  3. Add Items Drawer
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (stations && stations.length > 0 && !selectedStation) {
-                      setSelectedStation(stations[0]);
-                    }
-                    setActiveDrawer("update");
-                  }}
-                  className={`px-3.5 py-1 rounded-full text-xs font-semibold transition-all ${
-                    activeDrawer === "update"
-                      ? "bg-[#000000] text-white shadow-xs"
-                      : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#eee7e3]"
-                  }`}
-                >
-                  4. Update Station Drawer
-                </button>
-              </div>
+              <span className="w-1 h-1 rounded-full bg-[#7f7570]" />
+              <span className="text-xs text-[#645d58]">Terminal Routing Control</span>
             </div>
 
             <div className="flex items-center gap-4 text-xs text-[#645d58]">
@@ -238,6 +192,7 @@ export default function KdsStationDashboardPage() {
 
             <div className="flex items-center gap-4">
               <button
+                ref={addStationBtnRef}
                 type="button"
                 onClick={handleOpenCreateDrawer}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full bg-[#000000] text-white font-medium text-sm shadow-xs hover:bg-[#1d1b1a] transition-colors cursor-pointer"
@@ -492,121 +447,28 @@ export default function KdsStationDashboardPage() {
           )}
         </div>
 
-        {/* Drawer Backdrop */}
+        {/* Drawer Backdrop (for stub drawers Screen 3 & Screen 4) */}
         <div
           id="drawer-backdrop"
           onClick={handleCloseDrawer}
           className={`fixed inset-0 bg-[#000000]/25 backdrop-blur-[2px] z-50 transition-opacity duration-300 ${
-            activeDrawer ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+            activeDrawer === "items" || activeDrawer === "update"
+              ? "opacity-100 pointer-events-auto"
+              : "opacity-0 pointer-events-none"
           }`}
         />
 
-        {/* Screen 2: Create Station Drawer (Follow-up Screen Entry Point) */}
-        <aside
-          id="create-station-drawer"
-          className={`fixed top-0 right-0 h-full w-full max-w-lg bg-[#ffffff] z-50 shadow-2xl transition-transform duration-300 flex flex-col justify-between border-l border-[#d0c4be]/40 ${
-            activeDrawer === "create" ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <div className="flex items-center justify-between p-6 bg-[#faf2ee] border-b border-[#e9e1dd]">
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-[#7f7570]">
-                Configuration Module
-              </span>
-              <h3 className="text-2xl font-garamond text-[#1e1b19] font-normal">
-                Add KDS Station
-              </h3>
-            </div>
-            <button
-              type="button"
-              aria-label="Close drawer"
-              onClick={handleCloseDrawer}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#645d58] hover:text-[#1e1b19] hover:bg-[#eae1da] transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 text-[#1e1b19]">
-            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200/60 text-xs text-amber-900 flex items-start gap-2.5">
-              <svg className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <circle cx="12" cy="12" r="10" strokeWidth="2" />
-                <line x1="12" y1="8" x2="12" y2="12" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="12" cy="16" r="1" fill="currentColor" />
-              </svg>
-              <span>
-                <strong>Screen 2 Entry Point:</strong> Station Creation flow will be implemented in the next dedicated screen.
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-[#1e1b19]">Station Identifier / Code</label>
-              <input
-                type="text"
-                disabled
-                placeholder="e.g. PASTRY / DESSERT LINE"
-                className="w-full px-4 py-2.5 bg-[#f4ece8] text-[#1e1b19] rounded-full text-sm border border-[#d0c4be]/40 focus:outline-none"
-              />
-              <p className="text-xs text-[#645d58]">
-                Will display on bump bars, digital ticket strips, and expo logs.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-[#1e1b19]">Station Type &amp; Mode</label>
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  className="p-3.5 rounded-xl bg-[#000000] text-white text-left space-y-1 cursor-pointer"
-                >
-                  <div className="text-xs font-semibold">Prep Line</div>
-                  <div className="text-[11px] text-[#cbc5c3]">Receives dish-specific ticket lines</div>
-                </button>
-                <button
-                  type="button"
-                  className="p-3.5 rounded-xl bg-[#f4ece8] text-[#1e1b19] text-left space-y-1 hover:bg-[#eae1da] transition-colors cursor-pointer"
-                >
-                  <div className="text-xs font-semibold">Expo / Pass</div>
-                  <div className="text-[11px] text-[#645d58]">Full ticket consolidation</div>
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[#faf2ee] border border-[#d0c4be]/30 space-y-1">
-              <div className="flex items-center gap-1.5 text-[#1e1b19] text-xs font-semibold">
-                <svg className="w-4 h-4 text-[#7f7570]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span>Bump Bar Chime Setting</span>
-              </div>
-              <p className="text-xs text-[#645d58]">
-                Play audible chime on newly fired priority courses (VIP, Entree Fired).
-              </p>
-            </div>
-          </div>
-
-          <div className="p-6 bg-[#faf2ee] border-t border-[#e9e1dd] flex items-center justify-end gap-3">
-            <button
-              type="button"
-              onClick={handleCloseDrawer}
-              className="px-4 py-2 rounded-full text-[#645d58] text-xs font-semibold hover:bg-[#eae1da] transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                handleCloseDrawer();
-                showToast("Station creation entry point invoked.", "success");
-              }}
-              className="px-5 py-2 rounded-full bg-[#000000] text-white text-xs font-semibold shadow-xs hover:bg-[#1d1b1a] transition-colors cursor-pointer"
-            >
-              Save &amp; Assign Items →
-            </button>
-          </div>
-        </aside>
+        {/* Screen 2: Create Station Drawer */}
+        <CreateStationDrawer
+          isOpen={activeDrawer === "create"}
+          onClose={handleCloseDrawer}
+          organizationId={activeOrg?._id}
+          existingStationNames={stations ? stations.map((s: any) => s.name) : []}
+          onSuccess={(_id, name) => {
+            showToast(`Station "${name}" created successfully.`, "success");
+          }}
+          triggerRef={addStationBtnRef}
+        />
 
         {/* Screen 3: Add Items Drawer (Follow-up Screen Entry Point) */}
         <aside
