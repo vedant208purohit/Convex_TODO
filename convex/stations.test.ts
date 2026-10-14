@@ -1519,4 +1519,210 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
       ).rejects.toThrow("Item not found or belongs to another organization");
     });
   });
+
+  // 11. Final Screen: Live KDS Terminal Operational Tests
+  describe("11. Final Screen: Live KDS Terminal Operational Tests", () => {
+    test("Full ticket lifecycle: Accepted -> In Progress -> Ready with item completion", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      // Create station
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill & Tandoor",
+      });
+
+      // Create 2 menu items
+      const item1 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Malai Broccoli Tandoori",
+        price: 450,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      const item2 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Tandoori Chicken Tikka",
+        price: 550,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: true,
+      });
+
+      // Assign items to station
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stRes.id,
+        itemId: item1,
+      });
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stRes.id,
+        itemId: item2,
+      });
+
+      // Create customer order
+      const orderRes = await t.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        items: [
+          { itemId: item1, quantity: 1 },
+          { itemId: item2, quantity: 2 },
+        ],
+      });
+
+      // 1. Initial State: Ticket is in ACCEPTED
+      let terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      expect(terminalData.orders).toHaveLength(1);
+      let ticket = terminalData.orders[0];
+      expect(ticket.order.isStationAccepted).toBe(true);
+      expect(ticket.order.isStationInProgress).toBe(false);
+      expect(ticket.order.isStationReady).toBe(false);
+      expect(ticket.orderItems).toHaveLength(2);
+      expect(ticket.orderItems.every((i) => !i.isReady)).toBe(true);
+
+      // 2. Start Preparing Ticket
+      const startRes = await asAdmin.mutation(api.stations.startPreparingStationTicket, {
+        stationId: stRes.id,
+        orderId: orderRes.orderId,
+      });
+      expect(startRes.success).toBe(true);
+
+      terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      ticket = terminalData.orders[0];
+      expect(ticket.order.isStationAccepted).toBe(false);
+      expect(ticket.order.isStationInProgress).toBe(true);
+      expect(ticket.order.isStationReady).toBe(false);
+
+      // 3. Mark 1 of 2 items ready
+      const oi1 = ticket.orderItems.find((i) => i.itemId === item1)!;
+      await asAdmin.mutation(api.stations.toggleStationOrderItemReady, {
+        stationId: stRes.id,
+        orderItemId: oi1._id,
+        isReady: true,
+      });
+
+      terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      ticket = terminalData.orders[0];
+      expect(ticket.order.isStationInProgress).toBe(true);
+      expect(ticket.order.isStationReady).toBe(false);
+      const readyItemsCount = ticket.orderItems.filter((i) => i.isReady).length;
+      expect(readyItemsCount).toBe(1);
+
+      // 4. Mark all items ready via markStationTicketReady
+      const readyRes = await asAdmin.mutation(api.stations.markStationTicketReady, {
+        stationId: stRes.id,
+        orderId: orderRes.orderId,
+      });
+      expect(readyRes.success).toBe(true);
+      expect(readyRes.allOrderItemsReady).toBe(true);
+
+      terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      ticket = terminalData.orders[0];
+      expect(ticket.order.isStationAccepted).toBe(false);
+      expect(ticket.order.isStationInProgress).toBe(false);
+      expect(ticket.order.isStationReady).toBe(true);
+      expect(ticket.allStationItemsReady).toBe(true);
+    });
+
+    test("Multi-station order routing: completing station A does not mark station B ready or prematurely finish order", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      // Station A: Grill
+      const stGrill = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill Station",
+      });
+
+      // Station B: Bar
+      const stBar = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Bar Station",
+      });
+
+      const grillItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Lamb Kebab",
+        price: 800,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: true,
+      });
+
+      const barItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Mango Lassi",
+        price: 250,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stGrill.id,
+        itemId: grillItem,
+      });
+
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stBar.id,
+        itemId: barItem,
+      });
+
+      // Create multi-station customer order
+      const orderRes = await t.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        items: [
+          { itemId: grillItem, quantity: 1 },
+          { itemId: barItem, quantity: 2 },
+        ],
+      });
+
+      // Grill completes its ticket
+      await asAdmin.mutation(api.stations.startPreparingStationTicket, {
+        stationId: stGrill.id,
+        orderId: orderRes.orderId,
+      });
+
+      const grillReadyRes = await asAdmin.mutation(api.stations.markStationTicketReady, {
+        stationId: stGrill.id,
+        orderId: orderRes.orderId,
+      });
+
+      // Notice: Whole order is NOT yet ready because Bar hasn't completed!
+      expect(grillReadyRes.allOrderItemsReady).toBe(false);
+
+      // Verify Grill station view: Grill ticket is READY
+      const grillData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stGrill.id,
+      });
+      expect(grillData.orders[0].order.isStationReady).toBe(true);
+
+      // Verify Bar station view: Bar ticket is still ACCEPTED (not marked ready!)
+      const barData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stBar.id,
+      });
+      expect(barData.orders[0].order.isStationReady).toBe(false);
+      expect(barData.orders[0].allStationItemsReady).toBe(false);
+
+      // Now Bar completes its ticket
+      const barReadyRes = await asAdmin.mutation(api.stations.markStationTicketReady, {
+        stationId: stBar.id,
+        orderId: orderRes.orderId,
+      });
+      // Now ALL stations are done -> whole order is ready!
+      expect(barReadyRes.allOrderItemsReady).toBe(true);
+    });
+  });
 });

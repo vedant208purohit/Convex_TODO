@@ -1163,6 +1163,38 @@ export const getStationOrders = query({
       const latestActivity = sortedActivities[sortedActivities.length - 1];
       const currentDuration = latestActivity?.totalDuration ?? 0;
 
+      const allItemsReady = itemsForStation.length > 0 && itemsForStation.every((i) => i.isReady);
+      const someItemsReady = itemsForStation.some((i) => i.isReady);
+
+      const hasInProgressActivity = sortedActivities.some(
+        (a) =>
+          a.processName.toLowerCase().includes("progress") ||
+          a.processName.toLowerCase().includes("prepar")
+      );
+      const orderStatusIsInProgress =
+        order.orderStatusName?.toLowerCase().includes("progress") ||
+        order.orderStatusName?.toLowerCase().includes("prepar") ||
+        (processStatus?.isSequence && processStatus.position === 2);
+
+      const isStationReady = allItemsReady;
+      const isStationInProgress =
+        !allItemsReady && (orderStatusIsInProgress || someItemsReady || hasInProgressActivity);
+      const isStationAccepted = !isStationReady && !isStationInProgress;
+
+      const readyActivity = sortedActivities.find((a) =>
+        a.processName.toLowerCase().includes("ready")
+      );
+      const readyAt = isStationReady
+        ? readyActivity?.completedAt || readyActivity?.createdAt || order.updatedAt
+        : undefined;
+
+      const startActivity = sortedActivities.find(
+        (a) =>
+          a.processName.toLowerCase().includes("progress") ||
+          a.processName.toLowerCase().includes("prepar")
+      );
+      const startedAt = startActivity?.startedAt || startActivity?.createdAt || order.createdAt;
+
       stationOrders.push({
         order: {
           _id: order._id,
@@ -1183,9 +1215,17 @@ export const getStationOrders = query({
           tableId: order.tableId,
           customerId: order.customerId,
           customerName: order.customerName,
+          membersOnTable: order.membersOnTable,
+          deliveryAddress: order.deliveryAddress,
+          customerPhone: order.customerPhone,
+          isStationAccepted,
+          isStationInProgress,
+          isStationReady,
+          startedAt,
+          readyAt,
         },
         orderItems: itemsForStation,
-        allStationItemsReady: itemsForStation.every((i) => i.isReady),
+        allStationItemsReady: allItemsReady,
       });
     }
 
@@ -1197,9 +1237,319 @@ export const getStationOrders = query({
         _id: station._id,
         name: station.name,
         isMain: station.isMain,
+        legacyId: station.legacyId,
       },
       orders: stationOrders,
       activeOrdersCount,
+    };
+  },
+});
+
+/**
+ * Helper to record activity duration and state transitions for KDS tickets.
+ */
+async function logStationOrderActivity(
+  ctx: MutationCtx,
+  args: {
+    organizationId: Id<"organizations">;
+    orderId: Id<"orders">;
+    processId?: Id<"organizationOrderProcesses">;
+    processName: string;
+    position?: number;
+    now?: number;
+  }
+) {
+  const now = args.now ?? Date.now();
+  const existingActivities = await ctx.db
+    .query("orderActivities")
+    .withIndex("by_order", (q) => q.eq("orderId", args.orderId))
+    .collect();
+
+  const activeActivities = existingActivities.filter((a) => a.deletedAt === undefined);
+  let totalDuration = 0;
+  if (activeActivities.length > 0) {
+    const sorted = [...activeActivities].sort(
+      (a, b) => a.position - b.position || a.createdAt - b.createdAt
+    );
+    const firstActivity = sorted[0];
+    const sinceFirstStep = firstActivity.startedAt ?? firstActivity.createdAt;
+    totalDuration = Math.max(0, Math.round((now - sinceFirstStep) / 1000));
+
+    const lastActivity = sorted[sorted.length - 1];
+    if (lastActivity && lastActivity.completedAt === undefined) {
+      await ctx.db.patch(lastActivity._id, {
+        completedAt: now,
+        updatedAt: now,
+      });
+    }
+  }
+
+  const nextPosition = args.position ?? activeActivities.length + 1;
+  await ctx.db.insert("orderActivities", {
+    organizationId: args.organizationId,
+    orderId: args.orderId,
+    processId: args.processId,
+    processName: args.processName,
+    position: nextPosition,
+    totalDuration,
+    startedAt: now,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+/**
+ * Advances a ticket from ACCEPTED to IN PROGRESS for the station.
+ */
+export const startPreparingStationTicket = mutation({
+  args: {
+    stationId: v.id("stations"),
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStaffMember(ctx, station.organizationId);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order || order.organizationId !== org._id) {
+      throw new Error("Order not found");
+    }
+
+    if (order.isCompleted || order.isRejected) {
+      throw new Error("Cannot prepare completed or rejected order");
+    }
+
+    // Verify station has items in this order
+    const stationItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_org_station", (q) =>
+        q.eq("organizationId", org._id).eq("stationId", station._id)
+      )
+      .collect();
+
+    const orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+    if (orderStationItems.length === 0) {
+      throw new Error("No items for this station in the order");
+    }
+
+    if (orderStationItems.every((i) => i.isReady)) {
+      throw new Error("All items for this station are already marked ready");
+    }
+
+    const now = Date.now();
+
+    // Advance order to In Progress if currently at Accepted (sequence position 1)
+    const processes = await ctx.db
+      .query("organizationOrderProcesses")
+      .collect();
+
+    const inProgressProc = processes.find(
+      (p) =>
+        p.deletedAt === undefined &&
+        p.isSequence &&
+        (p.position === 2 ||
+          p.name.toLowerCase().includes("progress") ||
+          p.name.toLowerCase().includes("prepar"))
+    );
+
+    await logStationOrderActivity(ctx, {
+      organizationId: org._id,
+      orderId: order._id,
+      processId: inProgressProc?._id,
+      processName: inProgressProc?.name || `In progress: ${station.name}`,
+      position: inProgressProc?.position ?? 2,
+      now,
+    });
+
+    const currentProc = order.orderStatusId ? await ctx.db.get(order.orderStatusId) : null;
+    if (
+      inProgressProc &&
+      (!currentProc || (currentProc.isSequence && currentProc.position < inProgressProc.position))
+    ) {
+      await ctx.db.patch(order._id, {
+        orderStatusId: inProgressProc._id,
+        orderStatusName: inProgressProc.name,
+        updatedAt: now,
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+/**
+ * Toggles an item readiness state within a station, advancing order to in-progress if needed.
+ */
+export const toggleStationOrderItemReady = mutation({
+  args: {
+    stationId: v.id("stations"),
+    orderItemId: v.id("orderItems"),
+    isReady: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStaffMember(ctx, station.organizationId);
+
+    const item = await ctx.db.get(args.orderItemId);
+    if (!item || item.organizationId !== org._id) {
+      throw new Error("Order item not found");
+    }
+
+    if (item.stationId && item.stationId !== station._id) {
+      throw new Error("Order item is assigned to another station");
+    }
+
+    await ctx.db.patch(item._id, {
+      isReady: args.isReady,
+    });
+
+    const now = Date.now();
+    const order = await ctx.db.get(item.orderId);
+    if (order && !order.isCompleted && !order.isRejected && args.isReady) {
+      const processes = await ctx.db
+        .query("organizationOrderProcesses")
+        .collect();
+
+      const inProgressProc = processes.find(
+        (p) =>
+          p.deletedAt === undefined &&
+          p.isSequence &&
+          (p.position === 2 ||
+            p.name.toLowerCase().includes("progress") ||
+            p.name.toLowerCase().includes("prepar"))
+      );
+
+      const acceptedProc = processes.find(
+        (p) => p.deletedAt === undefined && p.isSequence && p.position === 1
+      );
+
+      if (inProgressProc && (!order.orderStatusId || order.orderStatusId === acceptedProc?._id)) {
+        await ctx.db.patch(order._id, {
+          orderStatusId: inProgressProc._id,
+          orderStatusName: inProgressProc.name,
+          updatedAt: now,
+        });
+
+        await logStationOrderActivity(ctx, {
+          organizationId: org._id,
+          orderId: order._id,
+          processId: inProgressProc._id,
+          processName: inProgressProc.name,
+          position: inProgressProc.position,
+          now,
+        });
+      }
+    }
+
+    return { success: true };
+  },
+});
+
+/**
+ * Marks all items for this station ready, moving ticket to READY column.
+ * If all items across all stations are ready, advances overall order to READY.
+ */
+export const markStationTicketReady = mutation({
+  args: {
+    stationId: v.id("stations"),
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStaffMember(ctx, station.organizationId);
+
+    const order = await ctx.db.get(args.orderId);
+    if (!order || order.organizationId !== org._id) {
+      throw new Error("Order not found");
+    }
+
+    const now = Date.now();
+
+    // Mark all items for this station in this order as ready
+    const stationItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_org_station", (q) =>
+        q.eq("organizationId", org._id).eq("stationId", station._id)
+      )
+      .collect();
+
+    const orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+    if (orderStationItems.length === 0) {
+      throw new Error("No items for this station in the order");
+    }
+
+    for (const item of orderStationItems) {
+      if (!item.isReady) {
+        await ctx.db.patch(item._id, {
+          isReady: true,
+        });
+      }
+    }
+
+    // Check ALL items for the whole order across ALL stations
+    const allOrderItems = await ctx.db
+      .query("orderItems")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .collect();
+
+    const allReady = allOrderItems.every((item) =>
+      orderStationItems.some((si) => si._id === item._id) ? true : item.isReady
+    );
+
+    // If all items for the whole order are ready, advance order to "Ready to deliver" (pos 3)
+    if (allReady) {
+      const processes = await ctx.db
+        .query("organizationOrderProcesses")
+        .collect();
+
+      const readyProc = processes.find(
+        (p) =>
+          p.deletedAt === undefined &&
+          p.isSequence &&
+          (p.position === 3 || p.name.toLowerCase().includes("ready"))
+      );
+
+      if (readyProc) {
+        await logStationOrderActivity(ctx, {
+          organizationId: org._id,
+          orderId: order._id,
+          processId: readyProc._id,
+          processName: readyProc.name,
+          position: readyProc.position,
+          now,
+        });
+
+        await ctx.db.patch(order._id, {
+          orderStatusId: readyProc._id,
+          orderStatusName: readyProc.name,
+          updatedAt: now,
+        });
+      }
+    } else {
+      // Record station-level completion activity
+      await logStationOrderActivity(ctx, {
+        organizationId: org._id,
+        orderId: order._id,
+        processName: `Ready: ${station.name}`,
+        now,
+      });
+    }
+
+    return {
+      success: true,
+      allOrderItemsReady: allReady,
     };
   },
 });
