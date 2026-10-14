@@ -857,6 +857,7 @@ export const getStationAssignmentData = query({
         _id: station._id,
         name: station.name,
         isMain: station.isMain,
+        legacyId: station.legacyId,
       },
       menus: activeMenus.map((m) => ({
         _id: m._id,
@@ -949,6 +950,122 @@ export const updateStationItemAssignments = mutation({
       addedCount,
       removedCount,
       totalAssigned: args.assignedItemIds.length,
+    };
+  },
+});
+
+/**
+ * Atomically updates both the station name and its complete set of assigned menu items.
+ * Powers Screen 4: Update Station Drawer.
+ */
+export const updateStationWithAssignments = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    stationId: v.id("stations"),
+    name: v.string(),
+    assignedItemIds: v.array(v.id("items")),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStationAdmin(ctx, station.organizationId);
+
+    // 1. Validate station name
+    const trimmedName = args.name.trim();
+    if (!trimmedName) {
+      throw new Error("Station name is required.");
+    }
+
+    // Duplicate active name check in organization (excluding this station itself)
+    if (trimmedName.toLowerCase() !== station.name.trim().toLowerCase()) {
+      const existingStations = await ctx.db
+        .query("stations")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+
+      const isDuplicate = existingStations.some(
+        (st) =>
+          st._id !== station._id &&
+          st.deletedAt === undefined &&
+          st.name.trim().toLowerCase() === trimmedName.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        throw new Error(`Hey! ${trimmedName} is already taken.`);
+      }
+    }
+
+    const now = Date.now();
+
+    // Patch station name if changed
+    if (trimmedName !== station.name) {
+      await ctx.db.patch(station._id, {
+        name: trimmedName,
+        updatedAt: now,
+      });
+    }
+
+    // 2. Validate that all assignedItemIds belong to this organization and are active
+    for (const itemId of args.assignedItemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || item.deletedAt !== undefined || item.organizationId !== org._id) {
+        throw new Error(`Item not found or belongs to another organization: ${itemId}`);
+      }
+    }
+
+    // 3. Differential update for station items
+    const existingMappings = await ctx.db
+      .query("stationItems")
+      .withIndex("by_org_station", (q) =>
+        q.eq("organizationId", org._id).eq("stationId", station._id)
+      )
+      .collect();
+
+    const targetSet = new Set<string>(args.assignedItemIds);
+    let addedCount = 0;
+    let removedCount = 0;
+
+    // Soft-delete mappings that are no longer selected
+    for (const mapping of existingMappings) {
+      if (mapping.deletedAt === undefined && !targetSet.has(mapping.itemId)) {
+        await ctx.db.patch(mapping._id, {
+          deletedAt: now,
+          updatedAt: now,
+        });
+        removedCount++;
+      }
+    }
+
+    // Add or reactivate mappings for selected items
+    for (const itemId of args.assignedItemIds) {
+      const existing = existingMappings.find((m) => m.itemId === itemId);
+      if (!existing) {
+        await ctx.db.insert("stationItems", {
+          organizationId: org._id,
+          stationId: station._id,
+          itemId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        addedCount++;
+      } else if (existing.deletedAt !== undefined) {
+        await ctx.db.patch(existing._id, {
+          deletedAt: undefined,
+          updatedAt: now,
+        });
+        addedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      name: trimmedName,
+      totalAssigned: args.assignedItemIds.length,
+      addedCount,
+      removedCount,
     };
   },
 });

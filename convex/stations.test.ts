@@ -1352,4 +1352,171 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
       ).rejects.toThrow("Item not found or belongs to another organization");
     });
   });
+
+  // 10. Screen 4 Update Station Drawer Parity Tests
+  describe("10. Screen 4 Update Station Drawer Parity Tests", () => {
+    test("updateStationWithAssignments atomically updates station name and item assignments", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "starter",
+      });
+
+      const item1 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Cheese filled garlic bread",
+        price: 850,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      const item2 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Hummus pita platter",
+        price: 1200,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      const item3 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Labneh spread with nachos",
+        price: 1150,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // Update station name from "starter" to "Cold Larder & Starters" and assign item1 & item2
+      const res = await asAdmin.mutation(api.stations.updateStationWithAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        name: "  Cold Larder & Starters  ",
+        assignedItemIds: [item1, item2],
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.name).toBe("Cold Larder & Starters");
+      expect(res.totalAssigned).toBe(2);
+      expect(res.addedCount).toBe(2);
+
+      // Verify station document updated
+      const updatedStation = await asAdmin.query(api.stations.get, { id: stRes.id });
+      expect(updatedStation?.name).toBe("Cold Larder & Starters");
+
+      // Verify item assignments
+      const list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      expect(list.length).toBe(2);
+      expect(list.map((m) => m.item._id)).toEqual(expect.arrayContaining([item1, item2]));
+
+      // Now update assignments again: swap item1 for item3, keeping same name
+      const res2 = await asAdmin.mutation(api.stations.updateStationWithAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        name: "Cold Larder & Starters",
+        assignedItemIds: [item2, item3],
+      });
+
+      expect(res2.success).toBe(true);
+      expect(res2.addedCount).toBe(1); // item3 added
+      expect(res2.removedCount).toBe(1); // item1 removed
+      expect(res2.totalAssigned).toBe(2);
+
+      const list2 = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      const ids2 = list2.map((m) => m.item._id);
+      expect(ids2).toContain(item2);
+      expect(ids2).toContain(item3);
+      expect(ids2).not.toContain(item1);
+    });
+
+    test("updateStationWithAssignments validates name requirements and prevents duplicates", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const st1 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill Station",
+      });
+
+      const st2 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Salad Station",
+      });
+
+      // 1. Reject empty / whitespace name
+      await expect(
+        asAdmin.mutation(api.stations.updateStationWithAssignments, {
+          organizationId: orgId,
+          stationId: st2.id,
+          name: "   ",
+          assignedItemIds: [],
+        })
+      ).rejects.toThrow("Station name is required.");
+
+      // 2. Reject duplicate name (case-insensitive) of another active station
+      await expect(
+        asAdmin.mutation(api.stations.updateStationWithAssignments, {
+          organizationId: orgId,
+          stationId: st2.id,
+          name: "grill station",
+          assignedItemIds: [],
+        })
+      ).rejects.toThrow("Hey! grill station is already taken.");
+
+      // 3. Allows keeping the same name
+      const sameNameRes = await asAdmin.mutation(api.stations.updateStationWithAssignments, {
+        organizationId: orgId,
+        stationId: st2.id,
+        name: "Salad Station",
+        assignedItemIds: [],
+      });
+      expect(sameNameRes.success).toBe(true);
+    });
+
+    test("updateStationWithAssignments rejects cross-organization item assignments", async () => {
+      const { t, orgId: orgAId, asAdmin: asAdminA } = await setupStoreWithAdmin("admin_store_a4");
+
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Store B",
+        ownerClerkId: "admin_store_b4",
+        isDelivery: true,
+        deliveryCashOnDelivery: true,
+      });
+
+      const stationA = await asAdminA.mutation(api.stations.create, {
+        organizationId: orgAId,
+        name: "Main Line A",
+      });
+
+      const itemB = await t.mutation(api.menu.createItem, {
+        organizationId: orgBId,
+        name: "Store B Pizza",
+        price: 900,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      await expect(
+        asAdminA.mutation(api.stations.updateStationWithAssignments, {
+          organizationId: orgAId,
+          stationId: stationA.id,
+          name: "Main Line A",
+          assignedItemIds: [itemB],
+        })
+      ).rejects.toThrow("Item not found or belongs to another organization");
+    });
+  });
 });
