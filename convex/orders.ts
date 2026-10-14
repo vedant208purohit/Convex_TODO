@@ -1223,6 +1223,29 @@ export const getOrderDetails = query({
       }
     }
 
+    // Look up active delivery attempt if any exists
+    const activeDelivery = await ctx.db
+      .query("orderDelivers")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .order("desc")
+      .first();
+
+    let deliveryPartner: any = null;
+    if (activeDelivery) {
+      deliveryPartner = {
+        provider: activeDelivery.provider,
+        status: activeDelivery.status,
+        trackingUrl: activeDelivery.trackingUrl,
+        name: activeDelivery.partnerInfo?.name,
+        phone: activeDelivery.partnerInfo?.phone,
+        vehicleNumber: activeDelivery.partnerInfo?.vehicleNumber,
+        vehicleType: activeDelivery.partnerInfo?.vehicleType,
+        latitude: activeDelivery.partnerInfo?.latitude,
+        longitude: activeDelivery.partnerInfo?.longitude,
+      };
+    }
+
     const org = await ctx.db.get(order.organizationId);
     let restaurantInfo: any = null;
     if (org && org.deletedAt === undefined) {
@@ -1265,6 +1288,7 @@ export const getOrderDetails = query({
       paymentStatus: effectivePaymentStatus,
       orderStatusName: effectiveOrderStatusName,
       surveyQrUrl,
+      deliveryPartner: deliveryPartner || (order as any).deliveryPartner || null,
       totalCredit,
       totalDebit,
       netPaid,
