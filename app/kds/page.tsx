@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { CreateStationDrawer } from "../components/kds/CreateStationDrawer";
+import { AddItemsToStationDrawer } from "../components/kds/AddItemsToStationDrawer";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 
@@ -365,9 +366,18 @@ export default function KdsStationDashboardPage() {
                       </div>
 
                       {/* Routing Rules Box */}
-                      <div className="p-4 rounded-xl bg-[#faf2ee] border border-[#d0c4be]/30 space-y-1">
-                        <div className="text-[10px] font-bold text-[#7f7570] uppercase tracking-wider">
-                          Routing Rules
+                      <div
+                        onClick={() => handleOpenItemsDrawer(station)}
+                        className="p-4 rounded-xl bg-[#faf2ee] border border-[#d0c4be]/30 space-y-1 cursor-pointer hover:bg-[#eae1da]/70 transition-colors"
+                        title={`Manage assigned items for ${station.name}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="text-[10px] font-bold text-[#7f7570] uppercase tracking-wider">
+                            Routing Rules
+                          </div>
+                          <span className="text-[10px] font-semibold text-[#645d58] hover:underline">
+                            Edit →
+                          </span>
                         </div>
                         <div className="text-sm text-[#1e1b19] font-medium leading-snug">
                           {station.isMain
@@ -397,6 +407,17 @@ export default function KdsStationDashboardPage() {
                     {/* Card Footer Actions */}
                     <div className="pt-5 mt-4 border-t border-[#f4ece8] flex items-center justify-between gap-2">
                       <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          aria-label={`Manage menu items for ${station.name} station`}
+                          title="Manage items"
+                          onClick={() => handleOpenItemsDrawer(station)}
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-[#645d58] hover:text-[#1e1b19] hover:bg-[#f4ece8] transition-colors cursor-pointer"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                          </svg>
+                        </button>
                         <button
                           type="button"
                           aria-label={`Edit ${station.name} station`}
@@ -447,12 +468,12 @@ export default function KdsStationDashboardPage() {
           )}
         </div>
 
-        {/* Drawer Backdrop (for stub drawers Screen 3 & Screen 4) */}
+        {/* Drawer Backdrop (for stub drawer Screen 4) */}
         <div
           id="drawer-backdrop"
           onClick={handleCloseDrawer}
           className={`fixed inset-0 bg-[#000000]/25 backdrop-blur-[2px] z-50 transition-opacity duration-300 ${
-            activeDrawer === "items" || activeDrawer === "update"
+            activeDrawer === "update"
               ? "opacity-100 pointer-events-auto"
               : "opacity-0 pointer-events-none"
           }`}
@@ -466,103 +487,24 @@ export default function KdsStationDashboardPage() {
           existingStationNames={stations ? stations.map((s: any) => s.name) : []}
           onSuccess={(_id, name) => {
             showToast(`Station "${name}" created successfully.`, "success");
+            setSelectedStation({ _id, name, isMain: false, assignedItemCount: 0 });
           }}
           triggerRef={addStationBtnRef}
         />
 
-        {/* Screen 3: Add Items Drawer (Follow-up Screen Entry Point) */}
-        <aside
-          id="assign-items-drawer"
-          className={`fixed top-0 right-0 h-full w-full max-w-lg bg-[#ffffff] z-50 shadow-2xl transition-transform duration-300 flex flex-col justify-between border-l border-[#d0c4be]/40 ${
-            activeDrawer === "items" ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
-          <div className="flex items-center justify-between p-6 bg-[#faf2ee] border-b border-[#e9e1dd]">
-            <div>
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-[#7f7570]">
-                Station Routing Matrix
-              </span>
-              <h3 className="text-2xl font-garamond text-[#1e1b19] font-normal">
-                Add Items to Station
-              </h3>
-            </div>
-            <button
-              type="button"
-              aria-label="Close drawer"
-              onClick={handleCloseDrawer}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#645d58] hover:text-[#1e1b19] hover:bg-[#eae1da] transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 text-[#1e1b19]">
-            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200/60 text-xs text-amber-900 flex items-start gap-2.5">
-              <svg className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <circle cx="12" cy="12" r="10" strokeWidth="2" />
-                <line x1="12" y1="8" x2="12" y2="12" strokeWidth="2" strokeLinecap="round" />
-                <circle cx="12" cy="16" r="1" fill="currentColor" />
-              </svg>
-              <span>
-                <strong>Screen 3 Entry Point:</strong> Item &amp; Category Routing Matrix will be implemented in Screen 3. Target Station:{" "}
-                <span className="font-semibold underline">
-                  {selectedStation ? selectedStation.name : "All Stations"}
-                </span>
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-[#7f7570]">
-                Sample Catalog Items
-              </span>
-              <div className="space-y-2">
-                {selectedStation?.sampleItems?.length > 0 ? (
-                  selectedStation.sampleItems.map((item: string, idx: number) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3.5 rounded-xl bg-[#faf2ee] border border-[#d0c4be]/30"
-                    >
-                      <div>
-                        <div className="text-xs font-semibold text-[#1e1b19]">{item}</div>
-                        <div className="text-[11px] text-[#645d58]">Assigned to line</div>
-                      </div>
-                      <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-[#645d58] italic">No items assigned yet to this workstation.</p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="p-6 bg-[#faf2ee] border-t border-[#e9e1dd] flex items-center justify-between">
-            <span className="text-xs text-[#645d58]">
-              {selectedStation?.assignedItemCount ?? 0} dishes routed to station
-            </span>
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCloseDrawer}
-                className="px-4 py-2 rounded-full text-[#645d58] text-xs font-semibold hover:bg-[#eae1da] transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  handleCloseDrawer();
-                  showToast("Item assignment matrix entry point invoked.", "success");
-                }}
-                className="px-5 py-2 rounded-full bg-[#000000] text-white text-xs font-semibold shadow-xs hover:bg-[#1d1b1a] transition-colors cursor-pointer"
-              >
-                Confirm Assignments
-              </button>
-            </div>
-          </div>
-        </aside>
+        {/* Screen 3: Add Items to Station Drawer */}
+        <AddItemsToStationDrawer
+          isOpen={activeDrawer === "items"}
+          onClose={handleCloseDrawer}
+          station={selectedStation}
+          organizationId={activeOrg?._id}
+          onSuccess={(count) => {
+            showToast(
+              `Updated menu items for ${selectedStation?.name || "station"} (${count} items routed).`,
+              "success"
+            );
+          }}
+        />
 
         {/* Screen 4: Update Station Drawer (Follow-up Screen Entry Point) */}
         <aside

@@ -732,6 +732,227 @@ export const listItemStations = query({
   },
 });
 
+/**
+ * Retrieves menus, categories with eligible items, and current item assignments for a workstation.
+ * Powers Screen 3: Add Items to Station Drawer.
+ */
+export const getStationAssignmentData = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    stationId: v.id("stations"),
+    menuId: v.optional(v.id("menus")),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStaffMember(ctx, station.organizationId);
+
+    // 1. Fetch all active menus for this store
+    const menus = await ctx.db
+      .query("menus")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    const activeMenus = menus
+      .filter((m) => m.isActive !== false)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+    // Resolve target menu
+    let resolvedMenuId = args.menuId;
+    if (!resolvedMenuId && activeMenus.length > 0) {
+      const defaultMenu = activeMenus.find((m) => m.isDefault) || activeMenus[0];
+      resolvedMenuId = defaultMenu._id;
+    }
+
+    // 2. Fetch categories for resolved menu (or all store categories if no menu exists)
+    let categories: any[] = [];
+    if (resolvedMenuId) {
+      categories = await ctx.db
+        .query("categories")
+        .withIndex("by_menu", (q) => q.eq("menuId", resolvedMenuId!))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+    } else {
+      categories = await ctx.db
+        .query("categories")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+    }
+
+    const activeCategories = categories
+      .filter((c) => c.published !== false)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+    // 3. For each category, fetch category items and resolve items
+    const categoriesWithItems = [];
+    const storeItemMap = new Map<string, any>();
+
+    for (const cat of activeCategories) {
+      const catItems = await ctx.db
+        .query("categoryItems")
+        .withIndex("by_category", (q) => q.eq("categoryId", cat._id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+
+      const activeCatItems = catItems
+        .filter((ci) => ci.published !== false)
+        .sort((a, b) => a.position - b.position);
+
+      const itemsInCat = [];
+      for (const ci of activeCatItems) {
+        let item = storeItemMap.get(ci.itemId);
+        if (!item) {
+          item = await ctx.db.get(ci.itemId);
+          if (item) storeItemMap.set(ci.itemId, item);
+        }
+
+        if (item && item.deletedAt === undefined && item.published !== false) {
+          itemsInCat.push({
+            _id: item._id,
+            name: item.name,
+            description: item.description,
+            price: item.price,
+            isVeg: item.isVeg,
+            isSpicy: item.isSpicy,
+            isAvailable: item.isAvailable,
+            skuNumber: item.skuNumber,
+          });
+        }
+      }
+
+      categoriesWithItems.push({
+        _id: cat._id,
+        name: cat.name,
+        position: cat.position,
+        items: itemsInCat,
+      });
+    }
+
+    // 4. Fetch currently assigned items for this station
+    const stationMappings = await ctx.db
+      .query("stationItems")
+      .withIndex("by_org_station", (q) =>
+        q.eq("organizationId", org._id).eq("stationId", station._id)
+      )
+      .collect();
+
+    const activeMappings = stationMappings.filter((m) => m.deletedAt === undefined);
+    const assignedItemIds = activeMappings.map((m) => m.itemId);
+
+    // 5. Total unique eligible items across current menu/categories
+    const allItemIdsInMenu = new Set<string>();
+    for (const cat of categoriesWithItems) {
+      for (const item of cat.items) {
+        allItemIdsInMenu.add(item._id);
+      }
+    }
+
+    return {
+      station: {
+        _id: station._id,
+        name: station.name,
+        isMain: station.isMain,
+      },
+      menus: activeMenus.map((m) => ({
+        _id: m._id,
+        name: m.name,
+        isDefault: m.isDefault,
+        isActive: m.isActive,
+      })),
+      selectedMenuId: resolvedMenuId,
+      categories: categoriesWithItems,
+      assignedItemIds,
+      totalEligibleItemsCount: allItemIdsInMenu.size,
+      currencySymbol: org.defaultCurrencySymbol || "₹",
+    };
+  },
+});
+
+/**
+ * Atomically updates the complete set of assigned menu items for a station.
+ * Performs safe differential updates: soft-deletes removed items, reactivates/inserts added items.
+ */
+export const updateStationItemAssignments = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    stationId: v.id("stations"),
+    assignedItemIds: v.array(v.id("items")),
+  },
+  handler: async (ctx, args) => {
+    const station = await ctx.db.get(args.stationId);
+    if (!station || station.deletedAt !== undefined) {
+      throw new Error("Station not found");
+    }
+
+    const { org } = await requireStationAdmin(ctx, station.organizationId);
+
+    // Validate that all assignedItemIds belong to this organization and are not deleted
+    for (const itemId of args.assignedItemIds) {
+      const item = await ctx.db.get(itemId);
+      if (!item || item.deletedAt !== undefined || item.organizationId !== org._id) {
+        throw new Error(`Item not found or belongs to another organization: ${itemId}`);
+      }
+    }
+
+    // Existing mappings for this station
+    const existingMappings = await ctx.db
+      .query("stationItems")
+      .withIndex("by_org_station", (q) =>
+        q.eq("organizationId", org._id).eq("stationId", station._id)
+      )
+      .collect();
+
+    const targetSet = new Set<string>(args.assignedItemIds);
+    const now = Date.now();
+    let addedCount = 0;
+    let removedCount = 0;
+
+    // 1. Soft-delete mappings that are not in targetSet
+    for (const mapping of existingMappings) {
+      if (mapping.deletedAt === undefined && !targetSet.has(mapping.itemId)) {
+        await ctx.db.patch(mapping._id, {
+          deletedAt: now,
+          updatedAt: now,
+        });
+        removedCount++;
+      }
+    }
+
+    // 2. Add or reactivate mappings for items in targetSet
+    for (const itemId of args.assignedItemIds) {
+      const existing = existingMappings.find((m) => m.itemId === itemId);
+      if (!existing) {
+        await ctx.db.insert("stationItems", {
+          organizationId: org._id,
+          stationId: station._id,
+          itemId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        addedCount++;
+      } else if (existing.deletedAt !== undefined) {
+        await ctx.db.patch(existing._id, {
+          deletedAt: undefined,
+          updatedAt: now,
+        });
+        addedCount++;
+      }
+    }
+
+    return {
+      success: true,
+      addedCount,
+      removedCount,
+      totalAssigned: args.assignedItemIds.length,
+    };
+  },
+});
+
 // ==========================================
 // 3. KDS STATION ORDERS & TICKET STREAM QUERY
 // ==========================================

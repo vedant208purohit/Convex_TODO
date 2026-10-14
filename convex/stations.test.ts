@@ -1125,4 +1125,231 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
       expect(dessertSummary?.sampleItems).toEqual([]);
     });
   });
+
+  // 9. Screen 3 Add Items to Station Drawer Parity Tests
+  describe("9. Screen 3 Add Items to Station Drawer Parity Tests", () => {
+    test("getStationAssignmentData returns station info, menus, categories, items, and assignedItemIds", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create station
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Cold Station & Raw Bar",
+      });
+
+      // Create Menu
+      const menuId = await asAdmin.mutation(api.menu.createMenu, {
+        organizationId: orgId,
+        name: "All-Day Dining Menu",
+        isDefault: true,
+      });
+
+      // Create Categories
+      const rawBarCatId = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId,
+        name: "Raw Bar & Crudo",
+        position: 0,
+        published: true,
+      });
+
+      const saladsCatId = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId,
+        name: "Organic Salads",
+        position: 1,
+        published: true,
+      });
+
+      // Create Menu Items
+      const hamachiItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Hamachi Crudo, Citrus Ponzu",
+        price: 950,
+        description: "Cold prep line / Allergen: Fish",
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: false,
+      });
+
+      const burrataItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Burrata Pugliese",
+        price: 820,
+        description: "Aged balsamic, heirloom figs",
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // Link items to categories
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: rawBarCatId,
+        itemId: hamachiItem,
+        position: 0,
+      });
+
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: saladsCatId,
+        itemId: burrataItem,
+        position: 1,
+      });
+
+      // Pre-assign Hamachi Crudo to station
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        itemId: hamachiItem,
+      });
+
+      // Query assignment data
+      const data = await asAdmin.query(api.stations.getStationAssignmentData, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+
+      expect(data).toBeDefined();
+      expect(data.station.name).toBe("Cold Station & Raw Bar");
+      expect(data.menus.length).toBe(1);
+      expect(data.menus[0].name).toBe("All-Day Dining Menu");
+      expect(data.categories.length).toBe(2);
+      expect(data.assignedItemIds).toContain(hamachiItem);
+      expect(data.assignedItemIds).not.toContain(burrataItem);
+      expect(data.totalEligibleItemsCount).toBe(2);
+    });
+
+    test("updateStationItemAssignments atomically performs differential updates", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill Station",
+      });
+
+      const item1 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Wagyu Ribeye",
+        price: 2400,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: false,
+      });
+
+      const item2 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Smoked Chicken",
+        price: 1200,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: false,
+      });
+
+      const item3 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Grilled Asparagus",
+        price: 650,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // 1. Initial assignment: item1 and item2
+      const res1 = await asAdmin.mutation(api.stations.updateStationItemAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        assignedItemIds: [item1, item2],
+      });
+
+      expect(res1.success).toBe(true);
+      expect(res1.addedCount).toBe(2);
+      expect(res1.removedCount).toBe(0);
+      expect(res1.totalAssigned).toBe(2);
+
+      let list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      expect(list.map((m) => m.item._id)).toEqual(expect.arrayContaining([item1, item2]));
+      expect(list.length).toBe(2);
+
+      // 2. Differential update: remove item1, keep item2, add item3
+      const res2 = await asAdmin.mutation(api.stations.updateStationItemAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        assignedItemIds: [item2, item3],
+      });
+
+      expect(res2.success).toBe(true);
+      expect(res2.addedCount).toBe(1); // item3 added
+      expect(res2.removedCount).toBe(1); // item1 removed
+      expect(res2.totalAssigned).toBe(2);
+
+      list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      const currentItemIds = list.map((m) => m.item._id);
+      expect(currentItemIds).toContain(item2);
+      expect(currentItemIds).toContain(item3);
+      expect(currentItemIds).not.toContain(item1);
+
+      // 3. Reactivation: re-add item1
+      const res3 = await asAdmin.mutation(api.stations.updateStationItemAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        assignedItemIds: [item1, item2, item3],
+      });
+      expect(res3.addedCount).toBe(1); // item1 reactivated
+      expect(res3.removedCount).toBe(0);
+
+      list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      expect(list.length).toBe(3);
+    });
+
+    test("updateStationItemAssignments rejects cross-organization item assignment", async () => {
+      const { t, orgId: orgAId, asAdmin: asAdminA } = await setupStoreWithAdmin("admin_store_a");
+
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Store B",
+        ownerClerkId: "admin_store_b",
+        isDelivery: true,
+        deliveryCashOnDelivery: true,
+      });
+
+      const stationA = await asAdminA.mutation(api.stations.create, {
+        organizationId: orgAId,
+        name: "Bakery Line",
+      });
+
+      // Item created in Org B
+      const itemB = await t.mutation(api.menu.createItem, {
+        organizationId: orgBId,
+        name: "Croissant from Store B",
+        price: 350,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // Org A attempts to assign Org B's item -> Rejected
+      await expect(
+        asAdminA.mutation(api.stations.updateStationItemAssignments, {
+          organizationId: orgAId,
+          stationId: stationA.id,
+          assignedItemIds: [itemB],
+        })
+      ).rejects.toThrow("Item not found or belongs to another organization");
+    });
+  });
 });
