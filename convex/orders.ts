@@ -5,6 +5,11 @@ import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
 import { validateActivePaymentMode } from "./paymentModes";
 import { resolveOrderItemStation } from "./stations";
+import {
+  convertUnits,
+  deductInventoryForOrderInternal,
+  restoreInventoryForOrderInternal,
+} from "./inventory";
 
 // ==========================================
 // ORDER ACTIVITY DURATION & LIFECYCLE HELPER
@@ -970,6 +975,13 @@ export const createOrder = mutation({
       });
     }
 
+    // 7.5 Auto-deduct inventory stock for recipe ingredients
+    try {
+      await deductInventoryForOrderInternal(ctx, orderId);
+    } catch (e) {
+      console.warn("Auto inventory deduction notice for order", orderId, e);
+    }
+
     // 8. Log Initial Activity Entry
     await recordOrderActivity(ctx, {
       organizationId: args.organizationId,
@@ -1550,11 +1562,25 @@ export const updateOrderStatus = mutation({
       now,
     });
 
+    const statusLower = process.name.toLowerCase();
+    const isCancelOrReject =
+      statusLower.includes("cancel") ||
+      statusLower.includes("reject");
+
     await ctx.db.patch(order._id, {
       orderStatusId: process._id,
       orderStatusName: process.name,
+      ...(isCancelOrReject ? { isRejected: true } : {}),
       updatedAt: now,
     });
+
+    if (isCancelOrReject) {
+      try {
+        await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
+      } catch (err) {
+        console.error("Failed to restore inventory on order status cancel/reject:", err);
+      }
+    }
 
     // 4. Resolve process notifications if order status actually transitioned and not suppressed
     let notifications: any[] = [];
@@ -1692,76 +1718,11 @@ export const completeOrder = mutation({
       }
     }
 
-    // 4. AUTOMATIC INVENTORY STOCK DEDUCTION HOOK
-    const orderItems = await ctx.db
-      .query("orderItems")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    for (const orderItem of orderItems) {
-      // 4a. Deduct stock for base menu item recipes
-      const itemRecipes = await ctx.db
-        .query("recipes")
-        .withIndex("by_item", (q) => q.eq("itemId", orderItem.itemId))
-        .collect();
-
-      for (const recipe of itemRecipes) {
-        const invItem = await ctx.db.get(recipe.inventoryItemId);
-        if (invItem) {
-          const consumedQty = recipe.quantity * orderItem.quantity;
-          const newStock = Math.max(0, invItem.availableStock - consumedQty);
-
-          await ctx.db.insert("inventoryItemStocks", {
-            organizationId: order.organizationId,
-            inventoryItemId: invItem._id,
-            stockType: "debit",
-            quantity: consumedQty,
-            unit: recipe.unit,
-            sourceType: "OrderSale",
-            orderId: order._id,
-            createdAt: now,
-          });
-
-          await ctx.db.patch(invItem._id, {
-            availableStock: newStock,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // 4b. Deduct stock for customization option recipes
-      if (orderItem.customizations) {
-        for (const cust of orderItem.customizations) {
-          const custRecipes = await ctx.db
-            .query("recipes")
-            .withIndex("by_customization", (q) => q.eq("customizationItemId", cust.optionId))
-            .collect();
-
-          for (const recipe of custRecipes) {
-            const invItem = await ctx.db.get(recipe.inventoryItemId);
-            if (invItem) {
-              const consumedQty = recipe.quantity * orderItem.quantity;
-              const newStock = Math.max(0, invItem.availableStock - consumedQty);
-
-              await ctx.db.insert("inventoryItemStocks", {
-                organizationId: order.organizationId,
-                inventoryItemId: invItem._id,
-                stockType: "debit",
-                quantity: consumedQty,
-                unit: recipe.unit,
-                sourceType: "OrderSale",
-                orderId: order._id,
-                createdAt: now,
-              });
-
-              await ctx.db.patch(invItem._id, {
-                availableStock: newStock,
-                updatedAt: now,
-              });
-            }
-          }
-        }
-      }
+    // 4. AUTOMATIC INVENTORY STOCK DEDUCTION HOOK (Unified & Idempotent)
+    try {
+      await deductInventoryForOrderInternal(ctx, order._id);
+    } catch (e) {
+      console.warn("Auto inventory deduction notice for completeOrder", order._id, e);
     }
 
     // 5. Automated Provider Payment Transfer Hook (Fail-safe marketplace payout routing)
@@ -2013,6 +1974,20 @@ export const addOrderPayment = mutation({
       updatedAt: now,
     });
 
+    // 3. Restore inventory if order has been refunded or cancelled
+    if (
+      args.paymentType === "Debit" &&
+      (nextPaymentStatus === "Refunded" ||
+        nextOrderStatusName === "Cancelled / Refunded" ||
+        isRejected === true)
+    ) {
+      try {
+        await restoreInventoryForOrderInternal(ctx, order._id, "Refund");
+      } catch (e) {
+        console.error("Failed to restore inventory on refund in addOrderPayment:", e);
+      }
+    }
+
     return {
       success: true,
       netPaid: (netPaid / 100).toFixed(2),
@@ -2164,6 +2139,13 @@ export const cancelOrder = mutation({
       position: 99,
       now,
     });
+
+    // Restore inventory stock back to available stock
+    try {
+      await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
+    } catch (e) {
+      console.error("Failed to restore inventory on cancelOrder:", e);
+    }
 
     return { success: true };
   },

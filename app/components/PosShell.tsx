@@ -208,7 +208,6 @@ const navItems: NavItem[] = [
     href: "/queue",
     label: "Queue",
     icon: <QueueNavIcon className="w-4 h-4" />,
-    badge: "Coming Soon",
   },
   {
     href: "/inventory",

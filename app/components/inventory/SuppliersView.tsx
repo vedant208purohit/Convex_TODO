@@ -4,7 +4,12 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { COUNTRIES_MASTER, getStatesForCountry } from "@/lib/constants/countries";
+import {
+  COUNTRIES_MASTER,
+  getStatesForCountry,
+  getPhoneCodeForCountry,
+  formatPhoneNumberWithCountryCode,
+} from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 export function SuppliersView({
@@ -12,6 +17,11 @@ export function SuppliersView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
+  const orgCountryCode = activeOrg?.country || "IN";
+  const orgPhoneCode = getPhoneCodeForCountry(orgCountryCode);
+
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
   const inventoryItems = useQuery(api.inventory.listInventoryItems, {
     organizationId,
@@ -20,6 +30,7 @@ export function SuppliersView({
   const createSupplierMutation = useMutation(api.inventory.createSupplier);
   const updateSupplierMutation = useMutation(api.inventory.updateSupplier);
   const deleteSupplierMutation = useMutation(api.inventory.deleteSupplier);
+  const assignItemsMutation = useMutation(api.inventory.assignItemsToSupplier);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,18 +66,32 @@ export function SuppliersView({
   const openAssignModal = (s: any) => {
     setSupplierToAssign(s);
     setAssignSearchQuery("");
-    const existing = assignedItemIdsMap[s._id] || [];
+    const existingFromDb = (inventoryItems ?? [])
+      .filter((it: any) =>
+        (it.supplierIds ?? []).some((id: any) => String(id) === String(s._id))
+      )
+      .map((it: any) => it._id);
+    const existing = existingFromDb.length > 0 ? existingFromDb : (assignedItemIdsMap[s._id] || []);
     setTempAssignedItemIds(existing);
     setActiveMenuId(null);
     setIsAssignModalOpen(true);
   };
 
-  const handleSaveAssignments = () => {
+  const handleSaveAssignments = async () => {
     if (!supplierToAssign) return;
-    setAssignedItemIdsMap((prev) => ({
-      ...prev,
-      [supplierToAssign._id]: tempAssignedItemIds,
-    }));
+    try {
+      await assignItemsMutation({
+        organizationId,
+        supplierId: supplierToAssign._id as Id<"suppliers">,
+        itemIds: tempAssignedItemIds as Id<"inventoryItems">[],
+      });
+      setAssignedItemIdsMap((prev) => ({
+        ...prev,
+        [supplierToAssign._id]: tempAssignedItemIds,
+      }));
+    } catch (e) {
+      console.error("Failed to assign items to supplier:", e);
+    }
     setIsAssignModalOpen(false);
   };
 
@@ -534,7 +559,7 @@ export function SuppliersView({
                       <td className="py-4 px-5 text-[#57534e] font-mono text-[11px]">
                         {s.phoneNumber ? (
                           <div className="flex items-center space-x-2">
-                            <span>{s.phoneNumber}</span>
+                            <span>{formatPhoneNumberWithCountryCode(s.phoneNumber, getPhoneCodeForCountry((s as any).country || orgCountryCode))}</span>
                             {s.whatsappNumber && (
                               <a
                                 href={`https://wa.me/${s.whatsappNumber.replace(/[^0-9]/g, "")}`}
@@ -776,7 +801,7 @@ export function SuppliersView({
                       Phone no
                     </p>
                     <p className="font-mono text-[#1c1917] mt-0.5">
-                      {selectedSupplier.phoneNumber}
+                      {formatPhoneNumberWithCountryCode(selectedSupplier.phoneNumber, getPhoneCodeForCountry(selectedSupplier.country || orgCountryCode))}
                     </p>
                   </div>
                 )}
@@ -977,20 +1002,25 @@ export function SuppliersView({
                   <label className="block font-medium text-[#1c1917] mb-1">
                     Phone no
                   </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
-                      phoneError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
-                    } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition font-mono`}
-                    placeholder="Enter 10-digit contact number"
-                    value={phoneNumber}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                      setPhoneNumber(val);
-                      if (phoneError) setPhoneError("");
-                    }}
-                  />
+                  <div className="flex">
+                    <span className="inline-flex items-center px-3 py-2 bg-stone-100 border border-r-0 border-[#e7e5e4] rounded-l-lg text-xs font-mono text-stone-600 select-none">
+                      {getPhoneCodeForCountry(country || orgCountryCode)}
+                    </span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      className={`flex-1 px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
+                        phoneError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                      } rounded-r-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition font-mono`}
+                      placeholder="Enter 10-digit contact number"
+                      value={phoneNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setPhoneNumber(val);
+                        if (phoneError) setPhoneError("");
+                      }}
+                    />
+                  </div>
                   {phoneError && (
                     <p className="text-[11px] text-rose-500 mt-1">{phoneError}</p>
                   )}

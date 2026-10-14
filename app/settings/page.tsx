@@ -479,7 +479,6 @@ function SettingsContent() {
                 }
 
                 const isComingSoon =
-                  tab.id === "queue" ||
                   tab.id === "printers" ||
                   tab.id === "liveScreens" ||
                   tab.id === "digitalStore" ||

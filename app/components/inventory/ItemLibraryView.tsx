@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { getCurrencyForCountry } from "@/lib/constants/countries";
+import { getCurrencyForCountry, formatStoreDate, formatStoreDateTime } from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 // Preset Buying Units & Relatable Serving Units matching old project
@@ -102,6 +102,83 @@ function getShortUnit(unitName: string): string {
   return unitName;
 }
 
+const UNIT_FACTORS: Record<
+  string,
+  { type: "weight" | "volume" | "count"; factor: number }
+> = {
+  gram: { type: "weight", factor: 1 },
+  g: { type: "weight", factor: 1 },
+  milligram: { type: "weight", factor: 0.001 },
+  mg: { type: "weight", factor: 0.001 },
+  kilogram: { type: "weight", factor: 1000 },
+  kg: { type: "weight", factor: 1000 },
+  pounds: { type: "weight", factor: 453.592 },
+  lbs: { type: "weight", factor: 453.592 },
+  ounce: { type: "weight", factor: 28.3495 },
+  oz: { type: "weight", factor: 28.3495 },
+
+  millilitre: { type: "volume", factor: 1 },
+  ml: { type: "volume", factor: 1 },
+  litre: { type: "volume", factor: 1000 },
+  l: { type: "volume", factor: 1000 },
+  teaspoon: { type: "volume", factor: 4.92892 },
+  tsp: { type: "volume", factor: 4.92892 },
+  tablespoon: { type: "volume", factor: 14.7868 },
+  tbsp: { type: "volume", factor: 14.7868 },
+  "fluid ounce": { type: "volume", factor: 29.5735 },
+  "fl oz": { type: "volume", factor: 29.5735 },
+  gallon: { type: "volume", factor: 3785.41 },
+  gal: { type: "volume", factor: 3785.41 },
+
+  piece: { type: "count", factor: 1 },
+  pc: { type: "count", factor: 1 },
+  portion: { type: "count", factor: 1 },
+  ptn: { type: "count", factor: 1 },
+  packet: { type: "count", factor: 1 },
+  pkt: { type: "count", factor: 1 },
+  dozen: { type: "count", factor: 12 },
+  dzn: { type: "count", factor: 12 },
+  box: { type: "count", factor: 1 },
+};
+
+function formatUnitDisplay(unitName?: string): string {
+  if (!unitName) return "Piece (pc)";
+  const match = BUYING_UNITS.find(
+    (u) => u.value.toLowerCase() === unitName.toLowerCase()
+  );
+  if (match) return match.label;
+  const short = getShortUnit(unitName);
+  return `${unitName.charAt(0).toUpperCase() + unitName.slice(1)} (${short})`;
+}
+
+function convertStockUnits(
+  amount: number,
+  fromUnit?: string,
+  toUnit?: string
+): number {
+  if (!fromUnit || !toUnit) return amount;
+  const cleanFrom = fromUnit
+    .trim()
+    .toLowerCase()
+    .split(" ")[0]
+    .replace(/[\(\)]/g, "");
+  const cleanTo = toUnit
+    .trim()
+    .toLowerCase()
+    .split(" ")[0]
+    .replace(/[\(\)]/g, "");
+
+  const fromSpec =
+    UNIT_FACTORS[cleanFrom] || UNIT_FACTORS[fromUnit.toLowerCase()];
+  const toSpec = UNIT_FACTORS[cleanTo] || UNIT_FACTORS[toUnit.toLowerCase()];
+
+  if (!fromSpec || !toSpec) return amount;
+  if (fromSpec.type !== toSpec.type) return amount;
+
+  const inBase = amount * fromSpec.factor;
+  return inBase / toSpec.factor;
+}
+
 export function ItemLibraryView({
   organizationId,
 }: {
@@ -110,18 +187,18 @@ export function ItemLibraryView({
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
   const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
-  const rawItems = useQuery(api.inventory.listInventoryItems, { organizationId });
+  const rawItems = useQuery(api.inventory.listInventoryItems, organizationId ? { organizationId } : "skip");
   const items = useMemo(() => rawItems ?? [], [rawItems]);
 
-  const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
-  const purchaseOrders = [
-    { _id: "po_1", poNumber: "PO-2026-001", supplierName: "Self Employee" },
-    { _id: "po_2", poNumber: "PO-2026-002", supplierName: "Fresh Wholesale" },
-  ];
+  const suppliers = useQuery(api.inventory.listSuppliers, organizationId ? { organizationId } : "skip");
+  const rawPOs = useQuery(api.inventory.listPurchaseOrders, organizationId ? { organizationId } : "skip");
+  const purchaseOrders = useMemo(() => rawPOs ?? [], [rawPOs]);
 
   const createItemMutation = useMutation(api.inventory.createInventoryItem);
   const updateItemMutation = useMutation(api.inventory.updateInventoryItem);
+  const deleteItemMutation = useMutation(api.inventory.deleteInventoryItem);
   const adjustStockMutation = useMutation(api.inventory.adjustInventoryStock);
+  const backfillStockLogsMutation = useMutation(api.inventory.backfillStockLogsPO);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -129,9 +206,25 @@ export function ItemLibraryView({
 
   // Selected item for full detail page view (e.g. TEA PREMIX)
   const [selectedItemDetail, setSelectedItemDetail] = useState<any | null>(null);
-  const [detailActiveTab, setDetailActiveTab] = useState<"added_logs" | "dead_logs">(
-    "added_logs"
+  const [detailActiveTab, setDetailActiveTab] = useState<
+    "added_logs" | "sales_logs" | "dead_logs"
+  >("added_logs");
+
+  // Live Stock Logs for Selected Item
+  const liveItemHistory = useQuery(
+    api.inventory.getItemStockHistory,
+    selectedItemDetail ? { inventoryItemId: selectedItemDetail._id } : "skip"
   );
+
+  // Auto-reconcile unlinked stock logs for selected item
+  useEffect(() => {
+    if (selectedItemDetail?._id) {
+      backfillStockLogsMutation({ inventoryItemId: selectedItemDetail._id }).catch(() => {});
+    }
+  }, [selectedItemDetail?._id, backfillStockLogsMutation]);
+
+  // Negative Stock Flag
+  const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(true);
 
   // Column Sorting state
   const [sortField, setSortField] = useState<"name" | "category" | null>(null);
@@ -203,8 +296,10 @@ export function ItemLibraryView({
 
   // Add Item Stock Drawer Form State
   const [addStockQuantity, setAddStockQuantity] = useState<number | "">("");
+  const [addStockUnit, setAddStockUnit] = useState<string>("");
   const [addStockSupplierId, setAddStockSupplierId] = useState<string>("");
   const [addStockPoNumber, setAddStockPoNumber] = useState<string>("");
+  const [addStockPoId, setAddStockPoId] = useState<string>("");
   const [addStockDateReceived, setAddStockDateReceived] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
@@ -291,6 +386,7 @@ export function ItemLibraryView({
     setBaselineStockLevel("" as any);
     setInitialStock(0);
     setUnitCost(0);
+    setAllowNegativeStock(true);
     setNameError("");
     setCategoryError("");
     setBuyingUnitError("");
@@ -313,6 +409,7 @@ export function ItemLibraryView({
     setBaselineStockLevel(item.baselineStockLevel ?? "");
     setInitialStock(item.availableStock || 0);
     setUnitCost(item.unitCost || 0);
+    setAllowNegativeStock(item.allowNegativeStock !== false);
     setNameError("");
     setCategoryError("");
     setBuyingUnitError("");
@@ -327,8 +424,10 @@ export function ItemLibraryView({
     setEditingItem(item);
     setDrawerMode("assign_stock");
     setAddStockQuantity("");
+    setAddStockUnit(item.buyingUnit || "piece");
     setAddStockSupplierId("");
     setAddStockPoNumber("");
+    setAddStockPoId("");
     setAddStockDateReceived(new Date().toISOString().slice(0, 10));
     setAddStockItemExpiry(new Date().toISOString().slice(0, 10));
     setActiveMenuId(null);
@@ -352,22 +451,35 @@ export function ItemLibraryView({
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (drawerMode === "assign_stock") {
-      const qty = Number(addStockQuantity);
-      if (!qty || qty <= 0) {
+      const rawQty = Number(addStockQuantity);
+      if (!rawQty || rawQty <= 0) {
         alert("Please enter a valid stock quantity.");
         return;
       }
       setIsSubmitting(true);
       try {
         if (editingItem) {
+          const baseUnit = editingItem.buyingUnit || "piece";
+          const chosenUnit = addStockUnit || baseUnit;
+          const convertedQty = convertStockUnits(rawQty, chosenUnit, baseUnit);
+
           const currentStock = Number(editingItem.availableStock || 0);
-          const newTotalStock = currentStock + qty;
+          const newTotalStock = Math.round((currentStock + convertedQty) * 1000) / 1000;
+
+          const selectedPo = purchaseOrders?.find(
+            (p: any) => p._id === addStockPoId || p.poNumber === addStockPoNumber
+          );
+          const finalSupplierId = addStockSupplierId || selectedPo?.supplierId;
 
           await adjustStockMutation({
             organizationId,
             inventoryItemId: editingItem._id,
             actualStockCount: newTotalStock,
             reason: "Manual Stock Assignment",
+            supplierId: finalSupplierId ? (finalSupplierId as Id<"suppliers">) : undefined,
+            purchaseOrderId: selectedPo?._id ? (selectedPo._id as Id<"purchaseOrders">) : undefined,
+            receivedDate: addStockDateReceived,
+            expiryDate: addStockItemExpiry,
           });
 
           if (unitCost !== undefined && unitCost !== null && Number(unitCost) > 0) {
@@ -381,8 +493,8 @@ export function ItemLibraryView({
           const supplierObj = suppliers?.find((s) => s._id === addStockSupplierId);
           const newLog = {
             _id: `log_${Date.now()}`,
-            quantity: qty,
-            unit: editingItem.buyingUnit || "piece (pc)",
+            quantity: rawQty,
+            unit: formatUnitDisplay(chosenUnit),
             supplierName: supplierObj?.supplierName || undefined,
             poNumber: addStockPoNumber || undefined,
             dateReceived: addStockDateReceived,
@@ -393,6 +505,12 @@ export function ItemLibraryView({
             ...prev,
             [editingItem._id]: [newLog, ...(prev[editingItem._id] || [])],
           }));
+
+          if (selectedItemDetail && selectedItemDetail._id === editingItem._id) {
+            setSelectedItemDetail((prev: any) =>
+              prev ? { ...prev, availableStock: newTotalStock } : null
+            );
+          }
         }
         setIsDrawerOpen(false);
       } catch (err) {
@@ -471,6 +589,7 @@ export function ItemLibraryView({
           description: description.trim() || undefined,
           minimumStockRefillLevel: Number(minimumStockRefillLevel),
           unitCost: Number(unitCost),
+          allowNegativeStock,
         });
       } else {
         await createItemMutation({
@@ -484,6 +603,7 @@ export function ItemLibraryView({
           baselineStockLevel: Number(baselineStockLevel) || undefined,
           initialStock: Number(initialStock),
           unitCost: Number(unitCost),
+          allowNegativeStock,
         });
       }
       setIsDrawerOpen(false);
@@ -495,12 +615,201 @@ export function ItemLibraryView({
     }
   };
 
-  const confirmDelete = () => {
-    if (selectedItemDetail && itemToDelete && selectedItemDetail._id === itemToDelete._id) {
-      setSelectedItemDetail(null);
+  const confirmDelete = async () => {
+    if (itemToDelete) {
+      try {
+        await deleteItemMutation({ id: itemToDelete._id });
+        if (selectedItemDetail && selectedItemDetail._id === itemToDelete._id) {
+          setSelectedItemDetail(null);
+        }
+      } catch (err) {
+        console.error("Failed to delete item:", err);
+        alert("Failed to delete item from inventory.");
+      }
     }
     setIsDeleteModalOpen(false);
     setItemToDelete(null);
+  };
+
+  // Shared Add Item Stock Drawer Content
+  const renderAddStockDrawer = () => {
+    if (!editingItem) return null;
+    const baseUnit = editingItem.buyingUnit || "piece";
+    const servingUnitVal = editingItem.servingUnit || "";
+    const hasDifferentServingUnit =
+      servingUnitVal &&
+      servingUnitVal.toLowerCase() !== baseUnit.toLowerCase();
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-stone-200 flex items-start justify-between bg-white shrink-0">
+          <div>
+            <h2 className="text-xl text-stone-900 font-semibold tracking-tight">
+              Add item stock
+            </h2>
+            <p className="text-xs text-stone-500 mt-0.5">
+              {editingItem.name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsDrawerOpen(false)}
+            className="text-stone-500 hover:text-stone-900 p-1 rounded-md transition cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form
+          id="addStockForm"
+          onSubmit={handleFormSubmit}
+          className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-stone-800"
+        >
+          {/* Quantity & Unit */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block font-medium mb-1 text-stone-800">
+                Quantity <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                min="0.001"
+                step="any"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400"
+                placeholder="Enter the item quantity"
+                value={addStockQuantity}
+                onChange={(e) =>
+                  setAddStockQuantity(
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1 text-stone-800">Unit *</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-800 font-medium"
+                value={addStockUnit}
+                onChange={(e) => setAddStockUnit(e.target.value)}
+              >
+                <option value={baseUnit}>
+                  {formatUnitDisplay(baseUnit)} (Buying unit)
+                </option>
+                {hasDifferentServingUnit && (
+                  <option value={servingUnitVal}>
+                    {formatUnitDisplay(servingUnitVal)} (Serving unit)
+                  </option>
+                )}
+              </select>
+            </div>
+          </div>
+          <p className="text-[11px] text-stone-500 leading-normal">
+            {addStockUnit.toLowerCase() !== baseUnit.toLowerCase() ? (
+              <span>
+                Note: Adding in <strong>{formatUnitDisplay(addStockUnit)}</strong> will automatically convert to <strong>{formatUnitDisplay(baseUnit)}</strong> when adding to total inventory.
+              </span>
+            ) : (
+              <span>
+                Note: Buying unit is <strong>{formatUnitDisplay(baseUnit)}</strong>. You can switch to <strong>{formatUnitDisplay(servingUnitVal || baseUnit)}</strong> above if needed.
+              </span>
+            )}
+          </p>
+
+          {/* Supplier */}
+          <div>
+            <label className="block font-medium mb-1 text-stone-800">Supplier</label>
+            <select
+              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
+              value={addStockSupplierId}
+              onChange={(e) => setAddStockSupplierId(e.target.value)}
+            >
+              <option value="">Search supplier</option>
+              {suppliers?.map((s) => (
+                <option key={s._id} value={s._id}>
+                  {s.supplierName} ({s.companyName || "Supplier"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* PO Number */}
+          <div>
+            <label className="block font-medium mb-1 text-stone-800">PO number</label>
+            <select
+              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
+              value={addStockPoId || addStockPoNumber}
+              onChange={(e) => {
+                const val = e.target.value;
+                setAddStockPoId(val);
+                const selectedPo = purchaseOrders?.find(
+                  (po: any) => po._id === val || po.poNumber === val
+                );
+                setAddStockPoNumber(selectedPo?.poNumber || "");
+                if (selectedPo?.supplierId && !addStockSupplierId) {
+                  setAddStockSupplierId(selectedPo.supplierId);
+                }
+              }}
+            >
+              <option value="">Select purchase order number</option>
+              {purchaseOrders?.map((po: any) => (
+                <option key={po._id} value={po._id}>
+                  {po.poNumber} ({po.supplierName || "PO"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date received & Item expiry */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium mb-1 text-stone-800">
+                Date received <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+                value={addStockDateReceived}
+                onChange={(e) => setAddStockDateReceived(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1 text-stone-800">Item expiry</label>
+              <input
+                type="date"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+                value={addStockItemExpiry}
+                onChange={(e) => setAddStockItemExpiry(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-stone-500 leading-normal">
+            Note: You can edit or remove the stock quantity in 24 hours after it was added. Once the 24 hours are completed, everything is locked.
+          </p>
+        </form>
+
+        <div className="p-4 px-6 border-t border-stone-200 bg-white flex items-center justify-end space-x-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsDrawerOpen(false)}
+            className="w-1/2 py-2.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-semibold transition cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="addStockForm"
+            disabled={isSubmitting}
+            className="w-1/2 py-2.5 rounded-lg bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            {isSubmitting ? "Adding..." : "Add stock"}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (rawItems === undefined) {
@@ -516,8 +825,42 @@ export function ItemLibraryView({
 
   // RENDER DETAILED ITEM PAGE (Matching Screenshots 1, 2, 3, 4)
   if (selectedItemDetail) {
-    const itemLogs = stockLogsMap[selectedItemDetail._id] || [];
-    const itemDeadLogs = deadStockLogsMap[selectedItemDetail._id] || [];
+    const liveAddedLogs = (liveItemHistory ?? [])
+      .filter((l) => !l.isDeadStock && l.stockType !== "debit")
+      .map((l) => ({
+        _id: l._id,
+        quantity: l.quantity,
+        unit: l.unit,
+        supplierName: l.supplierName && l.supplierName !== "—" ? l.supplierName : "—",
+        poNumber: l.poNumber && l.poNumber !== "—" ? l.poNumber : "—",
+        dateReceived: l.dateReceived,
+        itemExpiry: l.itemExpiry,
+      }));
+
+    const liveSalesLogs = (liveItemHistory ?? [])
+      .filter((l) => !l.isDeadStock && l.stockType === "debit")
+      .map((l) => ({
+        _id: l._id,
+        quantity: l.quantity,
+        unit: l.unit,
+        sourceType: l.sourceType,
+        date: l.dateReceived || l.createdAt,
+      }));
+
+    const liveDeadLogs = (liveItemHistory ?? [])
+      .filter((l) => l.isDeadStock)
+      .map((l) => ({
+        _id: l._id,
+        quantity: l.quantity,
+        unit: l.unit,
+        reason: l.reason || "Wasted / Expired",
+        markedDate: l.dateReceived,
+      }));
+
+    const itemLogs =
+      liveAddedLogs.length > 0 ? liveAddedLogs : stockLogsMap[selectedItemDetail._id] || [];
+    const itemDeadLogs =
+      liveDeadLogs.length > 0 ? liveDeadLogs : deadStockLogsMap[selectedItemDetail._id] || [];
 
     return (
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white p-8">
@@ -603,6 +946,17 @@ export function ItemLibraryView({
           </button>
           <button
             type="button"
+            onClick={() => setDetailActiveTab("sales_logs")}
+            className={`pb-3 transition-colors cursor-pointer border-b-2 font-semibold ${
+              detailActiveTab === "sales_logs"
+                ? "border-stone-900 text-stone-900"
+                : "border-transparent text-stone-500 hover:text-stone-900"
+            }`}
+          >
+            Order Sales Deductions
+          </button>
+          <button
+            type="button"
             onClick={() => setDetailActiveTab("dead_logs")}
             className={`pb-3 transition-colors cursor-pointer border-b-2 font-semibold ${
               detailActiveTab === "dead_logs"
@@ -658,19 +1012,66 @@ export function ItemLibraryView({
                     {itemLogs.map((log) => (
                       <tr key={log._id} className="hover:bg-stone-50">
                         <td className="py-3.5 px-4 font-medium text-stone-900">
-                          {log.quantity} {log.unit}
+                          {log.quantity} {formatUnitDisplay(log.unit)}
                         </td>
-                        <td className="py-3.5 px-4 text-stone-600">
+                        <td className="py-3.5 px-4 text-stone-600 font-medium">
                           {log.supplierName || "—"}
                         </td>
                         <td className="py-3.5 px-4 font-mono text-stone-600">
                           {log.poNumber || "—"}
                         </td>
                         <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {log.dateReceived}
+                          {formatStoreDate(log.dateReceived, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                         </td>
                         <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {log.itemExpiry || "—"}
+                          {log.itemExpiry && log.itemExpiry !== "—"
+                            ? formatStoreDate(log.itemExpiry, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"
+                            : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          ) : detailActiveTab === "sales_logs" ? (
+            liveSalesLogs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
+                  <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <h3 className="font-semibold text-stone-800 text-sm">
+                  No POS deductions yet
+                </h3>
+                <p className="text-xs text-stone-500 max-w-sm mt-1">
+                  When menu items linked to this ingredient are sold at POS, recipe usage logs will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="w-full h-full flex flex-col">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-stone-200 bg-stone-50 uppercase tracking-wider text-stone-500 font-medium select-none">
+                      <th className="py-3 px-4 font-normal">Quantity Deducted</th>
+                      <th className="py-3 px-4 font-normal">Source</th>
+                      <th className="py-3 px-4 font-normal">Date & Time</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-100">
+                    {liveSalesLogs.map((log) => (
+                      <tr key={log._id} className="hover:bg-stone-50">
+                        <td className="py-3.5 px-4 font-semibold text-purple-700">
+                          - {log.quantity} {formatUnitDisplay(log.unit)}
+                        </td>
+                        <td className="py-3.5 px-4 text-stone-700 font-medium">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-700">
+                            POS Order Sale
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-stone-600 font-mono">
+                          {formatStoreDate(log.date, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                         </td>
                       </tr>
                     ))}
@@ -710,13 +1111,13 @@ export function ItemLibraryView({
                   {itemDeadLogs.map((log) => (
                     <tr key={log._id} className="hover:bg-stone-50">
                       <td className="py-3.5 px-4 font-medium text-rose-600">
-                        {log.quantity} {log.unit}
+                        {log.quantity} {formatUnitDisplay(log.unit)}
                       </td>
                       <td className="py-3.5 px-4 text-stone-600 font-medium">
                         {log.reason}
                       </td>
                       <td className="py-3.5 px-4 text-stone-600 font-mono">
-                        {log.markedDate}
+                        {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                       </td>
                     </tr>
                   ))}
@@ -775,144 +1176,7 @@ export function ItemLibraryView({
           }`}
         >
           {drawerMode === "assign_stock" && editingItem ? (
-            /* ADD ITEM STOCK DRAWER MODE (Screenshot 4) */
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-6 border-b border-stone-200 flex items-start justify-between bg-white shrink-0">
-                <h2 className="text-xl text-stone-900 font-semibold tracking-tight">
-                  Add item stock
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="text-stone-500 hover:text-stone-900 p-1 rounded-md transition cursor-pointer"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <form
-                id="addStockForm"
-                onSubmit={handleFormSubmit}
-                className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-stone-800"
-              >
-                {/* Quantity & Unit */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <label className="block font-medium mb-1 text-stone-800">
-                      Quantity <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0.01"
-                      step="any"
-                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400"
-                      placeholder="Enter the item quantity"
-                      value={addStockQuantity}
-                      onChange={(e) =>
-                        setAddStockQuantity(
-                          e.target.value === "" ? "" : Number(e.target.value)
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium mb-1 text-stone-800">Unit *</label>
-                    <input
-                      type="text"
-                      disabled
-                      className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
-                      value={`${editingItem.buyingUnit || "piece"} (pc)`}
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-stone-500 leading-normal">
-                  Note: To change the unit for this item, you have to change the Buying unit from Edit item screen
-                </p>
-
-                {/* Supplier */}
-                <div>
-                  <label className="block font-medium mb-1 text-stone-800">Supplier</label>
-                  <select
-                    className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
-                    value={addStockSupplierId}
-                    onChange={(e) => setAddStockSupplierId(e.target.value)}
-                  >
-                    <option value="">Search supplier</option>
-                    {suppliers?.map((s) => (
-                      <option key={s._id} value={s._id}>
-                        {s.supplierName} ({s.companyName || "Supplier"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* PO Number */}
-                <div>
-                  <label className="block font-medium mb-1 text-stone-800">PO number</label>
-                  <select
-                    className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
-                    value={addStockPoNumber}
-                    onChange={(e) => setAddStockPoNumber(e.target.value)}
-                  >
-                    <option value="">Select purchase order number</option>
-                    {purchaseOrders?.map((po: any) => (
-                      <option key={po._id} value={po.poNumber}>
-                        {po.poNumber} ({po.supplierName || "PO"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Date received & Item expiry */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium mb-1 text-stone-800">
-                      Date received <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
-                      value={addStockDateReceived}
-                      onChange={(e) => setAddStockDateReceived(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium mb-1 text-stone-800">Item expiry</label>
-                    <input
-                      type="date"
-                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
-                      value={addStockItemExpiry}
-                      onChange={(e) => setAddStockItemExpiry(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-stone-500 leading-normal">
-                  Note: You can edit or remove the stock quantity in 24 hours after it was added. Once the 24 hours are completed, everything is locked.
-                </p>
-              </form>
-
-              <div className="p-4 px-6 border-t border-stone-200 bg-white flex items-center justify-end space-x-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="w-1/2 py-2.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-semibold transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="addStockForm"
-                  disabled={isSubmitting}
-                  className="w-1/2 py-2.5 rounded-lg bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  Add stock
-                </button>
-              </div>
-            </div>
+            renderAddStockDrawer()
           ) : (
             /* EDIT ITEM DRAWER MODE (Screenshot 3) */
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -1076,6 +1340,29 @@ export function ItemLibraryView({
                         className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
                         value={buyingUnit}
                       />
+                    </div>
+                  </div>
+
+                  {/* Negative Stock Toggle */}
+                  <div className="pt-3 border-t border-stone-100 mt-3">
+                    <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-200">
+                      <div>
+                        <span className="block font-semibold text-stone-900 text-xs">
+                          Allow Negative Stock
+                        </span>
+                        <span className="text-[11px] text-stone-500">
+                          Orders can deduct inventory past 0 during rush hours without halting sales.
+                        </span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                        <input
+                          type="checkbox"
+                          checked={allowNegativeStock}
+                          onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1293,22 +1580,19 @@ export function ItemLibraryView({
                     const basePct = Math.min(100, (baseline / maxScale) * 100);
 
                     const barColor =
-                      available > baseline
+                      available < 0
+                        ? "#9333ea"
+                        : available > baseline
                         ? "#219653"
                         : available > minRefill
                         ? "#FFB400"
                         : "#EB5757";
 
-                    const formattedDate = new Date(
-                      item.updatedAt || item.createdAt || Date.now()
-                    ).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                    });
+                    const formattedDate = formatStoreDateTime(
+                      item.updatedAt || item.createdAt || Date.now(),
+                      activeOrg?.country,
+                      activeOrg?.organizationTimeZone
+                    );
 
                     return (
                       <tr
@@ -1328,7 +1612,11 @@ export function ItemLibraryView({
                                 <p className="font-medium text-[#0c0a09] hover:underline">
                                   {item.name}
                                 </p>
-                                {(item.isLowStock || available <= minRefill) ? (
+                                {available < 0 ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                    ⚠️ DEFICIT
+                                  </span>
+                                ) : (item.isLowStock || available <= minRefill) ? (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                                     🔴 LOW
                                   </span>
@@ -1353,8 +1641,12 @@ export function ItemLibraryView({
                         <td className="py-4 px-5">
                           {/* Visual Stock Bar Slider Component */}
                           <div className="space-y-1.5">
-                            <div className="text-center text-[11px] font-semibold text-[#0c0a09]">
-                              {available.toFixed(2)}
+                            <div className={`text-center text-[11px] font-semibold ${available < 0 ? "text-purple-700 font-bold" : "text-[#0c0a09]"}`}>
+                              {shortUnit === "pc"
+                                ? available.toFixed(2)
+                                : Math.round(available * 100) / 100 !== available
+                                ? available.toFixed(3)
+                                : available.toFixed(2)}
                               {shortUnit}
                             </div>
                             <div className="relative w-full h-3 bg-[#f5f5f4] border border-[#e7e5e4] rounded-full overflow-hidden">
@@ -1515,14 +1807,17 @@ export function ItemLibraryView({
         />
       )}
 
-      {/* Slide-over Drawer for Add / Edit Item */}
+      {/* Slide-over Drawer for Add / Edit Item or Add Stock */}
       <aside
         className={`fixed top-0 right-0 h-full w-full max-w-md md:max-w-lg bg-white border-l border-[#e7e5e4] shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col ${
           isDrawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        {/* ADD / EDIT ITEM DRAWER MODE */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {drawerMode === "assign_stock" && editingItem ? (
+          renderAddStockDrawer()
+        ) : (
+          /* ADD / EDIT ITEM DRAWER MODE */
+          <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-6 border-b border-[#e7e5e4] flex items-start justify-between bg-white shrink-0">
             <div>
               <h2 className="font-serif text-2xl text-[#0c0a09] font-medium tracking-tight">
@@ -1775,6 +2070,29 @@ export function ItemLibraryView({
                   />
                 </div>
               </div>
+
+              {/* Allow Negative Stock Toggle */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between p-3.5 bg-[#fbf9f8] rounded-xl border border-[#e7e5e4]">
+                  <div>
+                    <span className="block font-medium text-[#1c1917] text-xs">
+                      Allow Negative Stock
+                    </span>
+                    <span className="text-[11px] text-[#78716c]">
+                      Permit orders to deduct stock past 0 without blocking checkout (auto-reconciles on PO restock).
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                    <input
+                      type="checkbox"
+                      checked={allowNegativeStock}
+                      onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-[#d6d3d1] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#d6d3d1] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0c0a09]"></div>
+                  </label>
+                </div>
+              </div>
             </div>
           </form>
 
@@ -1798,7 +2116,8 @@ export function ItemLibraryView({
             </button>
           </div>
         </div>
-      </aside>
+      )}
+    </aside>
     </div>
   );
 }

@@ -26,10 +26,22 @@ export function DeadStockView({
 }) {
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
-  const purchaseOrders = [
-    { _id: "po_1", poNumber: "PO-2026-001", supplierName: "Self Employee" },
-    { _id: "po_2", poNumber: "PO-2026-002", supplierName: "Fresh Wholesale" },
-  ];
+  const dbDeadStocks = useQuery(api.inventory.listDeadStock, { organizationId });
+  const dbPurchaseOrders = useQuery(api.inventory.listPurchaseOrders, { organizationId });
+
+  const purchaseOrders = useMemo(() => {
+    if (dbPurchaseOrders && dbPurchaseOrders.length > 0) {
+      return dbPurchaseOrders.map((po) => ({
+        _id: po._id,
+        poNumber: po.poNumber,
+        supplierName: po.supplierName,
+      }));
+    }
+    return [
+      { _id: "po_1", poNumber: "PO-2026-001", supplierName: "Self Employee" },
+      { _id: "po_2", poNumber: "PO-2026-002", supplierName: "Fresh Wholesale" },
+    ];
+  }, [dbPurchaseOrders]);
 
   const logDeadStockMutation = useMutation(api.inventory.logDeadStock);
 
@@ -45,6 +57,23 @@ export function DeadStockView({
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<LocalDeadStockRecord | null>(null);
   const [localLogs, setLocalLogs] = useState<LocalDeadStockRecord[]>([]);
+
+  // Filtered & Sorted Records
+  const allDeadStockLogs = useMemo(() => {
+    const fromDb = (dbDeadStocks ?? []).map((ds: any) => ({
+      _id: ds._id,
+      createdAt: ds.createdAt,
+      inventoryItemId: ds.inventoryItemId,
+      itemName: ds.itemName,
+      quantity: ds.quantity,
+      unit: ds.unit,
+      reasonForDeadStock: ds.reasonForDeadStock,
+      markedDate: ds.markedDate,
+      supplierId: ds.supplierId,
+      poNumber: ds.poNumber,
+    }));
+    return [...fromDb, ...localLogs];
+  }, [dbDeadStocks, localLogs]);
 
   // Form State
   const [selectedItemId, setSelectedItemId] = useState<string>("");
@@ -75,7 +104,7 @@ export function DeadStockView({
 
   // Filtered & Sorted Records
   const filteredAndSortedLogs = useMemo(() => {
-    let list = [...localLogs];
+    let list = [...allDeadStockLogs];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -98,7 +127,7 @@ export function DeadStockView({
     }
 
     return list;
-  }, [localLogs, searchQuery, sortField, sortOrder]);
+  }, [allDeadStockLogs, searchQuery, sortField, sortOrder]);
 
   // Paginated List
   const totalPages = Math.ceil(filteredAndSortedLogs.length / itemsPerPage) || 1;

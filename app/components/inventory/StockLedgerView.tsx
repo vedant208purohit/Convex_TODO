@@ -28,7 +28,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
 
   // Real existing backend queries & mutations
-  const rawLedgerRecords: any[] = [];
+  const rawLedgerRecords = useQuery(api.inventory.listStockLedger, { organizationId });
 
   // Filters state (frontend-only)
   const [searchQuery, setSearchQuery] = useState("");
@@ -231,7 +231,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
                     return (
                       <tr key={entry._id} className="hover:bg-[#fafaf9] transition-colors">
                         <td className="py-4 px-5 text-[#57534e] whitespace-nowrap">
-                          {formatStoreDateTime(entry.createdAt, activeOrg?.organizationTimeZone, activeOrg?.country)}
+                          {formatStoreDateTime(entry.createdAt, activeOrg?.country, activeOrg?.organizationTimeZone)}
                         </td>
                         <td className="py-4 px-5 font-medium text-[#0c0a09]">{entry.itemName}</td>
                         <td className="py-4 px-5">
