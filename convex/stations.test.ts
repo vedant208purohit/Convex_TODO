@@ -15,6 +15,8 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
     const orgId = await t.mutation(api.organizations.create, {
       name: "KDS Test Kitchen Store",
       ownerClerkId: adminClerkId,
+      isDelivery: true,
+      deliveryCashOnDelivery: true,
     });
 
     const asAdmin = t.withIdentity({ subject: adminClerkId });
@@ -812,6 +814,199 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
       expect(itemStations.length).toBe(2);
       expect(itemStations.map((s) => s.station.name)).toContain("Main Expo Station");
       expect(itemStations.map((s) => s.station.name)).toContain("Secondary Salad Prep");
+    });
+  });
+
+  // 7. KDS Dashboard Stations Summary & Metrics Tests
+  describe("7. KDS Dashboard Stations Summary & Metrics", () => {
+    test("stations.list with includeSummary: true aggregates item counts, categories, and active orders", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create main expo and 2 line stations
+      const mainRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "MAIN",
+        isMain: true,
+      });
+
+      const grillRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "GRILL & TANDOOR",
+        isMain: false,
+      });
+
+      const drinksRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "DRINKS",
+        isMain: false,
+      });
+
+      // Create categories
+      const menuRes = await t.mutation(api.menu.createMenu, {
+        organizationId: orgId,
+        name: "KDS Menu",
+      });
+
+      const bbqCategory = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId: menuRes,
+        name: "BBQ & Tandoori",
+      });
+
+      const barCategory = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId: menuRes,
+        name: "Artisanal Beverages",
+      });
+
+      // Create items
+      const tandooriChicken = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Tandoori Chicken Tikka",
+        price: 450,
+        published: true,
+        isAvailable: true,
+        isGst: false,
+        isVeg: false,
+        isSpicy: true,
+        showQuantity: false,
+        markAsBestseller: true,
+        showCalorie: false,
+      });
+
+      const wagyuSteak = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Wagyu Tenderloin",
+        price: 1200,
+        published: true,
+        isAvailable: true,
+        isGst: false,
+        isVeg: false,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: false,
+        showCalorie: false,
+      });
+
+      const craftCocktail = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Smoked Old Fashioned",
+        price: 650,
+        published: true,
+        isAvailable: true,
+        isGst: false,
+        isVeg: true,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: false,
+        showCalorie: false,
+      });
+
+      // Associate items with categories in categoryItems
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: bbqCategory,
+        itemId: tandooriChicken,
+        position: 1,
+      });
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: bbqCategory,
+        itemId: wagyuSteak,
+        position: 2,
+      });
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: barCategory,
+        itemId: craftCocktail,
+        position: 1,
+      });
+
+      // Assign items to stations
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: grillRes.id,
+        itemId: tandooriChicken,
+      });
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: grillRes.id,
+        itemId: wagyuSteak,
+      });
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: drinksRes.id,
+        itemId: craftCocktail,
+      });
+
+      // Place an order routing to GRILL & TANDOOR
+      await asAdmin.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        orderSource: "Prest-POS",
+        items: [
+          {
+            itemId: tandooriChicken,
+            quantity: 1,
+          },
+        ],
+      });
+
+      // Query stations with summary
+      const dashboardStations = (await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      })) as any[];
+
+      expect(dashboardStations.length).toBe(3);
+
+      // Verify MAIN station
+      const mainSummary = dashboardStations.find((s) => s.name === "MAIN");
+      expect(mainSummary).toBeDefined();
+      expect(mainSummary?.isMain).toBe(true);
+      expect(mainSummary?.assignedItemCount).toBe(3); // Consolidated all active store items
+      expect(mainSummary?.activeOrdersCount).toBe(1);
+
+      // Verify GRILL & TANDOOR station
+      const grillSummary = dashboardStations.find((s) => s.name === "GRILL & TANDOOR");
+      expect(grillSummary).toBeDefined();
+      expect(grillSummary?.assignedItemCount).toBe(2);
+      expect(grillSummary?.categoryCount).toBe(1);
+      expect(grillSummary?.sampleCategories).toContain("BBQ & Tandoori");
+      expect(grillSummary?.sampleItems).toContain("Tandoori Chicken Tikka");
+      expect(grillSummary?.activeOrdersCount).toBe(1);
+
+      // Verify DRINKS station
+      const drinksSummary = dashboardStations.find((s) => s.name === "DRINKS");
+      expect(drinksSummary).toBeDefined();
+      expect(drinksSummary?.assignedItemCount).toBe(1);
+      expect(drinksSummary?.sampleCategories).toContain("Artisanal Beverages");
+      expect(drinksSummary?.sampleItems).toContain("Smoked Old Fashioned");
+      expect(drinksSummary?.activeOrdersCount).toBe(0); // No drinks ordered yet
+    });
+
+    test("Deleted station is excluded from summary and order history remains intact", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const tempStation = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "TEMP LINE",
+      });
+
+      let list = await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      });
+      expect(list.some((s) => s.name === "TEMP LINE")).toBe(true);
+
+      // Delete station
+      await asAdmin.mutation(api.stations.remove, { id: tempStation.id });
+
+      list = await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      });
+      expect(list.some((s) => s.name === "TEMP LINE")).toBe(false);
     });
   });
 });

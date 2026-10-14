@@ -302,6 +302,7 @@ export const get = query({
 export const list = query({
   args: {
     organizationId: v.optional(v.id("organizations")),
+    includeSummary: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const { org } = await requireStaffMember(ctx, args.organizationId);
@@ -311,13 +312,141 @@ export const list = query({
       .withIndex("by_org", (q) => q.eq("organizationId", org._id))
       .collect();
 
-    return stations
+    const activeStations = stations
       .filter((st) => st.deletedAt === undefined)
       .sort((a, b) => {
         if (a.isMain && !b.isMain) return -1;
         if (!a.isMain && b.isMain) return 1;
         return a.name.localeCompare(b.name);
       });
+
+    if (!args.includeSummary) {
+      return activeStations;
+    }
+
+    // 1. Fetch total items for store once (for isMain consolidated routing)
+    const storeItems = await ctx.db
+      .query("items")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeStoreItems = storeItems.filter((i) => i.deletedAt === undefined);
+    const storeItemMap = new Map(activeStoreItems.map((i) => [i._id, i]));
+
+    // 2. Fetch categories for store once
+    const storeCategories = await ctx.db
+      .query("categories")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeCategoryMap = new Map(
+      storeCategories.filter((c) => c.deletedAt === undefined).map((c) => [c._id, c.name])
+    );
+
+    // Map item -> category name
+    const itemCategoryNameMap = new Map<string, string>();
+    for (const [catId, catName] of activeCategoryMap.entries()) {
+      const catItems = await ctx.db
+        .query("categoryItems")
+        .withIndex("by_category", (q) => q.eq("categoryId", catId as Id<"categories">))
+        .collect();
+      for (const ci of catItems) {
+        if (ci.deletedAt === undefined) {
+          itemCategoryNameMap.set(ci.itemId, catName);
+        }
+      }
+    }
+
+    // 3. Fetch printers for store
+    const printers = await ctx.db
+      .query("organizationPrinters")
+      .collect();
+    const activePrinters = printers.filter((p) => p.deletedAt === undefined);
+
+    // 4. Fetch uncompleted orders for store
+    const storeOrders = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+    const activeOrders = storeOrders.filter((o) => !o.isCompleted && !o.isRejected);
+    const activeOrderIdSet = new Set(activeOrders.map((o) => o._id));
+
+    return await Promise.all(
+      activeStations.map(async (st) => {
+        // Fetch station items
+        const stationMappings = await ctx.db
+          .query("stationItems")
+          .withIndex("by_org_station", (q) =>
+            q.eq("organizationId", org._id).eq("stationId", st._id)
+          )
+          .collect();
+
+        const activeMappings = stationMappings.filter((m) => m.deletedAt === undefined);
+        const assignedItemCount = st.isMain ? activeStoreItems.length : activeMappings.length;
+
+        const sampleItems: string[] = [];
+        const categoryNamesSet = new Set<string>();
+
+        for (const mapping of activeMappings) {
+          const item = storeItemMap.get(mapping.itemId);
+          if (item) {
+            if (sampleItems.length < 4) {
+              sampleItems.push(item.name);
+            }
+            const catName = itemCategoryNameMap.get(mapping.itemId);
+            if (catName) {
+              categoryNamesSet.add(catName);
+            }
+          }
+        }
+
+        const categoryNames = Array.from(categoryNamesSet);
+
+        // Active orders count
+        let stationActiveOrdersCount = 0;
+        if (st.isMain) {
+          stationActiveOrdersCount = activeOrders.length;
+        } else {
+          const stationOrderItems = await ctx.db
+            .query("orderItems")
+            .withIndex("by_org_station", (q) =>
+              q.eq("organizationId", org._id).eq("stationId", st._id)
+            )
+            .collect();
+
+          const orderIdSetForStation = new Set<string>();
+          for (const oi of stationOrderItems) {
+            if (activeOrderIdSet.has(oi.orderId)) {
+              orderIdSetForStation.add(oi.orderId);
+            }
+          }
+          stationActiveOrdersCount = orderIdSetForStation.size;
+        }
+
+        // Printer association
+        const linkedPrinter = activePrinters.find(
+          (p) =>
+            p.stationId === st._id ||
+            (st.legacyId && p.stationId === st.legacyId) ||
+            (st.isMain && p.printerUseFor === "Cashier")
+        );
+
+        return {
+          ...st,
+          assignedItemCount,
+          categoryCount: categoryNames.length,
+          sampleCategories: categoryNames.slice(0, 3),
+          sampleItems,
+          activeOrdersCount: stationActiveOrdersCount,
+          hasPrinter: Boolean(linkedPrinter),
+          printerDetails: linkedPrinter
+            ? {
+                url: linkedPrinter.printerUrl,
+                type: linkedPrinter.printerType,
+                port: linkedPrinter.printerPort,
+              }
+            : null,
+        };
+      })
+    );
   },
 });
 
