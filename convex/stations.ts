@@ -111,15 +111,25 @@ export async function resolveOrderItemStation(
     .collect();
 
   const activeMappings = mappings.filter((m) => m.deletedAt === undefined);
-  if (activeMappings.length === 0) {
-    return undefined;
+  if (activeMappings.length > 0) {
+    for (const mapping of activeMappings) {
+      const station = await ctx.db.get(mapping.stationId);
+      if (station && station.deletedAt === undefined) {
+        return station._id;
+      }
+    }
   }
 
-  for (const mapping of activeMappings) {
-    const station = await ctx.db.get(mapping.stationId);
-    if (station && station.deletedAt === undefined) {
-      return station._id;
-    }
+  // Fallback to Main station if unmapped (legacy POS business rule)
+  const allStations = await ctx.db
+    .query("stations")
+    .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+    .collect();
+  const mainStation = allStations.find(
+    (s) => s.deletedAt === undefined && s.isMain
+  );
+  if (mainStation) {
+    return mainStation._id;
   }
 
   return undefined;
@@ -1094,6 +1104,20 @@ export const getStationOrders = query({
       )
       .collect();
 
+    // If this is the Main station, also aggregate any unmapped order items (stationId is undefined)
+    if (station.isMain) {
+      const allOrgItems = await ctx.db
+        .query("orderItems")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+      const existingItemIds = new Set(stationOrderItems.map((i) => i._id));
+      for (const item of allOrgItems) {
+        if (!item.stationId && !existingItemIds.has(item._id)) {
+          stationOrderItems.push(item);
+        }
+      }
+    }
+
     if (stationOrderItems.length === 0) {
       return {
         station: {
@@ -1129,6 +1153,25 @@ export const getStationOrders = query({
       if (order.tableId) {
         const table = await ctx.db.get(order.tableId);
         tableNumber = table?.tableNumber;
+      }
+      if (!tableNumber && order.qrId) {
+        const qrDoc = await ctx.db.get(order.qrId);
+        if (qrDoc) {
+          if (qrDoc.tableNumber) {
+            tableNumber = qrDoc.tableNumber;
+          }
+          if (!tableNumber && qrDoc.tableId) {
+            try {
+              const normId = ctx.db.normalizeId("organizationTables", qrDoc.tableId);
+              if (normId) {
+                const qrTable = await ctx.db.get(normId);
+                if (qrTable) {
+                  tableNumber = qrTable.tableNumber;
+                }
+              }
+            } catch {}
+          }
+        }
       }
 
       let processStatus = undefined;
@@ -1349,7 +1392,16 @@ export const startPreparingStationTicket = mutation({
       )
       .collect();
 
-    const orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+    let orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+    if (orderStationItems.length === 0 && station.isMain) {
+      const unmapped = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .filter((q) => q.eq(q.field("stationId"), undefined))
+        .collect();
+      orderStationItems = unmapped;
+    }
+
     if (orderStationItems.length === 0) {
       throw new Error("No items for this station in the order");
     }
@@ -1516,6 +1568,19 @@ export const markStationTicketReady = mutation({
       .collect();
 
     const orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+    if (station.isMain) {
+      const unmapped = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .filter((q) => q.eq(q.field("stationId"), undefined))
+        .collect();
+      for (const u of unmapped) {
+        if (!orderStationItems.some((si) => si._id === u._id)) {
+          orderStationItems.push(u);
+        }
+      }
+    }
+
     if (orderStationItems.length === 0) {
       throw new Error("No items for this station in the order");
     }
@@ -1631,6 +1696,19 @@ export const advanceStationTicketProcess = mutation({
         .collect();
 
       const orderStationItems = stationItems.filter((i) => i.orderId === order._id);
+      if (station.isMain) {
+        const unmapped = await ctx.db
+          .query("orderItems")
+          .withIndex("by_order", (q) => q.eq("orderId", order._id))
+          .filter((q) => q.eq(q.field("stationId"), undefined))
+          .collect();
+        for (const u of unmapped) {
+          if (!orderStationItems.some((si) => si._id === u._id)) {
+            orderStationItems.push(u);
+          }
+        }
+      }
+
       for (const item of orderStationItems) {
         if (!item.isReady) {
           await ctx.db.patch(item._id, { isReady: true });

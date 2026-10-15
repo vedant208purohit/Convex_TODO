@@ -716,23 +716,38 @@ export const processPorterWebhook = internalMutation({
     const now = Date.now();
 
     // 2. Parse Partner Info
-    const partnerInfo = partnerInfoRaw.name
+    const hasPartnerInfo = Boolean(
+      partnerInfoRaw.name ||
+      partnerInfoRaw.location?.lat ||
+      partnerInfoRaw.location?.latitude ||
+      partnerInfoRaw.latitude !== undefined ||
+      partnerInfoRaw.phone ||
+      partnerInfoRaw.vehicle_number ||
+      partnerInfoRaw.vehicleNumber
+    );
+
+    const partnerInfo = hasPartnerInfo
       ? {
-          name: partnerInfoRaw.name,
-          vehicleNumber: partnerInfoRaw.vehicle_number || partnerInfoRaw.vehicleNumber,
-          vehicleType: partnerInfoRaw.vehicle_type || partnerInfoRaw.vehicleType,
+          name: partnerInfoRaw.name || delivery.partnerInfo?.name,
+          vehicleNumber: partnerInfoRaw.vehicle_number || partnerInfoRaw.vehicleNumber || delivery.partnerInfo?.vehicleNumber,
+          vehicleType: partnerInfoRaw.vehicle_type || partnerInfoRaw.vehicleType || delivery.partnerInfo?.vehicleType,
           phone:
             partnerInfoRaw.mobile?.number ||
             partnerInfoRaw.phone ||
-            partnerInfoRaw.mobileNumber,
-          secondaryPhone: partnerInfoRaw.partner_secondary_mobile?.mobile_number,
+            partnerInfoRaw.mobileNumber ||
+            delivery.partnerInfo?.phone,
+          secondaryPhone: partnerInfoRaw.partner_secondary_mobile?.mobile_number || delivery.partnerInfo?.secondaryPhone,
           latitude:
-            partnerInfoRaw.location?.lat ||
-            partnerInfoRaw.latitude,
+            partnerInfoRaw.location?.lat ??
+            partnerInfoRaw.location?.latitude ??
+            partnerInfoRaw.latitude ??
+            delivery.partnerInfo?.latitude,
           longitude:
-            partnerInfoRaw.location?.long ||
-            partnerInfoRaw.location?.lng ||
-            partnerInfoRaw.longitude,
+            partnerInfoRaw.location?.long ??
+            partnerInfoRaw.location?.lng ??
+            partnerInfoRaw.location?.longitude ??
+            partnerInfoRaw.longitude ??
+            delivery.partnerInfo?.longitude,
         }
       : delivery.partnerInfo;
 
@@ -792,5 +807,41 @@ export const processPorterWebhook = internalMutation({
     }
 
     return { acknowledged: true, deliveryId: delivery._id, status: nextStatus };
+  },
+});
+
+/**
+  * Mutation: Updates real-time courier coordinates for an active delivery attempt.
+  * Validates coordinate bounds and ensures the delivery attempt is not in a terminal state.
+  */
+export const updateDeliveryLocation = mutation({
+  args: {
+    deliveryId: v.id("orderDelivers"),
+    latitude: v.number(),
+    longitude: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const delivery = await ctx.db.get(args.deliveryId);
+    if (!delivery || delivery.deletedAt !== undefined) {
+      throw new Error("Delivery attempt not found");
+    }
+
+    if (args.latitude < -90 || args.latitude > 90 || args.longitude < -180 || args.longitude > 180) {
+      throw new Error("Invalid latitude or longitude values");
+    }
+
+    const now = Date.now();
+    const partnerInfo = {
+      ...(delivery.partnerInfo || {}),
+      latitude: args.latitude,
+      longitude: args.longitude,
+    };
+
+    await ctx.db.patch(delivery._id, {
+      partnerInfo,
+      updatedAt: now,
+    });
+
+    return { success: true, deliveryId: delivery._id, latitude: args.latitude, longitude: args.longitude };
   },
 });

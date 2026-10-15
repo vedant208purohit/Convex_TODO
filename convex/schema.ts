@@ -1117,6 +1117,8 @@ postpaidOrderRequests: defineTable({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
 

@@ -840,14 +840,7 @@ export function KdsTerminalView({
                               </div>
 
                               {/* Timer / Ready Badge */}
-                              {isReadyColumn ? (
-                                <div className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-xs font-semibold shrink-0">
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                                  </svg>
-                                  <span>{readyTimeLabel}</span>
-                                </div>
-                              ) : (
+                              <div className="flex flex-col items-end gap-1.5 shrink-0">
                                 <div
                                   className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-xs font-bold shrink-0 ${elapsed.colorClass}`}
                                 >
@@ -857,7 +850,16 @@ export function KdsTerminalView({
                                   </svg>
                                   <span>{elapsed.timeStr}</span>
                                 </div>
-                              )}
+
+                                {isReadyColumn && (
+                                  <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 font-mono text-[11px] font-semibold shrink-0">
+                                    <svg className="w-3 h-3 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                    </svg>
+                                    <span>{readyTimeLabel}</span>
+                                  </div>
+                                )}
+                              </div>
                             </div>
 
                             {/* Special Notes (if present) */}
@@ -1088,7 +1090,13 @@ export function KdsTerminalView({
                             <div className="space-y-2">
                               <div className="py-2.5 px-4 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/70 font-semibold text-xs uppercase tracking-wider flex items-center justify-center gap-2">
                                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                                <span>Ready for Service</span>
+                                <span>
+                                  {proc.name.toLowerCase().includes("deliver")
+                                    ? "Order Delivered"
+                                    : proc.name.toLowerCase().includes("served")
+                                      ? "Order Served"
+                                      : "Ready for Service"}
+                                </span>
                               </div>
                               {nextProcess ? (
                                 <button
