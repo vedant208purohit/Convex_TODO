@@ -411,9 +411,8 @@ function SettingsContent() {
         <div className="flex-1 flex flex-col lg:flex-row w-full p-5 lg:p-7 gap-5 min-h-0 overflow-hidden">
           {/* Left Panel: Settings Navigation */}
           <div
-            className={`shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full transition-all duration-300 ease-in-out ${
-              isSettingsCollapsed ? "w-full lg:w-20" : "w-full lg:w-48 xl:w-56"
-            }`}
+            className={`shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full transition-all duration-300 ease-in-out ${isSettingsCollapsed ? "w-full lg:w-20" : "w-full lg:w-48 xl:w-56"
+              }`}
           >
             <div className="p-3.5 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex items-center justify-between">
               {!isSettingsCollapsed && (
@@ -424,9 +423,8 @@ function SettingsContent() {
               <button
                 type="button"
                 onClick={toggleSettingsSidebar}
-                className={`p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${
-                  isSettingsCollapsed ? "mx-auto" : ""
-                }`}
+                className={`p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${isSettingsCollapsed ? "mx-auto" : ""
+                  }`}
                 title={
                   isSettingsCollapsed
                     ? "Expand Settings Menu"
@@ -434,9 +432,8 @@ function SettingsContent() {
                 }
               >
                 <svg
-                  className={`w-4 h-4 transition-transform duration-200 ${
-                    isSettingsCollapsed ? "rotate-180" : ""
-                  }`}
+                  className={`w-4 h-4 transition-transform duration-200 ${isSettingsCollapsed ? "rotate-180" : ""
+                    }`}
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -469,13 +466,12 @@ function SettingsContent() {
                       }}
                       disabled={isTabDisabled}
                       title={isTabDisabled ? "Dine-in is disabled in Settings" : tab.label}
-                      className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all select-none ${
-                        isTabDisabled
-                          ? "opacity-40 cursor-not-allowed text-[#8a7e75]"
-                          : isSelected
+                      className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all select-none ${isTabDisabled
+                        ? "opacity-40 cursor-not-allowed text-[#8a7e75]"
+                        : isSelected
                           ? "bg-[#0c0a09] text-white shadow-xs cursor-pointer"
                           : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] cursor-pointer"
-                      }`}
+                        }`}
                     >
                       <span className="w-5 h-5 flex items-center justify-center shrink-0">
                         {tab.icon}
@@ -487,8 +483,7 @@ function SettingsContent() {
                 const isComingSoon =
                   tab.id === "queue" ||
                   tab.id === "printers" ||
-                  tab.id === "digitalStore" ||
-                  tab.id === "branding";
+                  tab.id === "digitalStore";
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
@@ -503,13 +498,12 @@ function SettingsContent() {
                     }}
                     disabled={isTabDisabled}
                     title={isTabDisabled ? "Dine-in is disabled in Settings" : undefined}
-                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors select-none whitespace-nowrap ${
-                      isTabDisabled
-                        ? "opacity-40 cursor-not-allowed text-[#8a7e75] border-l-4 border-l-transparent"
-                        : isSelected
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors select-none whitespace-nowrap ${isTabDisabled
+                      ? "opacity-40 cursor-not-allowed text-[#8a7e75] border-l-4 border-l-transparent"
+                      : isSelected
                         ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09] cursor-pointer"
                         : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent cursor-pointer"
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0 truncate">
                       <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
