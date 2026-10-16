@@ -460,7 +460,13 @@ function SettingsContent() {
                     <button
                       key={tab.id}
                       type="button"
-                      onClick={() => !isTabDisabled && setActiveTab(tab.id)}
+                      onClick={() => {
+                        if (tab.id === "liveScreens") {
+                          router.push("/live-order-screen");
+                          return;
+                        }
+                        if (!isTabDisabled) setActiveTab(tab.id);
+                      }}
                       disabled={isTabDisabled}
                       title={isTabDisabled ? "Dine-in is disabled in Settings" : tab.label}
                       className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all select-none ${
@@ -480,7 +486,6 @@ function SettingsContent() {
 
                 const isComingSoon =
                   tab.id === "printers" ||
-                  tab.id === "liveScreens" ||
                   tab.id === "digitalStore" ||
                   tab.id === "branding";
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
@@ -488,7 +493,13 @@ function SettingsContent() {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => !isTabDisabled && setActiveTab(tab.id)}
+                    onClick={() => {
+                      if (tab.id === "liveScreens") {
+                        router.push("/live-order-screen");
+                        return;
+                      }
+                      if (!isTabDisabled) setActiveTab(tab.id);
+                    }}
                     disabled={isTabDisabled}
                     title={isTabDisabled ? "Dine-in is disabled in Settings" : undefined}
                     className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors select-none whitespace-nowrap ${
