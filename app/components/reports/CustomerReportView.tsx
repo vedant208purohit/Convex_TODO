@@ -27,6 +27,7 @@ interface CustomerReportViewProps {
   startDateMs?: number;
   selectedRange?: DateRange;
   onRangeChange?: (range: DateRange) => void;
+  priorCustomerKeys?: Set<string>;
 }
 
 export interface RecentOrderItem {
@@ -73,6 +74,7 @@ export function CustomerReportView({
   startDateMs,
   selectedRange,
   onRangeChange,
+  priorCustomerKeys,
 }: CustomerReportViewProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<
@@ -91,7 +93,7 @@ export function CustomerReportView({
   const showToast = (
     message: string,
     type: "success" | "error" | "info" | "warning" = "info",
-    subtext?: string
+    subtext?: string,
   ) => {
     setToast({ message, type, subtext });
   };
@@ -121,8 +123,9 @@ export function CustomerReportView({
       countryCode,
       storeTz,
       startDateMs,
+      priorCustomerKeys,
     );
-  }, [orders, currencySymbol, countryCode, storeTz, startDateMs]);
+  }, [orders, currencySymbol, countryCode, storeTz, startDateMs, priorCustomerKeys]);
 
   // 2. Compute live customer aggregations dynamically from orders (NO hardcoded data)
   const liveCustomerData = useMemo(() => {
@@ -151,7 +154,8 @@ export function CustomerReportView({
         displayName = rawName || `Guest ${phone.slice(-4)}`;
       } else if (order.customerId) {
         key = String(order.customerId);
-        displayName = rawName || `Customer #${String(order.customerId).slice(-6)}`;
+        displayName =
+          rawName || `Customer #${String(order.customerId).slice(-6)}`;
       } else if (rawName) {
         key = rawName.toLowerCase();
         displayName = rawName;
@@ -220,7 +224,13 @@ export function CustomerReportView({
         c.orders > 0
           ? Math.round(c.totalSpendPaise / c.orders)
           : c.totalSpendPaise;
-      const isRepeat = c.orders >= 2;
+      const hasPrior = Boolean(
+        priorCustomerKeys &&
+          (priorCustomerKeys.has(c.id) ||
+            priorCustomerKeys.has(c.phone) ||
+            priorCustomerKeys.has(c.name.toLowerCase()))
+      );
+      const isRepeat = c.orders >= 2 || hasPrior;
       const isHighValue = c.totalSpendPaise >= 300000;
 
       // Determine predominant channel
@@ -238,9 +248,9 @@ export function CustomerReportView({
         predominantSource.toLowerCase().includes("pickup")
           ? "takeout_dining"
           : predominantSource.toLowerCase().includes("delivery") ||
-            predominantSource.toLowerCase().includes("online")
-          ? "shopping_bag"
-          : "table_restaurant";
+              predominantSource.toLowerCase().includes("online")
+            ? "shopping_bag"
+            : "table_restaurant";
 
       const lastOrderDate = formatStoreDateTime(
         c.lastOrderTime || Date.now(),
@@ -278,7 +288,9 @@ export function CustomerReportView({
 
   // Exact KPI metrics calculated from real data
   const totalDiners = summaryReport.total_customers;
-  const repeatDiners = diners.filter((d) => d.retentionType === "repeat").length;
+  const repeatDiners = diners.filter(
+    (d) => d.retentionType === "repeat",
+  ).length;
   const newDiners = summaryReport.new_customers;
   const repeatRatio = summaryReport.retention_rate;
   const acquisitionIndex =
@@ -339,17 +351,66 @@ export function CustomerReportView({
     let end = new Date();
 
     if (presetName === "Today") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Yesterday") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Last 7 Days") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 6,
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "This Month") {
       start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Last Month") {
       start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
       end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
@@ -442,9 +503,8 @@ export function CustomerReportView({
 
   return (
     <div className="flex flex-col w-full">
-
       {/* Page Header & Date Range Action Controls */}
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-8">
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div>
           {/* Breadcrumbs */}
           <nav className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-[#645d58] mb-1">
@@ -455,32 +515,36 @@ export function CustomerReportView({
               Reports
             </Link>
             <span className="text-[#d0c4be]">/</span>
-            <span className="text-[#000000] font-semibold">Customer Report</span>
+            <span className="text-[#000000] font-semibold">
+              Customer Report
+            </span>
           </nav>
           {/* Title */}
           <h1
-            className="text-3xl sm:text-4xl lg:text-[42px] text-[#000000] tracking-tight leading-tight mb-1 font-normal"
+            className="text-3xl sm:text-4xl lg:text-5xl text-[#000000] tracking-tight leading-tight mb-1 font-normal"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Customer Report
           </h1>
-          <p className="text-sm text-[#645d58] max-w-xl">
-            Audit guest retention rates, cumulative dining spend, and patron return frequency derived in real-time from active store transactions.
+          <p className="text-xs sm:text-sm text-[#645d58] max-w-xl">
+            Audit guest retention rates, cumulative dining spend, and patron
+            return frequency derived in real-time from active store
+            transactions.
           </p>
         </div>
 
         {/* Date Range Selector & Export Action */}
-        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap sm:flex-nowrap w-full sm:w-auto self-start lg:self-end shrink-0">
           {/* Date Preset Dropdown */}
           <div className="relative" ref={dateDropdownRef}>
             <button
               type="button"
               onClick={() => setIsDateOpen(!isDateOpen)}
-              className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-4 pr-9 py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
+              className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-3.5 sm:pl-4 pr-8 sm:pr-9 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
             >
               <span>{currentDateLabel}</span>
               <svg
-                className="w-4 h-4 text-[#7f7570] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                className="w-4 h-4 text-[#7f7570] absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 pointer-events-none"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -491,7 +555,7 @@ export function CustomerReportView({
             </button>
 
             {isDateOpen && (
-              <div className="absolute right-0 mt-2 w-44 bg-white rounded-2xl shadow-xl py-2 z-30 border border-[#e9e1dd]">
+              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
                 {[
                   "Today",
                   "Yesterday",
@@ -521,7 +585,7 @@ export function CustomerReportView({
             onClick={handleExportCsv}
             type="button"
             style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-            className="btn-primary inline-flex items-center gap-2 bg-[#0c0a09] !text-white text-xs font-semibold px-5 py-2.5 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
+            className="btn-primary inline-flex items-center gap-2 bg-[#0c0a09] !text-white text-xs font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
           >
             <svg
               className="w-4 h-4 !text-white stroke-white"
@@ -530,27 +594,84 @@ export function CustomerReportView({
               stroke="#ffffff"
               strokeWidth="2"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline strokeLinecap="round" strokeLinejoin="round" points="7 10 12 15 17 10" />
-              <line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="15" x2="12" y2="3" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <polyline
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points="7 10 12 15 17 10"
+              />
+              <line
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                x1="12"
+                y1="15"
+                x2="12"
+                y2="3"
+              />
             </svg>
-            <span className="!text-white font-semibold" style={{ color: "#ffffff" }}>
+            <span
+              className="!text-white font-semibold"
+              style={{ color: "#ffffff" }}
+            >
               Export {viewMode === "directory" ? "Ledger" : "Summary"}
             </span>
           </button>
         </div>
       </div>
 
-      {/* 4 Core Analytical Metric Cards (Directly Matching Old defx-pos-frontend CustomerReport KPIs) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      {/* View Mode Tabs: Customer Directory vs Daily Summary */}
+      <div className="border-b border-[#e9e1dd] flex items-center gap-4 sm:gap-6 mb-6 overflow-x-auto no-scrollbar whitespace-nowrap">
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode("directory");
+            setCurrentPage(1);
+          }}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors cursor-pointer relative ${
+            viewMode === "directory"
+              ? "text-[#1e1b19]"
+              : "text-[#7f7570] hover:text-[#1e1b19]"
+          }`}
+        >
+          <span>Customer Directory</span>
+          {viewMode === "directory" && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1e1b19] rounded-full"></span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setViewMode("daily");
+            setDailyPage(1);
+          }}
+          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors cursor-pointer relative ${
+            viewMode === "daily"
+              ? "text-[#1e1b19]"
+              : "text-[#7f7570] hover:text-[#1e1b19]"
+          }`}
+        >
+          <span>Daily Summary</span>
+          {viewMode === "daily" && (
+            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1e1b19] rounded-full"></span>
+          )}
+        </button>
+      </div>
+
+      {/* 4 Core Analytical Metric Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
         {/* Card 1: Total Customers */}
-        <div className="bg-white p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase tracking-widest text-[#645d58] font-semibold">
+        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
               Total Customers
             </span>
-            <span className="w-8 h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58]">
-              <span className="material-symbols-outlined text-[18px]">
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                 groups
               </span>
             </span>
@@ -565,35 +686,35 @@ export function CustomerReportView({
               <>
                 <div className="flex items-baseline gap-1.5">
                   <span
-                    className="text-2xl sm:text-3xl text-[#000000] tracking-tight font-normal"
+                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {totalDiners}
                   </span>
-                  <span className="text-xs text-[#645d58] font-normal">
+                  <span className="text-[11px] sm:text-xs text-[#645d58] font-normal">
                     patrons
                   </span>
                 </div>
-                <p className="text-xs text-[#645d58] mt-1">
+                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
                   Unique guests in selected period
                 </p>
               </>
             )}
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-xs font-semibold">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541]"></span>
-            <span>Active dining ledger</span>
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541] shrink-0"></span>
+            <span className="truncate">Active dining ledger</span>
           </div>
         </div>
 
         {/* Card 2: Customer Retention Rate */}
-        <div className="bg-white p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase tracking-widest text-[#645d58] font-semibold">
-              Customer Retention Rate
+        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
+              Retention Rate
             </span>
-            <span className="w-8 h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58]">
-              <span className="material-symbols-outlined text-[18px]">
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                 sync_alt
               </span>
             </span>
@@ -608,35 +729,35 @@ export function CustomerReportView({
               <>
                 <div className="flex items-baseline gap-1.5">
                   <span
-                    className="text-2xl sm:text-3xl text-[#000000] tracking-tight font-normal"
+                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {repeatRatio}
                   </span>
-                  <span className="text-xs text-[#645d58] font-normal">
+                  <span className="text-[11px] sm:text-xs text-[#645d58] font-normal">
                     rate
                   </span>
                 </div>
-                <p className="text-xs text-[#645d58] mt-1">
-                  {repeatDiners} returning patrons with ≥ 2 orders
+                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
+                  {repeatDiners} returning patrons
                 </p>
               </>
             )}
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-xs font-semibold">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#000000]"></span>
-            <span>Repeat guest patronage</span>
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#000000] shrink-0"></span>
+            <span className="truncate">Repeat guest patronage</span>
           </div>
         </div>
 
         {/* Card 3: Avg Customer Spend */}
-        <div className="bg-white p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase tracking-widest text-[#645d58] font-semibold">
-              Avg Customer Spend
+        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
+              Avg Guest Spend
             </span>
-            <span className="w-8 h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58]">
-              <span className="material-symbols-outlined text-[18px]">
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                 payments
               </span>
             </span>
@@ -651,7 +772,7 @@ export function CustomerReportView({
               <>
                 <div className="flex items-baseline gap-1.5">
                   <span
-                    className="text-2xl sm:text-3xl text-[#000000] tracking-tight font-normal tabular-nums"
+                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal tabular-nums truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {formatPriceWithSymbol(
@@ -662,16 +783,16 @@ export function CustomerReportView({
                     )}
                   </span>
                 </div>
-                <p className="text-xs text-[#645d58] mt-1">
+                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
                   Across {totalCompletedOrders} completed orders
                 </p>
               </>
             )}
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-xs font-semibold">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541]"></span>
-            <span>
-              Total pool:{" "}
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541] shrink-0"></span>
+            <span className="truncate">
+              Pool:{" "}
               {formatPriceWithSymbol(
                 totalSpendPaise,
                 currencySymbol,
@@ -683,13 +804,13 @@ export function CustomerReportView({
         </div>
 
         {/* Card 4: New Customers */}
-        <div className="bg-white p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-xs uppercase tracking-widest text-[#645d58] font-semibold">
+        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
               New Customers
             </span>
-            <span className="w-8 h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58]">
-              <span className="material-symbols-outlined text-[18px]">
+            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
                 person_add
               </span>
             </span>
@@ -704,24 +825,24 @@ export function CustomerReportView({
               <>
                 <div className="flex items-baseline gap-1.5">
                   <span
-                    className="text-2xl sm:text-3xl text-[#000000] tracking-tight font-normal"
+                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {newDiners}
                   </span>
-                  <span className="text-xs text-[#645d58] font-normal">
+                  <span className="text-[11px] sm:text-xs text-[#645d58] font-normal">
                     profiles
                   </span>
                 </div>
-                <p className="text-xs text-[#645d58] mt-1">
+                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
                   First visit registered in this period
                 </p>
               </>
             )}
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-xs font-semibold">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541]"></span>
-            <span>{acquisitionIndex}% acquisition rate</span>
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541] shrink-0"></span>
+            <span className="truncate">{acquisitionIndex}% acquisition rate</span>
           </div>
         </div>
       </div>
@@ -730,9 +851,9 @@ export function CustomerReportView({
       {viewMode === "directory" && (
         <>
           {/* Search & Segment Filtration Ribbon */}
-          <div className="bg-white p-4 rounded-2xl shadow-xs border border-[#d0c4be]/40 mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-[#d0c4be]/40 mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
             {/* Search Field */}
-            <div className="relative flex-1 min-w-[260px]">
+            <div className="relative flex-1 min-w-[200px] sm:min-w-[260px]">
               <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#645d58] text-[20px]">
                 search
               </span>
@@ -749,14 +870,14 @@ export function CustomerReportView({
             </div>
 
             {/* Filter Chips */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">
+            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 lg:pb-0 whitespace-nowrap">
               <button
                 type="button"
                 onClick={() => {
                   setActiveFilter("all");
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "all"
                     ? "bg-[#000000] text-white"
                     : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
@@ -770,7 +891,7 @@ export function CustomerReportView({
                   setActiveFilter("repeat");
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "repeat"
                     ? "bg-[#000000] text-white"
                     : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
@@ -784,13 +905,14 @@ export function CustomerReportView({
                   setActiveFilter("single");
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "single"
                     ? "bg-[#000000] text-white"
                     : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
                 }`}
               >
-                Single Visit ({diners.filter((d) => d.retentionType === "single").length})
+                Single Visit (
+                {diners.filter((d) => d.retentionType === "single").length})
               </button>
               <button
                 type="button"
@@ -798,7 +920,7 @@ export function CustomerReportView({
                   setActiveFilter("high-value");
                   setCurrentPage(1);
                 }}
-                className={`px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "high-value"
                     ? "bg-[#000000] text-white"
                     : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
@@ -871,7 +993,10 @@ export function CustomerReportView({
                     ))
                   ) : paginatedDiners.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="py-16 text-center text-[#7f7570]">
+                      <td
+                        colSpan={8}
+                        className="py-16 text-center text-[#7f7570]"
+                      >
                         <div className="flex flex-col items-center justify-center space-y-2">
                           <span className="material-symbols-outlined text-[48px] text-[#b4a9a4]">
                             person_off
@@ -901,13 +1026,14 @@ export function CustomerReportView({
                     </tr>
                   ) : (
                     paginatedDiners.map((row) => {
-                      const initials = row.name
-                        .split(" ")
-                        .filter(Boolean)
-                        .map((n) => n[0])
-                        .join("")
-                        .substring(0, 2)
-                        .toUpperCase() || "GU";
+                      const initials =
+                        row.name
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((n) => n[0])
+                          .join("")
+                          .substring(0, 2)
+                          .toUpperCase() || "GU";
 
                       return (
                         <tr
@@ -1020,7 +1146,7 @@ export function CustomerReportView({
 
             {/* Pagination Footer */}
             {filteredDiners.length > 0 && (
-              <div className="px-6 py-4 bg-[#faf2ee] flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#e9e1dd]">
+              <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#faf2ee] flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 border-t border-[#e9e1dd] text-center sm:text-left">
                 <div className="text-xs text-[#645d58]">
                   Showing{" "}
                   <span className="font-semibold text-[#000000]">
@@ -1033,7 +1159,7 @@ export function CustomerReportView({
                   </span>{" "}
                   customers
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end">
                   <button
                     type="button"
                     disabled={currentPage === 1}
@@ -1058,7 +1184,9 @@ export function CustomerReportView({
                   ))}
                   <button
                     type="button"
-                    disabled={currentPage === totalDinerPages || totalDinerPages === 0}
+                    disabled={
+                      currentPage === totalDinerPages || totalDinerPages === 0
+                    }
                     onClick={() =>
                       setCurrentPage((p) => Math.min(totalDinerPages, p + 1))
                     }
@@ -1077,29 +1205,29 @@ export function CustomerReportView({
       {viewMode === "daily" && (
         <div className="bg-white rounded-2xl shadow-xs border border-[#d0c4be]/40 overflow-hidden flex flex-col">
           {/* Table Header Info Bar */}
-          <div className="px-6 py-3.5 bg-[#faf2ee] flex items-center justify-between border-b border-[#e9e1dd]">
-            <div className="flex items-center gap-3">
+          <div className="px-4 sm:px-6 py-3 sm:py-3.5 bg-[#faf2ee] flex items-center justify-between border-b border-[#e9e1dd]">
+            <div className="flex items-center gap-2 sm:gap-3">
               <span
-                className="text-lg text-[#000000] font-normal"
+                className="text-base sm:text-lg text-[#000000] font-normal"
                 style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
               >
                 Daily Customer Patronage Ledger
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#f4ece8] text-[11px] font-semibold text-[#645d58] border border-[#e9e1dd]">
-                {dailyTableData.length} active dates
+              <span className="px-2.5 py-0.5 rounded-full bg-[#f4ece8] text-[10px] sm:text-[11px] font-semibold text-[#645d58] border border-[#e9e1dd]">
+                {dailyTableData.length} dates
               </span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-[#645d58]">
+            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#645d58]">
               <span className="material-symbols-outlined text-[16px]">
                 calendar_view_day
               </span>
-              <span>Daily Aggregate Breakdown</span>
+              <span>Daily Breakdown</span>
             </div>
           </div>
 
           {/* Daily Table (Matches columns: Date, Total customers, New customers, Repeat customers, Retention rate, Avg customer spend) */}
           <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse min-w-[800px]">
+            <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
                 <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider font-semibold">
                   <th className="py-3 px-6">Date</th>
@@ -1121,7 +1249,10 @@ export function CustomerReportView({
                   ))
                 ) : paginatedDailyData.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="py-16 text-center text-[#7f7570]">
+                    <td
+                      colSpan={6}
+                      className="py-16 text-center text-[#7f7570]"
+                    >
                       <div className="flex flex-col items-center justify-center space-y-2">
                         <span className="material-symbols-outlined text-[48px] text-[#b4a9a4]">
                           event_busy
@@ -1130,7 +1261,8 @@ export function CustomerReportView({
                           No Daily Customer Transactions Available
                         </p>
                         <p className="text-xs text-[#645d58] max-w-sm">
-                          Daily records will appear dynamically once customer transactions are logged during this date range.
+                          Daily records will appear dynamically once customer
+                          transactions are logged during this date range.
                         </p>
                       </div>
                     </td>
@@ -1170,7 +1302,7 @@ export function CustomerReportView({
 
           {/* Daily Pagination Footer */}
           {dailyTableData.length > 0 && (
-            <div className="px-6 py-4 bg-[#faf2ee] flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-[#e9e1dd]">
+            <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#faf2ee] flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 border-t border-[#e9e1dd] text-center sm:text-left">
               <div className="text-xs text-[#645d58]">
                 Showing{" "}
                 <span className="font-semibold text-[#000000]">
@@ -1183,7 +1315,7 @@ export function CustomerReportView({
                 </span>{" "}
                 days
               </div>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end">
                 <button
                   type="button"
                   disabled={dailyPage === 1}
@@ -1208,7 +1340,9 @@ export function CustomerReportView({
                 ))}
                 <button
                   type="button"
-                  disabled={dailyPage === totalDailyPages || totalDailyPages === 0}
+                  disabled={
+                    dailyPage === totalDailyPages || totalDailyPages === 0
+                  }
                   onClick={() =>
                     setDailyPage((p) => Math.min(totalDailyPages, p + 1))
                   }
@@ -1232,10 +1366,10 @@ export function CustomerReportView({
           ></div>
 
           {/* Modal Card Sheet */}
-          <div className="relative w-full max-w-md bg-white shadow-2xl flex flex-col justify-between p-6 sm:p-8 overflow-y-auto z-10 animate-slideInRight border-l border-[#e9e1dd]">
+          <div className="relative w-full max-w-full sm:max-w-md bg-white shadow-2xl flex flex-col justify-between p-4 sm:p-6 lg:p-8 overflow-y-auto z-10 border-l border-[#e9e1dd]">
             <div>
-              <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#f4ece8]">
-                <div className="flex items-center gap-2 text-[#645d58] text-xs uppercase tracking-wider font-semibold">
+              <div className="flex items-center justify-between pb-3 sm:pb-4 mb-3 sm:mb-4 border-b border-[#f4ece8]">
+                <div className="flex items-center gap-2 text-[#645d58] text-[11px] sm:text-xs uppercase tracking-wider font-semibold">
                   <span className="material-symbols-outlined text-[16px]">
                     account_box
                   </span>
@@ -1244,7 +1378,7 @@ export function CustomerReportView({
                 <button
                   type="button"
                   onClick={() => setSelectedDiner(null)}
-                  className="w-8 h-8 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] flex items-center justify-center text-[#1e1b19] transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] flex items-center justify-center text-[#1e1b19] transition-colors cursor-pointer shrink-0"
                 >
                   <span className="material-symbols-outlined text-[18px]">
                     close
@@ -1253,9 +1387,9 @@ export function CustomerReportView({
               </div>
 
               {/* Customer Identity Core */}
-              <div className="text-center py-6 bg-[#faf2ee] rounded-2xl mb-6 border border-[#e9e1dd]">
+              <div className="text-center py-4 sm:py-6 bg-[#faf2ee] rounded-2xl mb-4 sm:mb-6 border border-[#e9e1dd]">
                 <div
-                  className="w-16 h-16 rounded-full bg-[#eae1da] text-[#1f1b17] flex items-center justify-center text-xl font-normal mx-auto mb-2"
+                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#eae1da] text-[#1f1b17] flex items-center justify-center text-lg sm:text-xl font-normal mx-auto mb-2"
                   style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                 >
                   {selectedDiner.name
@@ -1267,7 +1401,7 @@ export function CustomerReportView({
                     .toUpperCase() || "GU"}
                 </div>
                 <h2
-                  className="text-2xl text-[#000000] leading-tight font-normal"
+                  className="text-xl sm:text-2xl text-[#000000] leading-tight font-normal"
                   style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                 >
                   {selectedDiner.name}
@@ -1278,7 +1412,7 @@ export function CustomerReportView({
                     phoneDialCode,
                   )}
                 </p>
-                <div className="mt-2.5 inline-flex items-center gap-1.5 px-4 py-1 rounded-full bg-[#000000] text-white text-xs font-semibold">
+                <div className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1 rounded-full bg-[#000000] text-white text-xs font-semibold">
                   <span className="material-symbols-outlined text-[13px]">
                     military_tech
                   </span>
@@ -1287,13 +1421,13 @@ export function CustomerReportView({
               </div>
 
               {/* Metric Grid */}
-              <div className="grid grid-cols-2 gap-3 mb-6">
-                <div className="bg-[#faf2ee] p-4 rounded-xl border border-[#e9e1dd]">
-                  <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-1">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-4 sm:mb-6">
+                <div className="bg-[#faf2ee] p-3 sm:p-4 rounded-xl border border-[#e9e1dd]">
+                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-1 truncate">
                     Cumulative Spend
                   </span>
                   <span
-                    className="text-xl text-[#000000] font-normal tabular-nums"
+                    className="text-lg sm:text-xl text-[#000000] font-normal tabular-nums"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {formatPriceWithSymbol(
@@ -1304,12 +1438,12 @@ export function CustomerReportView({
                     )}
                   </span>
                 </div>
-                <div className="bg-[#faf2ee] p-4 rounded-xl border border-[#e9e1dd]">
-                  <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-1">
+                <div className="bg-[#faf2ee] p-3 sm:p-4 rounded-xl border border-[#e9e1dd]">
+                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-1 truncate">
                     Orders Placed
                   </span>
                   <span
-                    className="text-xl text-[#000000] font-normal tabular-nums"
+                    className="text-lg sm:text-xl text-[#000000] font-normal tabular-nums"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {selectedDiner.orders} Orders
@@ -1318,11 +1452,11 @@ export function CustomerReportView({
               </div>
 
               {/* Service Channel Habit */}
-              <div className="mb-6">
-                <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-2">
+              <div className="mb-4 sm:mb-6">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-2">
                   Service Channel Preference
                 </span>
-                <div className="flex items-center justify-between p-4 bg-[#faf2ee] rounded-xl border border-[#e9e1dd]">
+                <div className="flex items-center justify-between p-3 sm:p-4 bg-[#faf2ee] rounded-xl border border-[#e9e1dd]">
                   <span className="text-xs text-[#1e1b19] flex items-center gap-2 font-medium">
                     <span className="material-symbols-outlined text-[18px] text-[#645d58]">
                       {selectedDiner.sourceIcon}

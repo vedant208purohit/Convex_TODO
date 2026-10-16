@@ -466,6 +466,7 @@ export function computeCustomerReportData(
   countryCode?: string,
   timezone?: string,
   rangeStartDate?: number,
+  priorCustomerKeys?: Set<string>,
 ): CustomerReportOutput {
   const customerFirstOrderTime = new Map<string, number>();
   const rangeCustomerOrders = new Map<string, any[]>();
@@ -499,10 +500,9 @@ export function computeCustomerReportData(
 
   Array.from(rangeCustomerOrders.entries()).forEach(([custKey, cOrders]) => {
     const firstSeen = customerFirstOrderTime.get(custKey) || 0;
-    // If first order was on or after range start -> new customer
-    if (minRangeTs > 0 && firstSeen < minRangeTs) {
-      repeatCustomersCount += 1;
-    } else if (cOrders.length > 1) {
+    const hasPriorHistory = Boolean(priorCustomerKeys && priorCustomerKeys.has(custKey));
+    // If customer has prior orders before range or first seen before range start -> repeat customer
+    if (hasPriorHistory || (minRangeTs > 0 && firstSeen < minRangeTs) || cOrders.length > 1) {
       repeatCustomersCount += 1;
     } else {
       newCustomersCount += 1;
@@ -561,8 +561,9 @@ export function computeCustomerReportData(
 
     Array.from(d.dayCustomerKeys).forEach((ck) => {
       const firstSeen = customerFirstOrderTime.get(ck) || 0;
-      // If customer first ordered before today's start date -> repeat customer
-      if (firstSeen < d.rawDate - 86400000) {
+      const hasPriorHistory = Boolean(priorCustomerKeys && priorCustomerKeys.has(ck));
+      // If customer had prior orders or first ordered before today's start date -> repeat customer
+      if (hasPriorHistory || (minRangeTs > 0 && firstSeen < minRangeTs) || firstSeen < d.rawDate - 86400000) {
         dayRepeat += 1;
       } else {
         dayNew += 1;
@@ -659,16 +660,37 @@ export function computeMenuReportData(
 ): MenuReportOutput {
   // Build category lookup maps
   const itemCategoryMap = new Map<string, string>();
-  for (const item of allItems || []) {
-    if (item.categoryName) {
-      itemCategoryMap.set(item._id, item.categoryName);
-      itemCategoryMap.set(item.name.toLowerCase().trim(), item.categoryName);
+  const categoryNameMap = new Map<string, string>();
+
+  // 1. Process allCategories (including hierarchical categories with nested items)
+  for (const c of allCategories || []) {
+    const cId = c._id || c.id;
+    const cName = c.name || c.category_name;
+    if (cId && cName) {
+      categoryNameMap.set(String(cId), cName);
+    }
+    if (c.items && Array.isArray(c.items)) {
+      for (const it of c.items) {
+        const itemObj = it.item || it;
+        if (itemObj && cName) {
+          if (itemObj._id) itemCategoryMap.set(String(itemObj._id), cName);
+          if (itemObj.id) itemCategoryMap.set(String(itemObj.id), cName);
+          if (itemObj.name) itemCategoryMap.set(itemObj.name.toLowerCase().trim(), cName);
+        }
+      }
     }
   }
 
-  const categoryNameMap = new Map<string, string>();
-  for (const c of allCategories || []) {
-    categoryNameMap.set(c._id, c.name);
+  // 2. Process allItems
+  for (const item of allItems || []) {
+    const catName =
+      item.categoryName ||
+      (item.categoryId ? categoryNameMap.get(String(item.categoryId)) : null);
+    if (catName) {
+      if (item._id) itemCategoryMap.set(String(item._id), catName);
+      if (item.id) itemCategoryMap.set(String(item.id), catName);
+      if (item.name) itemCategoryMap.set(item.name.toLowerCase().trim(), catName);
+    }
   }
 
   // Aggregate items sold
@@ -1411,5 +1433,266 @@ export function computeOperationalReportData(
       table_data: daily_process_table,
       length: daily_process_table.length,
     },
+  };
+}
+
+// ==========================================
+// 6. Z-REPORT (SHIFT CLOSEOUT) CALCULATION
+// ==========================================
+
+export interface ZReportOutput {
+  shift_start_time: string;
+  shift_end_time: string;
+  total_orders: number;
+  completed_orders: number;
+  cancelled_orders: number;
+  gross_sales_paise: number;
+  gross_sales: string;
+  net_sales_paise: number;
+  net_sales: string;
+  tax_collected_paise: number;
+  tax_collected: string;
+  discounts_paise: number;
+  discounts: string;
+  refunds_paise: number;
+  refunds: string;
+  cash_sales_paise: number;
+  cash_sales: string;
+  card_sales_paise: number;
+  card_sales: string;
+  upi_sales_paise: number;
+  upi_sales: string;
+  other_sales_paise: number;
+  other_sales: string;
+  payment_methods: Array<{
+    mode: string;
+    count: number;
+    total_paise: number;
+    display_total: string;
+    percentage: string;
+  }>;
+}
+
+export function computeZReportData(
+  orders: any[],
+  currencySymbol: string,
+  countryCode?: string,
+  timezone?: string,
+): ZReportOutput {
+  let grossSalesPaise = 0;
+  let taxCollectedPaise = 0;
+  let discountsPaise = 0;
+  let refundsPaise = 0;
+  let completedOrders = 0;
+  let cancelledOrders = 0;
+
+  const tenderMap = new Map<string, { count: number; totalPaise: number }>();
+
+  let earliestTs = Infinity;
+  let latestTs = 0;
+
+  for (const o of orders) {
+    if (o.createdAt) {
+      if (o.createdAt < earliestTs) earliestTs = o.createdAt;
+      if (o.createdAt > latestTs) latestTs = o.createdAt;
+    }
+
+    if (
+      o.isRejected ||
+      (o.orderStatusName || "").toLowerCase().includes("cancel") ||
+      (o.orderStatusName || "").toLowerCase().includes("reject")
+    ) {
+      cancelledOrders += 1;
+      continue;
+    }
+
+    completedOrders += 1;
+    const gross = o.totalAmount || 0;
+    const tax = o.taxTotal || 0;
+    const disc = o.discountAmount || 0;
+
+    grossSalesPaise += gross;
+    taxCollectedPaise += tax;
+    discountsPaise += disc;
+
+    let ordRefund = 0;
+    if (o.paymentStatus === "Refunded") {
+      ordRefund = gross;
+    } else if (o.paymentStatus === "Partially Refunded") {
+      if (o.payments && Array.isArray(o.payments)) {
+        for (const p of o.payments) {
+          ordRefund += p.refundAmount || 0;
+        }
+      }
+      if (ordRefund === 0 && o.discountAmount) {
+        ordRefund = o.discountAmount;
+      }
+    }
+    refundsPaise += ordRefund;
+
+    // Tenders
+    if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
+      for (const p of o.payments) {
+        const mode = p.paymentMode || p.mode || o.paymentMode || "Cash";
+        const amt = p.payAmount || p.amount || 0;
+        const cur = tenderMap.get(mode) || { count: 0, totalPaise: 0 };
+        cur.count += 1;
+        cur.totalPaise += amt;
+        tenderMap.set(mode, cur);
+      }
+    } else {
+      const mode = o.paymentMode || o.paymentMethod || "Cash";
+      const amt = gross;
+      const cur = tenderMap.get(mode) || { count: 0, totalPaise: 0 };
+      cur.count += 1;
+      cur.totalPaise += amt;
+      tenderMap.set(mode, cur);
+    }
+  }
+
+  const netSalesPaise = Math.max(0, grossSalesPaise - taxCollectedPaise - refundsPaise);
+
+  let cashSalesPaise = 0;
+  let cardSalesPaise = 0;
+  let upiSalesPaise = 0;
+  let otherSalesPaise = 0;
+
+  const payment_methods: Array<{
+    mode: string;
+    count: number;
+    total_paise: number;
+    display_total: string;
+    percentage: string;
+  }> = [];
+
+  const totalTenderPaise = Array.from(tenderMap.values()).reduce(
+    (sum, t) => sum + t.totalPaise,
+    0,
+  );
+
+  Array.from(tenderMap.entries()).forEach(([mode, data]) => {
+    const lower = mode.toLowerCase();
+    if (lower.includes("cash")) {
+      cashSalesPaise += data.totalPaise;
+    } else if (
+      lower.includes("card") ||
+      lower.includes("credit") ||
+      lower.includes("debit") ||
+      lower.includes("pos")
+    ) {
+      cardSalesPaise += data.totalPaise;
+    } else if (
+      lower.includes("upi") ||
+      lower.includes("qr") ||
+      lower.includes("gpay") ||
+      lower.includes("paytm") ||
+      lower.includes("phonepe")
+    ) {
+      upiSalesPaise += data.totalPaise;
+    } else {
+      otherSalesPaise += data.totalPaise;
+    }
+
+    const pct =
+      totalTenderPaise > 0
+        ? `${((data.totalPaise / totalTenderPaise) * 100).toFixed(1)}%`
+        : "0.0%";
+    payment_methods.push({
+      mode,
+      count: data.count,
+      total_paise: data.totalPaise,
+      display_total: formatPriceWithSymbol(
+        data.totalPaise,
+        currencySymbol,
+        countryCode,
+        true,
+      ),
+      percentage: pct,
+    });
+  });
+
+  const startTimeStr =
+    earliestTs < Infinity
+      ? formatStoreDate(earliestTs, countryCode, timezone) +
+        " " +
+        new Date(earliestTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "Shift Open";
+  const endTimeStr =
+    latestTs > 0
+      ? formatStoreDate(latestTs, countryCode, timezone) +
+        " " +
+        new Date(latestTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : "Shift Close";
+
+  return {
+    shift_start_time: startTimeStr,
+    shift_end_time: endTimeStr,
+    total_orders: orders.length,
+    completed_orders: completedOrders,
+    cancelled_orders: cancelledOrders,
+    gross_sales_paise: grossSalesPaise,
+    gross_sales: formatPriceWithSymbol(
+      grossSalesPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    net_sales_paise: netSalesPaise,
+    net_sales: formatPriceWithSymbol(
+      netSalesPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    tax_collected_paise: taxCollectedPaise,
+    tax_collected: formatPriceWithSymbol(
+      taxCollectedPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    discounts_paise: discountsPaise,
+    discounts: formatPriceWithSymbol(
+      discountsPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    refunds_paise: refundsPaise,
+    refunds: formatPriceWithSymbol(
+      refundsPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    cash_sales_paise: cashSalesPaise,
+    cash_sales: formatPriceWithSymbol(
+      cashSalesPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    card_sales_paise: cardSalesPaise,
+    card_sales: formatPriceWithSymbol(
+      cardSalesPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    upi_sales_paise: upiSalesPaise,
+    upi_sales: formatPriceWithSymbol(
+      upiSalesPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    other_sales_paise: otherSalesPaise,
+    other_sales: formatPriceWithSymbol(
+      otherSalesPaise,
+      currencySymbol,
+      countryCode,
+      true,
+    ),
+    payment_methods,
   };
 }

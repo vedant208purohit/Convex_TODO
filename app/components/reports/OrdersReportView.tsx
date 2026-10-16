@@ -42,7 +42,7 @@ export function OrdersReportView({
   const showToast = (
     message: string,
     type: "success" | "error" | "info" | "warning" = "info",
-    subtext?: string
+    subtext?: string,
   ) => {
     setToast({ message, type, subtext });
   };
@@ -52,7 +52,9 @@ export function OrdersReportView({
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
 
   // Selected Day state for Drawer
-  const [selectedDayForDrawer, setSelectedDayForDrawer] = useState<any | null>(null);
+  const [selectedDayForDrawer, setSelectedDayForDrawer] = useState<any | null>(
+    null,
+  );
 
   // Date range dropdown state
   const [isDateOpen, setIsDateOpen] = useState(false);
@@ -69,15 +71,22 @@ export function OrdersReportView({
     { value: "delivery", label: "Delivery" },
   ];
   const currentChannelLabel =
-    channelOptions.find((c) => c.value === orderTypeFilter)?.label || "All Channels";
+    channelOptions.find((c) => c.value === orderTypeFilter)?.label ||
+    "All Channels";
 
   // Close dropdowns on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsDateOpen(false);
       }
-      if (channelDropdownRef.current && !channelDropdownRef.current.contains(event.target as Node)) {
+      if (
+        channelDropdownRef.current &&
+        !channelDropdownRef.current.contains(event.target as Node)
+      ) {
         setIsChannelOpen(false);
       }
     }
@@ -85,7 +94,13 @@ export function OrdersReportView({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const datePresets = ["Today", "Yesterday", "Last 7 Days", "This Month", "Last Month"];
+  const datePresets = [
+    "Today",
+    "Yesterday",
+    "Last 7 Days",
+    "This Month",
+    "Last Month",
+  ];
   const currentDateLabel = selectedRange?.preset || "Today";
 
   const handleSelectPreset = (presetName: string) => {
@@ -97,17 +112,66 @@ export function OrdersReportView({
     let end = new Date();
 
     if (presetName === "Today") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Yesterday") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Last 7 Days") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 6,
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "This Month") {
       start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Last Month") {
       start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
       end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
@@ -118,12 +182,20 @@ export function OrdersReportView({
 
   // Compute 100% Dynamic Orders Report Data matching defx-pos-frontend OrdersReport.jsx
   const reportData = useMemo(() => {
-    return computeOrdersReportData(orders, currencySymbol, countryCode, timezone);
+    return computeOrdersReportData(
+      orders,
+      currencySymbol,
+      countryCode,
+      timezone,
+    );
   }, [orders, currencySymbol, countryCode, timezone]);
 
   // Aggregate Metrics & Fulfillment Channel Overview
   const channelBreakdown = useMemo(() => {
-    const channels: Record<string, { count: number; grossPaise: number; refunded: number }> = {
+    const channels: Record<
+      string,
+      { count: number; grossPaise: number; refunded: number }
+    > = {
       "Dine In": { count: 0, grossPaise: 0, refunded: 0 },
       Takeaway: { count: 0, grossPaise: 0, refunded: 0 },
       Delivery: { count: 0, grossPaise: 0, refunded: 0 },
@@ -137,7 +209,8 @@ export function OrdersReportView({
       const type = (o.orderType || "").toLowerCase();
       let key = "Dine In";
       if (type.includes("delivery")) key = "Delivery";
-      else if (type.includes("takeaway") || type.includes("pickup")) key = "Takeaway";
+      else if (type.includes("takeaway") || type.includes("pickup"))
+        key = "Takeaway";
 
       channels[key].count += 1;
       channels[key].grossPaise += o.totalAmount || 0;
@@ -157,7 +230,8 @@ export function OrdersReportView({
         count: stats.count,
         grossPaise: stats.grossPaise,
         refunded: stats.refunded,
-        percentage: totalValid > 0 ? Math.round((stats.count / totalValid) * 100) : 0,
+        percentage:
+          totalValid > 0 ? Math.round((stats.count / totalValid) * 100) : 0,
         aov: stats.count > 0 ? Math.round(stats.grossPaise / stats.count) : 0,
       })),
       totalValid,
@@ -176,7 +250,9 @@ export function OrdersReportView({
 
       const matchesType =
         orderTypeFilter === "all" ||
-        row.avg_order_type.toLowerCase().includes(orderTypeFilter.toLowerCase());
+        row.avg_order_type
+          .toLowerCase()
+          .includes(orderTypeFilter.toLowerCase());
 
       return matchesSearch && matchesType;
     });
@@ -196,12 +272,17 @@ export function OrdersReportView({
     const dayOrders = orders.filter(
       (o) =>
         !o.isRejected &&
-        formatStoreDate(o.createdAt, countryCode, timezone) === selectedDayForDrawer.date
+        formatStoreDate(o.createdAt, countryCode, timezone) ===
+          selectedDayForDrawer.date,
     );
 
     let gross = 0;
     let refunds = 0;
-    const typeCounts: Record<string, number> = { "Dine In": 0, Takeaway: 0, Delivery: 0 };
+    const typeCounts: Record<string, number> = {
+      "Dine In": 0,
+      Takeaway: 0,
+      Delivery: 0,
+    };
 
     for (const o of dayOrders) {
       gross += o.totalAmount || 0;
@@ -210,7 +291,8 @@ export function OrdersReportView({
       }
       const type = (o.orderType || "").toLowerCase();
       if (type.includes("delivery")) typeCounts.Delivery += 1;
-      else if (type.includes("takeaway") || type.includes("pickup")) typeCounts.Takeaway += 1;
+      else if (type.includes("takeaway") || type.includes("pickup"))
+        typeCounts.Takeaway += 1;
       else typeCounts["Dine In"] += 1;
     }
 
@@ -268,7 +350,7 @@ export function OrdersReportView({
   return (
     <div className="flex flex-col w-full space-y-6">
       {/* Editorial Page Header */}
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-2">
+      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 mb-2">
         <div className="flex flex-col max-w-2xl space-y-1">
           <nav className="flex items-center gap-2 mb-1">
             <Link
@@ -283,28 +365,29 @@ export function OrdersReportView({
             </span>
           </nav>
           <h1
-            className="text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-none font-normal"
+            className="text-3xl sm:text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-none font-normal"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Orders Report
           </h1>
-          <p className="text-sm text-[#645d58] leading-relaxed pt-0.5">
-            Review fulfillment throughput, channel performance, turnaround velocity, and peak store cadence.
+          <p className="text-xs sm:text-sm text-[#645d58] leading-relaxed pt-0.5">
+            Review fulfillment throughput, channel performance, turnaround
+            velocity, and peak store cadence.
           </p>
         </div>
 
         {/* Right Controls: Global Range Selector, Print, and CSV Export */}
-        <div className="flex items-center gap-3 self-start lg:self-end shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 self-start lg:self-end shrink-0 w-full sm:w-auto">
           {selectedRange && onRangeChange && (
             <div className="relative" ref={dropdownRef}>
               <button
                 type="button"
                 onClick={() => setIsDateOpen(!isDateOpen)}
-                className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-4 pr-9 py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
+                className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-3.5 sm:pl-4 pr-8 sm:pr-9 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
               >
                 <span>{currentDateLabel}</span>
                 <svg
-                  className="w-4 h-4 text-[#7f7570] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                  className="w-4 h-4 text-[#7f7570] absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 pointer-events-none"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -315,7 +398,7 @@ export function OrdersReportView({
               </button>
 
               {isDateOpen && (
-                <div className="absolute right-0 mt-2 w-44 bg-white rounded-2xl shadow-xl py-2 z-30 border border-[#e9e1dd]">
+                <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
                   {datePresets.map((preset) => (
                     <button
                       key={preset}
@@ -338,7 +421,7 @@ export function OrdersReportView({
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] hover:bg-[#eee7e3] px-3.5 py-2.5 rounded-full text-xs font-semibold transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] hover:bg-[#eee7e3] px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-full text-xs font-semibold transition-colors cursor-pointer"
             title="Print Orders Report"
           >
             <svg
@@ -359,7 +442,7 @@ export function OrdersReportView({
             onClick={handleExportCsv}
             type="button"
             style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-            className="btn-primary inline-flex items-center gap-2 bg-[#0c0a09] !text-white text-xs font-semibold px-5 py-2.5 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
+            className="btn-primary inline-flex items-center gap-2 bg-[#0c0a09] !text-white text-xs font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
           >
             <svg
               className="w-4 h-4 !text-white stroke-white"
@@ -368,27 +451,44 @@ export function OrdersReportView({
               stroke="#ffffff"
               strokeWidth="2"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline strokeLinecap="round" strokeLinejoin="round" points="7 10 12 15 17 10" />
-              <line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="15" x2="12" y2="3" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <polyline
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points="7 10 12 15 17 10"
+              />
+              <line
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                x1="12"
+                y1="15"
+                x2="12"
+                y2="3"
+              />
             </svg>
-            <span className="!text-white font-semibold" style={{ color: "#ffffff" }}>
+            <span
+              className="!text-white font-semibold"
+              style={{ color: "#ffffff" }}
+            >
               Export CSV
             </span>
           </button>
         </div>
       </header>
-
       {/* 4 KPI Cards Matching defx-pos-frontend OrdersReport.jsx */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* Card 1: Total orders */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Total orders
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -401,29 +501,35 @@ export function OrdersReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
-              {loading ? "..." : reportData.total_orders === 0 ? "-" : reportData.total_orders}
+              {loading
+                ? "..."
+                : reportData.total_orders === 0
+                  ? "-"
+                  : reportData.total_orders}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Orders processed in period</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Orders processed in period
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1b873f]"></span>
-            <span className="text-[11px] text-[#1e1b19] tabular-nums font-medium">
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1b873f] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] tabular-nums font-medium whitespace-nowrap truncate">
               {channelBreakdown.totalCompleted} fulfilled
             </span>
           </div>
         </div>
 
         {/* Card 2: Avg order value */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Avg order value
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -435,29 +541,31 @@ export function OrdersReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading ? "..." : isDataZero(reportData.total_avg_order_value)}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Average check size</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Average check size
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58]"></span>
-            <span className="text-[11px] text-[#645d58] font-medium tabular-nums">
-              Gross sales / valid orders
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#645d58] font-medium tabular-nums whitespace-nowrap truncate">
+              Avg check size
             </span>
           </div>
         </div>
 
         {/* Card 3: Avg delivery time */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Avg delivery time
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -469,33 +577,35 @@ export function OrdersReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading
                 ? "..."
                 : reportData.average_delivery_time !== null
-                ? formatDeliveryTime(reportData.average_delivery_time)
-                : "-"}
+                  ? formatDeliveryTime(reportData.average_delivery_time)
+                  : "-"}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Delivery turnaround duration</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Delivery turnaround duration
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19]"></span>
-            <span className="text-[11px] text-[#1e1b19] font-medium">
-              Dispatch to delivery
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] font-medium whitespace-nowrap truncate">
+              Dispatch cadence
             </span>
           </div>
         </div>
 
         {/* Card 4: Peak order time frame */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-              Peak order time frame
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
+              Peak order time
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -507,24 +617,26 @@ export function OrdersReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading ? "..." : isDataZero(reportData.peak_order_time_frame)}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Busiest customer intake hour</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Busiest customer intake hour
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19]"></span>
-            <span className="text-[11px] text-[#1e1b19] font-medium tabular-nums">
-              Store peak volume
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] font-medium tabular-nums whitespace-nowrap truncate">
+              Peak hour
             </span>
           </div>
         </div>
       </section>
 
       {/* Channel Volume & Fulfillment Overview */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {channelBreakdown.channels.map((ch) => (
           <div
             key={ch.name}
@@ -545,7 +657,12 @@ export function OrdersReportView({
                   className="text-2xl font-normal text-[#1e1b19] tabular-nums"
                   style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                 >
-                  {formatPriceWithSymbol(ch.grossPaise, currencySymbol, countryCode, true)}
+                  {formatPriceWithSymbol(
+                    ch.grossPaise,
+                    currencySymbol,
+                    countryCode,
+                    true,
+                  )}
                 </span>
                 <span className="text-xs text-[#645d58] tabular-nums">
                   {ch.count} {ch.count === 1 ? "order" : "orders"}
@@ -561,7 +678,12 @@ export function OrdersReportView({
             <div className="mt-4 pt-3 border-t border-[#f4ece8] flex items-center justify-between text-[11px] text-[#645d58]">
               <span>Avg Check</span>
               <span className="font-semibold text-[#1e1b19] tabular-nums">
-                {formatPriceWithSymbol(ch.aov, currencySymbol, countryCode, true)}
+                {formatPriceWithSymbol(
+                  ch.aov,
+                  currencySymbol,
+                  countryCode,
+                  true,
+                )}
               </span>
             </div>
           </div>
@@ -569,31 +691,40 @@ export function OrdersReportView({
       </section>
 
       {/* Table 1: Order Type Summary Matching defx-pos-frontend OrdersReport.jsx */}
-      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-6 shadow-xs">
+      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-4 sm:p-6 shadow-xs">
         <div className="mb-4">
           <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
             Channel Distribution
           </span>
           <h2
-            className="text-xl text-[#1e1b19] font-normal"
+            className="text-lg sm:text-xl text-[#1e1b19] font-normal"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Order type summary
           </h2>
           <p className="text-xs text-[#7f7570] mt-0.5">
-            Breakdown of order volumes, ticket sizes, and refunds across fulfillment channels
+            Breakdown of order volumes, ticket sizes, and refunds across
+            fulfillment channels
           </p>
         </div>
 
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[560px]">
             <thead>
               <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider border-b border-[#e9e1dd]">
                 <th className="py-3 px-4 font-semibold">Order type</th>
-                <th className="py-3 px-4 font-semibold text-center">Total orders</th>
-                <th className="py-3 px-4 font-semibold text-right">Avg order value</th>
-                <th className="py-3 px-4 font-semibold text-center">Refunded orders</th>
-                <th className="py-3 px-4 font-semibold text-center">Avg delivery time</th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Total orders
+                </th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  Avg order value
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Refunded orders
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Avg delivery time
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#f4ece8] text-[#1e1b19] text-xs">
@@ -602,14 +733,21 @@ export function OrdersReportView({
                   <td colSpan={5} className="py-10 text-center text-[#7f7570]">
                     <div className="flex flex-col items-center justify-center space-y-1.5">
                       <span className="text-xl">📋</span>
-                      <p className="font-medium text-xs text-[#1e1b19]">No Order Types Recorded</p>
-                      <p className="text-[11px] text-[#7f7570]">Channel breakdowns will populate with incoming orders.</p>
+                      <p className="font-medium text-xs text-[#1e1b19]">
+                        No Order Types Recorded
+                      </p>
+                      <p className="text-[11px] text-[#7f7570]">
+                        Channel breakdowns will populate with incoming orders.
+                      </p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 reportData.order_type_summary_data.map((row) => (
-                  <tr key={row.order_type} className="hover:bg-[#faf2ee] transition-colors">
+                  <tr
+                    key={row.order_type}
+                    className="hover:bg-[#faf2ee] transition-colors"
+                  >
                     <td className="py-3.5 px-4 font-semibold text-[#1e1b19]">
                       <div className="flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-[#1e1b19]"></span>
@@ -645,26 +783,27 @@ export function OrdersReportView({
       </section>
 
       {/* Table 2: Daily Orders General Table Matching defx-pos-frontend OrdersReport.jsx */}
-      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-4 sm:p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 mb-4 sm:mb-6">
           <div>
             <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
               Daily Ledger
             </span>
             <h2
-              className="text-xl text-[#1e1b19] font-normal"
+              className="text-lg sm:text-xl text-[#1e1b19] font-normal"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               Daily Orders Summary
             </h2>
             <p className="text-xs text-[#7f7570] mt-0.5">
-              Day-by-day fulfillment log with throughput, average basket size, and peak order times
+              Day-by-day fulfillment log with throughput, average basket size,
+              and peak order times
             </p>
           </div>
 
           {/* Search & Channel Filter */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-[200px]">
+          <div className="flex flex-wrap sm:flex-nowrap items-center gap-2.5 sm:gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:flex-initial min-w-[160px] sm:min-w-[200px]">
               <input
                 type="text"
                 placeholder="Search date or channel..."
@@ -687,11 +826,11 @@ export function OrdersReportView({
               </svg>
             </div>
 
-            <div className="relative" ref={channelDropdownRef}>
+            <div className="relative shrink-0" ref={channelDropdownRef}>
               <button
                 type="button"
                 onClick={() => setIsChannelOpen(!isChannelOpen)}
-                className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-4 pr-8 py-2 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
+                className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-3.5 sm:pl-4 pr-7 sm:pr-8 py-2 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
               >
                 <span>{currentChannelLabel}</span>
                 <svg
@@ -731,19 +870,30 @@ export function OrdersReportView({
           </div>
         </div>
 
-        {/* Responsive Table Matching defx-pos-frontend columns:
-            ['Date', 'Total orders', 'Avg order value', 'Avg delivery time', 'Peak order time frame', 'Avg items per order', 'Avg order type'] */}
+        {/* Responsive Table Matching defx-pos-frontend columns */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[760px]">
             <thead>
               <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider border-b border-[#e9e1dd]">
                 <th className="py-3 px-4 font-semibold">Date</th>
-                <th className="py-3 px-4 font-semibold text-center">Total orders</th>
-                <th className="py-3 px-4 font-semibold text-right">Avg order value</th>
-                <th className="py-3 px-4 font-semibold text-center">Avg delivery time</th>
-                <th className="py-3 px-4 font-semibold text-center">Peak order time frame</th>
-                <th className="py-3 px-4 font-semibold text-center">Avg items / order</th>
-                <th className="py-3 px-4 font-semibold text-center">Avg order type</th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Total orders
+                </th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  Avg order value
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Avg delivery time
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Peak order time frame
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Avg items / order
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Avg order type
+                </th>
                 <th className="py-3 px-4 font-semibold text-center">Action</th>
               </tr>
             </thead>
@@ -753,8 +903,13 @@ export function OrdersReportView({
                   <td colSpan={8} className="py-12 text-center text-[#7f7570]">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <span className="text-2xl">📋</span>
-                      <p className="font-medium text-sm text-[#1e1b19]">No Reports Available Yet</p>
-                      <p className="text-xs text-[#7f7570]">Reports will appear once you start recording transactions.</p>
+                      <p className="font-medium text-sm text-[#1e1b19]">
+                        No Reports Available Yet
+                      </p>
+                      <p className="text-xs text-[#7f7570]">
+                        Reports will appear once you start recording
+                        transactions.
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -762,11 +917,18 @@ export function OrdersReportView({
                 paginatedDailyData.map((d, index) => {
                   const isFirstRow = currentPage === 1 && index === 0;
                   return (
-                    <tr key={d.date} className="hover:bg-[#faf2ee] transition-colors group">
+                    <tr
+                      key={d.date}
+                      className="hover:bg-[#faf2ee] transition-colors group"
+                    >
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2">
-                          {isFirstRow && <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>}
-                          <span className="font-semibold text-[#1e1b19]">{d.date}</span>
+                          {isFirstRow && (
+                            <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
+                          )}
+                          <span className="font-semibold text-[#1e1b19]">
+                            {d.date}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-center tabular-nums">
@@ -800,7 +962,13 @@ export function OrdersReportView({
                           className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] font-medium group-hover:bg-[#1e1b19] group-hover:text-white transition-colors cursor-pointer"
                         >
                           <span>View Day</span>
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <svg
+                            className="w-3 h-3"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
                             <polyline points="9 18 15 12 9 6" />
                           </svg>
                         </button>
@@ -815,16 +983,20 @@ export function OrdersReportView({
 
         {/* Editorial Pagination Footer Matching GeneralCommanReportTable */}
         {filteredDailyData.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-[#e9e1dd] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#645d58]">
+          <div className="mt-4 pt-4 border-t border-[#e9e1dd] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#645d58] text-center sm:text-left">
             <span>
               Showing{" "}
               <strong className="text-[#1e1b19] font-semibold">
                 {(currentPage - 1) * pageSize + 1}–
                 {Math.min(currentPage * pageSize, filteredDailyData.length)}
               </strong>{" "}
-              of <strong className="text-[#1e1b19] font-semibold">{filteredDailyData.length}</strong> settlement days
+              of{" "}
+              <strong className="text-[#1e1b19] font-semibold">
+                {filteredDailyData.length}
+              </strong>{" "}
+              settlement days
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end">
               <button
                 type="button"
                 disabled={currentPage === 1}
@@ -838,7 +1010,11 @@ export function OrdersReportView({
                   key={i}
                   type="button"
                   onClick={() => setCurrentPage(i + 1)}
-                  style={currentPage === i + 1 ? { backgroundColor: "#0c0a09", color: "#ffffff" } : undefined}
+                  style={
+                    currentPage === i + 1
+                      ? { backgroundColor: "#0c0a09", color: "#ffffff" }
+                      : undefined
+                  }
                   className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                     currentPage === i + 1
                       ? "bg-[#0c0a09] !text-white shadow-xs"
@@ -851,7 +1027,9 @@ export function OrdersReportView({
               <button
                 type="button"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 className="px-3 py-1 rounded-full border border-[#e9e1dd] bg-[#faf2ee] hover:bg-[#eee7e3] text-[#1e1b19] disabled:opacity-40 transition-colors cursor-pointer"
               >
                 Next
@@ -870,30 +1048,38 @@ export function OrdersReportView({
             onClick={() => setSelectedDayForDrawer(null)}
           />
 
-          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10">
-            <div className="w-screen max-w-lg bg-white shadow-2xl flex flex-col">
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-0 sm:pl-10">
+            <div className="w-screen max-w-full sm:max-w-lg bg-white shadow-2xl flex flex-col">
               {/* Drawer Header */}
-              <div className="p-6 border-b border-[#e9e1dd] flex items-center justify-between bg-[#faf2ee]">
+              <div className="p-4 sm:p-6 border-b border-[#e9e1dd] flex items-center justify-between bg-[#faf2ee]">
                 <div>
                   <div className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
                     Order Details Breakdown
                   </div>
                   <h3
-                    className="text-2xl text-[#1e1b19] font-normal"
+                    className="text-xl sm:text-2xl text-[#1e1b19] font-normal"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {drawerStats.date}
                   </h3>
                   <p className="text-xs text-[#7f7570] mt-0.5">
-                    {drawerStats.ordersCount} {drawerStats.ordersCount === 1 ? "order" : "orders"} recorded on this date
+                    {drawerStats.ordersCount}{" "}
+                    {drawerStats.ordersCount === 1 ? "order" : "orders"}{" "}
+                    recorded on this date
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSelectedDayForDrawer(null)}
-                  className="w-8 h-8 rounded-full border border-[#e9e1dd] bg-white hover:bg-[#f4ece8] flex items-center justify-center text-[#1e1b19] transition-colors cursor-pointer"
+                  className="w-8 h-8 rounded-full border border-[#e9e1dd] bg-white hover:bg-[#f4ece8] flex items-center justify-center text-[#1e1b19] transition-colors cursor-pointer shrink-0"
                 >
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -901,18 +1087,23 @@ export function OrdersReportView({
               </div>
 
               {/* Drawer Content */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
                 {/* Day Summary Cards */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-[#faf2ee] border border-[#e9e1dd] rounded-xl p-3.5">
+                <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+                  <div className="bg-[#faf2ee] border border-[#e9e1dd] rounded-xl p-3 sm:p-3.5">
                     <span className="text-[10px] uppercase tracking-wider text-[#645d58] font-semibold">
                       Gross Intake
                     </span>
                     <div
-                      className="text-xl font-normal text-[#1e1b19] tabular-nums mt-0.5"
+                      className="text-lg sm:text-xl font-normal text-[#1e1b19] tabular-nums mt-0.5"
                       style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                     >
-                      {formatPriceWithSymbol(drawerStats.grossPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        drawerStats.grossPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </div>
                   </div>
                   <div className="bg-[#faf2ee] border border-[#e9e1dd] rounded-xl p-3.5">
@@ -937,19 +1128,25 @@ export function OrdersReportView({
                   </span>
                   <div className="grid grid-cols-3 gap-2 pt-1 text-center">
                     <div className="p-2 bg-[#faf2ee] rounded-lg border border-[#e9e1dd]">
-                      <span className="text-[10px] text-[#645d58] block">Dine In</span>
+                      <span className="text-[10px] text-[#645d58] block">
+                        Dine In
+                      </span>
                       <strong className="text-sm text-[#1e1b19] tabular-nums">
                         {drawerStats.typeCounts["Dine In"]}
                       </strong>
                     </div>
                     <div className="p-2 bg-[#faf2ee] rounded-lg border border-[#e9e1dd]">
-                      <span className="text-[10px] text-[#645d58] block">Takeaway</span>
+                      <span className="text-[10px] text-[#645d58] block">
+                        Takeaway
+                      </span>
                       <strong className="text-sm text-[#1e1b19] tabular-nums">
                         {drawerStats.typeCounts.Takeaway}
                       </strong>
                     </div>
                     <div className="p-2 bg-[#faf2ee] rounded-lg border border-[#e9e1dd]">
-                      <span className="text-[10px] text-[#645d58] block">Delivery</span>
+                      <span className="text-[10px] text-[#645d58] block">
+                        Delivery
+                      </span>
                       <strong className="text-sm text-[#1e1b19] tabular-nums">
                         {drawerStats.typeCounts.Delivery}
                       </strong>
@@ -964,12 +1161,22 @@ export function OrdersReportView({
                   </span>
                   <div className="space-y-2.5">
                     {drawerStats.dayOrders.length === 0 ? (
-                      <p className="text-xs text-[#7f7570] text-center py-6">No individual orders found.</p>
+                      <p className="text-xs text-[#7f7570] text-center py-6">
+                        No individual orders found.
+                      </p>
                     ) : (
                       drawerStats.dayOrders.map((ord: any) => {
-                        const ordTime = formatStoreTime(ord.createdAt, timezone, countryCode);
+                        const ordTime = formatStoreTime(
+                          ord.createdAt,
+                          timezone,
+                          countryCode,
+                        );
                         const itemsCount = ord.items
-                          ? ord.items.reduce((acc: number, it: any) => acc + (it.quantity || 1), 0)
+                          ? ord.items.reduce(
+                              (acc: number, it: any) =>
+                                acc + (it.quantity || 1),
+                              0,
+                            )
                           : ord.item_count || 1;
 
                         return (
@@ -980,7 +1187,9 @@ export function OrdersReportView({
                             <div className="space-y-0.5">
                               <div className="flex items-center gap-2">
                                 <span className="font-semibold text-xs text-[#1e1b19]">
-                                  #{ord.orderNumber || ord._id.slice(-6).toUpperCase()}
+                                  #
+                                  {ord.orderNumber ||
+                                    ord._id.slice(-6).toUpperCase()}
                                 </span>
                                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-[#e9e1dd] text-[#645d58] font-medium">
                                   {ord.orderType || "DineIn"}
@@ -992,13 +1201,21 @@ export function OrdersReportView({
                                 )}
                               </div>
                               <div className="text-[11px] text-[#7f7570]">
-                                {ordTime} • {itemsCount} {itemsCount === 1 ? "item" : "items"}
-                                {ord.tableName ? ` • Table ${ord.tableName}` : ""}
+                                {ordTime} • {itemsCount}{" "}
+                                {itemsCount === 1 ? "item" : "items"}
+                                {ord.tableName
+                                  ? ` • Table ${ord.tableName}`
+                                  : ""}
                               </div>
                             </div>
                             <div className="text-right">
                               <span className="text-sm font-semibold text-[#1e1b19] tabular-nums block">
-                                {formatPriceWithSymbol(ord.totalAmount, currencySymbol, countryCode, true)}
+                                {formatPriceWithSymbol(
+                                  ord.totalAmount,
+                                  currencySymbol,
+                                  countryCode,
+                                  true,
+                                )}
                               </span>
                               <span className="text-[10px] text-[#645d58]">
                                 {ord.paymentMode || ord.paymentStatus || "Paid"}
@@ -1020,7 +1237,9 @@ export function OrdersReportView({
                   style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
                   className="btn-primary px-4 py-2 bg-[#0c0a09] !text-white text-xs font-semibold rounded-full hover:bg-[#262626] transition-colors cursor-pointer"
                 >
-                  <span className="!text-white" style={{ color: "#ffffff" }}>Close</span>
+                  <span className="!text-white" style={{ color: "#ffffff" }}>
+                    Close
+                  </span>
                 </button>
               </div>
             </div>

@@ -2,9 +2,15 @@
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import Link from "next/link";
-import { formatPriceWithSymbol, formatStoreDate } from "../../../lib/constants/countries";
+import {
+  formatPriceWithSymbol,
+  formatStoreDate,
+} from "../../../lib/constants/countries";
 import { DateRange } from "./ReportHeader";
-import { computeSalesReportData, isDataZero } from "../../reports/reportCalculations";
+import {
+  computeSalesReportData,
+  isDataZero,
+} from "../../reports/reportCalculations";
 import { Toast, type ToastMessage } from "../Toast";
 
 interface SalesReportViewProps {
@@ -34,22 +40,33 @@ export function SalesReportView({
   const showToast = (
     message: string,
     type: "success" | "error" | "info" | "warning" = "info",
-    subtext?: string
+    subtext?: string,
   ) => {
     setToast({ message, type, subtext });
   };
 
   // Selected Day state for Drawer
-  const [selectedDayForDrawer, setSelectedDayForDrawer] = useState<any | null>(null);
+  const [selectedDayForDrawer, setSelectedDayForDrawer] = useState<any | null>(
+    null,
+  );
 
   // Date Range Dropdown State (matches MenuReportView)
   const [isDateOpen, setIsDateOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const datePresets = ["Today", "Yesterday", "Last 7 Days", "This Month", "Last Month"];
+  const datePresets = [
+    "Today",
+    "Yesterday",
+    "Last 7 Days",
+    "This Month",
+    "Last Month",
+  ];
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsDateOpen(false);
       }
     }
@@ -68,17 +85,66 @@ export function SalesReportView({
     let end = new Date();
 
     if (presetName === "Today") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Yesterday") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 1,
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Last 7 Days") {
-      start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      start = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - 6,
+        0,
+        0,
+        0,
+      );
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "This Month") {
       start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      end = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate(),
+        23,
+        59,
+        59,
+      );
     } else if (presetName === "Last Month") {
       start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
       end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
@@ -89,7 +155,12 @@ export function SalesReportView({
 
   // 1. Calculate Old Project Sales Report Data (matches defx-pos-frontend SalesReport.jsx)
   const salesReport = useMemo(() => {
-    return computeSalesReportData(orders, currencySymbol, countryCode, timezone);
+    return computeSalesReportData(
+      orders,
+      currencySymbol,
+      countryCode,
+      timezone,
+    );
   }, [orders, currencySymbol, countryCode, timezone]);
 
   // 2. Calculate Detailed Aggregates
@@ -113,7 +184,10 @@ export function SalesReportView({
       if (o.deliveryFee || o.deliveryCharge) {
         deliveryPaise += o.deliveryFee || o.deliveryCharge || 0;
         deliveryRuns += 1;
-      } else if (o.orderType === "Delivery" || o.orderType === "ScheduledDelivery") {
+      } else if (
+        o.orderType === "Delivery" ||
+        o.orderType === "ScheduledDelivery"
+      ) {
         deliveryRuns += 1;
       }
 
@@ -150,7 +224,8 @@ export function SalesReportView({
       refundPaise,
       refundOrdersCount,
       netPaise,
-      completedOrders: completedOrders || (orders.length > 0 ? orders.length : 0),
+      completedOrders:
+        completedOrders || (orders.length > 0 ? orders.length : 0),
       deliveryRuns,
     };
   }, [orders]);
@@ -239,8 +314,8 @@ export function SalesReportView({
         type === "Delivery" || type === "ScheduledDelivery"
           ? "Delivery"
           : type === "TakeAway" || type === "ScheduledPickup"
-          ? "TakeAway"
-          : "DineIn";
+            ? "TakeAway"
+            : "DineIn";
 
       channels[key].count += 1;
       channels[key].grossPaise += o.totalAmount || 0;
@@ -252,7 +327,10 @@ export function SalesReportView({
       {
         type: "Dine In",
         count: channels.DineIn.count,
-        percentage: totalOrders > 0 ? `${Math.round((channels.DineIn.count / totalOrders) * 100)}%` : "0%",
+        percentage:
+          totalOrders > 0
+            ? `${Math.round((channels.DineIn.count / totalOrders) * 100)}%`
+            : "0%",
         grossPaise: channels.DineIn.grossPaise,
         avgTicketPaise:
           channels.DineIn.count > 0
@@ -262,7 +340,10 @@ export function SalesReportView({
       {
         type: "Takeaway",
         count: channels.TakeAway.count,
-        percentage: totalOrders > 0 ? `${Math.round((channels.TakeAway.count / totalOrders) * 100)}%` : "0%",
+        percentage:
+          totalOrders > 0
+            ? `${Math.round((channels.TakeAway.count / totalOrders) * 100)}%`
+            : "0%",
         grossPaise: channels.TakeAway.grossPaise,
         avgTicketPaise:
           channels.TakeAway.count > 0
@@ -272,7 +353,10 @@ export function SalesReportView({
       {
         type: "Delivery",
         count: channels.Delivery.count,
-        percentage: totalOrders > 0 ? `${Math.round((channels.Delivery.count / totalOrders) * 100)}%` : "0%",
+        percentage:
+          totalOrders > 0
+            ? `${Math.round((channels.Delivery.count / totalOrders) * 100)}%`
+            : "0%",
         grossPaise: channels.Delivery.grossPaise,
         avgTicketPaise:
           channels.Delivery.count > 0
@@ -280,6 +364,56 @@ export function SalesReportView({
             : 0,
       },
     ];
+  }, [orders]);
+
+  // Tender / Payment mode breakdown across selected period
+  const overallTenders = useMemo(() => {
+    const modes: Record<string, { count: number; grossPaise: number }> = {
+      Cash: { count: 0, grossPaise: 0 },
+      Card: { count: 0, grossPaise: 0 },
+      UPI: { count: 0, grossPaise: 0 },
+      Other: { count: 0, grossPaise: 0 },
+    };
+
+    let totalSettled = 0;
+
+    for (const o of orders) {
+      if (o.isRejected) continue;
+      const amount = o.totalAmount || 0;
+      totalSettled += amount;
+
+      const m = (o.paymentMode || o.paymentMethod || "Cash").toLowerCase();
+      let key = "Other";
+      if (m.includes("cash")) key = "Cash";
+      else if (
+        m.includes("card") ||
+        m.includes("credit") ||
+        m.includes("debit") ||
+        m.includes("pos")
+      )
+        key = "Card";
+      else if (
+        m.includes("upi") ||
+        m.includes("qr") ||
+        m.includes("gpay") ||
+        m.includes("paytm") ||
+        m.includes("phonepe")
+      )
+        key = "UPI";
+
+      modes[key].count += 1;
+      modes[key].grossPaise += amount;
+    }
+
+    return Object.entries(modes).map(([mode, data]) => ({
+      mode,
+      count: data.count,
+      grossPaise: data.grossPaise,
+      percentage:
+        totalSettled > 0
+          ? `${Math.round((data.grossPaise / totalSettled) * 100)}%`
+          : "0%",
+    }));
   }, [orders]);
 
   // 5. Daily Ledger Settlement Table Data (matches defx-pos-frontend columns: Date, Gross sales, Refunds, Taxes collected, Net sales, Total orders)
@@ -360,7 +494,8 @@ export function SalesReportView({
     const dayOrders = orders.filter(
       (o) =>
         !o.isRejected &&
-        formatStoreDate(o.createdAt, countryCode, timezone) === selectedDayForDrawer.dateLabel
+        formatStoreDate(o.createdAt, countryCode, timezone) ===
+          selectedDayForDrawer.dateLabel,
     );
 
     let gross = 0;
@@ -376,7 +511,10 @@ export function SalesReportView({
       OnlineStore: { count: 0, amount: 0 },
     };
 
-    const paymentModes: Record<string, { txns: number; gross: number; refunds: number; net: number }> = {
+    const paymentModes: Record<
+      string,
+      { txns: number; gross: number; refunds: number; net: number }
+    > = {
       Cash: { txns: 0, gross: 0, refunds: 0, net: 0 },
       "UPI / QR Scan": { txns: 0, gross: 0, refunds: 0, net: 0 },
       "Credit / Debit Card": { txns: 0, gross: 0, refunds: 0, net: 0 },
@@ -389,7 +527,7 @@ export function SalesReportView({
       discounts += o.discountAmount || 0;
       taxes += o.taxTotal || 0;
       if (o.deliveryFee || o.deliveryCharge) {
-        delivery += (o.deliveryFee || o.deliveryCharge || 0);
+        delivery += o.deliveryFee || o.deliveryCharge || 0;
       }
 
       let orderRef = 0;
@@ -428,9 +566,20 @@ export function SalesReportView({
         for (const p of o.payments) {
           const m = (p.mode || p.paymentMode || "Cash").toLowerCase();
           let targetKey = "Cash";
-          if (m.includes("upi") || m.includes("qr")) targetKey = "UPI / QR Scan";
-          else if (m.includes("card") || m.includes("debit") || m.includes("credit")) targetKey = "Credit / Debit Card";
-          else if (m.includes("swiggy") || m.includes("zomato") || m.includes("aggregator")) targetKey = "Aggregator";
+          if (m.includes("upi") || m.includes("qr"))
+            targetKey = "UPI / QR Scan";
+          else if (
+            m.includes("card") ||
+            m.includes("debit") ||
+            m.includes("credit")
+          )
+            targetKey = "Credit / Debit Card";
+          else if (
+            m.includes("swiggy") ||
+            m.includes("zomato") ||
+            m.includes("aggregator")
+          )
+            targetKey = "Aggregator";
 
           const pGross = p.amount || 0;
           const pRef = p.refundAmount || 0;
@@ -443,8 +592,18 @@ export function SalesReportView({
         const m = (o.paymentMode || "Cash").toLowerCase();
         let targetKey = "Cash";
         if (m.includes("upi") || m.includes("qr")) targetKey = "UPI / QR Scan";
-        else if (m.includes("card") || m.includes("debit") || m.includes("credit")) targetKey = "Credit / Debit Card";
-        else if (m.includes("swiggy") || m.includes("zomato") || m.includes("online")) targetKey = "Aggregator";
+        else if (
+          m.includes("card") ||
+          m.includes("debit") ||
+          m.includes("credit")
+        )
+          targetKey = "Credit / Debit Card";
+        else if (
+          m.includes("swiggy") ||
+          m.includes("zomato") ||
+          m.includes("online")
+        )
+          targetKey = "Aggregator";
 
         paymentModes[targetKey].txns += 1;
         paymentModes[targetKey].gross += val;
@@ -490,7 +649,10 @@ export function SalesReportView({
   // Export CSV handler
   const handleExportCsv = () => {
     if (dailyLedger.length === 0) {
-      showToast("No settlement records available to export for this period.", "warning");
+      showToast(
+        "No settlement records available to export for this period.",
+        "warning",
+      );
       return;
     }
 
@@ -535,7 +697,7 @@ export function SalesReportView({
   return (
     <div className="flex flex-col w-full space-y-6">
       {/* Editorial Page Header */}
-      <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-2">
+      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 mb-2">
         <div className="flex flex-col max-w-2xl space-y-1">
           <nav className="flex items-center gap-2 mb-1">
             <Link
@@ -550,19 +712,19 @@ export function SalesReportView({
             </span>
           </nav>
           <h1
-            className="text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-none font-normal"
+            className="text-3xl sm:text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-tight sm:leading-none font-normal"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Sales Report
           </h1>
-          <p className="text-sm text-[#645d58] leading-relaxed pt-0.5">
+          <p className="text-xs sm:text-sm text-[#645d58] leading-relaxed pt-0.5">
             Track restaurant sales, revenue, discounts, tax collections, and net
             settlement cadence across service consoles.
           </p>
         </div>
 
         {/* Right Controls: Global Range Selector & CSV Export */}
-        <div className="flex items-center gap-3 self-start lg:self-end shrink-0">
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 self-start sm:self-end shrink-0 w-full sm:w-auto">
           {selectedRange && onRangeChange && (
             <div className="relative" ref={dropdownRef}>
               <button
@@ -583,7 +745,7 @@ export function SalesReportView({
               </button>
 
               {isDateOpen && (
-                <div className="absolute right-0 mt-2 w-44 bg-white rounded-2xl shadow-xl py-2 z-30 border border-[#e9e1dd]">
+                <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
                   {datePresets.map((preset) => (
                     <button
                       key={preset}
@@ -616,11 +778,29 @@ export function SalesReportView({
               stroke="#ffffff"
               strokeWidth="2"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline strokeLinecap="round" strokeLinejoin="round" points="7 10 12 15 17 10" />
-              <line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="15" x2="12" y2="3" />
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
+              />
+              <polyline
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                points="7 10 12 15 17 10"
+              />
+              <line
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                x1="12"
+                y1="15"
+                x2="12"
+                y2="3"
+              />
             </svg>
-            <span className="!text-white font-semibold" style={{ color: "#ffffff" }}>
+            <span
+              className="!text-white font-semibold"
+              style={{ color: "#ffffff" }}
+            >
               Export CSV
             </span>
           </button>
@@ -628,15 +808,15 @@ export function SalesReportView({
       </header>
 
       {/* 5 KPI Cards Matching defx-pos-frontend SalesReport.jsx */}
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
         {/* Card 1: Total gross sales */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Total gross sales
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -648,29 +828,31 @@ export function SalesReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading ? "..." : isDataZero(salesReport.total_gross_sales)}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Sum before deductions</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Sum before deductions
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19]"></span>
-            <span className="text-[11px] text-[#1e1b19] tabular-nums font-medium">
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] tabular-nums font-medium whitespace-nowrap truncate">
               {aggregates.completedOrders} completed orders
             </span>
           </div>
         </div>
 
         {/* Card 2: Total net sales */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Total net sales
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -681,29 +863,41 @@ export function SalesReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] leading-tight tabular-nums"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] leading-tight tabular-nums truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading ? "..." : isDataZero(salesReport.total_net_sales)}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Gross less tax &amp; refunds</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Gross less tax &amp; refunds
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58]"></span>
-            <span className="text-[11px] text-[#645d58] font-medium tabular-nums">
-              AOV: {aggregates.completedOrders > 0 ? formatPriceWithSymbol(Math.round(aggregates.grossPaise / aggregates.completedOrders), currencySymbol, countryCode, true) : "—"}
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#645d58] font-medium tabular-nums whitespace-nowrap truncate">
+              AOV:{" "}
+              {aggregates.completedOrders > 0
+                ? formatPriceWithSymbol(
+                    Math.round(
+                      aggregates.grossPaise / aggregates.completedOrders,
+                    ),
+                    currencySymbol,
+                    countryCode,
+                    true,
+                  )
+                : "—"}
             </span>
           </div>
         </div>
 
         {/* Card 3: Total tax collected */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Total tax collected
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -720,29 +914,33 @@ export function SalesReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading ? "..." : isDataZero(salesReport.total_tax_collected)}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Taxes collected on sales</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Taxes collected on sales
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1b873f]"></span>
-            <span className="text-[11px] text-[#1e1b19] font-medium">
-              {aggregates.taxPaise > 0 ? "Audited & compliant" : "100% compliant"}
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1b873f] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] font-medium whitespace-nowrap truncate">
+              {aggregates.taxPaise > 0
+                ? "Audited & compliant"
+                : "100% compliant"}
             </span>
           </div>
         </div>
 
         {/* Card 4: Total Refund given */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
               Total Refund given
             </span>
             <svg
-              className="w-4 h-4 text-[#7f7570]"
+              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -754,29 +952,31 @@ export function SalesReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
               {loading ? "..." : isDataZero(salesReport.total_refund)}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Refunds &amp; reversals</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Refunds &amp; reversals
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58]"></span>
-            <span className="text-[11px] text-[#1e1b19] tabular-nums font-medium">
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] tabular-nums font-medium whitespace-nowrap truncate">
               {aggregates.refundOrdersCount} refunded
             </span>
           </div>
         </div>
 
         {/* Card 5: Total orders */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] uppercase tracking-wider text-[#1e1b19] font-bold">
+        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between col-span-2 lg:col-span-1">
+          <div className="flex items-start justify-between gap-1 mb-2">
+            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#1e1b19] font-bold leading-tight">
               Total orders
             </span>
             <svg
-              className="w-4 h-4 text-[#1e1b19]"
+              className="w-4 h-4 text-[#1e1b19] shrink-0 mt-0.5"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -789,19 +989,74 @@ export function SalesReportView({
           </div>
           <div>
             <div
-              className="text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight"
+              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
-              {loading ? "..." : (salesReport.total_orders === 0 ? "-" : salesReport.total_orders)}
+              {loading
+                ? "..."
+                : salesReport.total_orders === 0
+                  ? "-"
+                  : salesReport.total_orders}
             </div>
-            <div className="text-xs text-[#7f7570] mt-1">Transactions in period</div>
+            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+              Transactions in period
+            </div>
           </div>
-          <div className="mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-3 py-1 w-fit">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19]"></span>
-            <span className="text-[11px] text-[#1e1b19] font-medium tabular-nums">
-              {aggregates.completedOrders} completed
+          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
+            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] font-medium whitespace-nowrap truncate">
+              All Channels
             </span>
           </div>
+        </div>
+      </section>
+
+      {/* Payment-Method Breakdown Section */}
+      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-4 sm:p-6 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
+          <div>
+            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+              Settlement Ledger
+            </span>
+            <h2
+              className="text-lg sm:text-xl text-[#1e1b19] font-normal"
+              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+            >
+              Payment-Method Breakdown
+            </h2>
+          </div>
+          <span className="text-xs text-[#7f7570]">
+            Audited Tenders
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          {overallTenders.map((t) => (
+            <div
+              key={t.mode}
+              className="p-3.5 bg-[#faf2ee]/70 border border-[#e9e1dd] rounded-xl flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-[#1e1b19]">
+                  {t.mode}
+                </span>
+                <span className="text-[10px] px-2 py-0.5 bg-[#1e1b19] text-white rounded-full font-medium tabular-nums">
+                  {t.percentage}
+                </span>
+              </div>
+              <div className="mt-2">
+                <div
+                  className="text-lg sm:text-xl font-normal text-[#1e1b19] tabular-nums"
+                  style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                >
+                  {formatPriceWithSymbol(t.grossPaise, currencySymbol, countryCode, true)}
+                </div>
+                <div className="text-[11px] text-[#645d58]">
+                  {t.count} {t.count === 1 ? "transaction" : "transactions"}
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -834,26 +1089,52 @@ export function SalesReportView({
           </div>
 
           {/* SVG Bar Chart with Responsive Height */}
-          <div className="relative w-full h-56 pt-2">
-            <svg
-              className="w-full h-full overflow-visible"
-              viewBox="0 0 680 180"
-              preserveAspectRatio="none"
-            >
+          <div className="overflow-x-auto w-full no-scrollbar pb-2">
+            <div className="relative min-w-[500px] h-56 pt-2">
+              <svg
+                className="w-full h-full overflow-visible"
+                viewBox="0 0 680 180"
+                preserveAspectRatio="none"
+              >
               {/* Subtle Gridlines */}
-              <line x1="0" y1="30" x2="680" y2="30" stroke="#f4ece8" strokeDasharray="3 3" />
-              <line x1="0" y1="80" x2="680" y2="80" stroke="#f4ece8" strokeDasharray="3 3" />
-              <line x1="0" y1="130" x2="680" y2="130" stroke="#f4ece8" strokeDasharray="3 3" />
+              <line
+                x1="0"
+                y1="30"
+                x2="680"
+                y2="30"
+                stroke="#f4ece8"
+                strokeDasharray="3 3"
+              />
+              <line
+                x1="0"
+                y1="80"
+                x2="680"
+                y2="80"
+                stroke="#f4ece8"
+                strokeDasharray="3 3"
+              />
+              <line
+                x1="0"
+                y1="130"
+                x2="680"
+                y2="130"
+                stroke="#f4ece8"
+                strokeDasharray="3 3"
+              />
 
               {hourlyData.hours.map((h, i) => {
-                const slot = hourlyData.buckets[h] || { count: 0, grossPaise: 0 };
+                const slot = hourlyData.buckets[h] || {
+                  count: 0,
+                  grossPaise: 0,
+                };
                 const barHeight =
                   hourlyData.maxGross > 0
                     ? Math.round((slot.grossPaise / hourlyData.maxGross) * 120)
                     : 0;
                 const x = 30 + i * 58;
                 const y = 150 - barHeight;
-                const isPeak = h === hourlyData.overallPeakHour && slot.grossPaise > 0;
+                const isPeak =
+                  h === hourlyData.overallPeakHour && slot.grossPaise > 0;
 
                 return (
                   <g key={h} className="cursor-pointer group">
@@ -883,7 +1164,12 @@ export function SalesReportView({
 
                     {/* Peak Tag */}
                     {isPeak && (
-                      <circle cx={x + 17} cy={Math.max(10, y - 8)} r="3" fill="#1b873f" />
+                      <circle
+                        cx={x + 17}
+                        cy={Math.max(10, y - 8)}
+                        r="3"
+                        fill="#1b873f"
+                      />
                     )}
 
                     {/* Hour Axis Label */}
@@ -903,6 +1189,7 @@ export function SalesReportView({
                 );
               })}
             </svg>
+            </div>
           </div>
 
           <div className="mt-4 flex items-center justify-between text-[#645d58] text-xs pt-2 border-t border-[#e9e1dd]">
@@ -928,16 +1215,26 @@ export function SalesReportView({
 
             <div className="space-y-3.5">
               {channelPerformance.map((ch) => (
-                <div key={ch.type} className="p-3 bg-[#faf2ee]/70 border border-[#e9e1dd] rounded-xl space-y-1.5">
+                <div
+                  key={ch.type}
+                  className="p-3 bg-[#faf2ee]/70 border border-[#e9e1dd] rounded-xl space-y-1.5"
+                >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#1e1b19]">{ch.type}</span>
+                    <span className="text-xs font-semibold text-[#1e1b19]">
+                      {ch.type}
+                    </span>
                     <span className="text-[11px] px-2 py-0.5 bg-[#1e1b19] text-white rounded-full font-medium tabular-nums">
                       {ch.percentage} share
                     </span>
                   </div>
                   <div className="flex items-baseline justify-between">
                     <span className="text-sm font-semibold text-[#1e1b19] tabular-nums">
-                      {formatPriceWithSymbol(ch.grossPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        ch.grossPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                     <span className="text-xs text-[#645d58] tabular-nums">
                       {ch.count} Orders
@@ -952,7 +1249,12 @@ export function SalesReportView({
                   <div className="flex justify-between text-[11px] text-[#645d58]">
                     <span>Avg Order Value</span>
                     <span className="font-medium text-[#1e1b19] tabular-nums">
-                      {formatPriceWithSymbol(ch.avgTicketPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        ch.avgTicketPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                   </div>
                 </div>
@@ -962,13 +1264,15 @@ export function SalesReportView({
 
           <div className="mt-4 pt-3 border-t border-[#e9e1dd] flex items-center justify-between text-xs text-[#645d58]">
             <span>Active Channels: 3</span>
-            <span className="font-semibold text-[#1e1b19]">100% Reconciled</span>
+            <span className="font-semibold text-[#1e1b19]">
+              100% Reconciled
+            </span>
           </div>
         </div>
       </section>
 
       {/* Sales Audit Summary Table: Daily Ledger Settlement matching defx-pos-frontend */}
-      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-6 shadow-xs">
+      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-4 sm:p-6 shadow-xs">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
             <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
@@ -990,7 +1294,13 @@ export function SalesReportView({
               onClick={() => window.print()}
               className="inline-flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] hover:bg-[#eee7e3] px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer"
             >
-              <svg className="w-3.5 h-3.5 text-[#645d58]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                className="w-3.5 h-3.5 text-[#645d58]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <polyline points="6 9 6 2 18 2 18 9" />
                 <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
                 <rect x="6" y="14" width="12" height="8" />
@@ -1000,17 +1310,25 @@ export function SalesReportView({
           </div>
         </div>
 
-        {/* Responsive Table Matching defx-pos-frontend columns: Date, Gross sales, Refunds, Taxes collected, Net sales, Total orders */}
+        {/* Responsive Table Matching defx-pos-frontend columns */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse min-w-[640px]">
             <thead>
               <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider border-b border-[#e9e1dd]">
                 <th className="py-3 px-4 font-semibold">Date</th>
-                <th className="py-3 px-4 font-semibold text-right">Gross Sales</th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  Gross Sales
+                </th>
                 <th className="py-3 px-4 font-semibold text-right">Refunds</th>
-                <th className="py-3 px-4 font-semibold text-right">Taxes Collected</th>
-                <th className="py-3 px-4 font-semibold text-right">Net Sales</th>
-                <th className="py-3 px-4 font-semibold text-center">Total Orders</th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  Taxes Collected
+                </th>
+                <th className="py-3 px-4 font-semibold text-right">
+                  Net Sales
+                </th>
+                <th className="py-3 px-4 font-semibold text-center">
+                  Total Orders
+                </th>
                 <th className="py-3 px-4 font-semibold text-center">Action</th>
               </tr>
             </thead>
@@ -1020,8 +1338,13 @@ export function SalesReportView({
                   <td colSpan={7} className="py-12 text-center text-[#7f7570]">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <span className="text-2xl">📋</span>
-                      <p className="font-medium text-sm text-[#1e1b19]">No Reports Available Yet</p>
-                      <p className="text-xs text-[#7f7570]">Reports will appear once you start recording transactions.</p>
+                      <p className="font-medium text-sm text-[#1e1b19]">
+                        No Reports Available Yet
+                      </p>
+                      <p className="text-xs text-[#7f7570]">
+                        Reports will appear once you start recording
+                        transactions.
+                      </p>
                     </div>
                   </td>
                 </tr>
@@ -1029,15 +1352,27 @@ export function SalesReportView({
                 paginatedDays.map((d, index) => {
                   const isFirstRow = currentPage === 1 && index === 0;
                   return (
-                    <tr key={d.dateLabel} className="hover:bg-[#faf2ee] transition-colors group">
+                    <tr
+                      key={d.dateLabel}
+                      className="hover:bg-[#faf2ee] transition-colors group"
+                    >
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-2">
-                          {isFirstRow && <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>}
-                          <span className="font-semibold text-[#1e1b19]">{d.dateLabel}</span>
+                          {isFirstRow && (
+                            <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
+                          )}
+                          <span className="font-semibold text-[#1e1b19]">
+                            {d.dateLabel}
+                          </span>
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right tabular-nums font-medium">
-                        {formatPriceWithSymbol(d.grossPaise, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          d.grossPaise,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right tabular-nums text-red-600">
                         {d.refundPaise > 0
@@ -1045,10 +1380,20 @@ export function SalesReportView({
                           : "—"}
                       </td>
                       <td className="py-3.5 px-4 text-right tabular-nums text-[#645d58]">
-                        {formatPriceWithSymbol(d.taxPaise, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          d.taxPaise,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-right tabular-nums font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(d.netPaise, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          d.netPaise,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </td>
                       <td className="py-3.5 px-4 text-center tabular-nums">
                         <span className="px-2.5 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] font-medium text-[11px]">
@@ -1062,7 +1407,13 @@ export function SalesReportView({
                           className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] font-medium group-hover:bg-[#1e1b19] group-hover:text-white transition-colors cursor-pointer"
                         >
                           <span>View Ledger</span>
-                          <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <svg
+                            className="w-3 h-3"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          >
                             <polyline points="9 18 15 12 9 6" />
                           </svg>
                         </button>
@@ -1079,8 +1430,16 @@ export function SalesReportView({
         {dailyLedger.length > 0 && (
           <div className="mt-4 pt-4 border-t border-[#e9e1dd] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#645d58]">
             <span>
-              Showing <strong className="text-[#1e1b19] font-semibold">{((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, dailyLedger.length)}</strong> of{" "}
-              <strong className="text-[#1e1b19] font-semibold">{dailyLedger.length}</strong> settlement days
+              Showing{" "}
+              <strong className="text-[#1e1b19] font-semibold">
+                {(currentPage - 1) * pageSize + 1}–
+                {Math.min(currentPage * pageSize, dailyLedger.length)}
+              </strong>{" "}
+              of{" "}
+              <strong className="text-[#1e1b19] font-semibold">
+                {dailyLedger.length}
+              </strong>{" "}
+              settlement days
             </span>
             <div className="flex items-center gap-1.5">
               <button
@@ -1096,7 +1455,11 @@ export function SalesReportView({
                   key={i}
                   type="button"
                   onClick={() => setCurrentPage(i + 1)}
-                  style={currentPage === i + 1 ? { backgroundColor: "#0c0a09", color: "#ffffff" } : undefined}
+                  style={
+                    currentPage === i + 1
+                      ? { backgroundColor: "#0c0a09", color: "#ffffff" }
+                      : undefined
+                  }
                   className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                     currentPage === i + 1
                       ? "bg-[#0c0a09] !text-white shadow-xs"
@@ -1109,7 +1472,9 @@ export function SalesReportView({
               <button
                 type="button"
                 disabled={currentPage === totalPages || totalPages === 0}
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
                 className="px-3 py-1 rounded-full border border-[#e9e1dd] bg-[#faf2ee] hover:bg-[#eee7e3] text-[#1e1b19] disabled:opacity-40 transition-colors cursor-pointer"
               >
                 Next
@@ -1129,9 +1494,9 @@ export function SalesReportView({
           />
 
           {/* Drawer Content */}
-          <aside className="relative z-10 w-full max-w-2xl h-full bg-[#fff8f5] shadow-2xl flex flex-col justify-between overflow-hidden border-l border-[#e9e1dd]">
+          <aside className="relative z-10 w-full max-w-full sm:max-w-xl lg:max-w-2xl h-full bg-[#fff8f5] shadow-2xl flex flex-col justify-between overflow-hidden border-l border-[#e9e1dd]">
             {/* Drawer Header */}
-            <div className="p-6 border-b border-[#e9e1dd] bg-white flex items-center justify-between">
+            <div className="p-4 sm:p-6 border-b border-[#e9e1dd] bg-white flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2.5">
                   <h2
@@ -1146,15 +1511,25 @@ export function SalesReportView({
                   </span>
                 </div>
                 <div className="flex items-center gap-2 text-[#645d58] text-xs">
-                  <svg className="w-3.5 h-3.5 text-[#7f7570]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="w-3.5 h-3.5 text-[#7f7570]"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
                     <line x1="16" y1="2" x2="16" y2="6" />
                     <line x1="8" y1="2" x2="8" y2="6" />
                     <line x1="3" y1="10" x2="21" y2="10" />
                   </svg>
-                  <span className="font-medium text-[#1e1b19]">{drawerStats.dateLabel}</span>
+                  <span className="font-medium text-[#1e1b19]">
+                    {drawerStats.dateLabel}
+                  </span>
                   <span className="text-[#d0c4be]">•</span>
-                  <span>Folio #{drawerStats.dateLabel.replace(/[^a-zA-Z0-9]/g, "")}</span>
+                  <span>
+                    Folio #{drawerStats.dateLabel.replace(/[^a-zA-Z0-9]/g, "")}
+                  </span>
                 </div>
               </div>
 
@@ -1164,7 +1539,13 @@ export function SalesReportView({
                 className="w-9 h-9 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] text-[#645d58] hover:text-[#1e1b19] flex items-center justify-center transition-colors cursor-pointer"
                 title="Close Ledger"
               >
-                <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -1193,7 +1574,12 @@ export function SalesReportView({
                       Gross Revenue
                     </span>
                     <span className="text-base font-semibold text-[#1e1b19] tabular-nums block">
-                      {formatPriceWithSymbol(drawerStats.grossPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        drawerStats.grossPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                     <span className="text-xs text-[#7f7570] block mt-0.5">
                       {drawerStats.ordersCount} orders processed
@@ -1235,7 +1621,12 @@ export function SalesReportView({
                       Taxes Collected
                     </span>
                     <span className="text-base font-semibold text-[#1e1b19] tabular-nums block">
-                      {formatPriceWithSymbol(drawerStats.taxPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        drawerStats.taxPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                     <span className="text-xs text-[#7f7570] block mt-0.5">
                       Audited tax total
@@ -1248,7 +1639,12 @@ export function SalesReportView({
                     </span>
                     <span className="text-base font-semibold text-[#1e1b19] tabular-nums block">
                       {drawerStats.deliveryPaise > 0
-                        ? formatPriceWithSymbol(drawerStats.deliveryPaise, currencySymbol, countryCode, true)
+                        ? formatPriceWithSymbol(
+                            drawerStats.deliveryPaise,
+                            currencySymbol,
+                            countryCode,
+                            true,
+                          )
                         : "—"}
                     </span>
                     <span className="text-xs text-[#7f7570] block mt-0.5">
@@ -1261,7 +1657,12 @@ export function SalesReportView({
                       Avg Order Value
                     </span>
                     <span className="text-base font-bold text-[#1e1b19] tabular-nums block">
-                      {formatPriceWithSymbol(drawerStats.aovPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        drawerStats.aovPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                     <span className="text-xs text-[#645d58] block mt-0.5">
                       {drawerStats.ordersCount} orders avg
@@ -1288,7 +1689,12 @@ export function SalesReportView({
                   <div className="py-2.5 flex items-center justify-between text-[#1e1b19]">
                     <span>Gross Sales Revenue</span>
                     <span className="font-semibold tabular-nums">
-                      {formatPriceWithSymbol(drawerStats.grossPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        drawerStats.grossPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                   </div>
                   <div className="py-2.5 flex items-center justify-between text-[#645d58]">
@@ -1319,7 +1725,13 @@ export function SalesReportView({
                     <div className="py-2.5 flex items-center justify-between text-[#645d58]">
                       <span>Add: Delivery &amp; Packaging</span>
                       <span className="tabular-nums">
-                        +{formatPriceWithSymbol(drawerStats.deliveryPaise, currencySymbol, countryCode, true)}
+                        +
+                        {formatPriceWithSymbol(
+                          drawerStats.deliveryPaise,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </span>
                     </div>
                   )}
@@ -1331,7 +1743,12 @@ export function SalesReportView({
                       Net Sales (Settled)
                     </span>
                     <span className="tabular-nums font-bold text-base">
-                      {formatPriceWithSymbol(drawerStats.netPaise, currencySymbol, countryCode, true)}
+                      {formatPriceWithSymbol(
+                        drawerStats.netPaise,
+                        currencySymbol,
+                        countryCode,
+                        true,
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1362,19 +1779,27 @@ export function SalesReportView({
                     <>
                       <div
                         className="bg-[#1e1b19] h-full transition-all duration-300"
-                        style={{ width: `${Math.round(((drawerStats.channelCounts.DineIn.count || 0) / drawerStats.ordersCount) * 100)}%` }}
+                        style={{
+                          width: `${Math.round(((drawerStats.channelCounts.DineIn.count || 0) / drawerStats.ordersCount) * 100)}%`,
+                        }}
                       ></div>
                       <div
                         className="bg-[#645d58] h-full transition-all duration-300"
-                        style={{ width: `${Math.round(((drawerStats.channelCounts.TakeAway.count || 0) / drawerStats.ordersCount) * 100)}%` }}
+                        style={{
+                          width: `${Math.round(((drawerStats.channelCounts.TakeAway.count || 0) / drawerStats.ordersCount) * 100)}%`,
+                        }}
                       ></div>
                       <div
                         className="bg-[#a8a29e] h-full transition-all duration-300"
-                        style={{ width: `${Math.round(((drawerStats.channelCounts.Delivery.count || 0) / drawerStats.ordersCount) * 100)}%` }}
+                        style={{
+                          width: `${Math.round(((drawerStats.channelCounts.Delivery.count || 0) / drawerStats.ordersCount) * 100)}%`,
+                        }}
                       ></div>
                       <div
                         className="bg-[#d6d3d1] h-full transition-all duration-300"
-                        style={{ width: `${Math.round(((drawerStats.channelCounts.OnlineStore.count || 0) / drawerStats.ordersCount) * 100)}%` }}
+                        style={{
+                          width: `${Math.round(((drawerStats.channelCounts.OnlineStore.count || 0) / drawerStats.ordersCount) * 100)}%`,
+                        }}
                       ></div>
                     </>
                   ) : (
@@ -1386,17 +1811,31 @@ export function SalesReportView({
                   <div className="flex items-center justify-between py-1.5 border-b border-[#f4ece8]">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#1e1b19] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">Dine-In</span>
+                      <span className="font-medium text-[#1e1b19]">
+                        Dine-In
+                      </span>
                       <span className="text-[#7f7570]">
                         ({drawerStats.channelCounts.DineIn.count} orders)
                       </span>
                     </div>
                     <div className="flex items-center gap-3 tabular-nums">
                       <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0 ? Math.round(((drawerStats.channelCounts.DineIn.count || 0) / drawerStats.ordersCount) * 100) : 0}%
+                        {drawerStats.ordersCount > 0
+                          ? Math.round(
+                              ((drawerStats.channelCounts.DineIn.count || 0) /
+                                drawerStats.ordersCount) *
+                                100,
+                            )
+                          : 0}
+                        %
                       </span>
                       <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(drawerStats.channelCounts.DineIn.amount, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          drawerStats.channelCounts.DineIn.amount,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -1404,17 +1843,31 @@ export function SalesReportView({
                   <div className="flex items-center justify-between py-1.5 border-b border-[#f4ece8]">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#645d58] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">Takeaway</span>
+                      <span className="font-medium text-[#1e1b19]">
+                        Takeaway
+                      </span>
                       <span className="text-[#7f7570]">
                         ({drawerStats.channelCounts.TakeAway.count} orders)
                       </span>
                     </div>
                     <div className="flex items-center gap-3 tabular-nums">
                       <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0 ? Math.round(((drawerStats.channelCounts.TakeAway.count || 0) / drawerStats.ordersCount) * 100) : 0}%
+                        {drawerStats.ordersCount > 0
+                          ? Math.round(
+                              ((drawerStats.channelCounts.TakeAway.count || 0) /
+                                drawerStats.ordersCount) *
+                                100,
+                            )
+                          : 0}
+                        %
                       </span>
                       <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(drawerStats.channelCounts.TakeAway.amount, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          drawerStats.channelCounts.TakeAway.amount,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -1422,17 +1875,31 @@ export function SalesReportView({
                   <div className="flex items-center justify-between py-1.5 border-b border-[#f4ece8]">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#a8a29e] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">Delivery</span>
+                      <span className="font-medium text-[#1e1b19]">
+                        Delivery
+                      </span>
                       <span className="text-[#7f7570]">
                         ({drawerStats.channelCounts.Delivery.count} orders)
                       </span>
                     </div>
                     <div className="flex items-center gap-3 tabular-nums">
                       <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0 ? Math.round(((drawerStats.channelCounts.Delivery.count || 0) / drawerStats.ordersCount) * 100) : 0}%
+                        {drawerStats.ordersCount > 0
+                          ? Math.round(
+                              ((drawerStats.channelCounts.Delivery.count || 0) /
+                                drawerStats.ordersCount) *
+                                100,
+                            )
+                          : 0}
+                        %
                       </span>
                       <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(drawerStats.channelCounts.Delivery.amount, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          drawerStats.channelCounts.Delivery.amount,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -1440,17 +1907,32 @@ export function SalesReportView({
                   <div className="flex items-center justify-between py-1.5">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-[#d6d3d1] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">Online Store</span>
+                      <span className="font-medium text-[#1e1b19]">
+                        Online Store
+                      </span>
                       <span className="text-[#7f7570]">
                         ({drawerStats.channelCounts.OnlineStore.count} orders)
                       </span>
                     </div>
                     <div className="flex items-center gap-3 tabular-nums">
                       <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0 ? Math.round(((drawerStats.channelCounts.OnlineStore.count || 0) / drawerStats.ordersCount) * 100) : 0}%
+                        {drawerStats.ordersCount > 0
+                          ? Math.round(
+                              ((drawerStats.channelCounts.OnlineStore.count ||
+                                0) /
+                                drawerStats.ordersCount) *
+                                100,
+                            )
+                          : 0}
+                        %
                       </span>
                       <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(drawerStats.channelCounts.OnlineStore.amount, currencySymbol, countryCode, true)}
+                        {formatPriceWithSymbol(
+                          drawerStats.channelCounts.OnlineStore.amount,
+                          currencySymbol,
+                          countryCode,
+                          true,
+                        )}
                       </span>
                     </div>
                   </div>
@@ -1478,37 +1960,69 @@ export function SalesReportView({
                         <th className="pb-2 font-semibold">Mode</th>
                         <th className="pb-2 text-center font-semibold">Txns</th>
                         <th className="pb-2 text-right font-semibold">Gross</th>
-                        <th className="pb-2 text-right font-semibold">Refunds</th>
-                        <th className="pb-2 text-right font-semibold">Net Settled</th>
-                        <th className="pb-2 text-right font-semibold">Status</th>
+                        <th className="pb-2 text-right font-semibold">
+                          Refunds
+                        </th>
+                        <th className="pb-2 text-right font-semibold">
+                          Net Settled
+                        </th>
+                        <th className="pb-2 text-right font-semibold">
+                          Status
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#f4ece8] text-[#1e1b19]">
-                      {Object.entries(drawerStats.paymentModes).map(([mode, data]) => (
-                        <tr key={mode} className="hover:bg-[#faf2ee] transition-colors">
-                          <td className="py-2.5 font-medium">{mode}</td>
-                          <td className="py-2.5 text-center tabular-nums text-[#645d58]">{data.txns}</td>
-                          <td className="py-2.5 text-right tabular-nums">
-                            {formatPriceWithSymbol(data.gross, currencySymbol, countryCode, true)}
-                          </td>
-                          <td className="py-2.5 text-right tabular-nums text-red-600">
-                            {data.refunds > 0
-                              ? `-${formatPriceWithSymbol(data.refunds, currencySymbol, countryCode, true)}`
-                              : "—"}
-                          </td>
-                          <td className="py-2.5 text-right tabular-nums font-semibold">
-                            {formatPriceWithSymbol(data.net, currencySymbol, countryCode, true)}
-                          </td>
-                          <td className="py-2.5 text-right">
-                            <span className="text-[#645d58] font-medium">—</span>
-                          </td>
-                        </tr>
-                      ))}
+                      {Object.entries(drawerStats.paymentModes).map(
+                        ([mode, data]) => (
+                          <tr
+                            key={mode}
+                            className="hover:bg-[#faf2ee] transition-colors"
+                          >
+                            <td className="py-2.5 font-medium">{mode}</td>
+                            <td className="py-2.5 text-center tabular-nums text-[#645d58]">
+                              {data.txns}
+                            </td>
+                            <td className="py-2.5 text-right tabular-nums">
+                              {formatPriceWithSymbol(
+                                data.gross,
+                                currencySymbol,
+                                countryCode,
+                                true,
+                              )}
+                            </td>
+                            <td className="py-2.5 text-right tabular-nums text-red-600">
+                              {data.refunds > 0
+                                ? `-${formatPriceWithSymbol(data.refunds, currencySymbol, countryCode, true)}`
+                                : "—"}
+                            </td>
+                            <td className="py-2.5 text-right tabular-nums font-semibold">
+                              {formatPriceWithSymbol(
+                                data.net,
+                                currencySymbol,
+                                countryCode,
+                                true,
+                              )}
+                            </td>
+                            <td className="py-2.5 text-right">
+                              <span className="text-[#645d58] font-medium">
+                                —
+                              </span>
+                            </td>
+                          </tr>
+                        ),
+                      )}
                       <tr className="bg-[#faf2ee] font-semibold text-[#1e1b19]">
                         <td className="py-2.5 px-2">Total Settled</td>
-                        <td className="py-2.5 text-center tabular-nums">{drawerStats.totalPaymentTxns}</td>
+                        <td className="py-2.5 text-center tabular-nums">
+                          {drawerStats.totalPaymentTxns}
+                        </td>
                         <td className="py-2.5 text-right tabular-nums">
-                          {formatPriceWithSymbol(drawerStats.totalPaymentGross, currencySymbol, countryCode, true)}
+                          {formatPriceWithSymbol(
+                            drawerStats.totalPaymentGross,
+                            currencySymbol,
+                            countryCode,
+                            true,
+                          )}
                         </td>
                         <td className="py-2.5 text-right tabular-nums text-red-600">
                           {drawerStats.totalPaymentRefunds > 0
@@ -1516,7 +2030,12 @@ export function SalesReportView({
                             : "—"}
                         </td>
                         <td className="py-2.5 text-right tabular-nums font-bold">
-                          {formatPriceWithSymbol(drawerStats.totalPaymentNet, currencySymbol, countryCode, true)}
+                          {formatPriceWithSymbol(
+                            drawerStats.totalPaymentNet,
+                            currencySymbol,
+                            countryCode,
+                            true,
+                          )}
                         </td>
                         <td className="py-2.5 text-right">
                           <span className="text-[#645d58] font-medium">—</span>
@@ -1531,7 +2050,13 @@ export function SalesReportView({
             {/* Drawer Footer */}
             <div className="p-4 border-t border-[#e9e1dd] bg-white flex items-center justify-between text-xs">
               <div className="flex items-center gap-1.5 text-[#645d58]">
-                <svg className="w-4 h-4 text-[#1b873f]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg
+                  className="w-4 h-4 text-[#1b873f]"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
                   <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 </svg>
                 <span>Verified Daily Sales Settlement Ledger</span>
@@ -1549,7 +2074,13 @@ export function SalesReportView({
                   onClick={() => window.print()}
                   className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#1e1b19] hover:bg-neutral-800 text-white font-medium transition-colors shadow-xs cursor-pointer"
                 >
-                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <svg
+                    className="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  >
                     <polyline points="6 9 6 2 18 2 18 9" />
                     <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
                     <rect x="6" y="14" width="12" height="8" />

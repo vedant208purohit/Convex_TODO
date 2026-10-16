@@ -201,7 +201,7 @@ export function ReportHeader({
 
           {/* Date Picker Popover Menu */}
           {isDropdownOpen && (
-            <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-[#eadfd6] rounded-2xl shadow-xl p-3 z-50 flex flex-col gap-2">
+            <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] bg-white border border-[#eadfd6] rounded-2xl shadow-xl p-3 z-50 flex flex-col gap-2">
               <div className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec]">
                 Select Date Range
               </div>

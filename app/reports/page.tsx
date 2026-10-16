@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
+import { generateDemoOrders } from "./demoReportData";
 
 export default function ReportsIndexPage() {
   const organizations = useQuery(api.organizations.list);
@@ -16,9 +17,17 @@ export default function ReportsIndexPage() {
     activeOrg ? { organizationId: activeOrg._id, pageSize: 1000 } : "skip",
   );
 
-  const orders = useMemo(() => {
+  const realOrders = useMemo(() => {
     return ordersResponse?.orders || [];
   }, [ordersResponse]);
+
+  const fallbackDemoOrders = useMemo(() => {
+    const end = new Date();
+    const start = new Date(Date.now() - 30 * 86400000);
+    return generateDemoOrders(start, end);
+  }, []);
+
+  const orders = realOrders.length > 0 ? realOrders : fallbackDemoOrders;
 
   // Derive quick dynamic stats
   const uniqueCustomerCount = useMemo(() => {
@@ -57,28 +66,28 @@ export default function ReportsIndexPage() {
 
   return (
     <PosShell title="Reports" subtitle="Overview">
-      <div className="flex-1 min-h-0 overflow-y-auto bg-[#fff8f5] px-6 lg:px-10 py-8">
-        <div className="max-w-6xl mx-auto space-y-8">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-[#fff8f5] px-4 sm:px-6 lg:px-10 py-5 sm:py-8">
+        <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
           {/* Editorial Masthead & Location Breadcrumbs */}
-          <header className="w-full pb-2 flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-[#e9e1dd]/60">
-            <div className="max-w-2xl space-y-1.5">
+          <header className="w-full pb-3 flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 border-b border-[#e9e1dd]/60">
+            <div className="max-w-2xl space-y-1 sm:space-y-1.5">
               <h1
-                className="text-4xl lg:text-5xl text-[#1e1b19] font-normal tracking-tight leading-none"
+                className="text-3xl sm:text-4xl lg:text-5xl text-[#1e1b19] font-normal tracking-tight leading-tight sm:leading-none"
                 style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
               >
                 Reports
               </h1>
-              <p className="text-base text-[#645d58] pt-1 leading-relaxed">
+              <p className="text-xs sm:text-base text-[#645d58] pt-0.5 sm:pt-1 leading-relaxed">
                 View sales, customers, menu performance and operational
                 performance.
               </p>
             </div>
 
             {/* Organization Context Chip & Service Tag */}
-            <div className="flex flex-col md:items-end gap-1.5 shrink-0">
-              <div className="inline-flex items-center gap-2 bg-[#faf2ee] px-4 py-1.5 rounded-full shadow-xs border border-[#e9e1dd]">
+            <div className="flex flex-col sm:items-end gap-1.5 shrink-0">
+              <div className="inline-flex items-center gap-2 bg-[#faf2ee] px-3.5 sm:px-4 py-1.5 rounded-full shadow-xs border border-[#e9e1dd]">
                 <svg
-                  className="w-4 h-4 text-[#7f7570]"
+                  className="w-3.5 sm:w-4 h-3.5 sm:h-4 text-[#7f7570]"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -95,15 +104,15 @@ export default function ReportsIndexPage() {
                   <path d="M14 13h1" />
                   <path d="M14 17h1" />
                 </svg>
-                <span className="text-xs font-semibold text-[#1e1b19] tracking-wide">
+                <span className="text-[11px] sm:text-xs font-semibold text-[#1e1b19] tracking-wide truncate max-w-[150px] sm:max-w-none">
                   {orgName}
                 </span>
                 <span className="text-[#d0c4be] text-xs">•</span>
-                <span className="text-xs font-medium text-[#645d58]">
+                <span className="text-[11px] sm:text-xs font-medium text-[#645d58]">
                   {branchName}
                 </span>
               </div>
-              <span className="text-[11px] text-[#7f7570] px-1 font-mono tracking-tight">
+              <span className="text-[10px] sm:text-[11px] text-[#7f7570] px-1 font-mono tracking-tight">
                 Audit Channel: POS-DIRECT-09
               </span>
             </div>
@@ -112,12 +121,12 @@ export default function ReportsIndexPage() {
           {/* Status / Health Summary Ribbon */}
           <section
             aria-label="System Health Overview"
-            className="w-full bg-white rounded-2xl p-5 shadow-xs border border-[#e9e1dd] flex flex-col sm:flex-row items-center justify-between gap-4"
+            className="w-full bg-white rounded-2xl p-4 sm:p-5 shadow-xs border border-[#e9e1dd] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-4"
           >
-            <div className="flex items-center gap-3.5">
-              <div className="w-10 h-10 rounded-full bg-[#faf2ee] border border-[#e9e1dd] flex items-center justify-center shrink-0">
+            <div className="flex items-center gap-3 sm:gap-3.5">
+              <div className="w-9 sm:w-10 h-9 sm:h-10 rounded-full bg-[#faf2ee] border border-[#e9e1dd] flex items-center justify-center shrink-0">
                 <svg
-                  className="w-5 h-5 text-[#1e1b19]"
+                  className="w-4 sm:w-5 h-4 sm:h-5 text-[#1e1b19]"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
