@@ -9,6 +9,8 @@ import {
   convertUnits,
   deductInventoryForOrderInternal,
   restoreInventoryForOrderInternal,
+  validateInventoryAvailabilityForItems,
+  checkInventoryAvailabilityForItems,
 } from "./inventory";
 
 // ==========================================
@@ -597,6 +599,18 @@ export const createOrder = mutation({
     // Cache tax groups and components
     const taxGroupCache = new Map<string, any>();
     const taxCompCache = new Map<string, any>();
+
+    // 3.5 Validate inventory availability for recipes if negative stock is not allowed
+    const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, args.organizationId);
+    if (stockError) {
+      return {
+        error: stockError,
+        orderId: null,
+        orderNumber: null,
+        tokenNumber: null,
+        totalAmount: "0.00",
+      };
+    }
 
     // 4. Calculate Subtotal, Line Items, and Tax Amounts
     let rawSubTotal = 0;
@@ -2210,6 +2224,14 @@ export const addItemsToExistingOrder = mutation({
     }
 
     const now = Date.now();
+    // Validate inventory availability for new items if negative stock is not allowed
+    const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, order.organizationId);
+    if (stockError) {
+      return {
+        error: stockError,
+      };
+    }
+
     let additionalSubTotal = 0;
     const lineItemConfigs: Array<any> = [];
 

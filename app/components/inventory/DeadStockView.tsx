@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { formatStoreDate } from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 interface LocalDeadStockRecord {
@@ -26,6 +27,8 @@ export function DeadStockView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
   const dbDeadStocks = useQuery(api.inventory.listDeadStock, { organizationId });
@@ -44,6 +47,7 @@ export function DeadStockView({
   }, [dbPurchaseOrders]);
 
   const logDeadStockMutation = useMutation(api.inventory.logDeadStock);
+  const updateDeadStockMutation = useMutation(api.inventory.updateDeadStock);
   const deleteDeadStockMutation = useMutation(api.inventory.deleteDeadStock);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -51,7 +55,9 @@ export function DeadStockView({
   const itemsPerPage = 10;
 
   // Column Sorting state
-  const [sortField, setSortField] = useState<"itemName" | null>(null);
+  const [sortField, setSortField] = useState<
+    "itemName" | "type" | "quantity" | "reason" | "markedDate" | null
+  >(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Drawer & Log State
@@ -75,8 +81,26 @@ export function DeadStockView({
       purchaseOrderId: ds.purchaseOrderId,
       poNumber: ds.poNumber,
     }));
-    return [...fromDb, ...localLogs];
+    const dbIds = new Set(fromDb.map((d) => d._id));
+    const extraLocal = localLogs.filter((l) => !dbIds.has(l._id));
+    return [...fromDb, ...extraLocal];
   }, [dbDeadStocks, localLogs]);
+
+  // Allowed dates (only today and yesterday)
+  const { todayStr, yesterdayStr } = useMemo(() => {
+    const toYmd = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    const now = new Date();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return {
+      todayStr: toYmd(now),
+      yesterdayStr: toYmd(yesterday),
+    };
+  }, []);
 
   // Form State
   const [selectedItemId, setSelectedItemId] = useState<string>("");
@@ -86,9 +110,13 @@ export function DeadStockView({
   const [unit, setUnit] = useState<string>("piece");
   const [supplierId, setSupplierId] = useState<string>("");
   const [poNumber, setPoNumber] = useState<string>("");
-  const [markedDate, setMarkedDate] = useState<string>(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [markedDate, setMarkedDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
   const [reason, setReason] = useState<string>("Expired");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -96,7 +124,9 @@ export function DeadStockView({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Sorting Handler
-  const handleSort = (field: "itemName") => {
+  const handleSort = (
+    field: "itemName" | "type" | "quantity" | "reason" | "markedDate"
+  ) => {
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -123,8 +153,24 @@ export function DeadStockView({
 
     if (sortField) {
       list.sort((a, b) => {
-        const valA = a.itemName.toLowerCase();
-        const valB = b.itemName.toLowerCase();
+        let valA: string | number = "";
+        let valB: string | number = "";
+        if (sortField === "itemName") {
+          valA = a.itemName.toLowerCase();
+          valB = b.itemName.toLowerCase();
+        } else if (sortField === "type") {
+          valA = ((a as any).type || "inventory item").toLowerCase();
+          valB = ((b as any).type || "inventory item").toLowerCase();
+        } else if (sortField === "quantity") {
+          valA = Number(a.quantity) || 0;
+          valB = Number(b.quantity) || 0;
+        } else if (sortField === "reason") {
+          valA = (a.reasonForDeadStock || "").toLowerCase();
+          valB = (b.reasonForDeadStock || "").toLowerCase();
+        } else if (sortField === "markedDate") {
+          valA = a.markedDate || "";
+          valB = b.markedDate || "";
+        }
         if (valA < valB) return sortOrder === "asc" ? -1 : 1;
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
@@ -150,7 +196,7 @@ export function DeadStockView({
     setQuantity("");
     setSupplierId("");
     setPoNumber("");
-    setMarkedDate(new Date().toISOString().slice(0, 10));
+    setMarkedDate(todayStr);
     setReason("Expired");
     setIsDrawerOpen(true);
   };
@@ -208,6 +254,11 @@ export function DeadStockView({
       return;
     }
 
+    if (markedDate > todayStr || markedDate < yesterdayStr) {
+      alert("Invalid date: only today and yesterday are allowed.");
+      return;
+    }
+
     const selectedItem = inventoryItems?.find((i) => i._id === finalItemId);
     const selectedSupplier = suppliers?.find((s) => s._id === supplierId);
     const selectedPo = purchaseOrders.find((p) => p.poNumber === poNumber);
@@ -215,6 +266,18 @@ export function DeadStockView({
     setIsSubmitting(true);
     try {
       if (editingRecord) {
+        if (!editingRecord._id.startsWith("dead_")) {
+          await updateDeadStockMutation({
+            id: editingRecord._id as Id<"inventoryItemStocks">,
+            quantity: numQty,
+            unit: unit.trim(),
+            reasonForDeadStock: reason,
+            supplierId: supplierId ? (supplierId as Id<"suppliers">) : undefined,
+            purchaseOrderId: selectedPo?._id ? (selectedPo._id as Id<"purchaseOrders">) : undefined,
+            poNumber: poNumber || undefined,
+            markedDate: new Date(markedDate).getTime(),
+          });
+        }
         setLocalLogs((prev) =>
           prev.map((l) =>
             l._id === editingRecord._id
@@ -235,7 +298,6 @@ export function DeadStockView({
           )
         );
       } else {
-        // Log mutation if valid convex ID, else local sync
         if (selectedItem) {
           await logDeadStockMutation({
             organizationId,
@@ -248,23 +310,24 @@ export function DeadStockView({
             poNumber: poNumber || undefined,
             markedDate: new Date(markedDate).getTime(),
           });
+          // Note: Do NOT add to localLogs here because Convex dbDeadStocks automatically updates reactively
+        } else {
+          const newRec: LocalDeadStockRecord = {
+            _id: `dead_${Date.now()}`,
+            createdAt: Date.now(),
+            inventoryItemId: finalItemId,
+            itemName: finalItemName,
+            quantity: numQty,
+            unit: unit.trim(),
+            reasonForDeadStock: reason,
+            markedDate,
+            supplierId: supplierId || undefined,
+            supplierName: selectedSupplier?.supplierName,
+            purchaseOrderId: selectedPo?._id,
+            poNumber: poNumber || undefined,
+          };
+          setLocalLogs((prev) => [newRec, ...prev]);
         }
-
-        const newRec: LocalDeadStockRecord = {
-          _id: `dead_${Date.now()}`,
-          createdAt: Date.now(),
-          inventoryItemId: finalItemId,
-          itemName: selectedItem?.name ?? finalItemName,
-          quantity: numQty,
-          unit: unit.trim(),
-          reasonForDeadStock: reason,
-          markedDate,
-          supplierId: supplierId || undefined,
-          supplierName: selectedSupplier?.supplierName,
-          purchaseOrderId: selectedPo?._id,
-          poNumber: poNumber || undefined,
-        };
-        setLocalLogs((prev) => [newRec, ...prev]);
       }
       setIsDrawerOpen(false);
     } catch (err) {
@@ -437,10 +500,114 @@ export function DeadStockView({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-5 font-semibold">Stockable type</th>
-                    <th className="py-3 px-5 font-semibold">Quantity</th>
-                    <th className="py-3 px-5 font-semibold">Reason</th>
-                    <th className="py-3 px-5 font-semibold">Marked date</th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("type")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Stockable type</span>
+                        {sortField === "type" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("quantity")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Quantity</span>
+                        {sortField === "quantity" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("reason")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Reason</span>
+                        {sortField === "reason" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("markedDate")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Marked date</span>
+                        {sortField === "markedDate" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
                     <th className="py-3 px-5 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -482,8 +649,8 @@ export function DeadStockView({
                           {log.reasonForDeadStock}
                         </span>
                       </td>
-                      <td className="py-3.5 px-5 text-stone-500 text-[11px]">
-                        {log.markedDate}
+                      <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                        {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || log.markedDate || "—"}
                       </td>
                       <td className="py-3.5 px-5 text-right relative">
                         <button
@@ -821,9 +988,24 @@ export function DeadStockView({
             </label>
             <input
               type="date"
-              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium"
+              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium cursor-pointer"
               value={markedDate}
-              onChange={(e) => setMarkedDate(e.target.value)}
+              min={yesterdayStr}
+              max={todayStr}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) {
+                  setMarkedDate(val);
+                  return;
+                }
+                if (val > todayStr) {
+                  setMarkedDate(todayStr);
+                } else if (val < yesterdayStr) {
+                  setMarkedDate(yesterdayStr);
+                } else {
+                  setMarkedDate(val);
+                }
+              }}
             />
             <p className="text-[11px] text-stone-500 mt-1.5">
               Note: Select a date to mark dead stock: only today and yesterday are allowed.

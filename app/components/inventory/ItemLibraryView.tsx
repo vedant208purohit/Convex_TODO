@@ -233,7 +233,9 @@ export function ItemLibraryView({
   const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(true);
 
   // Column Sorting state
-  const [sortField, setSortField] = useState<"name" | "category" | null>(null);
+  const [sortField, setSortField] = useState<
+    "name" | "category" | "sku" | "availableStock" | "createdAt" | null
+  >(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Drawer & Modal States
@@ -329,7 +331,9 @@ export function ItemLibraryView({
   }, [buyingUnit, servingUnit]);
 
   // Sorting Handler
-  const handleSort = (field: "name" | "category") => {
+  const handleSort = (
+    field: "name" | "category" | "sku" | "availableStock" | "createdAt"
+  ) => {
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -354,14 +358,23 @@ export function ItemLibraryView({
 
     if (sortField) {
       list.sort((a, b) => {
-        let valA = "";
-        let valB = "";
+        let valA: string | number = "";
+        let valB: string | number = "";
         if (sortField === "name") {
           valA = a.name.toLowerCase();
           valB = b.name.toLowerCase();
         } else if (sortField === "category") {
           valA = "dairy items";
           valB = "dairy items";
+        } else if (sortField === "sku") {
+          valA = (a.skuNumber || "").toLowerCase();
+          valB = (b.skuNumber || "").toLowerCase();
+        } else if (sortField === "availableStock") {
+          valA = a.availableStock ?? 0;
+          valB = b.availableStock ?? 0;
+        } else if (sortField === "createdAt") {
+          valA = a.updatedAt || a._creationTime || 0;
+          valB = b.updatedAt || b._creationTime || 0;
         }
         if (valA < valB) return sortOrder === "asc" ? -1 : 1;
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
@@ -1044,10 +1057,10 @@ export function ItemLibraryView({
                           <td className="py-3.5 px-5 font-mono text-stone-600">
                             {log.poNumber || "—"}
                           </td>
-                          <td className="py-3.5 px-5 text-stone-600 font-mono">
+                          <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                             {formatStoreDate(log.dateReceived, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                           </td>
-                          <td className="py-3.5 px-5 text-stone-600 font-mono">
+                          <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                             {log.itemExpiry && log.itemExpiry !== "—"
                               ? formatStoreDate(log.itemExpiry, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"
                               : "—"}
@@ -1133,7 +1146,7 @@ export function ItemLibraryView({
                               POS Order Sale
                             </span>
                           </td>
-                          <td className="py-3.5 px-5 text-stone-600 font-mono">
+                          <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                             {formatStoreDate(log.date, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                           </td>
                         </tr>
@@ -1217,7 +1230,7 @@ export function ItemLibraryView({
                         <td className="py-3.5 px-5 text-stone-700 font-medium">
                           {log.reason}
                         </td>
-                        <td className="py-3.5 px-5 text-stone-600 font-mono">
+                        <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                           {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                         </td>
                       </tr>
@@ -1395,14 +1408,23 @@ export function ItemLibraryView({
                 <div className="pt-2">
                   <h3 className="text-base font-semibold text-stone-900 mb-3">Unit details</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
+                    <div className={drawerMode === "edit" ? "opacity-50 select-none" : ""}>
                       <label className="block font-medium mb-1 text-stone-800">
                         Buying unit <span className="text-rose-500">*</span>
                       </label>
                       <select
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+                        disabled={drawerMode === "edit"}
+                        className={`w-full px-3 py-2 text-xs border rounded-md transition ${
+                          drawerMode === "edit"
+                            ? "bg-stone-200 text-stone-500 cursor-not-allowed border-stone-300 opacity-60"
+                            : "bg-white border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                        }`}
                         value={buyingUnit}
-                        onChange={(e) => handleBuyingUnitChange(e.target.value)}
+                        onChange={(e) => {
+                          if (drawerMode !== "edit") {
+                            handleBuyingUnitChange(e.target.value);
+                          }
+                        }}
                       >
                         {BUYING_UNITS.map((u) => (
                           <option key={u.value} value={u.value}>
@@ -1447,12 +1469,12 @@ export function ItemLibraryView({
                         onChange={(e) => setMinimumStockRefillLevel(Number(e.target.value))}
                       />
                     </div>
-                    <div>
+                    <div className="opacity-50 select-none">
                       <label className="block font-medium mb-1 text-stone-800">Unit *</label>
                       <input
                         type="text"
                         disabled
-                        className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
+                        className="w-full px-3 py-2 bg-stone-200 text-stone-500 border border-stone-300 rounded-md capitalize font-medium cursor-not-allowed opacity-60"
                         value={buyingUnit}
                       />
                     </div>
@@ -1471,12 +1493,12 @@ export function ItemLibraryView({
                         onChange={(e) => setBaselineStockLevel(Number(e.target.value))}
                       />
                     </div>
-                    <div>
+                    <div className="opacity-50 select-none">
                       <label className="block font-medium mb-1 text-stone-800">Unit *</label>
                       <input
                         type="text"
                         disabled
-                        className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
+                        className="w-full px-3 py-2 bg-stone-200 text-stone-500 border border-stone-300 rounded-md capitalize font-medium cursor-not-allowed opacity-60"
                         value={buyingUnit}
                       />
                     </div>
@@ -1695,9 +1717,87 @@ export function ItemLibraryView({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-5 font-semibold">SKU no.</th>
-                    <th className="py-3 px-5 font-semibold w-72">Available stock</th>
-                    <th className="py-3 px-5 font-semibold">Created/update time</th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("sku")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>SKU no.</span>
+                        {sortField === "sku" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none w-72"
+                      onClick={() => handleSort("availableStock")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Available stock</span>
+                        {sortField === "availableStock" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("createdAt")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Created/update time</span>
+                        {sortField === "createdAt" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
                     <th className="py-3 px-5 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -1808,7 +1908,7 @@ export function ItemLibraryView({
                             </div>
                           </div>
                         </td>
-                        <td className="py-3.5 px-5 text-stone-500 text-[11px]">
+                        <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                           {formattedDate}
                         </td>
                         <td className="py-3.5 px-5 text-right relative">
@@ -2078,20 +2178,25 @@ export function ItemLibraryView({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className={drawerMode === "edit" ? "opacity-50 select-none" : ""}>
                   <label className="block font-medium text-[#1c1917] mb-1">
                     Buying unit <span className="text-rose-500">*</span>
                   </label>
                   <select
-                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
-                      buyingUnitError
-                        ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
-                        : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    disabled={drawerMode === "edit"}
+                    className={`w-full px-3 py-2 text-xs border ${
+                      drawerMode === "edit"
+                        ? "bg-[#e7e5e4] text-[#78716c] cursor-not-allowed border-[#d6d3d1] opacity-60"
+                        : buyingUnitError
+                        ? "bg-[#fbf9f8] hover:bg-white border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                        : "bg-[#fbf9f8] hover:bg-white border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
                     } rounded-lg focus:outline-none focus:ring-1 transition`}
                     value={buyingUnit}
                     onChange={(e) => {
-                      handleBuyingUnitChange(e.target.value);
-                      if (buyingUnitError) setBuyingUnitError("");
+                      if (drawerMode !== "edit") {
+                        handleBuyingUnitChange(e.target.value);
+                        if (buyingUnitError) setBuyingUnitError("");
+                      }
                     }}
                   >
                     <option value="">Select buying unit</option>
@@ -2167,12 +2272,12 @@ export function ItemLibraryView({
                     <p className="text-[11px] text-rose-500 mt-1">{minRefillError}</p>
                   )}
                 </div>
-                <div>
+                <div className="opacity-50 select-none">
                   <label className="block font-medium text-[#78716c] mb-1">Unit</label>
                   <input
                     type="text"
                     disabled
-                    className="w-full px-3 py-2 bg-[#f5f5f4] text-xs border border-[#e7e5e4] rounded-lg text-[#78716c] font-mono capitalize"
+                    className="w-full px-3 py-2 bg-[#e7e5e4] text-xs border border-[#d6d3d1] rounded-lg text-[#78716c] font-mono capitalize cursor-not-allowed opacity-60"
                     value={buyingUnit}
                   />
                 </div>
@@ -2201,12 +2306,12 @@ export function ItemLibraryView({
                     <p className="text-[11px] text-rose-500 mt-1">{baselineError}</p>
                   )}
                 </div>
-                <div>
+                <div className="opacity-50 select-none">
                   <label className="block font-medium text-[#78716c] mb-1">Unit</label>
                   <input
                     type="text"
                     disabled
-                    className="w-full px-3 py-2 bg-[#f5f5f4] text-xs border border-[#e7e5e4] rounded-lg text-[#78716c] font-mono capitalize"
+                    className="w-full px-3 py-2 bg-[#e7e5e4] text-xs border border-[#d6d3d1] rounded-lg text-[#78716c] font-mono capitalize cursor-not-allowed opacity-60"
                     value={buyingUnit}
                   />
                 </div>

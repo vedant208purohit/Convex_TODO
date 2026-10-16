@@ -1,5 +1,12 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  formatStoreDate,
+  formatCurrencyAmount,
+  getCurrencyForCountry,
+  getPhoneCodeForCountry,
+  formatPhoneNumberWithCountryCode,
+} from "@/lib/constants/countries";
 
 export interface PurchaseOrderPdfData {
   po: any;
@@ -21,8 +28,9 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
   const contentWidth = pageWidth - margin * 2;
   let currentY = 22;
 
-  // Currency Symbol
-  const rawSymbol = org?.defaultCurrencySymbol || org?.currencySymbol || "$";
+  // Currency Symbol from centralized country master or org setting
+  const countryCurrency = getCurrencyForCountry(org?.country);
+  const rawSymbol = org?.defaultCurrencySymbol || countryCurrency.symbol || "$";
   const currencySymbol =
     !rawSymbol || rawSymbol === "₹" || rawSymbol === "INR" || rawSymbol.charCodeAt(0) > 127
       ? "Rs."
@@ -74,11 +82,17 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
     po.supplierGstNumber ||
     po.supplierGst ||
     po.gstNumber;
-  const supplierPhone =
+  const rawSupplierPhone =
     resolvedSupplier?.phoneNumber ||
     po.supplierPhoneNumber ||
     po.supplierPhone ||
     po.phoneNumber;
+  const supplierPhone = rawSupplierPhone
+    ? formatPhoneNumberWithCountryCode(
+        rawSupplierPhone,
+        getPhoneCodeForCountry(resolvedSupplier?.country || org?.country)
+      )
+    : "";
   const supplierEmail =
     resolvedSupplier?.email || po.supplierEmail || po.email;
 
@@ -105,7 +119,13 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
   ].filter(Boolean);
   const buyerAddress = buyerAddressParts.join(", ");
   const buyerGst = org?.gstNumber;
-  const buyerPhone = org?.phone || org?.mobile;
+  const rawBuyerPhone = org?.phone || org?.mobile;
+  const buyerPhone = rawBuyerPhone
+    ? formatPhoneNumberWithCountryCode(
+        rawBuyerPhone,
+        getPhoneCodeForCountry(org?.country)
+      )
+    : "";
   const buyerEmail = org?.email;
 
   printLine("Buyer", true, 13, 5.5);
@@ -121,7 +141,11 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
   printLine("PO Details", true, 13, 5.5);
   if (po.poNumber) printLine(`PO Number: ${po.poNumber}`, false, 10, 4.8);
 
-  const poDateFormatted = formatPoDate(po.createdAt);
+  const poDateFormatted = formatStoreDate(
+    po.createdAt,
+    org?.country,
+    org?.organizationTimeZone
+  );
   if (poDateFormatted) printLine(`PO Date: ${poDateFormatted}`, false, 10, 4.8);
 
   const priorityVal = po.purchasePriority || "low";
@@ -142,8 +166,8 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
       item.sku || item.skuNumber || "",
       qty.toString(),
       item.buyingUnit || item.unit || "",
-      `${currencySymbol} ${unitCost.toFixed(2)}`,
-      `${currencySymbol} ${totalCost.toFixed(2)}`,
+      `${currencySymbol} ${formatCurrencyAmount(unitCost, org?.country)}`,
+      `${currencySymbol} ${formatCurrencyAmount(totalCost, org?.country)}`,
     ];
   });
 
@@ -192,7 +216,7 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   doc.text(
-    `Total Amount: ${currencySymbol} ${totalAmountNum.toFixed(2)}`,
+    `Total Amount: ${currencySymbol} ${formatCurrencyAmount(totalAmountNum, org?.country)}`,
     pageWidth - margin,
     summaryY,
     { align: "right" }
@@ -212,14 +236,4 @@ export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdf
   // Save & Download PDF File
   const filename = `${po.poNumber || "PO"}_Voucher.pdf`;
   doc.save(filename);
-}
-
-function formatPoDate(val: number | string | Date | undefined): string {
-  if (!val) return "";
-  const d = new Date(val);
-  if (isNaN(d.getTime())) return "";
-  const day = String(d.getDate()).padStart(2, "0");
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const year = d.getFullYear();
-  return `${day}-${month}-${year}`;
 }

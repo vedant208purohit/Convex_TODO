@@ -8,6 +8,7 @@ import {
   formatCurrencyAmount,
   getCurrencyForCountry,
   formatStoreDate,
+  getPhoneCodeForCountry,
 } from "@/lib/constants/countries";
 import { downloadPurchaseOrderPdf } from "@/app/utils/generatePurchaseOrderPdf";
 import { Toast, type ToastMessage, type ToastType } from "@/app/components/Toast";
@@ -85,6 +86,23 @@ export function PurchaseOrdersView({
   const [expandedPoIds, setExpandedPoIds] = useState<Record<string, boolean>>({});
   const [openRowMenuPoId, setOpenRowMenuPoId] = useState<string | null>(null);
   const [rowMenuPos, setRowMenuPos] = useState<{ top: number; right: number; openUp: boolean } | null>(null);
+
+  // Column Sorting state for PO Master List
+  const [poSortField, setPoSortField] = useState<
+    "poNumber" | "supplierName" | "itemsCount" | "priority" | "status" | "total" | null
+  >(null);
+  const [poSortOrder, setPoSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handlePoSort = (
+    field: "poNumber" | "supplierName" | "itemsCount" | "priority" | "status" | "total"
+  ) => {
+    if (poSortField === field) {
+      setPoSortOrder(poSortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setPoSortField(field);
+      setPoSortOrder("asc");
+    }
+  };
 
   useEffect(() => {
     if (!openRowMenuPoId) return;
@@ -185,8 +203,36 @@ export function PurchaseOrdersView({
           (p.companyName && p.companyName.toLowerCase().includes(q))
       );
     }
+    if (poSortField) {
+      list = [...list].sort((a: any, b: any) => {
+        let valA: string | number = "";
+        let valB: string | number = "";
+        if (poSortField === "poNumber") {
+          valA = (a.poNumber || "").toLowerCase();
+          valB = (b.poNumber || "").toLowerCase();
+        } else if (poSortField === "supplierName") {
+          valA = (a.supplierName || "").toLowerCase();
+          valB = (b.supplierName || "").toLowerCase();
+        } else if (poSortField === "itemsCount") {
+          valA = a.itemsCount ?? a.items?.length ?? 0;
+          valB = b.itemsCount ?? b.items?.length ?? 0;
+        } else if (poSortField === "priority") {
+          valA = (a.priority || "").toLowerCase();
+          valB = (b.priority || "").toLowerCase();
+        } else if (poSortField === "status") {
+          valA = (a.status || "").toLowerCase();
+          valB = (b.status || "").toLowerCase();
+        } else if (poSortField === "total") {
+          valA = a.totalAmount ?? 0;
+          valB = b.totalAmount ?? 0;
+        }
+        if (valA < valB) return poSortOrder === "asc" ? -1 : 1;
+        if (valA > valB) return poSortOrder === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
     return list;
-  }, [allPOs, activeTabStatus, searchQuery]);
+  }, [allPOs, activeTabStatus, searchQuery, poSortField, poSortOrder]);
 
   // Pagination State for PO Master List (View 1) - 10 rows per page
   const [poCurrentPage, setPoCurrentPage] = useState(1);
@@ -529,7 +575,11 @@ export function PurchaseOrdersView({
     const s = suppliers?.find((sup) => sup._id === po.supplierId);
     const raw = po.supplierWhatsappNumber || s?.whatsappNumber || po.supplierPhoneNumber || s?.phoneNumber;
     if (!raw) return null;
-    const digits = raw.replace(/\D/g, "");
+    let digits = raw.replace(/\D/g, "");
+    if (digits.length === 10) {
+      const dialCode = getPhoneCodeForCountry(s?.country || activeOrg?.country || "India").replace(/\D/g, "");
+      digits = `${dialCode}${digits}`;
+    }
     return digits.length >= 10 ? digits : null;
   };
 
@@ -2015,14 +2065,170 @@ export function PurchaseOrdersView({
             <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold text-[#78716c] uppercase tracking-wider">
-                  <th className="py-3 px-5">PO Number</th>
-                  <th className="py-3 px-5">Supplier</th>
-                  <th className="py-3 px-4">Items Count</th>
-                  <th className="py-3 px-4">Priority</th>
-                  <th className="py-3 px-4">Status</th>
-                  <th className="py-3 px-5">Est. Total</th>
-                  <th className="py-3 px-5 text-right">Actions</th>
+                <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold text-[#78716c] uppercase tracking-wider select-none sticky top-0 z-20">
+                  <th
+                    className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                    onClick={() => handlePoSort("poNumber")}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>PO Number</span>
+                      {poSortField === "poNumber" ? (
+                        <span className="text-stone-900 font-bold">
+                          {poSortOrder === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : (
+                        <svg
+                          className="w-3 h-3 text-stone-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                    onClick={() => handlePoSort("supplierName")}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Supplier</span>
+                      {poSortField === "supplierName" ? (
+                        <span className="text-stone-900 font-bold">
+                          {poSortOrder === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : (
+                        <svg
+                          className="w-3 h-3 text-stone-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-stone-900 select-none"
+                    onClick={() => handlePoSort("itemsCount")}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Items Count</span>
+                      {poSortField === "itemsCount" ? (
+                        <span className="text-stone-900 font-bold">
+                          {poSortOrder === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : (
+                        <svg
+                          className="w-3 h-3 text-stone-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-stone-900 select-none"
+                    onClick={() => handlePoSort("priority")}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Priority</span>
+                      {poSortField === "priority" ? (
+                        <span className="text-stone-900 font-bold">
+                          {poSortOrder === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : (
+                        <svg
+                          className="w-3 h-3 text-stone-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-4 cursor-pointer hover:text-stone-900 select-none"
+                    onClick={() => handlePoSort("status")}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Status</span>
+                      {poSortField === "status" ? (
+                        <span className="text-stone-900 font-bold">
+                          {poSortOrder === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : (
+                        <svg
+                          className="w-3 h-3 text-stone-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                  <th
+                    className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                    onClick={() => handlePoSort("total")}
+                  >
+                    <div className="flex items-center space-x-1.5">
+                      <span>Est. Total</span>
+                      {poSortField === "total" ? (
+                        <span className="text-stone-900 font-bold">
+                          {poSortOrder === "asc" ? "↑" : "↓"}
+                        </span>
+                      ) : (
+                        <svg
+                          className="w-3 h-3 text-stone-300"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                  </th>
+                  <th className="py-3 px-5 text-right font-semibold select-none">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f5f5f4]">
@@ -2069,7 +2275,7 @@ export function PurchaseOrdersView({
                               {po.poNumber}
                             </span>
                           </div>
-                          <p className="text-[11px] text-stone-400 pl-6">
+                          <p className="text-[11px] text-stone-900 font-medium pl-6">
                             {formatStoreDate(po.createdAt, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
                           </p>
                         </td>

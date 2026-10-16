@@ -342,7 +342,7 @@ export default function CashierTablesView(props?: any) {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage(null);
-    }, 2800);
+    }, 4000);
   }, []);
 
   // Item Customization Selection Modal State
@@ -1145,10 +1145,16 @@ export default function CashierTablesView(props?: any) {
 
       if (activeOrder) {
         // Appending KOT #2 / #3 to existing active order
-        await addItemsMutation({
+        const res = await addItemsMutation({
           orderId: activeOrder._id,
           items: itemsPayload,
         });
+
+        if ((res as any)?.error) {
+          showToast((res as any).error);
+          setIsPlacingCart(false);
+          return;
+        }
 
         showToast("✅ KOT #2 Sent to Kitchen Printer");
       } else {
@@ -1175,7 +1181,7 @@ export default function CashierTablesView(props?: any) {
           currentDial
         );
 
-        await createOrderMutation({
+        const res = await createOrderMutation({
           organizationId: orgId,
           orderType: "DineIn",
           orderSource: "Prest-Cashier",
@@ -1188,13 +1194,23 @@ export default function CashierTablesView(props?: any) {
           items: itemsPayload,
         });
 
+        if ((res as any)?.error) {
+          showToast((res as any).error);
+          setIsPlacingCart(false);
+          return;
+        }
+
         showToast("✅ Order Created & KOT #1 Dispatched");
       }
 
       setRunningCart([]);
       setDrawerSubTab("tab");
     } catch (err: any) {
-      showToast(err.message || "Failed to dispatch KOT");
+      const msg = err?.data ?? err?.message ?? "Failed to dispatch KOT";
+      const cleanMsg = typeof msg === "string"
+        ? msg.replace(/^[\s\S]*(?:Server Error|Uncaught Error:|Uncaught ConvexError:|ConvexError:)\s*/i, "").replace(/^\[CONVEX[^\]]*\]\s*/i, "").trim()
+        : "Failed to dispatch KOT";
+      showToast(cleanMsg);
     } finally {
       setIsPlacingCart(false);
     }
@@ -2766,7 +2782,7 @@ export default function CashierTablesView(props?: any) {
 
       {/* Toast Notification */}
       {toastMessage && (
-        <div className="fixed bottom-14 left-1/2 transform -translate-x-1/2 bg-[#0c0a09] text-white px-5 py-2.5 rounded-xl shadow-2xl text-xs font-medium z-50 flex items-center space-x-2 font-sans border border-[#292524]">
+        <div className="fixed top-4 right-4 z-[9999] bg-[#0c0a09] text-white px-4 py-2.5 rounded-xl shadow-xl text-xs font-semibold flex items-center gap-2 animate-bounce">
           <span className="w-2 h-2 rounded-full bg-emerald-400" />
           <span>{toastMessage}</span>
         </div>

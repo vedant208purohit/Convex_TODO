@@ -1,5 +1,5 @@
-import { mutation, query, MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { mutation, query, MutationCtx, QueryCtx } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 
 // ==========================================
@@ -467,6 +467,39 @@ export const linkItemRecipe = mutation({
     }
 
     const now = Date.now();
+    const cleanYieldUnit =
+      args.yieldUnit && args.yieldUnit.toLowerCase() !== "portion"
+        ? args.yieldUnit
+        : "Kilogram (kg)";
+
+    let existing = null;
+    if (args.itemId) {
+      existing = await ctx.db
+        .query("recipes")
+        .withIndex("by_item", (q) => q.eq("itemId", args.itemId!))
+        .filter((q) => q.eq(q.field("inventoryItemId"), args.inventoryItemId))
+        .first();
+    } else if (args.customizationItemId) {
+      existing = await ctx.db
+        .query("recipes")
+        .withIndex("by_customization", (q) =>
+          q.eq("customizationItemId", args.customizationItemId!)
+        )
+        .filter((q) => q.eq(q.field("inventoryItemId"), args.inventoryItemId))
+        .first();
+    }
+
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        quantity: args.quantity,
+        unit: args.unit,
+        yield: args.yield ?? existing.yield,
+        yieldUnit: cleanYieldUnit,
+        updatedAt: now,
+      });
+      return { recipeId: existing._id };
+    }
+
     const recipeId = await ctx.db.insert("recipes", {
       organizationId: args.organizationId,
       itemId: args.itemId,
@@ -475,7 +508,7 @@ export const linkItemRecipe = mutation({
       quantity: args.quantity,
       unit: args.unit,
       yield: args.yield,
-      yieldUnit: args.yieldUnit,
+      yieldUnit: cleanYieldUnit,
       createdAt: now,
       updatedAt: now,
     });
@@ -513,6 +546,10 @@ export const getItemRecipe = query({
       )) as Doc<"inventoryItems"> | null;
       result.push({
         ...r,
+        yieldUnit:
+          r.yieldUnit && r.yieldUnit.toLowerCase() !== "portion"
+            ? r.yieldUnit
+            : "Kilogram (kg)",
         ingredientName: invItem?.name ?? "Unknown Ingredient",
         buyingUnit: invItem?.buyingUnit,
         servingUnit: invItem?.servingUnit,
@@ -638,6 +675,14 @@ export const assignRecipeToMenuItem = mutation({
         .query("recipeAssignments")
         .withIndex("by_target_item", (q) => q.eq("targetItemId", args.targetItemId))
         .collect();
+
+      // Ensure single assignment: delete any previous/conflicting assignments for this menu item
+      for (const a of all) {
+        if (String(a.sourceRecipeItemId) !== String(args.sourceRecipeItemId)) {
+          await ctx.db.delete(a._id);
+        }
+      }
+
       existing = all.find(
         (a) => String(a.sourceRecipeItemId) === String(args.sourceRecipeItemId)
       );
@@ -648,6 +693,14 @@ export const assignRecipeToMenuItem = mutation({
           q.eq("targetCustomizationItemId", args.targetCustomizationItemId)
         )
         .collect();
+
+      // Ensure single assignment: delete any previous/conflicting assignments for this customization
+      for (const a of all) {
+        if (String(a.sourceRecipeItemId) !== String(args.sourceRecipeItemId)) {
+          await ctx.db.delete(a._id);
+        }
+      }
+
       existing = all.find(
         (a) => String(a.sourceRecipeItemId) === String(args.sourceRecipeItemId)
       );
@@ -1570,6 +1623,45 @@ export const listDeadStock = query({
   },
 });
 
+export const updateDeadStock = mutation({
+  args: {
+    id: v.id("inventoryItemStocks"),
+    quantity: v.number(),
+    unit: v.string(),
+    reasonForDeadStock: v.string(),
+    supplierId: v.optional(v.id("suppliers")),
+    purchaseOrderId: v.optional(v.id("purchaseOrders")),
+    poNumber: v.optional(v.string()),
+    markedDate: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const record = await ctx.db.get(args.id);
+    if (!record) throw new Error("Record not found");
+
+    const invItem = await ctx.db.get(record.inventoryItemId);
+    if (invItem) {
+      const diff = args.quantity - record.quantity;
+      const newStock = Math.round((invItem.availableStock - diff) * 1000) / 1000;
+      await ctx.db.patch(record.inventoryItemId, {
+        availableStock: newStock,
+        updatedAt: Date.now(),
+      });
+    }
+
+    await ctx.db.patch(args.id, {
+      quantity: args.quantity,
+      unit: args.unit,
+      reasonForDeadStock: args.reasonForDeadStock,
+      supplierId: args.supplierId,
+      purchaseOrderId: args.purchaseOrderId,
+      poNumber: args.poNumber,
+      markedDate: args.markedDate ?? record.markedDate,
+    });
+
+    return { success: true };
+  },
+});
+
 export const deleteDeadStock = mutation({
   args: { id: v.id("inventoryItemStocks") },
   handler: async (ctx, args) => {
@@ -1824,6 +1916,158 @@ export const getItemStockHistory = query({
   },
 });
 
+/**
+ * Validates that all required ingredients for the given items are in stock,
+ * unless allowNegativeStock is explicitly true for that ingredient.
+ * If any ingredient without allowNegativeStock would fall below 0, throws a user-facing error.
+ */
+export async function checkInventoryAvailabilityForItems(
+  ctx: MutationCtx | QueryCtx,
+  items: Array<{
+    itemId: Id<"items">;
+    quantity: number;
+    customizations?: Array<any>;
+  }>,
+  organizationId: Id<"organizations">
+): Promise<string | null> {
+  const deductions: Array<{
+    itemId: Id<"inventoryItems">;
+    qty: number;
+    unit: string;
+  }> = [];
+
+  for (const oi of items) {
+    if (!oi.quantity || oi.quantity <= 0) continue;
+
+    // 1. Menu Item assigned master recipes (via explicit recipeAssignments only)
+    const itemAssignments = await ctx.db
+      .query("recipeAssignments")
+      .withIndex("by_target_item", (q) => q.eq("targetItemId", oi.itemId))
+      .collect();
+
+    let activeAssignment = null;
+    if (itemAssignments.length === 1) {
+      activeAssignment = itemAssignments[0];
+    } else if (itemAssignments.length > 1) {
+      itemAssignments.sort((a, b) => {
+        const aIsDedicated = String(a.sourceRecipeItemId) !== String(a.targetItemId) ? 1 : 0;
+        const bIsDedicated = String(b.sourceRecipeItemId) !== String(b.targetItemId) ? 1 : 0;
+        if (aIsDedicated !== bIsDedicated) return bIsDedicated - aIsDedicated;
+        return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
+      });
+      activeAssignment = itemAssignments[0];
+    }
+
+    if (activeAssignment) {
+      const masterRecipes = await ctx.db
+        .query("recipes")
+        .withIndex("by_item", (q) => q.eq("itemId", activeAssignment.sourceRecipeItemId))
+        .collect();
+
+      for (const mr of masterRecipes) {
+        deductions.push({
+          itemId: mr.inventoryItemId,
+          qty: mr.quantity * activeAssignment.portionMultiplier * oi.quantity,
+          unit: mr.unit,
+        });
+      }
+    }
+
+    // 2. Customizations / Modifiers assigned recipes
+    if (oi.customizations && Array.isArray(oi.customizations)) {
+      for (const cust of oi.customizations) {
+        const targetOptionId = cust.optionId || (cust.id as any);
+        if (!targetOptionId) continue;
+
+        const custAssignments = await ctx.db
+          .query("recipeAssignments")
+          .withIndex("by_target_customization", (q) =>
+            q.eq("targetCustomizationItemId", targetOptionId)
+          )
+          .collect();
+
+        let activeCustAssignment = null;
+        if (custAssignments.length === 1) {
+          activeCustAssignment = custAssignments[0];
+        } else if (custAssignments.length > 1) {
+          custAssignments.sort(
+            (a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0)
+          );
+          activeCustAssignment = custAssignments[0];
+        }
+
+        if (activeCustAssignment) {
+          const masterRecipes = await ctx.db
+            .query("recipes")
+            .withIndex("by_item", (q) => q.eq("itemId", activeCustAssignment.sourceRecipeItemId))
+            .collect();
+
+          for (const mr of masterRecipes) {
+            deductions.push({
+              itemId: mr.inventoryItemId,
+              qty: mr.quantity * activeCustAssignment.portionMultiplier * oi.quantity,
+              unit: mr.unit,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // Aggregate required quantities in buyingUnit per inventory item
+  const requiredMap = new Map<string, number>();
+  for (const d of deductions) {
+    const invItem = await ctx.db.get(d.itemId);
+    if (!invItem) continue;
+
+    const qtyInBuyingUnit = convertUnits(d.qty, d.unit, invItem.buyingUnit);
+    const prev = requiredMap.get(String(d.itemId)) || 0;
+    requiredMap.set(String(d.itemId), prev + qtyInBuyingUnit);
+  }
+
+  // Check inventory stock and allowNegativeStock
+  const unavailableIngredients: string[] = [];
+
+  for (const [invId, totalRequired] of requiredMap.entries()) {
+    const invItem = await ctx.db.get(invId as Id<"inventoryItems">);
+    if (!invItem) continue;
+
+    // If negative stock is NOT allowed (allowNegativeStock !== true)
+    if (invItem.allowNegativeStock !== true) {
+      const currentStock = invItem.availableStock ?? 0;
+      if (currentStock < totalRequired) {
+        unavailableIngredients.push(invItem.name);
+      }
+    }
+  }
+
+  if (unavailableIngredients.length > 0) {
+    if (unavailableIngredients.length === 1) {
+      return `Ingredient "${unavailableIngredients[0]}" is not available. Please add stock.`;
+    } else {
+      const names = unavailableIngredients.map((n) => `"${n}"`).join(", ");
+      return `Ingredients (${names}) are not available. Please add stock.`;
+    }
+  }
+
+  return null;
+}
+
+export async function validateInventoryAvailabilityForItems(
+  ctx: MutationCtx | QueryCtx,
+  items: Array<{
+    itemId: Id<"items">;
+    quantity: number;
+    customizations?: Array<any>;
+  }>,
+  organizationId: Id<"organizations">
+) {
+  const err = await checkInventoryAvailabilityForItems(ctx, items, organizationId);
+  if (err) {
+    throw new ConvexError(err);
+  }
+}
+
 export async function deductInventoryForOrderInternal(
   ctx: MutationCtx,
   orderId: Id<"orders">
@@ -1869,16 +2113,36 @@ export async function deductInventoryForOrderInternal(
         .withIndex("by_target_item", (q) => q.eq("targetItemId", oi.itemId))
         .collect();
 
-      for (const assign of itemAssignments) {
+      // Resolve the SINGLE authoritative recipe assignment for this menu item
+      let activeAssignment = null;
+      if (itemAssignments.length === 1) {
+        activeAssignment = itemAssignments[0];
+      } else if (itemAssignments.length > 1) {
+        // Prefer dedicated external recipe (source != target), then latest updated
+        itemAssignments.sort((a, b) => {
+          const aIsDedicated = String(a.sourceRecipeItemId) !== String(a.targetItemId) ? 1 : 0;
+          const bIsDedicated = String(b.sourceRecipeItemId) !== String(b.targetItemId) ? 1 : 0;
+          if (aIsDedicated !== bIsDedicated) return bIsDedicated - aIsDedicated;
+          return (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0);
+        });
+        activeAssignment = itemAssignments[0];
+
+        // Clean up duplicate/stale assignments so they never cause double deduction again
+        for (let i = 1; i < itemAssignments.length; i++) {
+          await ctx.db.delete(itemAssignments[i]._id);
+        }
+      }
+
+      if (activeAssignment) {
         const masterRecipes = await ctx.db
           .query("recipes")
-          .withIndex("by_item", (q) => q.eq("itemId", assign.sourceRecipeItemId))
+          .withIndex("by_item", (q) => q.eq("itemId", activeAssignment.sourceRecipeItemId))
           .collect();
 
         for (const mr of masterRecipes) {
           deductions.push({
             itemId: mr.inventoryItemId,
-            qty: mr.quantity * assign.portionMultiplier * oi.quantity,
+            qty: mr.quantity * activeAssignment.portionMultiplier * oi.quantity,
             unit: mr.unit,
           });
         }
@@ -1894,16 +2158,27 @@ export async function deductInventoryForOrderInternal(
             )
             .collect();
 
-          for (const ca of custAssignments) {
+          let activeCustAssignment = null;
+          if (custAssignments.length === 1) {
+            activeCustAssignment = custAssignments[0];
+          } else if (custAssignments.length > 1) {
+            custAssignments.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+            activeCustAssignment = custAssignments[0];
+            for (let i = 1; i < custAssignments.length; i++) {
+              await ctx.db.delete(custAssignments[i]._id);
+            }
+          }
+
+          if (activeCustAssignment) {
             const masterRecipes = await ctx.db
               .query("recipes")
-              .withIndex("by_item", (q) => q.eq("itemId", ca.sourceRecipeItemId))
+              .withIndex("by_item", (q) => q.eq("itemId", activeCustAssignment.sourceRecipeItemId))
               .collect();
 
             for (const mr of masterRecipes) {
               deductions.push({
                 itemId: mr.inventoryItemId,
-                qty: mr.quantity * ca.portionMultiplier * oi.quantity,
+                qty: mr.quantity * activeCustAssignment.portionMultiplier * oi.quantity,
                 unit: mr.unit,
               });
             }
@@ -1931,9 +2206,10 @@ export async function deductInventoryForOrderInternal(
       let newStock = currentStock - deductionInBuyingUnit;
 
       // Honor Negative Stock Flag
-      // If allowNegativeStock is false, clamp at 0
-      if (newStock < 0 && invItem.allowNegativeStock === false) {
-        newStock = 0;
+      if (newStock < 0 && invItem.allowNegativeStock !== true) {
+        throw new ConvexError(
+          `Ingredient "${invItem.name}" is not available. Please add stock.`
+        );
       }
 
       await ctx.db.patch(invItem._id, {
@@ -2106,5 +2382,7 @@ export const repairPoNumbers = mutation({
     return { success: true, updated };
   },
 });
+
+
 
 
