@@ -970,7 +970,7 @@ export function PosShell({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
+        <main className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</main>
       </div>
     </div>
   );

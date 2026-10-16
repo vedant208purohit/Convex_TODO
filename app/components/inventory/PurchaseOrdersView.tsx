@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useRef, Fragment } from "react";
+import React, { useState, useMemo, useRef, useEffect, Fragment } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
@@ -10,6 +10,7 @@ import {
   formatStoreDate,
 } from "@/lib/constants/countries";
 import { downloadPurchaseOrderPdf } from "@/app/utils/generatePurchaseOrderPdf";
+import { Toast, type ToastMessage, type ToastType } from "@/app/components/Toast";
 
 export interface PurchaseOrderItem {
   _id?: string;
@@ -59,6 +60,7 @@ export function PurchaseOrdersView({
 
   // Live Convex Mutations
   const createPOMutation = useMutation(api.inventory.createPurchaseOrder);
+  const updatePODetailsMutation = useMutation(api.inventory.updatePurchaseOrderDetails);
   const addItemsMutation = useMutation(api.inventory.addItemsToPurchaseOrder);
   const removeItemsMutation = useMutation(api.inventory.removePurchaseOrderItems);
   const updateItemQtyMutation = useMutation(api.inventory.updatePurchaseOrderItemQuantity);
@@ -68,6 +70,7 @@ export function PurchaseOrdersView({
   const updateReceivingMutation = useMutation(api.inventory.updatePOItemReceivingStatus);
   const settlePOMutation = useMutation(api.inventory.settlePurchaseOrder);
   const attachPOInvoiceMutation = useMutation(api.inventory.attachPOInvoice);
+  const updatePOItemDetailsMutation = useMutation(api.inventory.updatePurchaseOrderItemDetails);
 
   // R2 Storage Actions for Invoice Upload
   const createAssetUpload = useAction(api.r2.createAssetUpload);
@@ -81,6 +84,34 @@ export function PurchaseOrdersView({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedPoIds, setExpandedPoIds] = useState<Record<string, boolean>>({});
   const [openRowMenuPoId, setOpenRowMenuPoId] = useState<string | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; right: number; openUp: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!openRowMenuPoId) return;
+    const handleClose = () => {
+      setOpenRowMenuPoId(null);
+      setRowMenuPos(null);
+    };
+    window.addEventListener("scroll", handleClose, true);
+    window.addEventListener("resize", handleClose);
+    return () => {
+      window.removeEventListener("scroll", handleClose, true);
+      window.removeEventListener("resize", handleClose);
+    };
+  }, [openRowMenuPoId]);
+
+  // 3-Dots Row Actions Modals State
+  const [poForSupplierEdit, setPoForSupplierEdit] = useState<any | null>(null);
+  const [newSupplierId, setNewSupplierId] = useState<string>("");
+  const [isUpdatingSupplier, setIsUpdatingSupplier] = useState(false);
+
+  const [poForDetailsEdit, setPoForDetailsEdit] = useState<any | null>(null);
+  const [editPriority, setEditPriority] = useState<"high" | "medium" | "low">("low");
+  const [editNotes, setEditNotes] = useState("");
+  const [isUpdatingDetails, setIsUpdatingDetails] = useState(false);
+
+  const [poForCancel, setPoForCancel] = useState<any | null>(null);
+  const [isCancellingPo, setIsCancellingPo] = useState(false);
 
   // Create PO Drawer State
   const [isNewPODrawerOpen, setIsNewPODrawerOpen] = useState(false);
@@ -101,25 +132,27 @@ export function PurchaseOrdersView({
   const [detailSearchQuery, setDetailSearchQuery] = useState("");
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [localQuantities, setLocalQuantities] = useState<Record<string, string>>({});
+  const [localPrices, setLocalPrices] = useState<Record<string, string>>({});
+  const [localReceivedQtys, setLocalReceivedQtys] = useState<Record<string, string>>({});
+  const debounceTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Confirmation Modals State
   const [isPlaceOrderConfirmOpen, setIsPlaceOrderConfirmOpen] = useState(false);
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false);
   const [isSettleConfirmOpen, setIsSettleConfirmOpen] = useState(false);
+  const [isOrderReceivedConfirmOpen, setIsOrderReceivedConfirmOpen] = useState(false);
+  const [isOrderMissingConfirmOpen, setIsOrderMissingConfirmOpen] = useState(false);
   const [isPerformingAction, setIsPerformingAction] = useState(false);
 
   // Placed Order Detail Tabs: "ordered" | "received" | "missing"
   const [detailTab, setDetailTab] = useState<"ordered" | "received" | "missing">("ordered");
 
-  // Toast message state
-  const [toastMessage, setToastMessage] = useState<{
-    text: string;
-    type: "success" | "error";
-  } | null>(null);
+  // Standard Menu-style Toast Notification (top-right)
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
+  const showToast = (message: string, type: ToastType = "success", subtext?: string) => {
+    setToast({ message, type, subtext });
   };
 
   // Status Counts for List View Tabs
@@ -154,6 +187,36 @@ export function PurchaseOrdersView({
     }
     return list;
   }, [allPOs, activeTabStatus, searchQuery]);
+
+  // Pagination State for PO Master List (View 1) - 10 rows per page
+  const [poCurrentPage, setPoCurrentPage] = useState(1);
+  const poItemsPerPage = 10;
+  const totalPoPages = Math.max(1, Math.ceil(filteredPOs.length / poItemsPerPage));
+  const paginatedPOs = useMemo(() => {
+    const start = (poCurrentPage - 1) * poItemsPerPage;
+    return filteredPOs.slice(start, start + poItemsPerPage);
+  }, [filteredPOs, poCurrentPage, poItemsPerPage]);
+
+  // Pagination State for PO Detail Items (View 2) - 10 items per page
+  const [detailCurrentPage, setDetailCurrentPage] = useState(1);
+  const detailItemsPerPage = 10;
+
+  // Synchronize Detail Tab based on active PO status (settled POs default to "received")
+  React.useEffect(() => {
+    if (!activePODetails) return;
+    if (activePODetails.status === "settled") {
+      setDetailTab("received");
+    } else if (activePODetails.status === "sent" || activePODetails.status === "drafted") {
+      setDetailTab("ordered");
+    }
+    setDetailCurrentPage(1);
+    setSelectedItemIds([]);
+  }, [activePODetails?._id, activePODetails?.status]);
+
+  // Reset detail page on tab or query change
+  React.useEffect(() => {
+    setDetailCurrentPage(1);
+  }, [detailTab, detailSearchQuery]);
 
   // Check if Prefill Modal should automatically show on entering PO
   React.useEffect(() => {
@@ -300,15 +363,39 @@ export function PurchaseOrdersView({
   };
 
   // Handler: Place Order (Screenshot 2: Place order button)
-  const handleConfirmPlaceOrder = async () => {
+  const handleConfirmPlaceOrder = async (targetItemsToOrder: any[]) => {
     if (!activePODetails) return;
     setIsPerformingAction(true);
     try {
-      await placePOMutation({
+      // 1. Sync all quantities, zeroing out any omitted lines
+      const activeItems = activePODetails.items || [];
+      const orderItemIds = new Set(targetItemsToOrder.map((it: any) => it._id));
+      for (const item of activeItems) {
+        if (!orderItemIds.has(item._id)) {
+          await updateItemQtyMutation({
+            purchaseOrderItemId: item._id,
+            orderedQuantity: 0,
+          });
+        } else if (localQuantities[item._id] !== undefined) {
+          const parsed = parseFloat(localQuantities[item._id]);
+          const validQty = isNaN(parsed) || parsed < 0 ? 0 : parsed;
+          await updateItemQtyMutation({
+            purchaseOrderItemId: item._id,
+            orderedQuantity: validQty,
+          });
+        }
+      }
+
+      // 2. Call placePurchaseOrder (removes 0-quantity items and sets status to sent)
+      const res = await placePOMutation({
         purchaseOrderId: activePODetails._id,
       });
+
       setIsPlaceOrderConfirmOpen(false);
-      showToast(`Purchase order ${activePODetails.poNumber} placed successfully!`, "success");
+      showToast(
+        `Purchase order ${activePODetails.poNumber} placed successfully (${res.itemsCount ?? targetItemsToOrder.length} item(s))!`,
+        "success"
+      );
     } catch (err: any) {
       console.error("Failed to place purchase order:", err);
       showToast(err?.message || "Failed to place purchase order.", "error");
@@ -337,18 +424,140 @@ export function PurchaseOrdersView({
     }
   };
 
-  // Handler: Cancel Single PO from table row action menu
-  const handleCancelSinglePO = async (po: any) => {
-    if (!confirm(`Are you sure you want to cancel purchase order ${po.poNumber}?`)) return;
+  // Handler: Confirm Order Received (Marks selected items as received & moves to Received Items tab)
+  const handleConfirmOrderReceived = async () => {
+    if (!activePODetails || selectedItemIds.length === 0) return;
+    setIsPerformingAction(true);
+    try {
+      await updateReceivingMutation({
+        purchaseOrderId: activePODetails._id,
+        itemIds: selectedItemIds as Id<"purchaseOrderItems">[],
+        statusType: "received",
+      });
+      const receivedCount = selectedItemIds.length;
+      setSelectedItemIds([]);
+      setIsOrderReceivedConfirmOpen(false);
+      setDetailTab("received");
+      showToast(
+        `Selected ${receivedCount} item(s) marked as received.`,
+        "success"
+      );
+    } catch (err: any) {
+      console.error("Failed to mark items as received:", err);
+      showToast(err?.message || "Failed to mark items as received.", "error");
+    } finally {
+      setIsPerformingAction(false);
+    }
+  };
+
+  // Handler: Confirm Order Missing (Marks selected items as missing & moves to Missing Items tab)
+  const handleConfirmOrderMissing = async () => {
+    if (!activePODetails || selectedItemIds.length === 0) return;
+    setIsPerformingAction(true);
+    try {
+      await updateReceivingMutation({
+        purchaseOrderId: activePODetails._id,
+        itemIds: selectedItemIds as Id<"purchaseOrderItems">[],
+        statusType: "missing",
+      });
+      const missingCount = selectedItemIds.length;
+      setSelectedItemIds([]);
+      setIsOrderMissingConfirmOpen(false);
+      setDetailTab("missing");
+      showToast(
+        `Selected ${missingCount} item(s) marked as missing.`,
+        "success"
+      );
+    } catch (err: any) {
+      console.error("Failed to mark items as missing:", err);
+      showToast(err?.message || "Failed to mark items as missing.", "error");
+    } finally {
+      setIsPerformingAction(false);
+    }
+  };
+
+  // Handlers for Row Action Menu (All 7 Options)
+  const openEditSupplierModal = (po: any) => {
+    setPoForSupplierEdit(po);
+    setNewSupplierId(po.supplierId || suppliers?.[0]?._id || "");
+  };
+
+  const handleSaveSupplierChange = async () => {
+    if (!poForSupplierEdit || !newSupplierId) return;
+    setIsUpdatingSupplier(true);
+    try {
+      await updatePODetailsMutation({
+        purchaseOrderId: poForSupplierEdit._id,
+        supplierId: newSupplierId as Id<"suppliers">,
+      });
+      showToast(`Supplier updated for ${poForSupplierEdit.poNumber}.`, "success");
+      setPoForSupplierEdit(null);
+    } catch (err: any) {
+      console.error("Failed to update supplier on PO:", err);
+      showToast(err?.message || "Failed to update supplier.", "error");
+    } finally {
+      setIsUpdatingSupplier(false);
+    }
+  };
+
+  const openEditDetailsModal = (po: any) => {
+    setPoForDetailsEdit(po);
+    setEditPriority(po.purchasePriority || "low");
+    setEditNotes(po.notes || "");
+  };
+
+  const handleSaveDetailsChange = async () => {
+    if (!poForDetailsEdit) return;
+    setIsUpdatingDetails(true);
+    try {
+      await updatePODetailsMutation({
+        purchaseOrderId: poForDetailsEdit._id,
+        purchasePriority: editPriority,
+        notes: editNotes.trim() || undefined,
+      });
+      showToast(`PO details updated for ${poForDetailsEdit.poNumber}.`, "success");
+      setPoForDetailsEdit(null);
+    } catch (err: any) {
+      console.error("Failed to update PO details:", err);
+      showToast(err?.message || "Failed to update PO details.", "error");
+    } finally {
+      setIsUpdatingDetails(false);
+    }
+  };
+
+  const getSupplierChatNumber = (po: any): string | null => {
+    const s = suppliers?.find((sup) => sup._id === po.supplierId);
+    const raw = po.supplierWhatsappNumber || s?.whatsappNumber || po.supplierPhoneNumber || s?.phoneNumber;
+    if (!raw) return null;
+    const digits = raw.replace(/\D/g, "");
+    return digits.length >= 10 ? digits : null;
+  };
+
+  const handleViewChat = (po: any) => {
+    const digits = getSupplierChatNumber(po);
+    if (!digits) {
+      showToast("No WhatsApp number available for this supplier.", "error");
+      return;
+    }
+    const msg = encodeURIComponent(`Hello ${po.supplierName}, regarding Purchase Order ${po.poNumber}`);
+    window.open(`https://wa.me/${digits}?text=${msg}`, "_blank");
+  };
+
+  const handleConfirmCancelPo = async () => {
+    if (!poForCancel) return;
+    setIsCancellingPo(true);
     try {
       await cancelPOMutation({
-        purchaseOrderId: po._id,
+        purchaseOrderId: poForCancel._id,
         reason: "Cancelled by store manager",
       });
-      showToast(`Purchase order ${po.poNumber} cancelled.`, "success");
+      showToast(`Purchase order ${poForCancel.poNumber} cancelled.`, "success");
+      setPoForCancel(null);
     } catch (err: any) {
       console.error("Failed to cancel purchase order:", err);
       showToast(err?.message || "Failed to cancel purchase order.", "error");
+    } finally {
+      setIsCancellingPo(false);
     }
   };
 
@@ -454,11 +663,40 @@ export function PurchaseOrdersView({
   }
 
   // =========================================================================
-  // VIEW 2: ADD ITEMS IN PO#XXXX (EXACT MATCH FOR SCREENSHOT 1 & 2)
+  // VIEW 2: ADD ITEMS IN PO#XXXX / PLACED PO TABS VIEW (EXACT MATCH FOR PHOTOS 1, 2, 3)
   // =========================================================================
   if (activePoId && activePODetails) {
-    const items = activePODetails.items || [];
-    const filteredDetailItems = items.filter((item: any) => {
+    const isDraft = activePODetails.status === "drafted";
+    const isSent = activePODetails.status === "sent";
+    const isSettled = activePODetails.status === "settled";
+
+    // When PO is settled, default to "received" tab so received items are immediately visible
+    const effectiveDetailTab: "ordered" | "received" | "missing" =
+      isDraft
+        ? "ordered"
+        : isSettled
+        ? detailTab === "missing"
+          ? "missing"
+          : "received"
+        : detailTab;
+
+    const allItems = activePODetails.items || [];
+    const totalReceivedItems = allItems.filter((it: any) => it.isReceived === true);
+    const totalMissingItems = allItems.filter((it: any) => it.isMissing === true);
+    const totalOrderedItems = allItems.filter(
+      (it: any) => !it.isReceived && !it.isMissing
+    );
+
+    // Active items to display based on status & current active tab
+    const activeItemsList = isDraft
+      ? allItems
+      : effectiveDetailTab === "ordered"
+      ? totalOrderedItems
+      : effectiveDetailTab === "received"
+      ? totalReceivedItems
+      : totalMissingItems;
+
+    const filteredDetailItems = activeItemsList.filter((item: any) => {
       if (!detailSearchQuery.trim()) return true;
       const q = detailSearchQuery.toLowerCase();
       return (
@@ -468,33 +706,65 @@ export function PurchaseOrdersView({
       );
     });
 
-    const isAllSelected =
-      filteredDetailItems.length > 0 &&
-      filteredDetailItems.every((it: any) => selectedItemIds.includes(it._id));
+    const totalDetailPages = Math.max(1, Math.ceil(filteredDetailItems.length / detailItemsPerPage));
+    const paginatedDetailItems = filteredDetailItems.slice(
+      (detailCurrentPage - 1) * detailItemsPerPage,
+      detailCurrentPage * detailItemsPerPage
+    );
 
-    const totalPOAmount = items.reduce(
-      (acc: number, it: any) => acc + (it.orderedQuantity || 0) * (it.unitCost || 0),
+    const isAllSelected =
+      paginatedDetailItems.length > 0 &&
+      paginatedDetailItems.every((it: any) => selectedItemIds.includes(it._id));
+
+    // Instant quantity getters for Draft Mode
+    const getItemQuantity = (item: any): number => {
+      if (localQuantities[item._id] !== undefined) {
+        const parsed = parseFloat(localQuantities[item._id]);
+        return isNaN(parsed) || parsed < 0 ? 0 : parsed;
+      }
+      return item.orderedQuantity ?? 0;
+    };
+
+    const getItemRawQuantityStr = (item: any): string => {
+      if (localQuantities[item._id] !== undefined) {
+        return localQuantities[item._id];
+      }
+      return (item.orderedQuantity ?? 0) > 0 ? String(item.orderedQuantity) : "";
+    };
+
+    // Valid items to order (must have quantity > 0)
+    const itemsWithQty = allItems.filter((it: any) => getItemQuantity(it) > 0);
+    const itemsToOrder =
+      selectedItemIds.length > 0
+        ? allItems.filter((it: any) => selectedItemIds.includes(it._id) && getItemQuantity(it) > 0)
+        : itemsWithQty;
+
+    const unquantifiedOrUnselected = allItems.filter(
+      (it: any) => !itemsToOrder.some((ordered: any) => ordered._id === it._id)
+    );
+
+    const hasItemsWithQty = itemsToOrder.length > 0;
+
+    const totalDraftAmount = itemsToOrder.reduce(
+      (acc: number, it: any) => acc + getItemQuantity(it) * (it.unitCost || 0),
       0
     );
 
-    const hasItemsWithQty = items.some((it: any) => (it.orderedQuantity || 0) > 0);
-
     return (
-      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-[#faf9f8] p-6 md:p-8 space-y-6">
-        {/* Toast Notification */}
-        {toastMessage && (
-          <div
-            className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center space-x-2 transition ${
-              toastMessage.type === "success"
-                ? "bg-emerald-900 border-emerald-800 text-white"
-                : "bg-rose-900 border-rose-800 text-white"
-            }`}
-          >
-            <span>{toastMessage.text}</span>
-          </div>
-        )}
+      <div className="flex-1 flex flex-col min-w-0 w-full bg-[#faf9f8] p-6 md:p-8 space-y-6">
+        {/* Toast Notification (Top-Right Standard Menu Toast) */}
+        <Toast toast={toast} onClose={() => setToast(null)} />
 
-        {/* 1. Header & Breadcrumb (Screenshot 2: Purchase order > Add items in) */}
+        {/* Hidden File Input for Supplier Invoice Upload */}
+        <input
+          type="file"
+          ref={invoiceFileInputRef}
+          onChange={handleInvoiceFileUpload}
+          accept=".pdf,.jpg,.jpeg,.png"
+          className="hidden"
+        />
+
+        {/* 1. Header & Breadcrumb (Screenshot 2: Purchase order > Add items in OR Photo 2/3: Purchase order > PO#XXXX) */}
         <div className="space-y-1">
           <div className="flex items-center space-x-2 text-xs text-[#78716c]">
             <button
@@ -509,54 +779,112 @@ export function PurchaseOrdersView({
               Purchase order
             </button>
             <span>&gt;</span>
-            <span className="text-[#0c0a09] font-medium">Add items in</span>
+            <span className="text-[#0c0a09] font-medium">
+              {isDraft ? "Add items in" : activePODetails.poNumber}
+            </span>
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-            <h1 className="text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
-              Add items in {activePODetails.poNumber}
-            </h1>
 
-            {/* If PO is in Sent status, show Settle Button */}
-            {activePODetails.status === "sent" && (
-              <button
-                type="button"
-                onClick={() => setIsSettleConfirmOpen(true)}
-                className="px-5 py-2.5 rounded-full bg-emerald-700 hover:bg-emerald-800 text-white !text-white text-xs font-semibold shadow-sm transition cursor-pointer flex items-center space-x-2 shrink-0 self-start sm:self-auto"
-              >
-                <span>Settle & Restock PO</span>
-              </button>
-            )}
-          </div>
+          {/* If Draft, show the classic H1 title "Add items in PO-XXXX" */}
+          {isDraft && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+              <h1 className="text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
+                Add items in {activePODetails.poNumber}
+              </h1>
+            </div>
+          )}
         </div>
 
-        {/* 2. Top Action Controls Bar (Screenshot 2: Search input + Actions button + Place order button) */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
-          {/* Search Box */}
-          <div className="relative flex-1 max-w-md">
-            <input
-              type="text"
-              placeholder="Search by item name, sku no"
-              value={detailSearchQuery}
-              onChange={(e) => setDetailSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800 shadow-2xs"
-            />
-            <svg
-              className="w-4 h-4 text-stone-400 absolute left-3 top-2.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
+        {/* 2. Top Bar: TABS (Photo 2 & 3) + SEARCH + ACTIONS + PRIMARY BUTTON */}
+        <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4 pt-1 border-b border-[#e7e5e4] pb-2">
+          {/* TABS (Photos 2 & 3: Ordered Items, Received Items, Missing Items) */}
+          {!isDraft ? (
+            <div className="flex items-center space-x-8 overflow-x-auto pb-1 lg:pb-0">
+              {isSent && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDetailTab("ordered");
+                    setSelectedItemIds([]);
+                  }}
+                  className={`pb-2.5 text-sm font-semibold transition cursor-pointer relative shrink-0 ${
+                    effectiveDetailTab === "ordered"
+                      ? "text-[#0c0a09]"
+                      : "text-[#78716c] hover:text-[#0c0a09]"
+                  }`}
+                >
+                  <span>Ordered Items ({totalOrderedItems.length})</span>
+                  {effectiveDetailTab === "ordered" && (
+                    <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0c0a09]" />
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailTab("received");
+                  setSelectedItemIds([]);
+                }}
+                className={`pb-2.5 text-sm font-semibold transition cursor-pointer relative shrink-0 ${
+                  effectiveDetailTab === "received"
+                    ? "text-[#0c0a09]"
+                    : "text-[#78716c] hover:text-[#0c0a09]"
+                }`}
+              >
+                <span>Received Items ({totalReceivedItems.length})</span>
+                {effectiveDetailTab === "received" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0c0a09]" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDetailTab("missing");
+                  setSelectedItemIds([]);
+                }}
+                className={`pb-2.5 text-sm font-semibold transition cursor-pointer relative shrink-0 ${
+                  effectiveDetailTab === "missing"
+                    ? "text-[#0c0a09]"
+                    : "text-[#78716c] hover:text-[#0c0a09]"
+                }`}
+              >
+                <span>Missing Items ({totalMissingItems.length})</span>
+                {effectiveDetailTab === "missing" && (
+                  <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#0c0a09]" />
+                )}
+              </button>
+            </div>
+          ) : (
+            <div className="text-xs text-stone-500 font-medium">
+              Configure items and quantities before placing order
+            </div>
+          )}
 
-          {/* Action Buttons: Actions dropdown + Place order */}
-          <div className="flex items-center space-x-3 relative">
+          {/* Right Action Controls: Search + Actions Dropdown + Primary Button */}
+          <div className="flex items-center space-x-3 shrink-0">
+            {/* Search Box */}
+            <div className="relative w-64 sm:w-72">
+              <input
+                type="text"
+                placeholder="Search by item name, sku no"
+                value={detailSearchQuery}
+                onChange={(e) => setDetailSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800 shadow-2xs"
+              />
+              <svg
+                className="w-4 h-4 text-stone-400 absolute left-3 top-2.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+
             {/* Actions Dropdown */}
             <div className="relative">
               <button
@@ -578,72 +906,76 @@ export function PurchaseOrdersView({
               {isActionsMenuOpen && (
                 <div className="absolute right-0 top-11 w-52 bg-white border border-[#e7e5e4] rounded-xl shadow-xl py-1.5 z-40 text-left divide-y divide-[#f5f5f4] text-xs">
                   {/* Actions for Drafted PO */}
-                  {activePODetails.status === "drafted" && (
-                    <>
-                      <div className="py-1">
-                        <button
-                          type="button"
-                          disabled={(activePODetails.supplierItemsCount ?? 0) === 0}
-                          onClick={handlePrefillAssignedItems}
-                          className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent"
-                        >
-                          Prefill assigned items
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsActionsMenuOpen(false);
-                            setIsAddItemDrawerOpen(true);
-                          }}
-                          className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
-                        >
-                          Add new item
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSelectedItemIds(filteredDetailItems.map((i: any) => i._id));
-                            setIsActionsMenuOpen(false);
-                          }}
-                          className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
-                        >
-                          Select all items
-                        </button>
-                        <button
-                          type="button"
-                          disabled={selectedItemIds.length === 0}
-                          onClick={handleRemoveSelectedItems}
-                          className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent"
-                        >
-                          Remove selected items
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAutofillQuantity}
-                          className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
-                        >
-                          Autofill quantity
-                        </button>
-                      </div>
-                    </>
+                  {isDraft && (
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        disabled={(activePODetails.supplierItemsCount ?? 0) === 0}
+                        onClick={handlePrefillAssignedItems}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        Prefill assigned items
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsActionsMenuOpen(false);
+                          setIsAddItemDrawerOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                      >
+                        Add new item
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedItemIds(filteredDetailItems.map((i: any) => i._id));
+                          setIsActionsMenuOpen(false);
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                      >
+                        Select all items
+                      </button>
+                      <button
+                        type="button"
+                        disabled={selectedItemIds.length === 0}
+                        onClick={handleRemoveSelectedItems}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        Remove selected items
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAutofillQuantity}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                      >
+                        Autofill quantity
+                      </button>
+                    </div>
                   )}
 
-                  {/* Actions for Sent / Placed PO */}
-                  {activePODetails.status === "sent" && (
+                  {/* Actions for Placed PO in Ordered Items tab (Photo 4) */}
+                  {isSent && effectiveDetailTab === "ordered" && (
                     <div className="py-1">
                       <button
                         type="button"
                         disabled={selectedItemIds.length === 0}
-                        onClick={() => handleUpdateItemReceiving("received")}
-                        className="w-full text-left px-3.5 py-2 text-emerald-700 hover:bg-emerald-50 transition cursor-pointer disabled:opacity-40"
+                        onClick={() => {
+                          setIsActionsMenuOpen(false);
+                          setIsOrderReceivedConfirmOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         Selected items received
                       </button>
                       <button
                         type="button"
                         disabled={selectedItemIds.length === 0}
-                        onClick={() => handleUpdateItemReceiving("missing")}
-                        className="w-full text-left px-3.5 py-2 text-rose-700 hover:bg-rose-50 transition cursor-pointer disabled:opacity-40"
+                        onClick={() => {
+                          setIsActionsMenuOpen(false);
+                          setIsOrderMissingConfirmOpen(true);
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer disabled:opacity-40 disabled:hover:bg-transparent"
                       >
                         Selected items missing
                       </button>
@@ -656,13 +988,57 @@ export function PurchaseOrdersView({
                       type="button"
                       onClick={() => {
                         setIsActionsMenuOpen(false);
-                        downloadPurchaseOrderPdf({ po: activePODetails, org: activeOrg });
+                        const supp =
+                          suppliers?.find(
+                            (s) =>
+                              s._id ===
+                              (activePODetails.supplierId || activePODetails.supplier?._id)
+                          ) || activePODetails.supplier;
+                        downloadPurchaseOrderPdf({
+                          po: activePODetails,
+                          org: activeOrg,
+                          supplier: supp,
+                        });
                       }}
                       className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
                     >
                       Download PDF
                     </button>
-                    {activePODetails.status !== "cancelled" && activePODetails.status !== "settled" && (
+
+                    <button
+                      type="button"
+                      disabled={isUploadingInvoice}
+                      onClick={() => {
+                        setIsActionsMenuOpen(false);
+                        invoiceFileInputRef.current?.click();
+                      }}
+                      className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                    >
+                      {isUploadingInvoice
+                        ? "Uploading invoice..."
+                        : activePODetails.invoiceUrl || activePODetails.invoiceAssetId
+                        ? "Replace Invoice"
+                        : "Upload Supplier Invoice"}
+                    </button>
+
+                    {(activePODetails.invoiceUrl || activePODetails.invoiceAssetId) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsActionsMenuOpen(false);
+                          if (activePODetails.invoiceUrl) {
+                            window.open(activePODetails.invoiceUrl, "_blank");
+                          } else {
+                            showToast("Invoice attached to this purchase order.", "success");
+                          }
+                        }}
+                        className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                      >
+                        View Invoice
+                      </button>
+                    )}
+
+                    {!isSettled && activePODetails.status !== "cancelled" && (
                       <button
                         type="button"
                         onClick={() => {
@@ -679,8 +1055,9 @@ export function PurchaseOrdersView({
               )}
             </div>
 
-            {/* Place Order Button (Screenshot 2) */}
-            {activePODetails.status === "drafted" && (
+            {/* PRIMARY BUTTON BASED ON VIEW & STATUS */}
+            {/* 1. Draft mode: "Place order" button */}
+            {isDraft && (
               <button
                 type="button"
                 disabled={!hasItemsWithQty || isPerformingAction}
@@ -694,48 +1071,128 @@ export function PurchaseOrdersView({
                 Place order
               </button>
             )}
+
+            {/* 2. Placed mode & Ordered Items Tab: "Order received" button (Photo 2) */}
+            {isSent && effectiveDetailTab === "ordered" && (
+              <button
+                type="button"
+                disabled={selectedItemIds.length === 0 || isPerformingAction}
+                onClick={() => setIsOrderReceivedConfirmOpen(true)}
+                className={`px-5 py-2 rounded-lg text-xs font-semibold transition cursor-pointer shadow-2xs ${
+                  selectedItemIds.length > 0
+                    ? "bg-[#1c1917] hover:bg-[#292524] text-white !text-white"
+                    : "bg-[#78716c] text-[#d6d3d1] cursor-not-allowed opacity-75"
+                }`}
+              >
+                Order received
+              </button>
+            )}
+
+            {/* 3. Placed mode & Received Items Tab: "Settle & Restock PO" button */}
+            {isSent && effectiveDetailTab === "received" && (
+              <button
+                type="button"
+                disabled={isPerformingAction}
+                onClick={() => setIsSettleConfirmOpen(true)}
+                className="px-5 py-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white !text-white text-xs font-semibold transition cursor-pointer shadow-2xs"
+              >
+                Settle &amp; Restock PO
+              </button>
+            )}
+
+            {/* 4. Settled status badge */}
+            {isSettled && (
+              <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+                Settled &amp; Restocked
+              </span>
+            )}
           </div>
         </div>
 
-        {/* 3. Items Table (Screenshot 2) */}
+        {/* 3. ITEMS TABLE (MATCHING EXACT COLUMNS OF SCREENSHOT 2, PHOTO 2, PHOTO 3) */}
         <div className="bg-white border border-[#e7e5e4] rounded-xl overflow-hidden shadow-2xs">
           {filteredDetailItems.length === 0 ? (
             <div className="py-16 text-center text-stone-400 text-xs">
-              <p className="font-medium text-stone-500 mb-1">No items added to this purchase order yet.</p>
-              <p className="text-[11px]">Use "Actions &gt; Prefill assigned items" or "Add new item" to populate items.</p>
+              <p className="font-medium text-stone-500 mb-1">
+                {isDraft
+                  ? "No items added to this purchase order yet."
+                  : effectiveDetailTab === "ordered"
+                  ? "All items in this purchase order have been marked as received."
+                  : effectiveDetailTab === "received"
+                  ? "No items marked as received yet. Select items in 'Ordered Items' and click 'Order received'."
+                  : "No items marked as missing in this purchase order."}
+              </p>
+              {isDraft && (
+                <p className="text-[11px]">
+                  Use "Actions &gt; Prefill assigned items" or "Add new item" to populate items.
+                </p>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold text-[#78716c]">
-                    <th className="py-3 px-4 w-10 text-center">
-                      <input
-                        type="checkbox"
-                        checked={isAllSelected}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedItemIds(filteredDetailItems.map((i: any) => i._id));
-                          } else {
-                            setSelectedItemIds([]);
-                          }
-                        }}
-                        className="rounded border-stone-300 cursor-pointer"
-                      />
-                    </th>
+                    {/* Checkbox column only in Draft OR Placed Ordered Items tab */}
+                    {(isDraft || (!isDraft && effectiveDetailTab === "ordered")) && (
+                      <th className="py-3 px-4 w-10 text-center">
+                        <input
+                          type="checkbox"
+                          checked={isAllSelected}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedItemIds(filteredDetailItems.map((i: any) => i._id));
+                            } else {
+                              setSelectedItemIds([]);
+                            }
+                          }}
+                          className="rounded border-stone-300 cursor-pointer"
+                        />
+                      </th>
+                    )}
+
                     <th className="py-3 px-4 w-16">Sr no</th>
                     <th className="py-3 px-6">Item name</th>
-                    <th className="py-3 px-6 w-64">Available stock</th>
-                    <th className="py-3 px-6 w-32">SKU no</th>
-                    <th className="py-3 px-6 w-44">Item quantity</th>
+                    <th className="py-3 px-6 w-60">Available stock</th>
+                    <th className="py-3 px-6 w-28">SKU no</th>
+
+                    {/* Columns for Draft mode */}
+                    {isDraft && <th className="py-3 px-6 w-44">Item quantity</th>}
+
+                    {/* Columns for Placed: Ordered Items tab (Photo 2) */}
+                    {!isDraft && effectiveDetailTab === "ordered" && (
+                      <>
+                        <th className="py-3 px-6 w-32">Buying unit</th>
+                        <th className="py-3 px-6 w-36">Ordered quantity</th>
+                      </>
+                    )}
+
+                    {/* Columns for Placed: Received Items tab (Photo 3) */}
+                    {!isDraft && effectiveDetailTab === "received" && (
+                      <>
+                        <th className="py-3 px-6 w-44">Price of item</th>
+                        <th className="py-3 px-6 w-44">Received quantity</th>
+                        <th className="py-3 px-6 w-32">Buying unit</th>
+                        <th className="py-3 px-6 w-36">Ordered quantity</th>
+                      </>
+                    )}
+
+                    {/* Columns for Missing Items tab */}
+                    {!isDraft && effectiveDetailTab === "missing" && (
+                      <>
+                        <th className="py-3 px-6 w-36">Missing quantity</th>
+                        <th className="py-3 px-6 w-32">Buying unit</th>
+                        <th className="py-3 px-6 w-36">Ordered quantity</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f5f5f4]">
-                  {filteredDetailItems.map((item: any, idx: number) => {
+                  {paginatedDetailItems.map((item: any, idx: number) => {
                     const isSelected = selectedItemIds.includes(item._id);
                     const stockNum = parseFloat(item.stock) || 0;
-                    // Visual stock bar: 100% when stock >= 100 or baseline, proportional fill
                     const stockFillPercent = Math.min(100, Math.max(8, (stockNum / 100) * 100));
+                    const srNo = (detailCurrentPage - 1) * detailItemsPerPage + idx + 1;
 
                     return (
                       <tr
@@ -744,38 +1201,39 @@ export function PurchaseOrdersView({
                           isSelected ? "bg-stone-50" : ""
                         }`}
                       >
-                        {/* Checkbox */}
-                        <td className="py-4 px-4 text-center">
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedItemIds((prev) => [...prev, item._id]);
-                              } else {
-                                setSelectedItemIds((prev) => prev.filter((id) => id !== item._id));
-                              }
-                            }}
-                            className="rounded border-stone-300 cursor-pointer"
-                          />
-                        </td>
+                        {/* Checkbox (Draft OR Placed Ordered Tab) */}
+                        {(isDraft || (!isDraft && effectiveDetailTab === "ordered")) && (
+                          <td className="py-4 px-4 text-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedItemIds((prev) => [...prev, item._id]);
+                                } else {
+                                  setSelectedItemIds((prev) => prev.filter((id) => id !== item._id));
+                                }
+                              }}
+                              className="rounded border-stone-300 cursor-pointer"
+                            />
+                          </td>
+                        )}
 
                         {/* Sr no */}
-                        <td className="py-4 px-4 text-stone-500 font-medium">{idx + 1}</td>
+                        <td className="py-4 px-4 text-stone-500 font-medium">{srNo}</td>
 
-                        {/* Item name + Category (Screenshot 2: bold name, category underneath) */}
+                        {/* Item name + Category (Photo 2 & 3: bold name, category underneath) */}
                         <td className="py-4 px-6">
                           <p className="font-bold text-[#0c0a09]">{item.name}</p>
-                          <p className="text-[11px] text-[#78716c]">{item.category || "Beverages"}</p>
+                          <p className="text-[11px] text-[#78716c]">{item.category || "General"}</p>
                         </td>
 
-                        {/* Available Stock + Progress Bar (Screenshot 2) */}
+                        {/* Available Stock + Progress Bar (Photo 2 & 3) */}
                         <td className="py-4 px-6">
                           <div className="w-48 space-y-1">
                             <div className="text-[11px] font-medium text-right text-stone-600">
                               {item.stock}
                             </div>
-                            {/* Horizontal Progress Bar */}
                             <div className="w-full h-3 bg-[#e7e5e4] rounded-sm overflow-hidden p-0.5">
                               <div
                                 className="h-full bg-[#16a34a] rounded-xs transition-all"
@@ -790,24 +1248,238 @@ export function PurchaseOrdersView({
                           {item.sku || "—"}
                         </td>
 
-                        {/* Item quantity (Screenshot 2: Input box "Enter quantity") */}
-                        <td className="py-4 px-6">
-                          {activePODetails.status === "drafted" ? (
+                        {/* 1. DRAFT MODE: Enter quantity input */}
+                        {isDraft && (
+                          <td className="py-4 px-6">
                             <input
                               type="number"
                               min="0"
                               step="any"
                               placeholder="Enter quantity"
-                              defaultValue={item.orderedQuantity > 0 ? item.orderedQuantity : ""}
-                              onBlur={(e) => handleItemQtyChange(item._id, e.target.value)}
-                              className="w-32 px-3 py-1.5 border border-[#d6d3d1] rounded-md text-xs font-medium focus:outline-none focus:border-stone-800 bg-white shadow-2xs"
+                              value={getItemRawQuantityStr(item)}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setLocalQuantities((prev) => ({ ...prev, [item._id]: val }));
+                                const num = parseFloat(val);
+                                const validQty = isNaN(num) || num < 0 ? 0 : num;
+
+                                if (validQty > 0) {
+                                  setSelectedItemIds((prev) =>
+                                    prev.includes(item._id) ? prev : [...prev, item._id]
+                                  );
+                                } else {
+                                  setSelectedItemIds((prev) => prev.filter((id) => id !== item._id));
+                                }
+
+                                if (debounceTimersRef.current[item._id]) {
+                                  clearTimeout(debounceTimersRef.current[item._id]);
+                                }
+                                debounceTimersRef.current[item._id] = setTimeout(async () => {
+                                  try {
+                                    await updateItemQtyMutation({
+                                      purchaseOrderItemId: item._id,
+                                      orderedQuantity: validQty,
+                                    });
+                                  } catch (err) {
+                                    console.error("Failed to sync quantity:", err);
+                                  }
+                                }, 300);
+                              }}
+                              onBlur={async (e) => {
+                                const val = e.target.value;
+                                const num = parseFloat(val);
+                                const validQty = isNaN(num) || num < 0 ? 0 : num;
+                                if (debounceTimersRef.current[item._id]) {
+                                  clearTimeout(debounceTimersRef.current[item._id]);
+                                }
+                                try {
+                                  await updateItemQtyMutation({
+                                    purchaseOrderItemId: item._id,
+                                    orderedQuantity: validQty,
+                                  });
+                                } catch (err) {
+                                  console.error("Failed to sync quantity on blur:", err);
+                                }
+                              }}
+                              className="w-32 px-3 py-1.5 border border-[#d6d3d1] rounded-md text-xs font-medium focus:outline-none focus:border-stone-800 bg-white shadow-2xs transition"
                             />
-                          ) : (
-                            <div className="font-semibold text-stone-900">
-                              {item.orderedQuantity} {item.buyingUnit}
-                            </div>
-                          )}
-                        </td>
+                          </td>
+                        )}
+
+                        {/* 2. PLACED MODE: Ordered Items Tab (Photo 2) */}
+                        {!isDraft && effectiveDetailTab === "ordered" && (
+                          <>
+                            <td className="py-4 px-6 text-stone-700 font-medium">
+                              {item.buyingUnit || "piece"}
+                            </td>
+                            <td className="py-4 px-6 font-semibold text-stone-900">
+                              {item.orderedQuantity}
+                            </td>
+                          </>
+                        )}
+
+                        {/* 3. PLACED MODE: Received Items Tab (Photo 3) */}
+                        {!isDraft && effectiveDetailTab === "received" && (
+                          <>
+                            {/* Price of item with currency prefix */}
+                            <td className="py-4 px-6">
+                              {isSettled ? (
+                                <span className="font-semibold text-stone-900">
+                                  {currencySymbol}
+                                  {item.unitCost ?? 0}
+                                </span>
+                              ) : (
+                                <div className="relative w-36">
+                                  <span className="absolute left-3 top-2 text-stone-500 font-medium text-xs">
+                                    {currencySymbol}
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    placeholder="0"
+                                    value={
+                                      localPrices[item._id] !== undefined
+                                        ? localPrices[item._id]
+                                        : item.unitCost !== undefined
+                                        ? String(item.unitCost)
+                                        : "0"
+                                    }
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      setLocalPrices((prev) => ({ ...prev, [item._id]: val }));
+                                      const num = parseFloat(val);
+                                      const validPrice = isNaN(num) || num < 0 ? 0 : num;
+
+                                      if (debounceTimersRef.current[`price_${item._id}`]) {
+                                        clearTimeout(debounceTimersRef.current[`price_${item._id}`]);
+                                      }
+                                      debounceTimersRef.current[`price_${item._id}`] = setTimeout(
+                                        async () => {
+                                          try {
+                                            await updatePOItemDetailsMutation({
+                                              purchaseOrderItemId: item._id,
+                                              priceOfItem: validPrice,
+                                            });
+                                          } catch (err) {
+                                            console.error("Failed to sync price:", err);
+                                          }
+                                        },
+                                        350
+                                      );
+                                    }}
+                                    onBlur={async (e) => {
+                                      const val = e.target.value;
+                                      const num = parseFloat(val);
+                                      const validPrice = isNaN(num) || num < 0 ? 0 : num;
+                                      if (debounceTimersRef.current[`price_${item._id}`]) {
+                                        clearTimeout(debounceTimersRef.current[`price_${item._id}`]);
+                                      }
+                                      try {
+                                        await updatePOItemDetailsMutation({
+                                          purchaseOrderItemId: item._id,
+                                          priceOfItem: validPrice,
+                                        });
+                                      } catch (err) {
+                                        console.error("Failed to sync price on blur:", err);
+                                      }
+                                    }}
+                                    className="w-full pl-7 pr-3 py-1.5 border border-[#d6d3d1] rounded-md text-xs font-medium focus:outline-none focus:border-stone-800 bg-white shadow-2xs transition"
+                                  />
+                                </div>
+                              )}
+                            </td>
+
+                            {/* Received quantity input */}
+                            <td className="py-4 px-6">
+                              {isSettled ? (
+                                <span className="font-semibold text-stone-900">
+                                  {item.receivedQuantity ?? 0}
+                                </span>
+                              ) : (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  placeholder="0"
+                                  value={
+                                    localReceivedQtys[item._id] !== undefined
+                                      ? localReceivedQtys[item._id]
+                                      : item.receivedQuantity !== undefined
+                                      ? String(item.receivedQuantity)
+                                      : "0"
+                                  }
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setLocalReceivedQtys((prev) => ({ ...prev, [item._id]: val }));
+                                    const num = parseFloat(val);
+                                    const validQty = isNaN(num) || num < 0 ? 0 : num;
+
+                                    if (debounceTimersRef.current[`rcv_${item._id}`]) {
+                                      clearTimeout(debounceTimersRef.current[`rcv_${item._id}`]);
+                                    }
+                                    debounceTimersRef.current[`rcv_${item._id}`] = setTimeout(
+                                      async () => {
+                                        try {
+                                          await updatePOItemDetailsMutation({
+                                            purchaseOrderItemId: item._id,
+                                            receivedQuantity: validQty,
+                                          });
+                                        } catch (err) {
+                                          console.error("Failed to sync received qty:", err);
+                                        }
+                                      },
+                                      350
+                                    );
+                                  }}
+                                  onBlur={async (e) => {
+                                    const val = e.target.value;
+                                    const num = parseFloat(val);
+                                    const validQty = isNaN(num) || num < 0 ? 0 : num;
+                                    if (debounceTimersRef.current[`rcv_${item._id}`]) {
+                                      clearTimeout(debounceTimersRef.current[`rcv_${item._id}`]);
+                                    }
+                                    try {
+                                      await updatePOItemDetailsMutation({
+                                        purchaseOrderItemId: item._id,
+                                        receivedQuantity: validQty,
+                                      });
+                                    } catch (err) {
+                                      console.error("Failed to sync received qty on blur:", err);
+                                    }
+                                  }}
+                                  className="w-28 px-3 py-1.5 border border-[#d6d3d1] rounded-md text-xs font-medium focus:outline-none focus:border-stone-800 bg-white shadow-2xs transition"
+                                />
+                              )}
+                            </td>
+
+                            {/* Buying unit */}
+                            <td className="py-4 px-6 text-stone-700 font-medium">
+                              {item.buyingUnit || "piece"}
+                            </td>
+
+                            {/* Ordered quantity */}
+                            <td className="py-4 px-6 font-semibold text-stone-900">
+                              {item.orderedQuantity}
+                            </td>
+                          </>
+                        )}
+
+                        {/* 4. PLACED MODE: Missing Items Tab */}
+                        {!isDraft && effectiveDetailTab === "missing" && (
+                          <>
+                            <td className="py-4 px-6 font-bold text-rose-600">
+                              {item.missingQuantity ??
+                                Math.max(0, item.orderedQuantity - (item.receivedQuantity ?? 0))}
+                            </td>
+                            <td className="py-4 px-6 text-stone-700 font-medium">
+                              {item.buyingUnit || "piece"}
+                            </td>
+                            <td className="py-4 px-6 font-semibold text-stone-900">
+                              {item.orderedQuantity}
+                            </td>
+                          </>
+                        )}
                       </tr>
                     );
                   })}
@@ -816,15 +1488,89 @@ export function PurchaseOrdersView({
             </div>
           )}
 
+          {/* View 2 Detail Items Pagination Controls (10 items per page) */}
+          {totalDetailPages > 1 && (
+            <div className="py-3 px-6 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c]">
+              <span>
+                Showing{" "}
+                <strong className="text-[#0c0a09]">
+                  {(detailCurrentPage - 1) * detailItemsPerPage + 1} -{" "}
+                  {Math.min(detailCurrentPage * detailItemsPerPage, filteredDetailItems.length)}
+                </strong>{" "}
+                of <strong className="text-[#0c0a09]">{filteredDetailItems.length}</strong> items
+              </span>
+              <div className="flex items-center space-x-2 text-xs">
+                <button
+                  type="button"
+                  disabled={detailCurrentPage <= 1}
+                  onClick={() => setDetailCurrentPage((p) => Math.max(1, p - 1))}
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                >
+                  Previous
+                </button>
+                <span className="px-2 font-medium text-[#0c0a09]">
+                  {detailCurrentPage} / {totalDetailPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={detailCurrentPage >= totalDetailPages}
+                  onClick={() => setDetailCurrentPage((p) => Math.min(totalDetailPages, p + 1))}
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Table Footer with Summary */}
           <div className="py-3 px-6 bg-[#fafaf9] border-t border-[#e7e5e4] flex items-center justify-between text-xs text-stone-500">
-            <span>
-              Showing <strong>{filteredDetailItems.length}</strong> items in purchase order
-            </span>
-            <span className="font-medium text-[#0c0a09]">
-              Estimated Cost: {currencySymbol}
-              {formatCurrencyAmount(totalPOAmount, activeOrg?.country)}
-            </span>
+            {isDraft ? (
+              <>
+                <span>
+                  Showing <strong>{filteredDetailItems.length}</strong> items in purchase order •{" "}
+                  <strong className="text-emerald-700">{itemsToOrder.length}</strong> item(s) selected
+                  to order
+                </span>
+                <span className="font-medium text-[#0c0a09]">
+                  Estimated Cost: {currencySymbol}
+                  {formatCurrencyAmount(totalDraftAmount, activeOrg?.country)}
+                </span>
+              </>
+            ) : effectiveDetailTab === "ordered" ? (
+              <>
+                <span>
+                  Showing <strong>{filteredDetailItems.length}</strong> ordered item(s) •{" "}
+                  <strong className="text-stone-900">{selectedItemIds.length}</strong> item(s) selected
+                  to receive
+                </span>
+                <span className="font-medium text-[#0c0a09]">
+                  Total Placed PO Amount: {currencySymbol}
+                  {formatCurrencyAmount(activePODetails.totalAmount || 0, activeOrg?.country)}
+                </span>
+              </>
+            ) : effectiveDetailTab === "received" ? (
+              <>
+                <span>
+                  Showing <strong>{filteredDetailItems.length}</strong> received item(s)
+                </span>
+                <span className="font-medium text-[#0c0a09]">
+                  Total Restock Amount: {currencySymbol}
+                  {formatCurrencyAmount(activePODetails.totalAmount || 0, activeOrg?.country)}
+                </span>
+              </>
+            ) : (
+              <>
+                <span>
+                  Showing <strong>{filteredDetailItems.length}</strong> missing item(s)
+                </span>
+                <span className="text-rose-600 font-medium">
+                  {filteredDetailItems.length > 0
+                    ? "Items shortfall will not be restocked into inventory"
+                    : "No missing items"}
+                </span>
+              </>
+            )}
           </div>
         </div>
 
@@ -912,7 +1658,7 @@ export function PurchaseOrdersView({
                     return it.name.toLowerCase().includes(q) || (it.skuNumber && it.skuNumber.toLowerCase().includes(q));
                   })
                   .map((it: any) => {
-                    const alreadyInPO = items.some((line: any) => line.inventoryItemId === it._id);
+                    const alreadyInPO = allItems.some((line: any) => line.inventoryItemId === it._id);
                     return (
                       <div key={it._id} className="p-3 hover:bg-stone-50 rounded-xl flex items-center justify-between">
                         <div>
@@ -956,20 +1702,71 @@ export function PurchaseOrdersView({
         {/* Place Order Confirmation Modal */}
         {isPlaceOrderConfirmOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
-            <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4">
+            <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
               <h3 className="text-base font-bold text-[#0c0a09]">
                 Are you sure you want to place this purchase order?
               </h3>
-              <div className="text-xs text-stone-600 bg-stone-50 p-3 rounded-xl border border-stone-200 space-y-1">
-                <p>
-                  <strong>Supplier:</strong> {activePODetails.companyName || activePODetails.supplierName}
-                </p>
-                <p>
-                  <strong>PO Number:</strong> {activePODetails.poNumber}
-                </p>
-                <p>
-                  <strong>Total Items:</strong> {items.length}
-                </p>
+              <div className="text-xs text-stone-600 bg-stone-50 p-3.5 rounded-xl border border-stone-200 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Supplier:</span>
+                  <span className="font-semibold text-stone-900">
+                    {activePODetails.companyName || activePODetails.supplierName}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">PO Number:</span>
+                  <span className="font-semibold text-stone-900">{activePODetails.poNumber}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Total Items to Order:</span>
+                  <span className="font-bold text-emerald-700">{itemsToOrder.length} item(s)</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-stone-500">Estimated Total:</span>
+                  <span className="font-bold text-stone-900">
+                    {currencySymbol}
+                    {formatCurrencyAmount(totalDraftAmount, activeOrg?.country)}
+                  </span>
+                </div>
+
+                {/* Breakdown of ordered items */}
+                <div className="pt-2 border-t border-stone-200 space-y-1">
+                  <p className="font-semibold text-[11px] text-stone-700 uppercase tracking-wider">
+                    Order items breakdown:
+                  </p>
+                  {itemsToOrder.map((it: any) => (
+                    <div key={it._id} className="flex items-center justify-between text-xs py-0.5">
+                      <span className="text-stone-800 font-medium">• {it.name}</span>
+                      <span className="text-stone-700 font-semibold">
+                        {getItemQuantity(it)} {it.buyingUnit}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Clear notice if any item in the table has 0 quantity */}
+                {unquantifiedOrUnselected.length > 0 && (
+                  <div className="pt-2 border-t border-amber-200/60 text-[11px] text-amber-800 flex items-start space-x-1.5">
+                    <svg
+                      className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      />
+                    </svg>
+                    <span>
+                      {unquantifiedOrUnselected.length} item(s) without quantity (
+                      {unquantifiedOrUnselected.map((it: any) => it.name).join(", ")}
+                      ) will be omitted from this finalized order.
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-end space-x-3 pt-2">
                 <button
@@ -981,11 +1778,11 @@ export function PurchaseOrdersView({
                 </button>
                 <button
                   type="button"
-                  disabled={isPerformingAction}
-                  onClick={handleConfirmPlaceOrder}
-                  className="px-5 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold cursor-pointer"
+                  disabled={isPerformingAction || itemsToOrder.length === 0}
+                  onClick={() => handleConfirmPlaceOrder(itemsToOrder)}
+                  className="px-5 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  Confirm &amp; Place Order
+                  {isPerformingAction ? "Placing..." : "Confirm & Place Order"}
                 </button>
               </div>
             </div>
@@ -1049,6 +1846,68 @@ export function PurchaseOrdersView({
             </div>
           </div>
         )}
+
+        {/* Order Received Confirmation Modal (Photo 2) */}
+        {isOrderReceivedConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+            <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <h3 className="text-base font-bold text-[#0c0a09]">
+                Are you sure you want to mark these {selectedItemIds.length} items as received?
+              </h3>
+              <p className="text-xs text-stone-600">
+                These items will be marked as received and moved to the <strong>Received Items</strong> tab, where you can enter the received quantity and item price before restocking.
+              </p>
+              <div className="flex items-center justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOrderReceivedConfirmOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-stone-300 text-stone-700 text-xs font-medium cursor-pointer hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isPerformingAction}
+                  onClick={handleConfirmOrderReceived}
+                  className="px-5 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {isPerformingAction ? "Receiving..." : "Confirm Received"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Order Missing Confirmation Modal */}
+        {isOrderMissingConfirmOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+            <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <h3 className="text-base font-bold text-[#0c0a09]">
+                Are you sure you want to mark these {selectedItemIds.length} items as missing?
+              </h3>
+              <p className="text-xs text-stone-600">
+                These items will be marked as missing and moved to the <strong>Missing Items</strong> tab. They will not be restocked into inventory when this order is settled.
+              </p>
+              <div className="flex items-center justify-end space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsOrderMissingConfirmOpen(false)}
+                  className="px-4 py-2 rounded-lg border border-stone-300 text-stone-700 text-xs font-medium cursor-pointer hover:bg-stone-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isPerformingAction}
+                  onClick={handleConfirmOrderMissing}
+                  className="px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white !text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  {isPerformingAction ? "Updating..." : "Confirm Missing"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1057,19 +1916,9 @@ export function PurchaseOrdersView({
   // VIEW 1: PURCHASE ORDER MASTER LIST VIEW
   // =========================================================================
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-y-auto bg-[#faf9f8] p-6 md:p-8 space-y-6">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 px-4 py-2.5 rounded-xl shadow-lg border text-xs font-semibold flex items-center space-x-2 transition ${
-            toastMessage.type === "success"
-              ? "bg-emerald-900 border-emerald-800 text-white"
-              : "bg-rose-900 border-rose-800 text-white"
-          }`}
-        >
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
+    <div className="flex-1 flex flex-col min-w-0 w-full bg-[#faf9f8] p-6 md:p-8 space-y-6">
+      {/* Toast Notification (Top-Right Standard Menu Toast) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* Header & Title */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1104,7 +1953,10 @@ export function PurchaseOrdersView({
             <button
               key={tab.id}
               type="button"
-              onClick={() => setActiveTabStatus(tab.id)}
+              onClick={() => {
+                setActiveTabStatus(tab.id);
+                setPoCurrentPage(1);
+              }}
               className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-1.5 ${
                 activeTabStatus === tab.id
                   ? "bg-[#0c0a09] text-white !text-white shadow-2xs"
@@ -1131,7 +1983,10 @@ export function PurchaseOrdersView({
             type="text"
             placeholder="Search PO number, supplier..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setPoCurrentPage(1);
+            }}
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800"
           />
           <svg
@@ -1156,7 +2011,8 @@ export function PurchaseOrdersView({
             <p className="text-stone-400 text-xs">Create your first purchase order to restock inventory.</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
                 <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold text-[#78716c] uppercase tracking-wider">
@@ -1170,7 +2026,7 @@ export function PurchaseOrdersView({
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#f5f5f4]">
-                {filteredPOs.map((po: any) => {
+                {paginatedPOs.map((po: any) => {
                   const itemsCount = po.itemsCount ?? po.items?.length ?? 0;
                   const isExpanded = !!expandedPoIds[po._id];
                   return (
@@ -1265,10 +2121,26 @@ export function PurchaseOrdersView({
                             >
                               {po.status === "drafted" ? "Add / Edit items" : "View Order"}
                             </button>
-                            <div className="relative">
+                            <div>
                               <button
                                 type="button"
-                                onClick={() => setOpenRowMenuPoId(openRowMenuPoId === po._id ? null : po._id)}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (openRowMenuPoId === po._id) {
+                                    setOpenRowMenuPoId(null);
+                                    setRowMenuPos(null);
+                                  } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    const openUp = spaceBelow < 280;
+                                    setRowMenuPos({
+                                      top: openUp ? rect.top - 6 : rect.bottom + 6,
+                                      right: window.innerWidth - rect.right,
+                                      openUp,
+                                    });
+                                    setOpenRowMenuPoId(po._id);
+                                  }
+                                }}
                                 className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                                 title="Actions"
                               >
@@ -1277,41 +2149,149 @@ export function PurchaseOrdersView({
                                 </svg>
                               </button>
 
-                              {openRowMenuPoId === po._id && (
-                                <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-[#e7e5e4] rounded-xl shadow-lg py-1.5 z-30 text-left">
-                                  <button
-                                    type="button"
-                                    onClick={() => {
+                              {openRowMenuPoId === po._id && rowMenuPos && (
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setOpenRowMenuPoId(null);
-                                      setActivePoId(po._id);
+                                      setRowMenuPos(null);
                                     }}
-                                    className="w-full px-3.5 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center space-x-2 text-left cursor-pointer"
-                                  >
-                                    <span>{po.status === "drafted" ? "Add / Edit items" : "View order details"}</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setOpenRowMenuPoId(null);
-                                      downloadPurchaseOrderPdf({ po, org: activeOrg });
+                                  />
+                                  <div
+                                    className="fixed z-50 w-44 bg-white border border-[#e7e5e4] rounded-xl shadow-xl py-1.5 text-left"
+                                    style={{
+                                      top: rowMenuPos.openUp ? undefined : `${rowMenuPos.top}px`,
+                                      bottom: rowMenuPos.openUp ? `${window.innerHeight - rowMenuPos.top}px` : undefined,
+                                      right: `${rowMenuPos.right}px`,
                                     }}
-                                    className="w-full px-3.5 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center space-x-2 text-left cursor-pointer"
+                                    onClick={(e) => e.stopPropagation()}
                                   >
-                                    <span>Download PDF</span>
-                                  </button>
-                                  {po.status !== "cancelled" && po.status !== "settled" && (
+                                    {/* 1. Add items */}
+                                    <button
+                                      type="button"
+                                      disabled={po.status !== "drafted"}
+                                      onClick={() => {
+                                        setOpenRowMenuPoId(null);
+                                        setRowMenuPos(null);
+                                        setActivePoId(po._id);
+                                      }}
+                                      className={`w-full px-3.5 py-2 text-xs font-medium text-left flex items-center transition ${
+                                        po.status === "drafted"
+                                          ? "text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                          : "text-stone-300 cursor-not-allowed"
+                                      }`}
+                                    >
+                                      <span>Add items</span>
+                                    </button>
+
+                                    {/* 2. Edit supplier */}
+                                    <button
+                                      type="button"
+                                      disabled={po.status !== "drafted"}
+                                      onClick={() => {
+                                        setOpenRowMenuPoId(null);
+                                        setRowMenuPos(null);
+                                        openEditSupplierModal(po);
+                                      }}
+                                      className={`w-full px-3.5 py-2 text-xs font-medium text-left flex items-center transition ${
+                                        po.status === "drafted"
+                                          ? "text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                          : "text-stone-300 cursor-not-allowed"
+                                      }`}
+                                    >
+                                      <span>Edit supplier</span>
+                                    </button>
+
+                                    {/* 3. Edit PO details */}
+                                    <button
+                                      type="button"
+                                      disabled={po.status !== "drafted"}
+                                      onClick={() => {
+                                        setOpenRowMenuPoId(null);
+                                        setRowMenuPos(null);
+                                        openEditDetailsModal(po);
+                                      }}
+                                      className={`w-full px-3.5 py-2 text-xs font-medium text-left flex items-center transition ${
+                                        po.status === "drafted"
+                                          ? "text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                          : "text-stone-300 cursor-not-allowed"
+                                      }`}
+                                    >
+                                      <span>Edit PO details</span>
+                                    </button>
+
+                                    {/* 4. View order */}
                                     <button
                                       type="button"
                                       onClick={() => {
                                         setOpenRowMenuPoId(null);
-                                        handleCancelSinglePO(po);
+                                        setRowMenuPos(null);
+                                        setActivePoId(po._id);
                                       }}
-                                      className="w-full px-3.5 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 flex items-center space-x-2 text-left cursor-pointer"
+                                      className="w-full px-3.5 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center text-left cursor-pointer transition"
+                                    >
+                                      <span>View order</span>
+                                    </button>
+
+                                    {/* 5. View chat */}
+                                    <button
+                                      type="button"
+                                      disabled={!getSupplierChatNumber(po)}
+                                      onClick={() => {
+                                        setOpenRowMenuPoId(null);
+                                        setRowMenuPos(null);
+                                        handleViewChat(po);
+                                      }}
+                                      className={`w-full px-3.5 py-2 text-xs font-medium text-left flex items-center transition ${
+                                        getSupplierChatNumber(po)
+                                          ? "text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                          : "text-stone-300 cursor-not-allowed"
+                                      }`}
+                                      title={
+                                        getSupplierChatNumber(po)
+                                          ? "Open WhatsApp chat with supplier"
+                                          : "No WhatsApp number configured for this supplier"
+                                      }
+                                    >
+                                      <span>View chat</span>
+                                    </button>
+
+                                    {/* 6. Download PDF */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setOpenRowMenuPoId(null);
+                                        setRowMenuPos(null);
+                                        const supp = suppliers?.find((s) => s._id === (po.supplierId || po.supplier?._id)) || po.supplier;
+                                        downloadPurchaseOrderPdf({ po, org: activeOrg, supplier: supp });
+                                        showToast("The purchase order PDF was downloaded successfully.", "success");
+                                      }}
+                                      className="w-full px-3.5 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 flex items-center text-left cursor-pointer transition"
+                                    >
+                                      <span>Download PDF</span>
+                                    </button>
+
+                                    {/* 7. Cancel PO */}
+                                    <button
+                                      type="button"
+                                      disabled={po.status === "settled" || po.status === "cancelled"}
+                                      onClick={() => {
+                                        setOpenRowMenuPoId(null);
+                                        setRowMenuPos(null);
+                                        setPoForCancel(po);
+                                      }}
+                                      className={`w-full px-3.5 py-2 text-xs font-medium text-left flex items-center transition ${
+                                        po.status !== "settled" && po.status !== "cancelled"
+                                          ? "text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                          : "text-rose-300 cursor-not-allowed"
+                                      }`}
                                     >
                                       <span>Cancel PO</span>
                                     </button>
-                                  )}
-                                </div>
+                                  </div>
+                                </>
                               )}
                             </div>
                           </div>
@@ -1383,8 +2363,46 @@ export function PurchaseOrdersView({
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+
+          {/* Pagination Controls (10 rows per page) */}
+          <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+            <span>
+              Showing{" "}
+              <strong className="text-[#0c0a09]">
+                {filteredPOs.length === 0
+                  ? 0
+                  : `${(poCurrentPage - 1) * poItemsPerPage + 1} - ${Math.min(
+                      poCurrentPage * poItemsPerPage,
+                      filteredPOs.length
+                    )}`}
+              </strong>{" "}
+              of <strong className="text-[#0c0a09]">{filteredPOs.length}</strong> purchase orders
+            </span>
+            <div className="flex items-center space-x-2 text-xs">
+              <button
+                type="button"
+                disabled={poCurrentPage <= 1}
+                onClick={() => setPoCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+              >
+                Previous
+              </button>
+              <span className="px-2 font-medium text-[#0c0a09]">
+                {poCurrentPage} / {totalPoPages}
+              </span>
+              <button
+                type="button"
+                disabled={poCurrentPage >= totalPoPages}
+                onClick={() => setPoCurrentPage((p) => Math.min(totalPoPages, p + 1))}
+                className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
 
       {/* CREATE PURCHASE ORDER DRAWER */}
       {isNewPODrawerOpen && (
@@ -1471,6 +2489,216 @@ export function PurchaseOrdersView({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Supplier Modal (from row menu) */}
+      {poForSupplierEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Edit Supplier</h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Update supplier for {poForSupplierEdit.poNumber}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPoForSupplierEdit(null)}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Current Supplier
+                </label>
+                <div className="p-3 bg-stone-50 rounded-lg border border-stone-200">
+                  <p className="font-semibold text-stone-900">{poForSupplierEdit.supplierName}</p>
+                  {poForSupplierEdit.companyName && (
+                    <p className="text-[11px] text-stone-500 mt-0.5">{poForSupplierEdit.companyName}</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Select New Supplier <span className="text-rose-500">*</span>
+                </label>
+                <select
+                  value={newSupplierId}
+                  onChange={(e) => setNewSupplierId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs border border-stone-300 rounded-lg focus:outline-none focus:border-stone-800 bg-white"
+                >
+                  {suppliers?.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.supplierName} {s.companyName ? `(${s.companyName})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="p-3 bg-amber-50/70 border border-amber-200/70 rounded-lg text-[11px] text-amber-800 flex items-start space-x-2">
+                <svg className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>
+                  Reassigning will update the supplier on this draft purchase order.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setPoForSupplierEdit(null)}
+                className="px-4 py-2 rounded-lg border border-stone-300 text-stone-700 text-xs font-medium cursor-pointer hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingSupplier || !newSupplierId}
+                onClick={handleSaveSupplierChange}
+                className="px-5 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isUpdatingSupplier ? "Updating..." : "Update Supplier"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit PO Details Modal (from row menu) */}
+      {poForDetailsEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+              <div>
+                <h3 className="text-base font-bold text-stone-900">Edit PO Details</h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Update priority and instructions for {poForDetailsEdit.poNumber}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPoForDetailsEdit(null)}
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-full hover:bg-stone-100 transition cursor-pointer"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1.5">
+                  Purchase Priority
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "High", value: "high", color: "border-rose-400 bg-rose-50 text-rose-700 font-bold" },
+                    { label: "Medium", value: "medium", color: "border-amber-400 bg-amber-50 text-amber-700 font-bold" },
+                    { label: "Low", value: "low", color: "border-emerald-400 bg-emerald-50 text-emerald-700 font-bold" },
+                  ].map((p) => (
+                    <button
+                      key={p.value}
+                      type="button"
+                      onClick={() => setEditPriority(p.value as any)}
+                      className={`py-2 px-3 rounded-lg border text-xs text-center transition cursor-pointer ${
+                        editPriority === p.value
+                          ? `${p.color} ring-2 ring-stone-900 shadow-2xs`
+                          : "border-stone-200 text-stone-600 hover:bg-stone-50"
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-stone-700 mb-1">
+                  Special Notes / Delivery Instructions
+                </label>
+                <textarea
+                  rows={3}
+                  value={editNotes}
+                  onChange={(e) => setEditNotes(e.target.value)}
+                  placeholder="Add delivery instructions, terms, or notes..."
+                  className="w-full px-3 py-2 text-xs border border-stone-300 rounded-lg focus:outline-none focus:border-stone-800 bg-white resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setPoForDetailsEdit(null)}
+                className="px-4 py-2 rounded-lg border border-stone-300 text-stone-700 text-xs font-medium cursor-pointer hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isUpdatingDetails}
+                onClick={handleSaveDetailsChange}
+                className="px-5 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isUpdatingDetails ? "Saving..." : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel PO Confirmation Modal (from row menu) */}
+      {poForCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-2xs">
+          <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4">
+            <h3 className="text-base font-bold text-stone-900">
+              Cancel order - {poForCancel.poNumber}
+            </h3>
+
+            <div className="space-y-1.5 text-xs">
+              <p className="text-stone-600">
+                <span className="font-semibold text-stone-700">Supplier name:</span>{" "}
+                {poForCancel.supplierName}
+              </p>
+              <p className="text-stone-600">
+                <span className="font-semibold text-stone-700">Total items:</span>{" "}
+                {poForCancel.itemsCount ?? poForCancel.items?.length ?? 0}
+              </p>
+              <p className="text-stone-600 pt-2 font-medium">
+                Are you sure you want to cancel this purchase order?
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setPoForCancel(null)}
+                className="px-4 py-2 rounded-lg border border-stone-300 text-stone-700 text-xs font-medium cursor-pointer hover:bg-stone-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isCancellingPo}
+                onClick={handleConfirmCancelPo}
+                className="px-5 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white !text-white text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isCancellingPo ? "Cancelling..." : "Confirm"}
+              </button>
+            </div>
           </div>
         </div>
       )}

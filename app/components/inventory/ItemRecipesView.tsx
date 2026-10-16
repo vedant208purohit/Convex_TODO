@@ -917,10 +917,10 @@ export function ItemRecipesView({
           {/* Header Bar */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
             <div>
-              <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
+              <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
                 Item recipes
               </h1>
-              <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
+              <p className="text-xs text-stone-500 mt-1">
                 Set the ingredients used to prepare each menu item.
               </p>
             </div>
@@ -928,12 +928,12 @@ export function ItemRecipesView({
             <div className="flex items-center gap-3">
               {/* Search Bar */}
               <div className="relative w-64 md:w-72">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#a8a29e]">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-stone-400">
                   search
                 </span>
                 <input
                   type="text"
-                  className="w-full bg-white rounded-full pl-9 pr-4 py-2 text-xs text-[#1c1917] placeholder:text-[#a8a29e] border border-[#e7e5e4] focus:outline-none focus:ring-1 focus:ring-[#0c0a09] shadow-2xs transition"
+                  className="w-full bg-white rounded-lg pl-9 pr-3 py-2 text-xs text-stone-900 placeholder:text-stone-400 border border-[#e7e5e4] focus:outline-none focus:border-stone-800 shadow-2xs transition"
                   placeholder="Search recipe"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -950,11 +950,11 @@ export function ItemRecipesView({
                       openContextMenuId === "bulk" ? null : "bulk",
                     );
                   }}
-                  className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f5f5f4] hover:bg-[#e7e5e4] text-[#1c1917] transition flex items-center space-x-1.5 cursor-pointer"
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-white border border-[#e7e5e4] hover:bg-stone-50 text-stone-700 shadow-2xs transition flex items-center space-x-1.5 cursor-pointer"
                 >
                   <span>Actions</span>
                   {selectedRecipeIds.size > 0 && (
-                    <span className="bg-[#0c0a09] text-white text-[10px] px-1.5 py-0.2 rounded-full font-mono">
+                    <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-md font-mono">
                       {selectedRecipeIds.size}
                     </span>
                   )}
@@ -964,10 +964,10 @@ export function ItemRecipesView({
                 </button>
 
                 {openContextMenuId === "bulk" && (
-                  <div className="absolute right-0 top-10 w-48 bg-white rounded-xl shadow-xl border border-[#e7e5e4] z-30 py-1 flex flex-col text-left text-xs">
+                  <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-lg border border-[#e7e5e4] z-30 py-1 flex flex-col text-left text-xs">
                     <button
                       type="button"
-                      className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition font-medium flex items-center justify-between cursor-pointer"
+                      className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition font-medium flex items-center justify-between cursor-pointer"
                       onClick={handleExportRecipes}
                     >
                       <span>Export recipes</span>
@@ -997,53 +997,49 @@ export function ItemRecipesView({
               <button
                 type="button"
                 onClick={openCreateRecipeDrawer}
-                className="inline-flex items-center space-x-1.5 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-4 py-2.5 rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center space-x-1.5 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer whitespace-nowrap"
               >
                 <span className="material-symbols-outlined text-[18px] text-white">
                   add
                 </span>
-                <span className="text-white font-medium">
-                  Add new recipe
-                </span>
+                <span>Add new recipe</span>
               </button>
             </div>
           </div>
 
-          {/* Main Table Container matching SuppliersView */}
-          <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+          {/* Main Table Container matching PO & Item Library */}
+          <div className="mt-6 flex-1 flex flex-col">
             {filteredMenuItems.length === 0 ? (
               /* Empty Master State */
               <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
-                <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
-                  <span className="material-symbols-outlined text-[#78716c] text-[28px]">
+                <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-stone-500 mb-4">
+                  <span className="material-symbols-outlined text-stone-500 text-[28px]">
                     menu_book
                   </span>
                 </div>
-                <h2 className="font-serif text-2xl text-[#0c0a09] font-medium">
+                <h2 className="text-xl font-bold text-stone-900">
                   No item recipes found
                 </h2>
-                <p className="text-xs text-[#78716c] max-w-sm mt-1 mb-6">
+                <p className="text-xs text-stone-500 max-w-sm mt-1 mb-6">
                   Set the ingredients used to prepare each menu item to track
                   live depletion accurately.
                 </p>
                 <button
                   type="button"
                   onClick={openCreateRecipeDrawer}
-                  className="px-5 py-2.5 rounded-full text-xs font-medium bg-[#0c0a09] text-white hover:bg-[#292524] transition shadow-sm cursor-pointer"
+                  className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-stone-900 text-white hover:bg-stone-800 transition shadow-2xs cursor-pointer"
                 >
-                  <span className="text-white font-medium">
-                    Add new recipe
-                  </span>
+                  <span>Add new recipe</span>
                 </button>
               </div>
             ) : (
               /* Master Table Card View */
-              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-visible flex flex-col flex-1">
-                <div className="flex-1 overflow-visible">
-                  <table className="w-full text-left border-collapse">
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
+                <div className="overflow-x-auto flex-1">
+                  <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9]/80 text-[11px] uppercase tracking-wider text-[#78716c] font-medium select-none">
-                        <th className="py-3 px-5 w-12 text-center font-normal">
+                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold uppercase tracking-wider text-[#78716c] select-none">
+                        <th className="py-3 px-5 w-12 text-center">
                           <input
                             type="checkbox"
                             checked={isAllSelected}
@@ -1051,19 +1047,19 @@ export function ItemRecipesView({
                               if (el) el.indeterminate = isSomeSelected;
                             }}
                             onChange={handleSelectAll}
-                            className="rounded accent-[#0c0a09] w-4 h-4 cursor-pointer"
+                            className="rounded accent-stone-900 w-4 h-4 cursor-pointer"
                           />
                         </th>
-                        <th className="py-3 px-5 font-normal w-[35%]">Supplier Name / Recipe</th>
-                        <th className="py-3 px-5 font-normal w-[20%]">Quantity</th>
-                        <th className="py-3 px-5 font-normal w-[20%]">Created on</th>
-                        <th className="py-3 px-5 font-normal w-[15%]">Updated on</th>
-                        <th className="py-3 px-5 text-right font-normal w-16">
+                        <th className="py-3 px-5 font-semibold w-[35%]">Supplier Name / Recipe</th>
+                        <th className="py-3 px-5 font-semibold w-[20%]">Quantity</th>
+                        <th className="py-3 px-5 font-semibold w-[20%]">Created on</th>
+                        <th className="py-3 px-5 font-semibold w-[15%]">Updated on</th>
+                        <th className="py-3 px-5 text-right font-semibold w-16">
                           Actions
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
+                    <tbody className="divide-y divide-[#f5f5f4] text-xs">
                       {filteredMenuItems.map((dish) => (
                         <MasterRecipeRowItem
                           key={dish._id}
@@ -1110,25 +1106,25 @@ export function ItemRecipesView({
                   </table>
                 </div>
 
-                {/* Pagination Footer matching SuppliersView */}
-                <div className="px-6 py-4 bg-white border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#78716c] shrink-0">
-                  <div>
-                    Showing <span className="font-medium text-[#1c1917]">{filteredMenuItems.length}</span> of{" "}
-                    <span className="font-medium text-[#1c1917]">{filteredMenuItems.length}</span> recipes
-                  </div>
-                  <div className="flex items-center space-x-3">
+                {/* Pagination Footer matching PO & Suppliers */}
+                <div className="py-3.5 px-5 bg-[#fafaf9]/60 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                  <span>
+                    Showing <strong className="text-stone-900">{filteredMenuItems.length}</strong> of{" "}
+                    <strong className="text-stone-900">{filteredMenuItems.length}</strong> recipes
+                  </span>
+                  <div className="flex items-center space-x-2 text-xs">
                     <button
                       type="button"
                       disabled
-                      className="px-3 py-1 rounded border border-[#e7e5e4] bg-[#fafaf9] text-[#a8a29e] cursor-not-allowed font-medium"
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                     >
                       Previous
                     </button>
-                    <span className="font-medium text-[#1c1917]">1 / 1</span>
+                    <span className="px-2 font-medium text-stone-900">1 / 1</span>
                     <button
                       type="button"
                       disabled
-                      className="px-3 py-1 rounded border border-[#e7e5e4] bg-[#fafaf9] text-[#a8a29e] cursor-not-allowed font-medium"
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                     >
                       Next
                     </button>
@@ -1162,7 +1158,7 @@ export function ItemRecipesView({
                 </span>
               </div>
               <div className="flex items-baseline space-x-3">
-                <h1 className="font-serif text-3xl text-[#1e1b19] tracking-tight font-medium">
+                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
                   {selectedDish.name}
                 </h1>
                 <span className="text-xs text-[#645d58] font-normal">
@@ -1487,7 +1483,7 @@ export function ItemRecipesView({
       >
         {/* Drawer Header */}
         <div className="h-16 px-6 border-b border-[#e9e1dd] flex items-center justify-between shrink-0">
-          <h2 className="font-serif text-xl font-medium text-[#1e1b19]">
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
             {editingDishId ? "Edit recipe name" : "Create new recipe"}
           </h2>
           <button
@@ -1640,7 +1636,7 @@ export function ItemRecipesView({
         }`}
       >
         <div className="h-16 px-6 border-b border-[#e9e1dd] flex items-center justify-between shrink-0">
-          <h2 className="font-serif text-xl font-medium text-[#1e1b19]">
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
             Add ingredient
           </h2>
           <button
@@ -1770,7 +1766,7 @@ export function ItemRecipesView({
         }`}
       >
         <div className="h-16 px-6 border-b border-[#e9e1dd] flex items-center justify-between shrink-0">
-          <h2 className="font-serif text-xl font-medium text-[#1e1b19]">
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
             Assign menu item
           </h2>
           <button
@@ -1989,42 +1985,44 @@ function MasterRecipeRowItem({
       }`}
     >
       <td
-        className="py-4 px-5 w-12 text-center"
+        className="py-3.5 px-5 w-12 text-center"
         onClick={(e) => e.stopPropagation()}
       >
         <input
           type="checkbox"
           checked={isSelected}
           onChange={onToggleSelect}
-          className="rounded accent-[#0c0a09] w-4 h-4 cursor-pointer"
+          className="rounded accent-stone-900 w-4 h-4 cursor-pointer"
         />
       </td>
 
-      <td className="py-4 px-5 font-medium text-[#1c1917] w-[35%]">
+      <td className="py-3.5 px-5 font-semibold text-stone-900 w-[35%]">
         <button
           type="button"
           onClick={onOpenDetail}
-          className="text-left font-medium text-[#1c1917] hover:underline focus:outline-none cursor-pointer"
+          className="text-left font-semibold text-stone-900 hover:underline focus:outline-none cursor-pointer"
         >
           {dish.name}
         </button>
       </td>
 
-      <td className="py-4 px-5 text-[#1c1917] font-medium w-[20%]">
+      <td className="py-3.5 px-5 text-stone-700 font-medium w-[20%]">
         {formattedYield}
       </td>
 
-      <td className="py-4 px-5 text-[#78716c] tabular-nums font-mono w-[20%]">
+      <td className="py-3.5 px-5 text-stone-500 font-mono text-[11px] w-[20%]">
         {createdDateStr}
       </td>
 
-      <td className="py-4 px-5 text-[#78716c] w-[15%]">43 minutes ago</td>
+      <td className="py-3.5 px-5 text-stone-500 text-[11px] w-[15%]">
+        {createdDateStr}
+      </td>
 
-      <td className="py-4 px-5 text-right w-16 relative">
+      <td className="py-3.5 px-5 text-right w-16 relative">
         <button
           type="button"
           onClick={onToggleMenu}
-          className="p-1 rounded-full hover:bg-[#f5f5f4] text-[#a8a29e] hover:text-[#1c1917] transition cursor-pointer"
+          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-800 transition cursor-pointer"
         >
           <span className="material-symbols-outlined text-[18px]">
             more_vert
@@ -2032,46 +2030,46 @@ function MasterRecipeRowItem({
         </button>
 
         {isOpenMenu && (
-          <div className="absolute right-2 top-full mt-1 w-52 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1 flex flex-col text-left text-xs font-normal">
+          <div className="absolute right-2 top-full mt-1 w-52 bg-white rounded-lg shadow-lg border border-[#e7e5e4] z-50 py-1 flex flex-col text-left text-xs font-normal">
             <button
               type="button"
               onClick={onOpenDetail}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition font-medium"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition font-medium cursor-pointer"
             >
               Edit recipe items
             </button>
             <button
               type="button"
               onClick={onEditRecipeName}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               Edit recipe name
             </button>
             <button
               type="button"
               onClick={onOpenDetail}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               View item recipe
             </button>
             <button
               type="button"
               onClick={onAssignMenuItem}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               Assign menu item
             </button>
             <button
               type="button"
               onClick={onViewDeadStock}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               View dead stock log
             </button>
             <button
               type="button"
               onClick={onDuplicateRecipe}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               Duplicate recipe
             </button>
@@ -2122,7 +2120,7 @@ function RecipeIngredientsBreakdownCard({
             menu_book
           </span>
         </div>
-        <h2 className="font-serif text-2xl text-[#1e1b19]">
+        <h2 className="text-xl font-bold text-stone-900">
           No ingredients configured yet
         </h2>
         <p className="text-xs text-[#645d58] max-w-md mt-1 mb-6">

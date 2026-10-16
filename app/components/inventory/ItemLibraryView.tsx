@@ -209,6 +209,12 @@ export function ItemLibraryView({
   const [detailActiveTab, setDetailActiveTab] = useState<
     "added_logs" | "sales_logs" | "dead_logs"
   >("added_logs");
+  const [detailPage, setDetailPage] = useState(1);
+  const detailLogsPerPage = 10;
+
+  useEffect(() => {
+    setDetailPage(1);
+  }, [selectedItemDetail?._id, detailActiveTab]);
 
   // Live Stock Logs for Selected Item
   const liveItemHistory = useQuery(
@@ -862,8 +868,26 @@ export function ItemLibraryView({
     const itemDeadLogs =
       liveDeadLogs.length > 0 ? liveDeadLogs : deadStockLogsMap[selectedItemDetail._id] || [];
 
+    const totalDetailPages = Math.max(1, Math.ceil(itemLogs.length / detailLogsPerPage));
+    const paginatedItemLogs = itemLogs.slice(
+      (detailPage - 1) * detailLogsPerPage,
+      detailPage * detailLogsPerPage
+    );
+
+    const totalSalesPages = Math.max(1, Math.ceil(liveSalesLogs.length / detailLogsPerPage));
+    const paginatedSalesLogs = liveSalesLogs.slice(
+      (detailPage - 1) * detailLogsPerPage,
+      detailPage * detailLogsPerPage
+    );
+
+    const totalDeadPages = Math.max(1, Math.ceil(itemDeadLogs.length / detailLogsPerPage));
+    const paginatedDeadLogs = itemDeadLogs.slice(
+      (detailPage - 1) * detailLogsPerPage,
+      detailPage * detailLogsPerPage
+    );
+
     return (
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white p-8">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] p-8 overflow-y-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center space-x-2 text-xs text-stone-500 mb-4 font-sans">
           <button
@@ -878,8 +902,8 @@ export function ItemLibraryView({
         </div>
 
         {/* Page Title & Header Actions */}
-        <div className="flex items-center justify-between pb-4">
-          <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight">
+        <div className="flex items-center justify-between pb-6">
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
             {selectedItemDetail.name}
           </h1>
 
@@ -888,7 +912,7 @@ export function ItemLibraryView({
             <button
               type="button"
               onClick={() => openEditDrawer(selectedItemDetail)}
-              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition cursor-pointer"
+              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 rounded-lg transition cursor-pointer"
               title="Edit item"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -923,16 +947,16 @@ export function ItemLibraryView({
               <button
                 type="button"
                 onClick={() => openAssignStockDrawer(selectedItemDetail)}
-                className="bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-xs cursor-pointer"
+                className="bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer inline-flex items-center space-x-1.5"
               >
-                Add item stock
+                <span>Add item stock</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center space-x-8 border-b border-stone-200 text-xs font-medium">
+        <div className="flex items-center space-x-8 border-b border-[#e7e5e4] text-xs font-medium mb-6">
           <button
             type="button"
             onClick={() => setDetailActiveTab("added_logs")}
@@ -969,19 +993,18 @@ export function ItemLibraryView({
         </div>
 
         {/* Tab Contents */}
-        <div className="flex-1 flex flex-col justify-center items-center py-12">
+        <div className="flex-1 flex flex-col min-h-0">
           {detailActiveTab === "added_logs" ? (
             itemLogs.length === 0 ? (
-              /* Added Stock Logs Empty State (Screenshot 1) */
-              <div className="flex flex-col items-center justify-center text-center">
-                {/* Box icon with x */}
+              /* Added Stock Logs Empty State */
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
                   <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 10l4 4m0-4l-4 4" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-stone-800 text-sm">
+                <h3 className="font-bold text-stone-900 text-base">
                   No stock logs available for this item
                 </h3>
                 <p className="text-xs text-stone-500 max-w-sm mt-1 mb-5">
@@ -990,59 +1013,98 @@ export function ItemLibraryView({
                 <button
                   type="button"
                   onClick={() => openAssignStockDrawer(selectedItemDetail)}
-                  className="bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-xs cursor-pointer"
+                  className="bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer"
                 >
                   Add item stock
                 </button>
               </div>
             ) : (
               /* Added Stock Logs Table */
-              <div className="w-full h-full flex flex-col">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-stone-200 bg-stone-50 uppercase tracking-wider text-stone-500 font-medium select-none">
-                      <th className="py-3 px-4 font-normal">Quantity Added</th>
-                      <th className="py-3 px-4 font-normal">Supplier</th>
-                      <th className="py-3 px-4 font-normal">PO Number</th>
-                      <th className="py-3 px-4 font-normal">Date Received</th>
-                      <th className="py-3 px-4 font-normal">Expiry Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {itemLogs.map((log) => (
-                      <tr key={log._id} className="hover:bg-stone-50">
-                        <td className="py-3.5 px-4 font-medium text-stone-900">
-                          {log.quantity} {formatUnitDisplay(log.unit)}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600 font-medium">
-                          {log.supplierName || "—"}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-stone-600">
-                          {log.poNumber || "—"}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {formatStoreDate(log.dateReceived, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {log.itemExpiry && log.itemExpiry !== "—"
-                            ? formatStoreDate(log.itemExpiry, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"
-                            : "—"}
-                        </td>
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-10 select-none">
+                        <th className="py-3 px-5">Quantity added</th>
+                        <th className="py-3 px-5">Supplier</th>
+                        <th className="py-3 px-5">PO number</th>
+                        <th className="py-3 px-5">Date received</th>
+                        <th className="py-3 px-5">Expiry date</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#f5f5f4]">
+                      {paginatedItemLogs.map((log) => (
+                        <tr key={log._id} className="hover:bg-stone-50/80 transition-colors">
+                          <td className="py-3.5 px-5 font-semibold text-stone-900">
+                            {log.quantity} {formatUnitDisplay(log.unit)}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-700 font-medium">
+                            {log.supplierName || "—"}
+                          </td>
+                          <td className="py-3.5 px-5 font-mono text-stone-600">
+                            {log.poNumber || "—"}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-600 font-mono">
+                            {formatStoreDate(log.dateReceived, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-600 font-mono">
+                            {log.itemExpiry && log.itemExpiry !== "—"
+                              ? formatStoreDate(log.itemExpiry, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                  <span>
+                    Showing{" "}
+                    <strong className="text-stone-900">
+                      {itemLogs.length === 0
+                        ? 0
+                        : `${(detailPage - 1) * detailLogsPerPage + 1} - ${Math.min(
+                            detailPage * detailLogsPerPage,
+                            itemLogs.length
+                          )}`}
+                    </strong>{" "}
+                    of <strong className="text-stone-900">{itemLogs.length}</strong> logs
+                  </span>
+                  <div className="flex items-center space-x-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={detailPage <= 1}
+                      onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2 font-medium text-stone-900">
+                      {detailPage} / {totalDetailPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={detailPage >= totalDetailPages}
+                      onClick={() => setDetailPage((p) => Math.min(totalDetailPages, p + 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             )
           ) : detailActiveTab === "sales_logs" ? (
             liveSalesLogs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center text-center">
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
                   <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-stone-800 text-sm">
+                <h3 className="font-bold text-stone-900 text-base">
                   No POS deductions yet
                 </h3>
                 <p className="text-xs text-stone-500 max-w-sm mt-1">
@@ -1050,46 +1112,84 @@ export function ItemLibraryView({
                 </p>
               </div>
             ) : (
-              <div className="w-full h-full flex flex-col">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-stone-200 bg-stone-50 uppercase tracking-wider text-stone-500 font-medium select-none">
-                      <th className="py-3 px-4 font-normal">Quantity Deducted</th>
-                      <th className="py-3 px-4 font-normal">Source</th>
-                      <th className="py-3 px-4 font-normal">Date & Time</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {liveSalesLogs.map((log) => (
-                      <tr key={log._id} className="hover:bg-stone-50">
-                        <td className="py-3.5 px-4 font-semibold text-purple-700">
-                          - {log.quantity} {formatUnitDisplay(log.unit)}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-700 font-medium">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-700">
-                            POS Order Sale
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {formatStoreDate(log.date, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
-                        </td>
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-10 select-none">
+                        <th className="py-3 px-5">Quantity deducted</th>
+                        <th className="py-3 px-5">Source</th>
+                        <th className="py-3 px-5">Date & Time</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#f5f5f4]">
+                      {paginatedSalesLogs.map((log) => (
+                        <tr key={log._id} className="hover:bg-stone-50/80 transition-colors">
+                          <td className="py-3.5 px-5 font-semibold text-rose-600">
+                            - {log.quantity} {formatUnitDisplay(log.unit)}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-700 font-medium">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                              POS Order Sale
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-600 font-mono">
+                            {formatStoreDate(log.date, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                  <span>
+                    Showing{" "}
+                    <strong className="text-stone-900">
+                      {liveSalesLogs.length === 0
+                        ? 0
+                        : `${(detailPage - 1) * detailLogsPerPage + 1} - ${Math.min(
+                            detailPage * detailLogsPerPage,
+                            liveSalesLogs.length
+                          )}`}
+                    </strong>{" "}
+                    of <strong className="text-stone-900">{liveSalesLogs.length}</strong> deductions
+                  </span>
+                  <div className="flex items-center space-x-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={detailPage <= 1}
+                      onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2 font-medium text-stone-900">
+                      {detailPage} / {totalSalesPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={detailPage >= totalSalesPages}
+                      onClick={() => setDetailPage((p) => Math.min(totalSalesPages, p + 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             )
           ) : itemDeadLogs.length === 0 ? (
-            /* Dead Stock Logs Empty State (Screenshot 2) */
-            <div className="flex flex-col items-center justify-center text-center">
-              {/* Box icon with x */}
+            /* Dead Stock Logs Empty State */
+            <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs p-12 flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
                 <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 10l4 4m0-4l-4 4" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-stone-800 text-sm">
+              <h3 className="font-bold text-stone-900 text-base">
                 No dead stock logs yet
               </h3>
               <p className="text-xs text-stone-500 max-w-sm mt-1">
@@ -1098,31 +1198,70 @@ export function ItemLibraryView({
             </div>
           ) : (
             /* Dead Stock Logs Table */
-            <div className="w-full h-full flex flex-col">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-stone-200 bg-stone-50 uppercase tracking-wider text-stone-500 font-medium select-none">
-                    <th className="py-3 px-4 font-normal">Wasted Quantity</th>
-                    <th className="py-3 px-4 font-normal">Reason</th>
-                    <th className="py-3 px-4 font-normal">Marked Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {itemDeadLogs.map((log) => (
-                    <tr key={log._id} className="hover:bg-stone-50">
-                      <td className="py-3.5 px-4 font-medium text-rose-600">
-                        {log.quantity} {formatUnitDisplay(log.unit)}
-                      </td>
-                      <td className="py-3.5 px-4 text-stone-600 font-medium">
-                        {log.reason}
-                      </td>
-                      <td className="py-3.5 px-4 text-stone-600 font-mono">
-                        {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
-                      </td>
+            <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-10 select-none">
+                      <th className="py-3 px-5">Wasted quantity</th>
+                      <th className="py-3 px-5">Reason</th>
+                      <th className="py-3 px-5">Marked date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#f5f5f4]">
+                    {paginatedDeadLogs.map((log) => (
+                      <tr key={log._id} className="hover:bg-stone-50/80 transition-colors">
+                        <td className="py-3.5 px-5 font-semibold text-rose-600">
+                          {log.quantity} {formatUnitDisplay(log.unit)}
+                        </td>
+                        <td className="py-3.5 px-5 text-stone-700 font-medium">
+                          {log.reason}
+                        </td>
+                        <td className="py-3.5 px-5 text-stone-600 font-mono">
+                          {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                <span>
+                  Showing{" "}
+                  <strong className="text-stone-900">
+                    {itemDeadLogs.length === 0
+                      ? 0
+                      : `${(detailPage - 1) * detailLogsPerPage + 1} - ${Math.min(
+                          detailPage * detailLogsPerPage,
+                          itemDeadLogs.length
+                        )}`}
+                  </strong>{" "}
+                  of <strong className="text-stone-900">{itemDeadLogs.length}</strong> logs
+                </span>
+                <div className="flex items-center space-x-2 text-xs">
+                  <button
+                    type="button"
+                    disabled={detailPage <= 1}
+                    onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-2 font-medium text-stone-900">
+                    {detailPage} / {totalDeadPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={detailPage >= totalDeadPages}
+                    onClick={() => setDetailPage((p) => Math.min(totalDeadPages, p + 1))}
+                    className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -1131,7 +1270,7 @@ export function ItemLibraryView({
         {isDeleteModalOpen && itemToDelete && (
           <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
             <div className="bg-white border border-stone-200 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-              <h3 className="font-serif text-xl text-stone-900 font-medium">
+              <h3 className="text-xl text-stone-900 font-bold">
                 Delete {itemToDelete.name}
               </h3>
               <div className="space-y-2 text-xs text-stone-600">
@@ -1145,14 +1284,14 @@ export function ItemLibraryView({
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-stone-600 hover:text-stone-900 border border-stone-200 rounded-full hover:bg-stone-50 transition cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-stone-700 hover:text-stone-900 border border-stone-200 rounded-lg hover:bg-stone-50 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={confirmDelete}
-                  className="px-5 py-2 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer shadow-xs"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer shadow-xs"
                 >
                   Confirm
                 </button>
@@ -1394,14 +1533,14 @@ export function ItemLibraryView({
 
   // RENDER ITEM LIBRARY MAIN TABLE PAGE
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] p-8">
       {/* Page Title & Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
         <div>
-          <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
             Item library
           </h1>
-          <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
+          <p className="text-xs text-stone-500 mt-1">
             Manage raw ingredient catalog, buying units, serving units, and refill alert levels.
           </p>
         </div>
@@ -1410,7 +1549,7 @@ export function ItemLibraryView({
         <div className="flex items-center gap-3">
           <div className="relative w-72">
             <svg
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a8a29e]"
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1424,7 +1563,7 @@ export function ItemLibraryView({
             </svg>
             <input
               type="text"
-              className="w-full pl-9.5 pr-4 py-2 bg-white text-xs text-[#1c1917] border border-[#e7e5e4] rounded-full focus:outline-none focus:ring-1 focus:ring-[#0c0a09] placeholder:text-[#a8a29e] transition shadow-2xs"
+              className="w-full pl-9 pr-3 py-2 bg-white text-xs text-stone-900 border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800 placeholder:text-stone-400 transition shadow-2xs"
               placeholder="Search by item name, SKU no"
               value={searchQuery}
               onChange={(e) => {
@@ -1437,7 +1576,7 @@ export function ItemLibraryView({
           <button
             type="button"
             onClick={openAddDrawer}
-            className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-4 py-2.5 rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center space-x-2 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer whitespace-nowrap"
           >
             <svg
               className="w-3.5 h-3.5 text-white stroke-white"
@@ -1452,16 +1591,16 @@ export function ItemLibraryView({
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            <span className="text-white !text-white font-medium">Add new item</span>
+            <span>Add new item</span>
           </button>
         </div>
       </div>
 
       {/* Main Table / Empty State Container */}
-      <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="mt-6 flex-1 flex flex-col">
         {filteredAndSortedItems.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
-            <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
+            <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-stone-500 mb-4">
               <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
@@ -1471,14 +1610,14 @@ export function ItemLibraryView({
                 />
               </svg>
             </div>
-            <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">Empty item Shelf</h3>
-            <p className="text-xs md:text-sm text-[#78716c] max-w-sm mt-1 mb-6">
+            <h3 className="text-xl font-bold text-stone-900">Empty item shelf</h3>
+            <p className="text-xs md:text-sm text-stone-500 max-w-sm mt-1 mb-6">
               No items have been added yet. Start building your inventory list.
             </p>
             <button
               type="button"
               onClick={openAddDrawer}
-              className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-5 py-2.5 rounded-full transition shadow-sm cursor-pointer"
+              className="inline-flex items-center space-x-2 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition shadow-2xs cursor-pointer"
             >
               <svg
                 className="w-3.5 h-3.5 text-white stroke-white"
@@ -1493,28 +1632,28 @@ export function ItemLibraryView({
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              <span className="text-white !text-white font-medium">Add new item</span>
+              <span>Add new item</span>
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-hidden flex flex-col flex-1">
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-left border-collapse">
+          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 z-20 select-none">
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-20 select-none">
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900"
                       onClick={() => handleSort("name")}
                     >
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-1.5">
                         <span>Item name</span>
                         {sortField === "name" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-stone-900 font-bold">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3 h-3 text-stone-300"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -1530,18 +1669,18 @@ export function ItemLibraryView({
                       </div>
                     </th>
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900"
                       onClick={() => handleSort("category")}
                     >
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-1.5">
                         <span>Category</span>
                         {sortField === "category" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-stone-900 font-bold">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3 h-3 text-stone-300"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -1556,13 +1695,13 @@ export function ItemLibraryView({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-5 font-normal">SKU no.</th>
-                    <th className="py-3 px-5 font-normal w-72">Available stock</th>
-                    <th className="py-3 px-5 font-normal">Created/update time</th>
-                    <th className="py-3 px-5 text-right font-normal">Actions</th>
+                    <th className="py-3 px-5 font-semibold">SKU no.</th>
+                    <th className="py-3 px-5 font-semibold w-72">Available stock</th>
+                    <th className="py-3 px-5 font-semibold">Created/update time</th>
+                    <th className="py-3 px-5 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
+                <tbody className="divide-y divide-[#f5f5f4] text-xs">
                   {paginatedItems.map((item) => {
                     const available = item.availableStock || 0;
                     const minRefill = item.minimumStockRefillLevel || 0;
@@ -1599,49 +1738,44 @@ export function ItemLibraryView({
                         key={item._id}
                         className="hover:bg-[#fafaf9] transition-colors group"
                       >
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 px-5">
                           <div
-                            className="flex items-center space-x-3 cursor-pointer"
+                            className="cursor-pointer"
                             onClick={() => setSelectedItemDetail(item)}
                           >
-                            <div className="w-7 h-7 rounded-full bg-[#f5f5f4] text-[#44403c] border border-[#e7e5e4] flex items-center justify-center font-serif font-medium text-xs shrink-0">
-                              {item.name.charAt(0).toUpperCase()}
+                            <div className="flex items-center space-x-2">
+                              <span className="font-semibold text-stone-900 hover:underline">
+                                {item.name}
+                              </span>
+                              {available < 0 ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                  DEFICIT
+                                </span>
+                              ) : (item.isLowStock || available <= minRefill) ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  LOW
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  OK
+                                </span>
+                              )}
                             </div>
-                            <div>
-                              <div className="flex items-center space-x-2">
-                                <p className="font-medium text-[#0c0a09] hover:underline">
-                                  {item.name}
-                                </p>
-                                {available < 0 ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
-                                    ⚠️ DEFICIT
-                                  </span>
-                                ) : (item.isLowStock || available <= minRefill) ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                    🔴 LOW
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    🟢 OK
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-[#a8a29e]">
-                                {item.description || "Raw ingredient"}
-                              </p>
-                            </div>
+                            <p className="text-[11px] text-stone-500 mt-0.5">
+                              {item.description || "Raw ingredient"}
+                            </p>
                           </div>
                         </td>
-                        <td className="py-4 px-5 text-[#44403c] font-medium">
+                        <td className="py-3.5 px-5 text-stone-700 font-medium">
                           Dairy items
                         </td>
-                        <td className="py-4 px-5 font-mono text-[11px] text-[#57534e]">
+                        <td className="py-3.5 px-5 font-mono text-[11px] text-stone-600">
                           {item.skuNumber || "—"}
                         </td>
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 px-5">
                           {/* Visual Stock Bar Slider Component */}
                           <div className="space-y-1.5">
-                            <div className={`text-center text-[11px] font-semibold ${available < 0 ? "text-purple-700 font-bold" : "text-[#0c0a09]"}`}>
+                            <div className={`text-center text-[11px] font-semibold ${available < 0 ? "text-purple-700 font-bold" : "text-stone-900"}`}>
                               {shortUnit === "pc"
                                 ? available.toFixed(2)
                                 : Math.round(available * 100) / 100 !== available
@@ -1649,7 +1783,7 @@ export function ItemLibraryView({
                                 : available.toFixed(2)}
                               {shortUnit}
                             </div>
-                            <div className="relative w-full h-3 bg-[#f5f5f4] border border-[#e7e5e4] rounded-full overflow-hidden">
+                            <div className="relative w-full h-2.5 bg-stone-100 border border-stone-200 rounded-full overflow-hidden">
                               {/* Filled Available Stock Bar */}
                               <div
                                 className="h-full rounded-full transition-all duration-300"
@@ -1661,64 +1795,64 @@ export function ItemLibraryView({
                               />
                               {/* Min Refill Level Marker */}
                               <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-rose-600"
+                                className="absolute top-0 bottom-0 w-0.5 bg-rose-500"
                                 style={{ left: `${minPct}%` }}
                                 title={`Minimum Stock Refill level: ${minRefill}${shortUnit}`}
                               />
                               {/* Baseline Stock Level Marker */}
                               <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-sky-600"
+                                className="absolute top-0 bottom-0 w-0.5 bg-sky-500"
                                 style={{ left: `${basePct}%` }}
                                 title={`Baseline stock level: ${baseline}${shortUnit}`}
                               />
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-5 text-[#57534e] text-[11px]">
+                        <td className="py-3.5 px-5 text-stone-500 text-[11px]">
                           {formattedDate}
                         </td>
-                        <td className="py-4 px-5 text-right relative">
+                        <td className="py-3.5 px-5 text-right relative">
                           <button
                             type="button"
                             onClick={() =>
                               setActiveMenuId(activeMenuId === item._id ? null : item._id)
                             }
-                            className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded hover:bg-[#e7e5e4]/50 transition cursor-pointer"
+                            className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                           >
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                             </svg>
                           </button>
                           {activeMenuId === item._id && (
-                            <div className="absolute right-5 top-12 w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans">
+                            <div className="absolute right-5 top-11 w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans text-xs">
                               <button
                                 type="button"
                                 onClick={() => {
                                   setSelectedItemDetail(item);
                                   setActiveMenuId(null);
                                 }}
-                                className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                               >
                                 View item logs
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openAssignStockDrawer(item)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                               >
                                 Add item stock
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openEditDrawer(item)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                               >
                                 Edit item
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openDeleteModal(item)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
                               >
                                 Delete item
                               </button>
@@ -1733,29 +1867,36 @@ export function ItemLibraryView({
             </div>
 
             {/* Pagination Controls */}
-            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/50 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
               <span>
-                Showing <strong className="text-[#0c0a09]">{paginatedItems.length}</strong>{" "}
-                of <strong className="text-[#0c0a09]">{filteredAndSortedItems.length}</strong>{" "}
-                items
+                Showing{" "}
+                <strong className="text-stone-900">
+                  {filteredAndSortedItems.length === 0
+                    ? 0
+                    : `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(
+                        currentPage * itemsPerPage,
+                        filteredAndSortedItems.length
+                      )}`}
+                </strong>{" "}
+                of <strong className="text-stone-900">{filteredAndSortedItems.length}</strong> items
               </span>
               <div className="flex items-center space-x-2 text-xs">
                 <button
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Previous
                 </button>
-                <span className="px-2 font-medium text-[#0c0a09]">
+                <span className="px-2 font-medium text-stone-900">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Next
                 </button>
@@ -1767,12 +1908,12 @@ export function ItemLibraryView({
 
       {/* Delete Confirmation Dialog Modal */}
       {isDeleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 bg-[#0c0a09]/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e7e5e4] rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-serif text-xl text-[#0c0a09] font-medium">
+        <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-xl text-stone-900 font-bold">
               Delete {itemToDelete.name}
             </h3>
-            <div className="space-y-2 text-xs text-[#57534e]">
+            <div className="space-y-2 text-xs text-stone-600">
               <p>Are you sure you want to delete this item from the inventory?</p>
               <p className="text-rose-600 font-medium bg-rose-50 p-2.5 rounded-lg border border-rose-200">
                 Warning: By deleting this item, all the items linked to this particular item will become unavailable everywhere.
@@ -1783,14 +1924,14 @@ export function ItemLibraryView({
               <button
                 type="button"
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-[#57534e] hover:text-[#0c0a09] border border-[#e7e5e4] rounded-full hover:bg-[#f5f5f4] transition cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-stone-700 hover:text-stone-900 border border-stone-200 rounded-lg hover:bg-stone-50 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmDelete}
-                className="px-5 py-2 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer shadow-xs"
+                className="px-5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer shadow-xs"
               >
                 Confirm
               </button>
@@ -1820,7 +1961,7 @@ export function ItemLibraryView({
           <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-6 border-b border-[#e7e5e4] flex items-start justify-between bg-white shrink-0">
             <div>
-              <h2 className="font-serif text-2xl text-[#0c0a09] font-medium tracking-tight">
+              <h2 className="text-xl font-bold text-[#0c0a09] tracking-tight">
                 {drawerMode === "edit" ? "Edit item" : "Add new item"}
               </h2>
               <p className="text-xs text-[#78716c] mt-0.5">
@@ -2100,7 +2241,7 @@ export function ItemLibraryView({
             <button
               type="button"
               onClick={() => setIsDrawerOpen(false)}
-              className="px-5 py-2.5 rounded-full border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-medium transition cursor-pointer"
+              className="px-4 py-2 rounded-lg border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-semibold transition cursor-pointer"
             >
               Cancel
             </button>
@@ -2108,9 +2249,9 @@ export function ItemLibraryView({
               type="submit"
               form="itemFormMain"
               disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-full bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium transition shadow-sm cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
             >
-              <span className="text-white !text-white font-medium">
+              <span>
                 {isSubmitting ? "Saving..." : drawerMode === "edit" ? "Update" : "Create"}
               </span>
             </button>

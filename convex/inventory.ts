@@ -92,6 +92,8 @@ export const createSupplier = mutation({
     fssaiLicNumber: v.optional(v.string()),
     address: v.optional(v.string()),
     city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -106,6 +108,8 @@ export const createSupplier = mutation({
       fssaiLicNumber: args.fssaiLicNumber,
       address: args.address,
       city: args.city,
+      country: args.country,
+      state: args.state,
       createdAt: now,
       updatedAt: now,
     });
@@ -125,6 +129,8 @@ export const updateSupplier = mutation({
     fssaiLicNumber: v.optional(v.string()),
     address: v.optional(v.string()),
     city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const supplier = await ctx.db.get(args.id);
@@ -140,6 +146,8 @@ export const updateSupplier = mutation({
     if (args.fssaiLicNumber !== undefined) patch.fssaiLicNumber = args.fssaiLicNumber;
     if (args.address !== undefined) patch.address = args.address;
     if (args.city !== undefined) patch.city = args.city;
+    if (args.country !== undefined) patch.country = args.country;
+    if (args.state !== undefined) patch.state = args.state;
 
     await ctx.db.patch(args.id, patch);
     return { success: true };
@@ -851,6 +859,32 @@ export const createPurchaseOrder = mutation({
   },
 });
 
+export const updatePurchaseOrderDetails = mutation({
+  args: {
+    purchaseOrderId: v.id("purchaseOrders"),
+    supplierId: v.optional(v.id("suppliers")),
+    purchasePriority: v.optional(
+      v.union(v.literal("high"), v.literal("medium"), v.literal("low"))
+    ),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const po = await ctx.db.get(args.purchaseOrderId);
+    if (!po) throw new Error("Purchase Order not found");
+    if (po.status === "settled" || po.status === "cancelled") {
+      throw new Error(`Cannot update details for a ${po.status} purchase order.`);
+    }
+
+    const patch: any = { updatedAt: Date.now() };
+    if (args.supplierId !== undefined) patch.supplierId = args.supplierId;
+    if (args.purchasePriority !== undefined) patch.purchasePriority = args.purchasePriority;
+    if (args.notes !== undefined) patch.notes = args.notes;
+
+    await ctx.db.patch(po._id, patch);
+    return { success: true };
+  },
+});
+
 export const addItemsToPurchaseOrder = mutation({
   args: {
     organizationId: v.id("organizations"),
@@ -1011,12 +1045,92 @@ export const placePurchaseOrder = mutation({
     const po = await ctx.db.get(args.purchaseOrderId);
     if (!po) throw new Error("Purchase Order not found");
 
+    const poItems = await ctx.db
+      .query("purchaseOrderItems")
+      .withIndex("by_po", (q) => q.eq("purchaseOrderId", po._id))
+      .collect();
+
+    // Clean up any draft lines where orderedQuantity <= 0
+    let validItemsCount = 0;
+    let totalAmount = 0;
+    for (const item of poItems) {
+      if ((item.orderedQuantity ?? 0) <= 0) {
+        await ctx.db.delete(item._id);
+      } else {
+        validItemsCount++;
+        totalAmount += (item.orderedQuantity * item.unitCost);
+        await ctx.db.patch(item._id, {
+          isReceived: false,
+          isMissing: false,
+          receivedQuantity: 0,
+          missingQuantity: 0,
+        });
+      }
+    }
+
+    if (validItemsCount === 0) {
+      throw new Error(
+        "Cannot place order without any item quantity. Please enter a quantity for at least one item."
+      );
+    }
+
     await ctx.db.patch(po._id, {
       status: "sent",
+      totalAmount,
       updatedAt: Date.now(),
     });
 
-    return { success: true, status: "sent" };
+    return { success: true, status: "sent", itemsCount: validItemsCount, totalAmount };
+  },
+});
+
+export const updatePurchaseOrderItemDetails = mutation({
+  args: {
+    purchaseOrderItemId: v.id("purchaseOrderItems"),
+    priceOfItem: v.optional(v.number()),
+    receivedQuantity: v.optional(v.number()),
+    orderedQuantity: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const item = await ctx.db.get(args.purchaseOrderItemId);
+    if (!item) throw new Error("Purchase order item not found");
+
+    const orderedQty = args.orderedQuantity !== undefined ? args.orderedQuantity : item.orderedQuantity;
+    const receivedQty = args.receivedQuantity !== undefined ? args.receivedQuantity : (item.receivedQuantity ?? 0);
+    const unitCost = args.priceOfItem !== undefined ? args.priceOfItem : item.unitCost;
+
+    const missingQty = receivedQty > 0 ? Math.max(0, orderedQty - receivedQty) : (item.missingQuantity ?? 0);
+    const isMissing = receivedQty > 0 ? (missingQty > 0) : (item.isMissing ?? false);
+    const isReceived = args.receivedQuantity !== undefined ? true : (item.isReceived ?? false);
+    const totalCost = orderedQty * unitCost;
+
+    await ctx.db.patch(item._id, {
+      orderedQuantity: orderedQty,
+      receivedQuantity: receivedQty,
+      missingQuantity: missingQty,
+      isMissing,
+      isReceived,
+      unitCost,
+      totalCost,
+    });
+
+    // Recalculate PO total amount
+    const poItems = await ctx.db
+      .query("purchaseOrderItems")
+      .withIndex("by_po", (q) => q.eq("purchaseOrderId", item.purchaseOrderId))
+      .collect();
+
+    const poTotal = poItems.reduce((acc, it) => {
+      const itCost = it._id === item._id ? totalCost : (it.totalCost || (it.orderedQuantity * it.unitCost));
+      return acc + itCost;
+    }, 0);
+
+    await ctx.db.patch(item.purchaseOrderId, {
+      totalAmount: poTotal,
+      updatedAt: Date.now(),
+    });
+
+    return { success: true };
   },
 });
 
@@ -1056,7 +1170,7 @@ export const updatePOItemReceivingStatus = mutation({
           await ctx.db.patch(line._id, {
             isReceived: true,
             isMissing: false,
-            receivedQuantity: line.orderedQuantity,
+            receivedQuantity: line.receivedQuantity !== undefined ? line.receivedQuantity : 0,
             missingQuantity: 0,
           });
         } else {
@@ -1068,20 +1182,6 @@ export const updatePOItemReceivingStatus = mutation({
           });
         }
       }
-    }
-
-    // Check if partially received
-    const allLines = await ctx.db
-      .query("purchaseOrderItems")
-      .withIndex("by_po", (q) => q.eq("purchaseOrderId", po._id))
-      .collect();
-
-    const anyReceived = allLines.some((l) => (l.receivedQuantity ?? 0) > 0 || l.isReceived);
-    if (anyReceived && po.status !== "settled" && po.status !== "cancelled") {
-      await ctx.db.patch(po._id, {
-        status: "partially_received",
-        updatedAt: Date.now(),
-      });
     }
 
     return { success: true };
@@ -1116,9 +1216,11 @@ export const listPurchaseOrders = query({
       const itemsWithDetails = [];
       for (const itemLine of poItems) {
         const invItem = await ctx.db.get(itemLine.inventoryItemId);
-        const orderedQty = itemLine.orderedQuantity;
-        const receivedQty = itemLine.receivedQuantity ?? orderedQty;
-        const missingQty = Math.max(0, orderedQty - receivedQty);
+        const orderedQty = itemLine.orderedQuantity ?? 0;
+        const receivedQty = itemLine.receivedQuantity ?? 0;
+        const missingQty = itemLine.missingQuantity ?? 0;
+        const isReceived = itemLine.isReceived === true;
+        const isMissing = itemLine.isMissing === true;
 
         itemsWithDetails.push({
           id: itemLine._id,
@@ -1133,8 +1235,9 @@ export const listPurchaseOrders = query({
           receivedQuantity: receivedQty,
           missingQuantity: missingQty,
           unitCost: itemLine.unitCost,
-          isReceived: itemLine.isReceived ?? receivedQty > 0,
-          isMissing: itemLine.isMissing ?? missingQty > 0,
+          totalCost: itemLine.totalCost ?? (itemLine.unitCost * orderedQty),
+          isReceived,
+          isMissing,
         });
       }
 
@@ -1145,6 +1248,28 @@ export const listPurchaseOrders = query({
         supplierId: po.supplierId,
         supplierName: supplier?.supplierName ?? "Unknown Supplier",
         companyName: supplier?.companyName,
+        supplierPhoneNumber: supplier?.phoneNumber,
+        supplierWhatsappNumber: supplier?.whatsappNumber,
+        supplierAddress: supplier?.address,
+        supplierEmail: supplier?.email,
+        supplierGstNumber: supplier?.gstNumber,
+        supplierCity: supplier?.city,
+        supplierState: supplier?.state,
+        supplierCountry: supplier?.country,
+        supplier: supplier
+          ? {
+              _id: supplier._id,
+              supplierName: supplier.supplierName,
+              companyName: supplier.companyName,
+              phoneNumber: supplier.phoneNumber,
+              email: supplier.email,
+              address: supplier.address,
+              city: supplier.city,
+              state: supplier.state,
+              country: supplier.country,
+              gstNumber: supplier.gstNumber,
+            }
+          : undefined,
         itemsCount: poItems.length,
         purchasePriority: po.purchasePriority,
         status: po.status,
@@ -1177,9 +1302,11 @@ export const getPurchaseOrder = query({
     const items = [];
     for (const itemLine of poItems) {
       const invItem = await ctx.db.get(itemLine.inventoryItemId);
-      const orderedQty = itemLine.orderedQuantity;
-      const receivedQty = itemLine.receivedQuantity ?? orderedQty;
-      const missingQty = Math.max(0, orderedQty - receivedQty);
+      const orderedQty = itemLine.orderedQuantity ?? 0;
+      const receivedQty = itemLine.receivedQuantity ?? 0;
+      const missingQty = itemLine.missingQuantity ?? 0;
+      const isReceived = itemLine.isReceived === true;
+      const isMissing = itemLine.isMissing === true;
 
       items.push({
         _id: itemLine._id,
@@ -1193,9 +1320,9 @@ export const getPurchaseOrder = query({
         receivedQuantity: receivedQty,
         missingQuantity: missingQty,
         unitCost: itemLine.unitCost,
-        totalCost: itemLine.totalCost,
-        isReceived: itemLine.isReceived ?? receivedQty > 0,
-        isMissing: itemLine.isMissing ?? missingQty > 0,
+        totalCost: itemLine.totalCost ?? (orderedQty * (itemLine.unitCost ?? 0)),
+        isReceived,
+        isMissing,
       });
     }
 
@@ -1303,27 +1430,44 @@ export const settlePurchaseOrder = mutation({
     for (const line of poItems) {
       const invItem = await ctx.db.get(line.inventoryItemId);
       if (invItem) {
-        const addedQty = line.receivedQuantity ?? line.orderedQuantity;
+        if (!line.isReceived) {
+          // Unreceived items marked as missing
+          await ctx.db.patch(line._id, {
+            isMissing: true,
+            missingQuantity: line.orderedQuantity,
+            receivedQuantity: 0,
+          });
+        } else {
+          const addedQty = line.receivedQuantity !== undefined ? line.receivedQuantity : line.orderedQuantity;
+          const missingQty = Math.max(0, line.orderedQuantity - addedQty);
+          await ctx.db.patch(line._id, {
+            missingQuantity: missingQty,
+            isMissing: missingQty > 0,
+            receivedQuantity: addedQty,
+          });
 
-        // Credit Stock Ledger Entry
-        await ctx.db.insert("inventoryItemStocks", {
-          organizationId: po.organizationId,
-          inventoryItemId: line.inventoryItemId,
-          stockType: "credit",
-          quantity: addedQty,
-          unit: line.unit,
-          sourceType: "PurchaseOrder",
-          purchaseOrderId: po._id,
-          supplierId: po.supplierId,
-          createdAt: now,
-        });
+          if (addedQty > 0) {
+            // Credit Stock Ledger Entry
+            await ctx.db.insert("inventoryItemStocks", {
+              organizationId: po.organizationId,
+              inventoryItemId: line.inventoryItemId,
+              stockType: "credit",
+              quantity: addedQty,
+              unit: line.unit,
+              sourceType: "PurchaseOrder",
+              purchaseOrderId: po._id,
+              supplierId: po.supplierId,
+              createdAt: now,
+            });
 
-        // Increase Available Stock (automatically reconciling any previous negative balance!)
-        await ctx.db.patch(line.inventoryItemId, {
-          availableStock: Math.round((invItem.availableStock + addedQty) * 1000) / 1000,
-          unitCost: line.unitCost,
-          updatedAt: now,
-        });
+            // Increase Available Stock (automatically reconciling any previous negative balance!)
+            await ctx.db.patch(line.inventoryItemId, {
+              availableStock: Math.round((invItem.availableStock + addedQty) * 1000) / 1000,
+              unitCost: line.unitCost > 0 ? line.unitCost : invItem.unitCost,
+              updatedAt: now,
+            });
+          }
+        }
       }
     }
 
@@ -1349,6 +1493,9 @@ export const logDeadStock = mutation({
     unit: v.string(),
     reasonForDeadStock: v.string(), // "Spoiled", "Expired", "Damaged", "Spilled"
     supplierId: v.optional(v.id("suppliers")),
+    purchaseOrderId: v.optional(v.id("purchaseOrders")),
+    poNumber: v.optional(v.string()),
+    markedDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const invItem = await ctx.db.get(args.inventoryItemId);
@@ -1367,7 +1514,9 @@ export const logDeadStock = mutation({
       isDeadStock: true,
       reasonForDeadStock: args.reasonForDeadStock,
       supplierId: args.supplierId,
-      markedDate: now,
+      purchaseOrderId: args.purchaseOrderId,
+      poNumber: args.poNumber,
+      markedDate: args.markedDate ?? now,
       createdAt: now,
     });
 
@@ -1412,11 +1561,28 @@ export const listDeadStock = query({
           : new Date(ds.createdAt).toISOString().slice(0, 10),
         supplierId: ds.supplierId,
         supplierName: supplier?.supplierName,
-        poNumber: po?.poNumber,
+        purchaseOrderId: ds.purchaseOrderId,
+        poNumber: po?.poNumber ?? ds.poNumber,
       });
     }
 
     return result;
+  },
+});
+
+export const deleteDeadStock = mutation({
+  args: { id: v.id("inventoryItemStocks") },
+  handler: async (ctx, args) => {
+    const record = await ctx.db.get(args.id);
+    if (!record) return;
+    const invItem = await ctx.db.get(record.inventoryItemId);
+    if (invItem) {
+      await ctx.db.patch(record.inventoryItemId, {
+        availableStock: Math.round((invItem.availableStock + record.quantity) * 1000) / 1000,
+        updatedAt: Date.now(),
+      });
+    }
+    await ctx.db.delete(args.id);
   },
 });
 

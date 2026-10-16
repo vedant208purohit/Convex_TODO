@@ -124,7 +124,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]">
         <div>
-          <h1 className="font-serif text-3xl font-medium text-[#0c0a09] tracking-tight">Stock Movement Ledger</h1>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Stock Movement Ledger</h1>
           <p className="text-xs text-[#78716c] mt-0.5">
             Immutable chronological audit log of all raw material credits, restocks, sales depletions, and spoilage.
           </p>
@@ -180,20 +180,20 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Total Audit Entries</span>
-          <p className="font-serif text-2xl font-semibold text-[#0c0a09] mt-1">{metrics.total}</p>
+          <p className="text-2xl font-bold text-stone-900 mt-1">{metrics.total}</p>
         </div>
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Inbound Restocks (Credits)</span>
-          <p className="font-serif text-2xl font-semibold text-emerald-700 mt-1">+{metrics.credits}</p>
+          <p className="text-2xl font-bold text-emerald-700 mt-1">+{metrics.credits}</p>
         </div>
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Outbound Depletions (Debits)</span>
-          <p className="font-serif text-2xl font-semibold text-rose-700 mt-1">-{metrics.debits}</p>
+          <p className="text-2xl font-bold text-rose-700 mt-1">-{metrics.debits}</p>
         </div>
       </div>
 
       {/* Main Table / Empty State */}
-      <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="mt-6 flex-1 flex flex-col">
         {filteredEntries.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
             <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
@@ -206,7 +206,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
                 />
               </svg>
             </div>
-            <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">No stock movement records found</h3>
+            <h3 className="text-xl font-bold text-stone-900">No stock movement records found</h3>
             <p className="text-xs text-[#78716c] max-w-sm mt-1">
               Stock movement audit entries will automatically appear here when purchase orders are settled, POS orders are completed, or dead stock is logged.
             </p>

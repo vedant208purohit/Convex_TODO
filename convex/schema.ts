@@ -1237,6 +1237,8 @@ postpaidOrderRequests: defineTable({
     fssaiLicNumber: v.optional(v.string()),
     address: v.optional(v.string()),
     city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
@@ -1342,6 +1344,7 @@ postpaidOrderRequests: defineTable({
     unit: v.string(),
     sourceType: v.string(), // "PurchaseOrder", "OrderSale", "ManualAdjustment", "DeadStock"
     purchaseOrderId: v.optional(v.id("purchaseOrders")),
+    poNumber: v.optional(v.string()),
     supplierId: v.optional(v.id("suppliers")),
     orderId: v.optional(v.id("orders")),
     isDeadStock: v.optional(v.boolean()),
