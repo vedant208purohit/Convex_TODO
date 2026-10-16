@@ -219,7 +219,6 @@ const navItems: NavItem[] = [
     href: "/kds",
     label: "KDS",
     icon: <KdsIcon className="w-4 h-4" />,
-    badge: "Coming Soon",
   },
   {
     href: "/qr-codes",

@@ -15,6 +15,8 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
     const orgId = await t.mutation(api.organizations.create, {
       name: "KDS Test Kitchen Store",
       ownerClerkId: adminClerkId,
+      isDelivery: true,
+      deliveryCashOnDelivery: true,
     });
 
     const asAdmin = t.withIdentity({ subject: adminClerkId });
@@ -812,6 +814,915 @@ describe("KDS Stations, Station-Item Mappings & Order Routing Domain Tests", () 
       expect(itemStations.length).toBe(2);
       expect(itemStations.map((s) => s.station.name)).toContain("Main Expo Station");
       expect(itemStations.map((s) => s.station.name)).toContain("Secondary Salad Prep");
+    });
+  });
+
+  // 7. KDS Dashboard Stations Summary & Metrics Tests
+  describe("7. KDS Dashboard Stations Summary & Metrics", () => {
+    test("stations.list with includeSummary: true aggregates item counts, categories, and active orders", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create main expo and 2 line stations
+      const mainRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "MAIN",
+        isMain: true,
+      });
+
+      const grillRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "GRILL & TANDOOR",
+        isMain: false,
+      });
+
+      const drinksRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "DRINKS",
+        isMain: false,
+      });
+
+      // Create categories
+      const menuRes = await t.mutation(api.menu.createMenu, {
+        organizationId: orgId,
+        name: "KDS Menu",
+      });
+
+      const bbqCategory = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId: menuRes,
+        name: "BBQ & Tandoori",
+      });
+
+      const barCategory = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId: menuRes,
+        name: "Artisanal Beverages",
+      });
+
+      // Create items
+      const tandooriChicken = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Tandoori Chicken Tikka",
+        price: 450,
+        published: true,
+        isAvailable: true,
+        isGst: false,
+        isVeg: false,
+        isSpicy: true,
+        showQuantity: false,
+        markAsBestseller: true,
+        showCalorie: false,
+      });
+
+      const wagyuSteak = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Wagyu Tenderloin",
+        price: 1200,
+        published: true,
+        isAvailable: true,
+        isGst: false,
+        isVeg: false,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: false,
+        showCalorie: false,
+      });
+
+      const craftCocktail = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Smoked Old Fashioned",
+        price: 650,
+        published: true,
+        isAvailable: true,
+        isGst: false,
+        isVeg: true,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: false,
+        showCalorie: false,
+      });
+
+      // Associate items with categories in categoryItems
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: bbqCategory,
+        itemId: tandooriChicken,
+        position: 1,
+      });
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: bbqCategory,
+        itemId: wagyuSteak,
+        position: 2,
+      });
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: barCategory,
+        itemId: craftCocktail,
+        position: 1,
+      });
+
+      // Assign items to stations
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: grillRes.id,
+        itemId: tandooriChicken,
+      });
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: grillRes.id,
+        itemId: wagyuSteak,
+      });
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: drinksRes.id,
+        itemId: craftCocktail,
+      });
+
+      // Place an order routing to GRILL & TANDOOR
+      await asAdmin.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        orderSource: "Prest-POS",
+        items: [
+          {
+            itemId: tandooriChicken,
+            quantity: 1,
+          },
+        ],
+      });
+
+      // Query stations with summary
+      const dashboardStations = (await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      })) as any[];
+
+      expect(dashboardStations.length).toBe(3);
+
+      // Verify MAIN station (nothing assigned in routing yet)
+      const mainSummary = dashboardStations.find((s) => s.name === "MAIN");
+      expect(mainSummary).toBeDefined();
+      expect(mainSummary?.isMain).toBe(true);
+      expect(mainSummary?.assignedItemCount).toBe(0);
+      expect(mainSummary?.activeOrdersCount).toBe(0);
+
+      // Verify GRILL & TANDOOR station
+      const grillSummary = dashboardStations.find((s) => s.name === "GRILL & TANDOOR");
+      expect(grillSummary).toBeDefined();
+      expect(grillSummary?.assignedItemCount).toBe(2);
+      expect(grillSummary?.categoryCount).toBe(1);
+      expect(grillSummary?.sampleCategories).toContain("BBQ & Tandoori");
+      expect(grillSummary?.sampleItems).toContain("Tandoori Chicken Tikka");
+      expect(grillSummary?.activeOrdersCount).toBe(1);
+
+      // Verify DRINKS station
+      const drinksSummary = dashboardStations.find((s) => s.name === "DRINKS");
+      expect(drinksSummary).toBeDefined();
+      expect(drinksSummary?.assignedItemCount).toBe(1);
+      expect(drinksSummary?.sampleCategories).toContain("Artisanal Beverages");
+      expect(drinksSummary?.sampleItems).toContain("Smoked Old Fashioned");
+      expect(drinksSummary?.activeOrdersCount).toBe(0); // No drinks ordered yet
+    });
+
+    test("Deleted station is excluded from summary and order history remains intact", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const tempStation = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "TEMP LINE",
+      });
+
+      let list = await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      });
+      expect(list.some((s) => s.name === "TEMP LINE")).toBe(true);
+
+      // Delete station
+      await asAdmin.mutation(api.stations.remove, { id: tempStation.id });
+
+      list = await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      });
+      expect(list.some((s) => s.name === "TEMP LINE")).toBe(false);
+    });
+  });
+
+  // 8. Screen 2 Create Station Drawer Parity Tests
+  describe("8. Screen 2 Create Station Drawer Parity Tests", () => {
+    test("Re-using soft-deleted station name is allowed (legacy Rails scope parity)", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create station
+      const st1 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Pastry & Garde Manger",
+      });
+      expect(st1.success).toBe(true);
+
+      // Soft delete it
+      await asAdmin.mutation(api.stations.remove, { id: st1.id });
+
+      // Creating a new station with the same name should SUCCEED because the previous one is soft-deleted
+      const st2 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Pastry & Garde Manger",
+      });
+      expect(st2.success).toBe(true);
+      expect(st2.id).not.toBe(st1.id);
+
+      // Verify active station in list
+      const list = await asAdmin.query(api.stations.list, { organizationId: orgId });
+      const activePastry = list.filter((s) => s.name === "Pastry & Garde Manger");
+      expect(activePastry.length).toBe(1);
+      expect(activePastry[0]._id).toBe(st2.id);
+    });
+
+    test("Station name is trimmed of leading and trailing whitespace on creation", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const created = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "   Salad & Cold Station   ",
+      });
+      expect(created.success).toBe(true);
+
+      const doc = await asAdmin.query(api.stations.get, { id: created.id });
+      expect(doc?.name).toBe("Salad & Cold Station");
+    });
+
+    test("Station creation rejects whitespace-only names and duplicate active names", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Whitespace rejection
+      await expect(
+        asAdmin.mutation(api.stations.create, {
+          organizationId: orgId,
+          name: "    \t\n  ",
+        })
+      ).rejects.toThrow("Station name is required");
+
+      // Create station
+      await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Wok Line 01",
+      });
+
+      // Duplicate rejection with exact legacy Rails error
+      await expect(
+        asAdmin.mutation(api.stations.create, {
+          organizationId: orgId,
+          name: "WOK LINE 01",
+        })
+      ).rejects.toThrow("Hey! WOK LINE 01 is already taken.");
+    });
+
+    test("Cross-organization protection: User of Org A cannot create a station in Org B", async () => {
+      const { t, orgId: orgAId, asAdmin: asAdminA } = await setupStoreWithAdmin("user_admin_org_a");
+
+      // Setup Org B
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Kitchen Store B",
+        ownerClerkId: "user_admin_org_b",
+        isDelivery: true,
+        deliveryCashOnDelivery: true,
+      });
+
+      // Org A admin attempts to create station in Org B -> Rejected
+      await expect(
+        asAdminA.mutation(api.stations.create, {
+          organizationId: orgBId,
+          name: "Malicious Station in Org B",
+        })
+      ).rejects.toThrow("Forbidden");
+    });
+
+    test("Newly created station defaults to isMain: false and is immediately reactive with zero summary metrics", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const res = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Dessert Station",
+      });
+      expect(res.success).toBe(true);
+
+      const doc = await asAdmin.query(api.stations.get, { id: res.id });
+      expect(doc?.isMain).toBe(false);
+
+      const listWithSummary = (await asAdmin.query(api.stations.list, {
+        organizationId: orgId,
+        includeSummary: true,
+      })) as any[];
+
+      const dessertSummary = listWithSummary.find((s) => s.name === "Dessert Station");
+      expect(dessertSummary).toBeDefined();
+      expect(dessertSummary?.assignedItemCount).toBe(0);
+      expect(dessertSummary?.categoryCount).toBe(0);
+      expect(dessertSummary?.activeOrdersCount).toBe(0);
+      expect(dessertSummary?.sampleCategories).toEqual([]);
+      expect(dessertSummary?.sampleItems).toEqual([]);
+    });
+  });
+
+  // 9. Screen 3 Add Items to Station Drawer Parity Tests
+  describe("9. Screen 3 Add Items to Station Drawer Parity Tests", () => {
+    test("getStationAssignmentData returns station info, menus, categories, items, and assignedItemIds", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      // Create station
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Cold Station & Raw Bar",
+      });
+
+      // Create Menu
+      const menuId = await asAdmin.mutation(api.menu.createMenu, {
+        organizationId: orgId,
+        name: "All-Day Dining Menu",
+        isDefault: true,
+      });
+
+      // Create Categories
+      const rawBarCatId = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId,
+        name: "Raw Bar & Crudo",
+        position: 0,
+        published: true,
+      });
+
+      const saladsCatId = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId,
+        name: "Organic Salads",
+        position: 1,
+        published: true,
+      });
+
+      // Create Menu Items
+      const hamachiItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Hamachi Crudo, Citrus Ponzu",
+        price: 950,
+        description: "Cold prep line / Allergen: Fish",
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: false,
+      });
+
+      const burrataItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Burrata Pugliese",
+        price: 820,
+        description: "Aged balsamic, heirloom figs",
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // Link items to categories
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: rawBarCatId,
+        itemId: hamachiItem,
+        position: 0,
+      });
+
+      await t.mutation(api.menu.addCategoryItem, {
+        organizationId: orgId,
+        categoryId: saladsCatId,
+        itemId: burrataItem,
+        position: 1,
+      });
+
+      // Pre-assign Hamachi Crudo to station
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        itemId: hamachiItem,
+      });
+
+      // Query assignment data
+      const data = await asAdmin.query(api.stations.getStationAssignmentData, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+
+      expect(data).toBeDefined();
+      expect(data.station.name).toBe("Cold Station & Raw Bar");
+      expect(data.menus.length).toBe(1);
+      expect(data.menus[0].name).toBe("All-Day Dining Menu");
+      expect(data.categories.length).toBe(2);
+      expect(data.assignedItemIds).toContain(hamachiItem);
+      expect(data.assignedItemIds).not.toContain(burrataItem);
+      expect(data.totalEligibleItemsCount).toBe(2);
+    });
+
+    test("updateStationItemAssignments atomically performs differential updates", async () => {
+      const { t, asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill Station",
+      });
+
+      const item1 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Wagyu Ribeye",
+        price: 2400,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: false,
+      });
+
+      const item2 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Smoked Chicken",
+        price: 1200,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: false,
+      });
+
+      const item3 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Grilled Asparagus",
+        price: 650,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // 1. Initial assignment: item1 and item2
+      const res1 = await asAdmin.mutation(api.stations.updateStationItemAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        assignedItemIds: [item1, item2],
+      });
+
+      expect(res1.success).toBe(true);
+      expect(res1.addedCount).toBe(2);
+      expect(res1.removedCount).toBe(0);
+      expect(res1.totalAssigned).toBe(2);
+
+      let list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      expect(list.map((m) => m.item._id)).toEqual(expect.arrayContaining([item1, item2]));
+      expect(list.length).toBe(2);
+
+      // 2. Differential update: remove item1, keep item2, add item3
+      const res2 = await asAdmin.mutation(api.stations.updateStationItemAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        assignedItemIds: [item2, item3],
+      });
+
+      expect(res2.success).toBe(true);
+      expect(res2.addedCount).toBe(1); // item3 added
+      expect(res2.removedCount).toBe(1); // item1 removed
+      expect(res2.totalAssigned).toBe(2);
+
+      list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      const currentItemIds = list.map((m) => m.item._id);
+      expect(currentItemIds).toContain(item2);
+      expect(currentItemIds).toContain(item3);
+      expect(currentItemIds).not.toContain(item1);
+
+      // 3. Reactivation: re-add item1
+      const res3 = await asAdmin.mutation(api.stations.updateStationItemAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        assignedItemIds: [item1, item2, item3],
+      });
+      expect(res3.addedCount).toBe(1); // item1 reactivated
+      expect(res3.removedCount).toBe(0);
+
+      list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      expect(list.length).toBe(3);
+    });
+
+    test("updateStationItemAssignments rejects cross-organization item assignment", async () => {
+      const { t, orgId: orgAId, asAdmin: asAdminA } = await setupStoreWithAdmin("admin_store_a");
+
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Store B",
+        ownerClerkId: "admin_store_b",
+        isDelivery: true,
+        deliveryCashOnDelivery: true,
+      });
+
+      const stationA = await asAdminA.mutation(api.stations.create, {
+        organizationId: orgAId,
+        name: "Bakery Line",
+      });
+
+      // Item created in Org B
+      const itemB = await t.mutation(api.menu.createItem, {
+        organizationId: orgBId,
+        name: "Croissant from Store B",
+        price: 350,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // Org A attempts to assign Org B's item -> Rejected
+      await expect(
+        asAdminA.mutation(api.stations.updateStationItemAssignments, {
+          organizationId: orgAId,
+          stationId: stationA.id,
+          assignedItemIds: [itemB],
+        })
+      ).rejects.toThrow("Item not found or belongs to another organization");
+    });
+  });
+
+  // 10. Screen 4 Update Station Drawer Parity Tests
+  describe("10. Screen 4 Update Station Drawer Parity Tests", () => {
+    test("updateStationWithAssignments atomically updates station name and item assignments", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "starter",
+      });
+
+      const item1 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Cheese filled garlic bread",
+        price: 850,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      const item2 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Hummus pita platter",
+        price: 1200,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      const item3 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Labneh spread with nachos",
+        price: 1150,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      // Update station name from "starter" to "Cold Larder & Starters" and assign item1 & item2
+      const res = await asAdmin.mutation(api.stations.updateStationWithAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        name: "  Cold Larder & Starters  ",
+        assignedItemIds: [item1, item2],
+      });
+
+      expect(res.success).toBe(true);
+      expect(res.name).toBe("Cold Larder & Starters");
+      expect(res.totalAssigned).toBe(2);
+      expect(res.addedCount).toBe(2);
+
+      // Verify station document updated
+      const updatedStation = await asAdmin.query(api.stations.get, { id: stRes.id });
+      expect(updatedStation?.name).toBe("Cold Larder & Starters");
+
+      // Verify item assignments
+      const list = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      expect(list.length).toBe(2);
+      expect(list.map((m) => m.item._id)).toEqual(expect.arrayContaining([item1, item2]));
+
+      // Now update assignments again: swap item1 for item3, keeping same name
+      const res2 = await asAdmin.mutation(api.stations.updateStationWithAssignments, {
+        organizationId: orgId,
+        stationId: stRes.id,
+        name: "Cold Larder & Starters",
+        assignedItemIds: [item2, item3],
+      });
+
+      expect(res2.success).toBe(true);
+      expect(res2.addedCount).toBe(1); // item3 added
+      expect(res2.removedCount).toBe(1); // item1 removed
+      expect(res2.totalAssigned).toBe(2);
+
+      const list2 = await asAdmin.query(api.stations.listStationItems, {
+        organizationId: orgId,
+        stationId: stRes.id,
+      });
+      const ids2 = list2.map((m) => m.item._id);
+      expect(ids2).toContain(item2);
+      expect(ids2).toContain(item3);
+      expect(ids2).not.toContain(item1);
+    });
+
+    test("updateStationWithAssignments validates name requirements and prevents duplicates", async () => {
+      const { asAdmin, orgId } = await setupStoreWithAdmin();
+
+      const st1 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill Station",
+      });
+
+      const st2 = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Salad Station",
+      });
+
+      // 1. Reject empty / whitespace name
+      await expect(
+        asAdmin.mutation(api.stations.updateStationWithAssignments, {
+          organizationId: orgId,
+          stationId: st2.id,
+          name: "   ",
+          assignedItemIds: [],
+        })
+      ).rejects.toThrow("Station name is required.");
+
+      // 2. Reject duplicate name (case-insensitive) of another active station
+      await expect(
+        asAdmin.mutation(api.stations.updateStationWithAssignments, {
+          organizationId: orgId,
+          stationId: st2.id,
+          name: "grill station",
+          assignedItemIds: [],
+        })
+      ).rejects.toThrow("Hey! grill station is already taken.");
+
+      // 3. Allows keeping the same name
+      const sameNameRes = await asAdmin.mutation(api.stations.updateStationWithAssignments, {
+        organizationId: orgId,
+        stationId: st2.id,
+        name: "Salad Station",
+        assignedItemIds: [],
+      });
+      expect(sameNameRes.success).toBe(true);
+    });
+
+    test("updateStationWithAssignments rejects cross-organization item assignments", async () => {
+      const { t, orgId: orgAId, asAdmin: asAdminA } = await setupStoreWithAdmin("admin_store_a4");
+
+      const orgBId = await t.mutation(api.organizations.create, {
+        name: "Store B",
+        ownerClerkId: "admin_store_b4",
+        isDelivery: true,
+        deliveryCashOnDelivery: true,
+      });
+
+      const stationA = await asAdminA.mutation(api.stations.create, {
+        organizationId: orgAId,
+        name: "Main Line A",
+      });
+
+      const itemB = await t.mutation(api.menu.createItem, {
+        organizationId: orgBId,
+        name: "Store B Pizza",
+        price: 900,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      await expect(
+        asAdminA.mutation(api.stations.updateStationWithAssignments, {
+          organizationId: orgAId,
+          stationId: stationA.id,
+          name: "Main Line A",
+          assignedItemIds: [itemB],
+        })
+      ).rejects.toThrow("Item not found or belongs to another organization");
+    });
+  });
+
+  // 11. Final Screen: Live KDS Terminal Operational Tests
+  describe("11. Final Screen: Live KDS Terminal Operational Tests", () => {
+    test("Full ticket lifecycle: Accepted -> In Progress -> Ready with item completion", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      // Create station
+      const stRes = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill & Tandoor",
+      });
+
+      // Create 2 menu items
+      const item1 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Malai Broccoli Tandoori",
+        price: 450,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      const item2 = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Tandoori Chicken Tikka",
+        price: 550,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: true,
+      });
+
+      // Assign items to station
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stRes.id,
+        itemId: item1,
+      });
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stRes.id,
+        itemId: item2,
+      });
+
+      // Create customer order
+      const orderRes = await t.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        items: [
+          { itemId: item1, quantity: 1 },
+          { itemId: item2, quantity: 2 },
+        ],
+      });
+
+      // 1. Initial State: Ticket is in ACCEPTED
+      let terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      expect(terminalData.orders).toHaveLength(1);
+      let ticket = terminalData.orders[0];
+      expect(ticket.order.isStationAccepted).toBe(true);
+      expect(ticket.order.isStationInProgress).toBe(false);
+      expect(ticket.order.isStationReady).toBe(false);
+      expect(ticket.orderItems).toHaveLength(2);
+      expect(ticket.orderItems.every((i) => !i.isReady)).toBe(true);
+
+      // 2. Start Preparing Ticket
+      const startRes = await asAdmin.mutation(api.stations.startPreparingStationTicket, {
+        stationId: stRes.id,
+        orderId: orderRes.orderId,
+      });
+      expect(startRes.success).toBe(true);
+
+      terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      ticket = terminalData.orders[0];
+      expect(ticket.order.isStationAccepted).toBe(false);
+      expect(ticket.order.isStationInProgress).toBe(true);
+      expect(ticket.order.isStationReady).toBe(false);
+
+      // 3. Mark 1 of 2 items ready
+      const oi1 = ticket.orderItems.find((i) => i.itemId === item1)!;
+      await asAdmin.mutation(api.stations.toggleStationOrderItemReady, {
+        stationId: stRes.id,
+        orderItemId: oi1._id,
+        isReady: true,
+      });
+
+      terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      ticket = terminalData.orders[0];
+      expect(ticket.order.isStationInProgress).toBe(true);
+      expect(ticket.order.isStationReady).toBe(false);
+      const readyItemsCount = ticket.orderItems.filter((i) => i.isReady).length;
+      expect(readyItemsCount).toBe(1);
+
+      // 4. Mark all items ready via markStationTicketReady
+      const readyRes = await asAdmin.mutation(api.stations.markStationTicketReady, {
+        stationId: stRes.id,
+        orderId: orderRes.orderId,
+      });
+      expect(readyRes.success).toBe(true);
+      expect(readyRes.allOrderItemsReady).toBe(true);
+
+      terminalData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stRes.id,
+      });
+      ticket = terminalData.orders[0];
+      expect(ticket.order.isStationAccepted).toBe(false);
+      expect(ticket.order.isStationInProgress).toBe(false);
+      expect(ticket.order.isStationReady).toBe(true);
+      expect(ticket.allStationItemsReady).toBe(true);
+    });
+
+    test("Multi-station order routing: completing station A does not mark station B ready or prematurely finish order", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      // Station A: Grill
+      const stGrill = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Grill Station",
+      });
+
+      // Station B: Bar
+      const stBar = await asAdmin.mutation(api.stations.create, {
+        organizationId: orgId,
+        name: "Bar Station",
+      });
+
+      const grillItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Lamb Kebab",
+        price: 800,
+        published: true,
+        isAvailable: true,
+        isVeg: false,
+        isSpicy: true,
+      });
+
+      const barItem = await t.mutation(api.menu.createItem, {
+        organizationId: orgId,
+        name: "Mango Lassi",
+        price: 250,
+        published: true,
+        isAvailable: true,
+        isVeg: true,
+        isSpicy: false,
+      });
+
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stGrill.id,
+        itemId: grillItem,
+      });
+
+      await asAdmin.mutation(api.stations.assignItemToStation, {
+        stationId: stBar.id,
+        itemId: barItem,
+      });
+
+      // Create multi-station customer order
+      const orderRes = await t.mutation(api.orders.createOrder, {
+        organizationId: orgId,
+        orderType: "DineIn",
+        items: [
+          { itemId: grillItem, quantity: 1 },
+          { itemId: barItem, quantity: 2 },
+        ],
+      });
+
+      // Grill completes its ticket
+      await asAdmin.mutation(api.stations.startPreparingStationTicket, {
+        stationId: stGrill.id,
+        orderId: orderRes.orderId,
+      });
+
+      const grillReadyRes = await asAdmin.mutation(api.stations.markStationTicketReady, {
+        stationId: stGrill.id,
+        orderId: orderRes.orderId,
+      });
+
+      // Notice: Whole order is NOT yet ready because Bar hasn't completed!
+      expect(grillReadyRes.allOrderItemsReady).toBe(false);
+
+      // Verify Grill station view: Grill ticket is READY
+      const grillData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stGrill.id,
+      });
+      expect(grillData.orders[0].order.isStationReady).toBe(true);
+
+      // Verify Bar station view: Bar ticket is still ACCEPTED (not marked ready!)
+      const barData = await asAdmin.query(api.stations.getStationOrders, {
+        stationId: stBar.id,
+      });
+      expect(barData.orders[0].order.isStationReady).toBe(false);
+      expect(barData.orders[0].allStationItemsReady).toBe(false);
+
+      // Now Bar completes its ticket
+      const barReadyRes = await asAdmin.mutation(api.stations.markStationTicketReady, {
+        stationId: stBar.id,
+        orderId: orderRes.orderId,
+      });
+      // Now ALL stations are done -> whole order is ready!
+      expect(barReadyRes.allOrderItemsReady).toBe(true);
     });
   });
 });

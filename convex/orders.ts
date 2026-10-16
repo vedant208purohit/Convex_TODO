@@ -388,6 +388,8 @@ export const createOrder = mutation({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
 
@@ -854,6 +856,17 @@ export const createOrder = mutation({
           autoQrId = directQr._id;
         }
       } catch { }
+
+      if (!autoQrId) {
+        const qrList = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_legacy_id", (q) => q.eq("legacyId", String(args.qrId)))
+          .collect();
+        const foundQr = qrList.find((q) => q.deletedAt === undefined);
+        if (foundQr) {
+          autoQrId = foundQr._id;
+        }
+      }
     }
 
     if (!autoQrId && args.tableId) {
@@ -864,6 +877,40 @@ export const createOrder = mutation({
       const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
       if (activeQr) {
         autoQrId = activeQr._id;
+      }
+    }
+
+    let effectiveTableId: Id<"organizationTables"> | undefined = args.tableId;
+
+    // If tableId was not passed directly or needs resolution from qrId
+    if (!effectiveTableId && autoQrId) {
+      const qrDoc = await ctx.db.get(autoQrId);
+      if (qrDoc && qrDoc.tableId) {
+        try {
+          const normTblId = ctx.db.normalizeId("organizationTables", qrDoc.tableId);
+          if (normTblId) {
+            const tblDoc = await ctx.db.get(normTblId);
+            if (tblDoc && tblDoc.deletedAt === undefined) {
+              effectiveTableId = tblDoc._id;
+            }
+          }
+        } catch { }
+
+        if (!effectiveTableId) {
+          const allTables = await ctx.db
+            .query("organizationTables")
+            .collect();
+          const found = allTables.find(
+            (t) =>
+              t.deletedAt === undefined &&
+              (t.legacyId === qrDoc.tableId ||
+                (qrDoc.tableNumber &&
+                  t.tableNumber.trim().toLowerCase() === qrDoc.tableNumber.trim().toLowerCase()))
+          );
+          if (found) {
+            effectiveTableId = found._id;
+          }
+        }
       }
     }
 
@@ -905,10 +952,10 @@ export const createOrder = mutation({
       orderSource: args.orderSource ?? "Prest-Cashier",
       orderStatusId: initialStatus?._id,
       orderStatusName: initialStatus?.name ?? "Accepted",
-      isCompleted: args.orderType === "DineIn" ? false : resolvedPaymentStatus === "Paid",
+      isCompleted: false,
       isRejected: false,
       isModify: false,
-      tableId: args.tableId,
+      tableId: effectiveTableId,
       qrId: autoQrId,
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
@@ -1204,6 +1251,24 @@ export const getOrderDetails = query({
       .withIndex("by_active", (q) => q.eq("active", true))
       .first();
 
+    let enrichedDeliveryAddress = order.deliveryAddress;
+    if (order.userAddressId) {
+      const userAddr = await ctx.db.get(order.userAddressId);
+      if (userAddr) {
+        enrichedDeliveryAddress = {
+          ...enrichedDeliveryAddress,
+          latitude: enrichedDeliveryAddress?.latitude ?? userAddr.latitude,
+          longitude: enrichedDeliveryAddress?.longitude ?? userAddr.longitude,
+          addressLine1: enrichedDeliveryAddress?.addressLine1 || userAddr.addressLine1,
+          addressLine2: enrichedDeliveryAddress?.addressLine2 || userAddr.addressLine2,
+          landmark: enrichedDeliveryAddress?.landmark || userAddr.landmark,
+          city: enrichedDeliveryAddress?.city || userAddr.city,
+          zipCode: enrichedDeliveryAddress?.zipCode || userAddr.zipCode,
+          addressType: enrichedDeliveryAddress?.addressType || userAddr.addressType,
+        };
+      }
+    }
+
     if (activeSurvey) {
       const attempt = await ctx.db
         .query("surveyAttempts")
@@ -1221,6 +1286,29 @@ export const getOrderDetails = query({
           ? `${baseUrl.replace(/\/$/, "")}/attempts/${attempt._id}`
           : `/attempts/${attempt._id}`;
       }
+    }
+
+    // Look up active delivery attempt if any exists
+    const activeDelivery = await ctx.db
+      .query("orderDelivers")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .order("desc")
+      .first();
+
+    let deliveryPartner: any = null;
+    if (activeDelivery) {
+      deliveryPartner = {
+        provider: activeDelivery.provider,
+        status: activeDelivery.status,
+        trackingUrl: activeDelivery.trackingUrl,
+        name: activeDelivery.partnerInfo?.name,
+        phone: activeDelivery.partnerInfo?.phone,
+        vehicleNumber: activeDelivery.partnerInfo?.vehicleNumber,
+        vehicleType: activeDelivery.partnerInfo?.vehicleType,
+        latitude: activeDelivery.partnerInfo?.latitude,
+        longitude: activeDelivery.partnerInfo?.longitude,
+      };
     }
 
     const org = await ctx.db.get(order.organizationId);
@@ -1259,12 +1347,14 @@ export const getOrderDetails = query({
 
     return {
       ...order,
+      deliveryAddress: enrichedDeliveryAddress,
       restaurant: restaurantInfo,
       scheduledPickupDate: (order as any).scheduledPickupDate || order.scheduledDeliveryDate || null,
       scheduledPickupTime: (order as any).scheduledPickupTime || order.scheduledDeliveryTime || null,
       paymentStatus: effectivePaymentStatus,
       orderStatusName: effectiveOrderStatusName,
       surveyQrUrl,
+      deliveryPartner: deliveryPartner || (order as any).deliveryPartner || null,
       totalCredit,
       totalDebit,
       netPaid,
@@ -1986,7 +2076,7 @@ export const addOrderPayment = mutation({
 
     if (netPaid >= order.totalAmount) {
       nextPaymentStatus = "Paid";
-      isCompleted = true;
+      isCompleted = order.isCompleted;
       isRejected = false;
       if (nextOrderStatusName === "Cancelled / Refunded") {
         nextOrderStatusName = "Accepted";
@@ -2022,6 +2112,62 @@ export const addOrderPayment = mutation({
 });
 
 // ==========================================
+// 8. CUSTOMER ONLINE PAYMENT CONFIRMATION
+// ==========================================
+
+export const confirmOrderPayment = mutation({
+  args: {
+    orderId: v.id("orders"),
+    paymentMode: v.optional(v.string()),
+    transactionReference: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+
+    const now = Date.now();
+    const payModeName = args.paymentMode || order.paymentMode || "Razorpay";
+
+    // Mark payment status Paid WITHOUT prematurely completing the order
+    await ctx.db.patch(order._id, {
+      paymentStatus: "Paid",
+      paymentMode: payModeName,
+      updatedAt: now,
+    });
+
+    // Record Credit entry in orderPayments
+    await ctx.db.insert("orderPayments", {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      paymentModeName: payModeName,
+      paymentType: "Credit",
+      amount: order.totalAmount,
+      payAmount: order.totalAmount,
+      refundAmount: 0,
+      transactionReference: args.transactionReference,
+      createdAt: now,
+    });
+
+    return { success: true, orderId: order._id, paymentStatus: "Paid" };
+  },
+});
+
+export const reopenOrderForKitchen = mutation({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    await ctx.db.patch(order._id, {
+      isCompleted: false,
+      updatedAt: Date.now(),
+    });
+    return { success: true, orderId: order._id };
+  },
+});
+
+// ==========================================
 // 7. UPDATE CUSTOMER INFO ON ORDER
 // ==========================================
 
@@ -2039,6 +2185,8 @@ export const updateOrderCustomer = mutation({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
   },

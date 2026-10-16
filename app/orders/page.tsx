@@ -814,6 +814,9 @@ export default function OrdersPage() {
 
   const addPaymentMutation = useMutation(api.orders.addOrderPayment);
   const cancelOrderMutation = useMutation(api.orders.cancelOrder);
+  const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
+  const [isDetailStatusOpen, setIsDetailStatusOpen] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Live Gross Total Calculation from actual database orders matching the selected filter
   const totalGrossSales = useMemo(() => {
@@ -1293,6 +1296,44 @@ export default function OrdersPage() {
   // =========================================================================
   if (selectedOrderId) {
     const order = selectedOrderDetails;
+    const currentProcess =
+      dbProcesses?.find(
+        (p) =>
+          p.name.trim().toLowerCase() ===
+          (order?.orderStatusName || "").trim().toLowerCase(),
+      ) || dbProcesses?.find((p) => p._id === order?.orderStatusId);
+    const currentProcessColor =
+      currentProcess?.processColor ||
+      (order?.orderStatusName === "Cancelled" ||
+      order?.orderStatusName === "Cancelled / Refunded" ||
+      order?.isRejected
+        ? "#e11d48"
+        : order?.orderStatusName === "Completed" ||
+            order?.orderStatusName === "Delivered" ||
+            order?.isCompleted
+          ? "#219653"
+          : "#EA9C1B");
+
+    const handleUpdateStatus = async (
+      processId: Id<"organizationOrderProcesses">,
+      processName: string,
+    ) => {
+      if (!selectedOrderId) return;
+      try {
+        setIsUpdatingStatus(true);
+        await updateOrderStatusMutation({
+          orderId: selectedOrderId,
+          processId,
+        });
+        showToast(`Order status updated to "${processName}"`);
+        setIsDetailStatusOpen(false);
+      } catch (err: any) {
+        showToast(err.message || "Failed to update order status");
+      } finally {
+        setIsUpdatingStatus(false);
+      }
+    };
+
     const orderCreatedDate = order?.createdAt
       ? new Date(order.createdAt)
       : new Date();
@@ -1352,16 +1393,82 @@ export default function OrdersPage() {
               <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setSelectedOrderId(null)}
+                  onClick={() => {
+                    setSelectedOrderId(null);
+                    setIsDetailStatusOpen(false);
+                  }}
                   className="h-10 px-5 border border-[#e7e5e4] rounded-full text-[#141010] hover:bg-[#f1edec] transition-colors font-medium text-sm bg-white cursor-pointer inline-flex items-center gap-2 shadow-2xs"
                 >
                   <ArrowLeftIcon className="w-4 h-4 text-[#5e5e5e]" />
                   <span>Back to Orders</span>
                 </button>
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs">
-                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                  <span>{order?.orderStatusName || "Live Order Status"}</span>
-                </span>
+
+                {/* Interactive Status Transition Dropdown Synced with Settings -> Order Statuses */}
+                <div className="relative">
+                  {isDetailStatusOpen && (
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setIsDetailStatusOpen(false)}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setIsDetailStatusOpen(!isDetailStatusOpen)}
+                    disabled={isUpdatingStatus}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold bg-white border border-[#e7e5e4] hover:border-[#141010] text-[#141010] shadow-2xs transition-all cursor-pointer relative z-50"
+                  >
+                    <span
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: currentProcessColor }}
+                    />
+                    <span>{order?.orderStatusName || "Active Status"}</span>
+                    <ChevronDownIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                  </button>
+
+                  {isDetailStatusOpen && (
+                    <div className="absolute right-0 mt-2 w-60 bg-white border border-[#e7e5e4] rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in duration-150">
+                      <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#7a716b] border-b border-[#f1edec]">
+                        Transition Order Status
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        {(dbProcesses && dbProcesses.length > 0
+                          ? dbProcesses
+                          : [
+                              { _id: "p1" as any, name: "Accepted", processColor: "#262626" },
+                              { _id: "p2" as any, name: "In progress", processColor: "#EA9C1B" },
+                              { _id: "p3" as any, name: "Ready to deliver", processColor: "#FC8019" },
+                              { _id: "p4" as any, name: "Delivered", processColor: "#219653" },
+                            ]
+                        ).map((proc) => {
+                          const isCurrent =
+                            (order?.orderStatusName || "").trim().toLowerCase() ===
+                            proc.name.trim().toLowerCase();
+                          return (
+                            <button
+                              key={proc._id}
+                              type="button"
+                              onClick={() => handleUpdateStatus(proc._id, proc.name)}
+                              className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-left transition-colors cursor-pointer hover:bg-[#fdf8f7] ${
+                                isCurrent ? "bg-[#f1edec] font-semibold text-[#0c0a09]" : "text-[#44403c]"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className="w-2 h-2 rounded-full shrink-0"
+                                  style={{ backgroundColor: proc.processColor || "#262626" }}
+                                />
+                                <span>{proc.name}</span>
+                              </div>
+                              {isCurrent && (
+                                <span className="text-[10px] text-[#219653] font-semibold">Current</span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -1403,10 +1510,19 @@ export default function OrdersPage() {
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                       Order Status
                     </span>
-                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700 whitespace-nowrap">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />{" "}
-                      {order?.orderStatusName || "Accepted"}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsDetailStatusOpen(!isDetailStatusOpen)}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
+                      style={{ color: currentProcessColor }}
+                    >
+                      <span
+                        className="h-2 w-2 rounded-full shrink-0"
+                        style={{ backgroundColor: currentProcessColor }}
+                      />
+                      <span>{order?.orderStatusName || "Accepted"}</span>
+                      <ChevronDownIcon className="w-3 h-3 ml-0.5 text-[#7a716b]" />
+                    </button>
                   </div>
                   <div className="px-4">
                     <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
@@ -3127,12 +3243,19 @@ export default function OrdersPage() {
                         {/* 2. Order Status */}
                         <td className="py-4 px-5">
                           {(() => {
+                            const matchedProcess = dbProcesses?.find(
+                              (p) =>
+                                p._id === order.orderStatusId ||
+                                p.name.trim().toLowerCase() ===
+                                  (order.orderStatusName || "").trim().toLowerCase(),
+                            );
                             const matchedStage = pipelineStages.find(
                               (st) =>
                                 st.name.toLowerCase() ===
                                 (order.orderStatusName || "").toLowerCase(),
                             );
                             const dotColor =
+                              matchedProcess?.processColor ||
                               matchedStage?.color ||
                               (order.orderStatusName === "Cancelled" ||
                               order.orderStatusName === "Cancelled / Refunded" ||
