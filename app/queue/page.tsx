@@ -5,7 +5,6 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { PosShell } from "../components/PosShell";
-import { ComingSoonOverlay } from "../components/ComingSoonOverlay";
 
 // Helper date formatter: YYYY-MM-DD
 function getTodayDateString(): string {
@@ -552,11 +551,7 @@ export default function QueueDashboardPage() {
 
   return (
     <PosShell title="Queue & Host Folio">
-      <ComingSoonOverlay
-        title="Queue & Host Folio"
-        description="Guest waitlists, live queue calling, and table reservations will be available here soon."
-      >
-        <div className="flex-1 min-h-0 flex flex-col bg-[#fff8f5] text-[#1e1b19] overflow-y-scroll [scrollbar-gutter:stable]">
+      <div className="flex-1 min-h-0 flex flex-col bg-[#fff8f5] text-[#1e1b19] overflow-y-scroll [scrollbar-gutter:stable]">
           {/* Operational Header Section */}
         <div className="px-8 pt-6 pb-4 bg-[#fff8f5] flex flex-col gap-4 border-b border-[#eee7e3]">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -2602,7 +2597,6 @@ export default function QueueDashboardPage() {
           </div>
         )}
       </div>
-    </ComingSoonOverlay>
     </PosShell>
   );
 }
