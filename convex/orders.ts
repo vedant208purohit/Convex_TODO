@@ -1,5 +1,5 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
 import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
@@ -605,13 +605,7 @@ export const createOrder = mutation({
     // 3.5 Validate inventory availability for recipes if negative stock is not allowed
     const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, args.organizationId);
     if (stockError) {
-      return {
-        error: stockError,
-        orderId: null,
-        orderNumber: null,
-        tokenNumber: null,
-        totalAmount: "0.00",
-      };
+      throw new ConvexError(stockError);
     }
 
     // 4. Calculate Subtotal, Line Items, and Tax Amounts
@@ -2375,9 +2369,7 @@ export const addItemsToExistingOrder = mutation({
     // Validate inventory availability for new items if negative stock is not allowed
     const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, order.organizationId);
     if (stockError) {
-      return {
-        error: stockError,
-      };
+      throw new ConvexError(stockError);
     }
 
     let additionalSubTotal = 0;
