@@ -519,13 +519,15 @@ export function normalizeToE164(rawPhone: string, defaultCountryCode: string = "
 }
 
 /**
- * Cryptographically secure 6-digit OTP generation using Web Crypto.
+ * Cryptographically secure 4-digit OTP generation using Web Crypto.
+ * Preserves leading zeros as a string (e.g. 15 -> "0015").
  */
-export function generateSecureOtp(): string {
+export function generateSecureOtp(length: number = 4): string {
   const array = new Uint32Array(1);
   crypto.getRandomValues(array);
-  const otpNumber = 100000 + (array[0] % 900000);
-  return otpNumber.toString();
+  const max = Math.pow(10, length);
+  const otpNumber = array[0] % max;
+  return otpNumber.toString().padStart(length, "0");
 }
 
 /**
@@ -707,7 +709,7 @@ export const prepareCustomerPhoneOtp = internalMutation({
 
     const now = Date.now();
     const COOLDOWN_MS = 60 * 1000;
-    const EXPIRY_MS = 5 * 60 * 1000;
+    const EXPIRY_MS = 2 * 60 * 1000; // 2 minutes (120 seconds) - matches approved DLT template
     const HOURLY_WINDOW_MS = 60 * 60 * 1000;
     const MAX_HOURLY_REQUESTS = 5;
 
@@ -744,7 +746,7 @@ export const prepareCustomerPhoneOtp = internalMutation({
       }
     }
 
-    const otp = generateSecureOtp();
+    const otp = generateSecureOtp(4);
     const otpHash = await hashOtp(normalizedPhone, otp);
 
     let storeName = "Prest";
@@ -813,7 +815,6 @@ export const sendCustomerPhoneOtp = action({
     cooldownSeconds: number;
     resendAvailableAt: number;
     expiresAt: number;
-    devOtp?: string;
   }> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -835,8 +836,13 @@ export const sendCustomerPhoneOtp = action({
       clerkUserId: identity.subject,
     });
 
+    const maskedPhone =
+      prep.normalizedPhone.length > 5
+        ? `${prep.normalizedPhone.slice(0, 3)}******${prep.normalizedPhone.slice(-4)}`
+        : "******";
+
     console.log(
-      `[sendCustomerPhoneOtp] Dispatched OTP [${prep.otp}] to ${prep.normalizedPhone} (Store: ${prep.storeName}, VerificationId: ${prep.verificationId})`
+      `[sendCustomerPhoneOtp] Dispatched OTP to ${maskedPhone} (Store: ${prep.storeName}, VerificationId: ${prep.verificationId})`
     );
 
     // Send OTP via SMS Provider (HTTP fetch call allowed in Convex actions)
@@ -860,7 +866,6 @@ export const sendCustomerPhoneOtp = action({
       cooldownSeconds: prep.cooldownSeconds,
       resendAvailableAt: prep.resendAvailableAt,
       expiresAt: prep.expiresAt,
-      devOtp: prep.otp,
     };
   },
 });
@@ -889,8 +894,8 @@ export const verifyCustomerPhoneOtp = mutation({
     const normalizedPhone = normalizeToE164(args.phone, defaultCode);
     const cleanOtp = args.otp.trim();
 
-    if (!cleanOtp || cleanOtp.length !== 6 || !/^\d{6}$/.test(cleanOtp)) {
-      throw new Error("Please enter a valid 6-digit verification code.");
+    if (!cleanOtp || (cleanOtp.length !== 4 && cleanOtp.length !== 6) || !/^\d+$/.test(cleanOtp)) {
+      throw new Error("Please enter a valid 4-digit verification code.");
     }
 
     const now = Date.now();
@@ -921,10 +926,9 @@ export const verifyCustomerPhoneOtp = mutation({
       throw new Error("Maximum verification attempts exceeded. Please request a new OTP.");
     }
 
-    // 2. Validate OTP Hash (allows exact hash match or dev master code 123456)
-    const isMasterDevOtp = cleanOtp === "123456";
+    // 2. Validate OTP Hash
     const computedHash = await hashOtp(normalizedPhone, cleanOtp);
-    const isValidOtp = computedHash === verification.otpHash || isMasterDevOtp;
+    const isValidOtp = computedHash === verification.otpHash;
 
     if (!isValidOtp) {
       const newAttempts = verification.attempts + 1;

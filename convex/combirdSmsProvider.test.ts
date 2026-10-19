@@ -18,7 +18,7 @@ describe("Combird SMS Provider Unit Tests", () => {
     it("reports configured when API key and template ID are provided", () => {
       const provider = new CombirdSmsProvider({
         apiKey: "test_combird_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
       });
       expect(provider.isConfigured()).toBe(true);
     });
@@ -26,7 +26,7 @@ describe("Combird SMS Provider Unit Tests", () => {
     it("reports unconfigured when API key is missing", () => {
       const provider = new CombirdSmsProvider({
         apiKey: "",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
       });
       expect(provider.isConfigured()).toBe(false);
     });
@@ -34,7 +34,7 @@ describe("Combird SMS Provider Unit Tests", () => {
     it("formats phone number by stripping '+' and preserving country code digits", () => {
       const provider = new CombirdSmsProvider({
         apiKey: "test_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
       });
 
       expect(provider.formatNumber("+919876543210")).toBe("919876543210");
@@ -42,16 +42,44 @@ describe("Combird SMS Provider Unit Tests", () => {
       expect(provider.formatNumber("9876543210")).toBe("919876543210"); // auto-prepends 91 for 10-digit Indian mobile
     });
 
-    it("formats standard DLT-approved Prest OTP template message", () => {
+    it("formats exact registered DLT template message for SBS user with 4-digit OTP", () => {
       const provider = new CombirdSmsProvider({
         apiKey: "test_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
+        senderId: "EDUMRC",
       });
 
-      const message = provider.formatMessage("458921");
-      expect(message).toBe(
-        "Your Prest OTP for verification is: 458921. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies"
+      // Test with placeholder example 0015
+      const msg0015 = provider.formatMessage("0015");
+      expect(msg0015).toBe(
+        "Dear SBS user, your OTP for login is: 0015. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC"
       );
+
+      // Test with example 7781
+      const msg7781 = provider.formatMessage("7781");
+      expect(msg7781).toBe(
+        "Dear SBS user, your OTP for login is: 7781. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC"
+      );
+    });
+
+    it("preserves leading zeros in a four-digit OTP such as 0015", () => {
+      const provider = new CombirdSmsProvider({
+        apiKey: "test_key",
+        templateId: "1707178064151587006",
+      });
+
+      const message = provider.formatMessage("0015");
+      expect(message).toBe(
+        "Dear SBS user, your OTP for login is: 0015. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC"
+      );
+    });
+
+    it("defaults to approved template ID 1707178064151587006 and sender ID EDUMRC", () => {
+      const provider = new CombirdSmsProvider({
+        apiKey: "test_key",
+      });
+      expect((provider as any).templateId).toBe("1707178064151587006");
+      expect((provider as any).senderId).toBe("EDUMRC");
     });
   });
 
@@ -64,7 +92,7 @@ describe("Combird SMS Provider Unit Tests", () => {
 
       const result = await provider.sendOtp({
         to: "+919876543210",
-        otp: "123456",
+        otp: "1234",
       });
 
       expect(result.success).toBe(false);
@@ -82,14 +110,14 @@ describe("Combird SMS Provider Unit Tests", () => {
 
       const provider = new CombirdSmsProvider({
         apiKey: "valid_secret_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
         apiUrl: "https://smsapi.edumarcsms.com/api/v1/sendsms",
         senderId: "EDUMRC",
       });
 
       const result = await provider.sendOtp({
         to: "+919876543210",
-        otp: "654321",
+        otp: "7781",
       });
 
       expect(result.success).toBe(true);
@@ -106,8 +134,35 @@ describe("Combird SMS Provider Unit Tests", () => {
       const body = JSON.parse(init.body);
       expect(body.number).toBe("919876543210");
       expect(body.senderId).toBe("EDUMRC");
-      expect(body.templateId).toBe("1707168926925165526");
-      expect(body.message).toContain("654321");
+      expect(body.templateId).toBe("1707178064151587006");
+      expect(body.message).toBe(
+        "Dear SBS user, your OTP for login is: 7781. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC"
+      );
+    });
+
+    it("never logs raw OTP values and masks phone number in dispatch logs", async () => {
+      const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ success: true, data: { transactionId: "tx_abc123" } }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const provider = new CombirdSmsProvider({
+        apiKey: "valid_secret_key",
+        templateId: "1707178064151587006",
+      });
+
+      await provider.sendOtp({
+        to: "+919876543210",
+        otp: "7781",
+      });
+
+      const loggedMessages = consoleSpy.mock.calls.map((c) => c.join(" ")).join("\n");
+      expect(loggedMessages).not.toContain("7781");
+      expect(loggedMessages).not.toContain("919876543210");
+      expect(loggedMessages).toContain("91******3210");
     });
 
     it("handles 401 Unauthorized provider rejection gracefully", async () => {
@@ -120,7 +175,7 @@ describe("Combird SMS Provider Unit Tests", () => {
 
       const provider = new CombirdSmsProvider({
         apiKey: "invalid_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
       });
 
       const result = await provider.sendOtp({
@@ -139,7 +194,7 @@ describe("Combird SMS Provider Unit Tests", () => {
 
       const provider = new CombirdSmsProvider({
         apiKey: "test_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
       });
 
       const result = await provider.sendOtp({
@@ -158,7 +213,7 @@ describe("Combird SMS Provider Unit Tests", () => {
 
       const provider = new CombirdSmsProvider({
         apiKey: "test_key",
-        templateId: "1707168926925165526",
+        templateId: "1707178064151587006",
       });
 
       const result = await provider.sendOtp({

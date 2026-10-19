@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api } from "./_generated/api";
-import { clearMockSmsHistory, mockSmsHistory, MockTestSmsProvider } from "./smsProvider";
-import { hashOtp } from "./customers";
+import { clearMockSmsHistory, mockSmsHistory, MockTestSmsProvider, CombirdSmsProvider } from "./smsProvider";
+import { hashOtp, generateSecureOtp } from "./customers";
 
 const modules = import.meta.glob("./**/*.*s");
 
@@ -103,10 +103,23 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
 
       expect(sendRes.success).toBe(true);
       expect(sendRes.cooldownSeconds).toBe(60);
+      // Assert OTP expiry is configured for exactly 2 minutes (120 seconds)
+      const now = Date.now();
+      expect(sendRes.expiresAt - now).toBeLessThanOrEqual(2 * 60 * 1000 + 500);
+      expect(sendRes.expiresAt - now).toBeGreaterThan(118 * 1000);
+
       expect(mockSmsHistory.length).toBe(1);
       expect(mockSmsHistory[0].to).toBe("+919876543210");
       const dispatchedOtp = mockSmsHistory[0].otp;
-      expect(dispatchedOtp).toMatch(/^\d{6}$/);
+      // Assert 4-digit format matching approved DLT template
+      expect(dispatchedOtp).toMatch(/^\d{4}$/);
+
+      // Assert exact DLT template message format
+      const provider = new CombirdSmsProvider();
+      const formattedMessage = provider.formatMessage(dispatchedOtp);
+      expect(formattedMessage).toBe(
+        `Dear SBS user, your OTP for login is: ${dispatchedOtp}. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC`
+      );
 
       // Verify OTP is hashed in DB, never plaintext
       await t.run(async (ctx) => {
@@ -151,12 +164,12 @@ describe("Customer Mobile OTP Verification, Identity Linking & Order History Par
         organizationId: orgId,
       });
 
-      // Attempt with wrong OTP
+      // Attempt with wrong OTP (4 digits)
       await expect(
         clerkUser.mutation(api.customers.verifyCustomerPhoneOtp, {
           phone: "9876500001",
           countryCode: "+91",
-          otp: "000000",
+          otp: "0000",
           organizationId: orgId,
         })
       ).rejects.toThrow(/Invalid verification code\. 4 attempts remaining/);

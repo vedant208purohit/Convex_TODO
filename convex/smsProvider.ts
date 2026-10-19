@@ -88,7 +88,7 @@ export class CombirdSmsProvider implements SmsProvider {
       options?.templateId ||
       process.env.COMBIRD_TEMPLATE_ID ||
       process.env.COMBIRDS_TEMPLATE_ID ||
-      "1707168926925165526";
+      "1707178064151587006";
     this.apiUrl =
       options?.apiUrl ||
       process.env.COMBIRD_API_URL ||
@@ -117,10 +117,14 @@ export class CombirdSmsProvider implements SmsProvider {
   }
 
   /**
-   * Formats the DLT-registered message template for Prest OTP verification
+   * Formats the DLT-registered message template for SBS user OTP verification.
+   * DLT Template ID: 1707178064151587006
+   * Sender ID: EDUMRC
+   * Exact approved DLT content:
+   * "Dear SBS user, your OTP for login is: {otp}. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC"
    */
   formatMessage(otp: string): string {
-    return `Your Prest OTP for verification is: ${otp}. OTP is confidential, refrain from sharing it with anyone. By Edumarc Technologies`;
+    return `Dear SBS user, your OTP for login is: ${otp}. This code is valid for 2 minutes. OTP is confidential. Do not share it with anyone. - EDUMARC`;
   }
 
   async sendOtp(params: { to: string; otp: string; storeName?: string }): Promise<SmsDeliveryResult> {
@@ -150,8 +154,13 @@ export class CombirdSmsProvider implements SmsProvider {
       templateId: this.templateId,
     };
 
+    const maskedNumber =
+      toNumber.length > 5
+        ? `${toNumber.slice(0, 2)}******${toNumber.slice(-4)}`
+        : "******";
+
     console.log(
-      `[Combird SMS Dispatch] Sending to: ${toNumber}, Template: ${this.templateId}, SenderID: ${this.senderId}, Message: "${message}"`
+      `[Combird SMS Dispatch] Sending to: ${maskedNumber}, Template: ${this.templateId}, SenderID: ${this.senderId}`
     );
 
     try {
@@ -165,7 +174,6 @@ export class CombirdSmsProvider implements SmsProvider {
       });
 
       const responseText = await response.text();
-      console.log(`[Combird SMS Response] HTTP ${response.status}: ${responseText}`);
 
       let responseData: any = {};
       try {
@@ -173,6 +181,16 @@ export class CombirdSmsProvider implements SmsProvider {
       } catch {
         responseData = { raw: responseText };
       }
+
+      const transactionId =
+        responseData?.data?.transactionId ||
+        responseData?.transactionId ||
+        responseData?.messageId ||
+        responseData?.id;
+
+      console.log(
+        `[Combird SMS Response] HTTP ${response.status}: status=${response.ok ? "success" : "failed"}, transactionId=${transactionId || "N/A"}`
+      );
 
       if (response.ok || (response.status >= 200 && response.status < 300)) {
         const messageId =
