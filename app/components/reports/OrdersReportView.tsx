@@ -17,6 +17,7 @@ import { Toast, type ToastMessage } from "../Toast";
 
 interface OrdersReportViewProps {
   orders: any[];
+  backendData?: any;
   loading?: boolean;
   currencySymbol?: string;
   countryCode?: string;
@@ -27,6 +28,7 @@ interface OrdersReportViewProps {
 
 export function OrdersReportView({
   orders = [],
+  backendData,
   loading = false,
   currencySymbol = "₹",
   countryCode = "IN",
@@ -182,13 +184,55 @@ export function OrdersReportView({
 
   // Compute 100% Dynamic Orders Report Data matching defx-pos-frontend OrdersReport.jsx
   const reportData = useMemo(() => {
+    if (backendData) {
+      return {
+        total_orders: backendData.totalOrders || 0,
+        total_avg_order_value: formatPriceWithSymbol(
+          backendData.totalAvgOrderValue || 0,
+          currencySymbol,
+          countryCode
+        ),
+        average_delivery_time: backendData.averageDeliveryTime || 0,
+        peak_order_time_frame: backendData.peakOrderTimeFrame || "No peak time",
+        order_type_summary_data: (backendData.orderTypeSummary || []).reduce(
+          (acc: any, cur: any) => {
+            acc[cur.orderType] = {
+              total_by_order_type: cur.totalOrders || 0,
+              avg_order_value: formatPriceWithSymbol(
+                cur.avgOrderValue || 0,
+                currencySymbol,
+                countryCode
+              ),
+              refunded_orders: cur.refundedOrders || 0,
+              avg_delivery_time: cur.avgDeliveryTime || 0,
+            };
+            return acc;
+          },
+          {}
+        ),
+        orders_data: (backendData.ordersData || []).map((d: any) => ({
+          date: d.displayDate || d.date,
+          total_order: d.totalOrders || 0,
+          avg_order_value: formatPriceWithSymbol(
+            d.avgOrderValue || 0,
+            currencySymbol,
+            countryCode
+          ),
+          average_delivery_time: d.averageDeliveryTime || 0,
+          peak_order_time_frame: d.peakOrderTimeFrame || "No peak time",
+          avg_items_per_order: d.avgItemsPerOrder || 0,
+          avg_order_type: d.avgOrderType || "DineIn",
+        })),
+        length: backendData.ordersData ? backendData.ordersData.length : 0,
+      };
+    }
     return computeOrdersReportData(
       orders,
       currencySymbol,
       countryCode,
       timezone,
     );
-  }, [orders, currencySymbol, countryCode, timezone]);
+  }, [backendData, orders, currencySymbol, countryCode, timezone]);
 
   // Aggregate Metrics & Fulfillment Channel Overview
   const channelBreakdown = useMemo(() => {

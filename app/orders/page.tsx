@@ -790,7 +790,7 @@ export default function OrdersPage() {
   // Backend Queries & Mutations
   const ordersResponse = useQuery(
     api.orders.listOrders,
-    activeOrg
+    activeOrg?._id
       ? {
           organizationId: activeOrg._id,
           startDate: getStartOfDay(appliedStartDate).getTime(),

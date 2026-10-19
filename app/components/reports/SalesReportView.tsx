@@ -15,6 +15,7 @@ import { Toast, type ToastMessage } from "../Toast";
 
 interface SalesReportViewProps {
   orders: any[];
+  backendData?: any;
   loading?: boolean;
   currencySymbol: string;
   countryCode?: string;
@@ -25,6 +26,7 @@ interface SalesReportViewProps {
 
 export function SalesReportView({
   orders = [],
+  backendData,
   loading = false,
   currencySymbol = "₹",
   countryCode = "IN",
@@ -155,13 +157,63 @@ export function SalesReportView({
 
   // 1. Calculate Old Project Sales Report Data (matches defx-pos-frontend SalesReport.jsx)
   const salesReport = useMemo(() => {
+    if (backendData) {
+      return {
+        total_gross_sales: formatPriceWithSymbol(
+          backendData.totalGrossSales || 0,
+          currencySymbol,
+          countryCode
+        ),
+        total_net_sales: formatPriceWithSymbol(
+          backendData.totalNetSales || 0,
+          currencySymbol,
+          countryCode
+        ),
+        total_tax_collected: formatPriceWithSymbol(
+          backendData.totalTaxCollected || 0,
+          currencySymbol,
+          countryCode
+        ),
+        total_refund: formatPriceWithSymbol(
+          backendData.totalRefund || 0,
+          currencySymbol,
+          countryCode
+        ),
+        total_orders: backendData.totalOrders || 0,
+        sales_data: (backendData.salesData || []).map((d: any) => ({
+          date: d.displayDate || d.date,
+          gross_sales: formatPriceWithSymbol(
+            d.grossPaise || 0,
+            currencySymbol,
+            countryCode
+          ),
+          refunds: formatPriceWithSymbol(
+            d.refundPaise || 0,
+            currencySymbol,
+            countryCode
+          ),
+          taxes_collected: formatPriceWithSymbol(
+            d.taxPaise || 0,
+            currencySymbol,
+            countryCode
+          ),
+          net_sales: formatPriceWithSymbol(
+            d.netPaise || 0,
+            currencySymbol,
+            countryCode
+          ),
+          total_orders: d.totalOrders || 0,
+        })),
+        length: backendData.salesData ? backendData.salesData.length : 0,
+      };
+    }
     return computeSalesReportData(
       orders,
       currencySymbol,
       countryCode,
       timezone,
     );
-  }, [orders, currencySymbol, countryCode, timezone]);
+  }, [backendData, orders, currencySymbol, countryCode, timezone]);
 
   // 2. Calculate Detailed Aggregates
   const aggregates = useMemo(() => {

@@ -12,6 +12,7 @@ import { Toast, type ToastMessage } from "../Toast";
 
 interface MenuReportViewProps {
   orders: any[];
+  backendData?: any;
   allItems?: any[];
   allCategories?: any[];
   loading?: boolean;
@@ -23,6 +24,7 @@ interface MenuReportViewProps {
 
 export function MenuReportView({
   orders = [],
+  backendData,
   allItems = [],
   allCategories = [],
   loading = false,
@@ -66,6 +68,82 @@ export function MenuReportView({
 
   // Compute Menu Report Data (100% dynamic from live orders, zero mock data)
   const menuReport = useMemo(() => {
+    if (backendData) {
+      return {
+        salesByItem: {
+          total_items_sold: backendData.totalItemsSold || 0,
+          avg_item_price: formatPriceWithSymbol(
+            backendData.avgItemPrice || 0,
+            currencySymbol,
+            countryCode
+          ),
+          top_performing_item: { item_name: backendData.topPerformingItem || "-" },
+          least_performing_item: { item_name: backendData.leastPerformingItem || "-" },
+          top_performing_items: backendData.topPerformingItems || [],
+          least_performing_items: backendData.leastPerformingItems || [],
+          table_data: (backendData.itemTableData || []).map((it: any) => ({
+            item_name: it.itemName,
+            item_price: formatPriceWithSymbol(
+              it.itemPricePaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            gross_sales: formatPriceWithSymbol(
+              it.grossSalesPaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            item_sold: it.totalQuantity || 0,
+            tax_collected: formatPriceWithSymbol(
+              it.taxesPaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            net_sales: formatPriceWithSymbol(
+              it.netSalesPaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            sales_percentage: `${it.salesPercentage || 0}%`,
+          })),
+        },
+        salesByCategory: {
+          total_items_sold_by_category: backendData.totalItemsSold || 0,
+          top_category: backendData.topCategory || "-",
+          least_category: backendData.leastCategory || "-",
+          avg_item_price_by_category: formatPriceWithSymbol(
+            backendData.avgItemPrice || 0,
+            currencySymbol,
+            countryCode
+          ),
+          table_data: (backendData.categoryTableData || []).map((c: any) => ({
+            category_name: c.categoryName,
+            items_sold: c.itemsSold || 0,
+            gross_sales: formatPriceWithSymbol(
+              c.grossSalesPaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            tax_collected: formatPriceWithSymbol(
+              c.taxesPaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            net_sales: formatPriceWithSymbol(
+              c.netSalesPaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            avg_item_price: formatPriceWithSymbol(
+              c.avgItemPricePaise || 0,
+              currencySymbol,
+              countryCode
+            ),
+            sales_percentage: `${c.salesPercentage || 0}%`,
+          })),
+        },
+      };
+    }
     return computeMenuReportData(
       orders,
       allItems,
@@ -73,7 +151,7 @@ export function MenuReportView({
       currencySymbol,
       countryCode,
     );
-  }, [orders, allItems, allCategories, currencySymbol, countryCode]);
+  }, [backendData, orders, allItems, allCategories, currencySymbol, countryCode]);
 
   const { salesByItem, salesByCategory } = menuReport;
 

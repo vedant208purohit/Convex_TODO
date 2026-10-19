@@ -20,6 +20,7 @@ import { Toast, type ToastMessage } from "../Toast";
 
 interface CustomerReportViewProps {
   orders: any[];
+  backendData?: any;
   loading?: boolean;
   currencySymbol?: string;
   countryCode?: string;
@@ -117,6 +118,32 @@ export function CustomerReportView({
 
   // 1. Calculate Summary & Daily Breakdown (matching old defx-pos-frontend report data model)
   const summaryReport: CustomerReportOutput = useMemo(() => {
+    if (backendData) {
+      return {
+        total_customers: backendData.totalCustomers || 0,
+        new_customers: backendData.newCustomers || 0,
+        repeat_customers: backendData.repeatCustomers || 0,
+        retention_rate: `${backendData.retentionRate || 0}%`,
+        avg_customer_spend: formatPriceWithSymbol(
+          backendData.avgCustomerSpend || 0,
+          currencySymbol,
+          countryCode
+        ),
+        table_data: (backendData.tableData || []).map((d: any) => ({
+          date: d.displayDate || d.date,
+          total_customers: d.totalCustomers || 0,
+          new_customers: d.newCustomers || 0,
+          repeat_customers: d.repeatCustomers || 0,
+          retention_rate: `${d.retentionRate || 0}%`,
+          avg_customer_spend: formatPriceWithSymbol(
+            d.avgCustomerSpend || 0,
+            currencySymbol,
+            countryCode
+          ),
+        })),
+        length: backendData.tableData ? backendData.tableData.length : 0,
+      };
+    }
     return computeCustomerReportData(
       orders,
       currencySymbol,
@@ -125,7 +152,7 @@ export function CustomerReportView({
       startDateMs,
       priorCustomerKeys,
     );
-  }, [orders, currencySymbol, countryCode, storeTz, startDateMs, priorCustomerKeys]);
+  }, [backendData, orders, currencySymbol, countryCode, storeTz, startDateMs, priorCustomerKeys]);
 
   // 2. Compute live customer aggregations dynamically from orders (NO hardcoded data)
   const liveCustomerData = useMemo(() => {

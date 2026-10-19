@@ -12,6 +12,32 @@ export default function ReportsIndexPage() {
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
 
+  const now = useMemo(() => Date.now(), []);
+  const thirtyDaysAgo = useMemo(() => now - 30 * 86400000, [now]);
+
+  // High-performance live aggregations from Convex
+  const salesReportBackend = useQuery(
+    api.reports.getSalesReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: thirtyDaysAgo,
+          toTimestamp: now,
+        }
+      : "skip"
+  );
+
+  const customerReportBackend = useQuery(
+    api.reports.getCustomerReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: thirtyDaysAgo,
+          toTimestamp: now,
+        }
+      : "skip"
+  );
+
   const ordersResponse = useQuery(
     api.orders.listOrders,
     activeOrg ? { organizationId: activeOrg._id, pageSize: 1000 } : "skip",
@@ -29,8 +55,11 @@ export default function ReportsIndexPage() {
 
   const orders = realOrders.length > 0 ? realOrders : fallbackDemoOrders;
 
-  // Derive quick dynamic stats
+  // Derive quick dynamic stats from backend when available, or from orders
   const uniqueCustomerCount = useMemo(() => {
+    if (customerReportBackend?.totalCustomers !== undefined && realOrders.length > 0) {
+      return customerReportBackend.totalCustomers;
+    }
     const custKeys = new Set<string>();
     orders.forEach((o: any) => {
       const k =
@@ -40,11 +69,14 @@ export default function ReportsIndexPage() {
       if (k) custKeys.add(k);
     });
     return custKeys.size;
-  }, [orders]);
+  }, [customerReportBackend, realOrders, orders]);
 
   const totalGrossPaise = useMemo(() => {
+    if (salesReportBackend?.totalGrossSales !== undefined && realOrders.length > 0) {
+      return salesReportBackend.totalGrossSales;
+    }
     return orders.reduce((sum: number, o: any) => sum + (o.totalAmount || 0), 0);
-  }, [orders]);
+  }, [salesReportBackend, realOrders, orders]);
 
   const totalItemsCount = useMemo(() => {
     return orders.reduce((sum: number, o: any) => {

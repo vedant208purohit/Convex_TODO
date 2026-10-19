@@ -95,6 +95,76 @@ export default function SubReportPage({ params }: SubReportPageProps) {
   const startMs = selectedRange.startDate.getTime();
   const endMs = selectedRange.endDate.getTime();
 
+  // Testing mode toggle: default to false so real backend data is used
+  const [forceDemoMode, setForceDemoMode] = useState<boolean>(false);
+
+  // 1. High-Performance Convex Backend Report Queries
+  const salesReportBackend = useQuery(
+    api.reports.getSalesReport,
+    activeOrg && !forceDemoMode
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const ordersReportBackend = useQuery(
+    api.reports.getOrdersReport,
+    activeOrg && !forceDemoMode
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const menuReportBackend = useQuery(
+    api.reports.getMenuReport,
+    activeOrg && !forceDemoMode
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const customerReportBackend = useQuery(
+    api.reports.getCustomerReport,
+    activeOrg && !forceDemoMode
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const operationalReportBackend = useQuery(
+    api.reports.getOperationalReport,
+    activeOrg && !forceDemoMode
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const zReportBackend = useQuery(
+    api.reports.getZReportShiftSummary,
+    activeOrg && !forceDemoMode
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
   const ordersResponse = useQuery(
     api.orders.listOrders,
     activeOrg
@@ -140,18 +210,17 @@ export default function SubReportPage({ params }: SubReportPageProps) {
     return generateDemoOrders(selectedRange.startDate, selectedRange.endDate);
   }, [selectedRange.startDate, selectedRange.endDate]);
 
-  // Testing mode toggle: if real orders are 0 (or testing enabled), use demo data so tables are never empty
-  const [forceDemoMode, setForceDemoMode] = useState<boolean>(true);
-
   const effectiveOrders = useMemo(() => {
     if (!forceDemoMode && realOrders.length > 0) {
       return realOrders;
     }
-    // If real orders are 0 or demo mode is active for testing, return demo orders
-    return demoOrders;
+    // If real orders are 0 and demo mode is active, return demo orders
+    if (forceDemoMode) return demoOrders;
+    // Otherwise return real orders (even if empty, to reflect live state)
+    return realOrders;
   }, [forceDemoMode, realOrders, demoOrders]);
 
-  const isUsingDemo = forceDemoMode || realOrders.length === 0;
+  const isUsingDemo = forceDemoMode;
 
   // Resolved Menu Categories & Items
   const allCategories = useMemo(() => {
@@ -236,21 +305,20 @@ export default function SubReportPage({ params }: SubReportPageProps) {
               </span>
             </div>
 
-            {realOrders.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setForceDemoMode(!forceDemoMode)}
-                className="px-3 py-1 rounded-full text-[11px] font-semibold border border-[#e9e1dd] bg-[#faf2ee] text-[#1e1b19] hover:bg-[#e9e1dd] transition-colors self-end sm:self-auto cursor-pointer"
-              >
-                {forceDemoMode ? "Switch to Live DB Orders" : "Switch to Testing Demo Data"}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => setForceDemoMode(!forceDemoMode)}
+              className="px-3 py-1 rounded-full text-[11px] font-semibold border border-[#e9e1dd] bg-[#faf2ee] text-[#1e1b19] hover:bg-[#e9e1dd] transition-colors self-end sm:self-auto cursor-pointer"
+            >
+              {forceDemoMode ? "Switch to Live Store Data" : "Preview Sample Demo Data"}
+            </button>
           </div>
 
           {/* Sub-Report Views */}
           {normalizedType === "sales" ? (
             <SalesReportView
               orders={effectiveOrders}
+              backendData={forceDemoMode ? undefined : salesReportBackend}
               loading={isOrdersLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
@@ -261,6 +329,7 @@ export default function SubReportPage({ params }: SubReportPageProps) {
           ) : normalizedType === "menu" ? (
             <MenuReportView
               orders={effectiveOrders}
+              backendData={forceDemoMode ? undefined : menuReportBackend}
               allItems={allItems}
               allCategories={allCategories}
               loading={isReportsLoading}
@@ -285,6 +354,7 @@ export default function SubReportPage({ params }: SubReportPageProps) {
           ) : normalizedType === "customer" ? (
             <CustomerReportView
               orders={effectiveOrders}
+              backendData={forceDemoMode ? undefined : customerReportBackend}
               priorCustomerKeys={priorCustomerKeys}
               loading={isOrdersLoading}
               currencySymbol={currencySymbol}
@@ -297,6 +367,7 @@ export default function SubReportPage({ params }: SubReportPageProps) {
           ) : normalizedType === "orders" ? (
             <OrdersReportView
               orders={effectiveOrders}
+              backendData={forceDemoMode ? undefined : ordersReportBackend}
               loading={isOrdersLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
