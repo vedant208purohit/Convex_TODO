@@ -6,6 +6,7 @@ import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { uploadAssetToR2 } from "../lib/r2Upload";
+import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
 interface OrganizationFrontDisplaySettingsProps {
   onBack?: () => void;
@@ -928,237 +929,261 @@ export function OrganizationFrontDisplaySettings({
 
         {/* Section 03: Payment Display */}
         <section className="bg-white rounded-2xl p-6 lg:p-8 shadow-xs border border-[#e9e1dd]">
-          <div>
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-              Section 03
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#e9e1dd] gap-2">
+            <div>
+              <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+                Section 03
+              </span>
+              <h2 className="font-garamond text-2xl lg:text-[26px] text-[#1e1b19] mt-0.5 font-normal">
+                Payment Display
+              </h2>
+              <p className="text-[13px] text-[#645d58] mt-0.5">
+                Control on-screen payment cues, static/dynamic merchant QR codes, and cash breakdowns.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200/80 text-[11px] font-semibold text-amber-700 tracking-wide uppercase self-start sm:self-auto">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Coming Soon
             </span>
-            <h2 className="font-garamond text-2xl lg:text-[26px] text-[#1e1b19] mt-0.5 font-normal">
-              Payment Display
-            </h2>
-            <p className="text-[13px] text-[#645d58] mt-0.5">
-              Control on-screen payment cues, static/dynamic merchant QR codes, and cash breakdowns.
-            </p>
           </div>
 
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-[#e9e1dd]">
-            {/* Left Column: QR and Identifiers */}
-            <div className="space-y-6">
-              {/* Toggle 1: Show Payment QR */}
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <span className="font-garamond text-lg text-black block font-medium">
-                    Show Payment QR on Customer Display
-                  </span>
-                  <p className="text-[12.5px] text-[#645d58] mt-0.5">
-                    Display a QR code containing the exact amount payable for the current order.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                  <input
-                    type="checkbox"
-                    checked={showPaymentQr}
-                    onChange={(e) => updateSetting({ showPaymentQr: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                </label>
-              </div>
+          <div className="mt-4">
+            <ComingSoonOverlay
+              title="Payment Display"
+              description="Dynamic payment QR codes, merchant UPI configuration, and cash breakdown options will be available soon."
+            >
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                {/* Left Column: QR and Identifiers */}
+                <div className="space-y-6">
+                  {/* Toggle 1: Show Payment QR */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <span className="font-garamond text-lg text-black block font-medium">
+                        Show Payment QR on Customer Display
+                      </span>
+                      <p className="text-[12.5px] text-[#645d58] mt-0.5">
+                        Display a QR code containing the exact amount payable for the current order.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                      <input
+                        type="checkbox"
+                        checked={showPaymentQr}
+                        onChange={(e) => updateSetting({ showPaymentQr: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                    </label>
+                  </div>
 
-              {/* Input 1: UPI ID */}
-              <div className="space-y-1.5">
-                <label className="text-[12.5px] font-semibold text-black flex items-center justify-between">
-                  <span>Store UPI Address</span>
-                  <span className="text-[11px] text-[#645d58] font-normal">
-                    Encrypted Settlement
-                  </span>
-                </label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#7f7570] text-[18px]">
-                    account_balance_wallet
-                  </span>
-                  <input
-                    type="text"
-                    value={storeUpiAddress}
-                    onChange={(e) => handleTextInput("storeUpiAddress", e.target.value)}
-                    onBlur={(e) => {
-                      if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
-                      updateSetting({ storeUpiAddress: e.target.value });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
-                        updateSetting({ storeUpiAddress: (e.target as HTMLInputElement).value });
-                      }
-                    }}
-                    placeholder="yourstore@bank"
-                    className="w-full pl-10 pr-3 py-2 rounded-xl bg-[#faf2ee] border border-[#e9e1dd] focus:border-black focus:bg-white focus:outline-none text-[13.5px] text-black transition-all"
-                  />
+                  {/* Input 1: UPI ID */}
+                  <div className="space-y-1.5">
+                    <label className="text-[12.5px] font-semibold text-black flex items-center justify-between">
+                      <span>Store UPI Address</span>
+                      <span className="text-[11px] text-[#645d58] font-normal">
+                        Encrypted Settlement
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#7f7570] text-[18px]">
+                        account_balance_wallet
+                      </span>
+                      <input
+                        type="text"
+                        value={storeUpiAddress}
+                        onChange={(e) => handleTextInput("storeUpiAddress", e.target.value)}
+                        onBlur={(e) => {
+                          if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
+                          updateSetting({ storeUpiAddress: e.target.value });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
+                            updateSetting({ storeUpiAddress: (e.target as HTMLInputElement).value });
+                          }
+                        }}
+                        placeholder="yourstore@bank"
+                        className="w-full pl-10 pr-3 py-2 rounded-xl bg-[#faf2ee] border border-[#e9e1dd] focus:border-black focus:bg-white focus:outline-none text-[13.5px] text-black transition-all"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Right Column: Cash Handling and Display Name */}
-            <div className="space-y-6">
-              {/* Toggle 2: Show Cash Tendered and Change Due */}
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <span className="font-garamond text-lg text-black block font-medium">
-                    Show Cash Tendered &amp; Change Due
-                  </span>
-                  <p className="text-[12.5px] text-[#645d58] mt-0.5">
-                    Show the amount received and change to return when a customer pays in cash.
-                  </p>
-                </div>
-                <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                  <input
-                    type="checkbox"
-                    checked={showCashTenderedChangeDue}
-                    onChange={(e) => updateSetting({ showCashTenderedChangeDue: e.target.checked })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                </label>
-              </div>
+                {/* Right Column: Cash Handling and Display Name */}
+                <div className="space-y-6">
+                  {/* Toggle 2: Show Cash Tendered and Change Due */}
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <span className="font-garamond text-lg text-black block font-medium">
+                        Show Cash Tendered &amp; Change Due
+                      </span>
+                      <p className="text-[12.5px] text-[#645d58] mt-0.5">
+                        Show the amount received and change to return when a customer pays in cash.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                      <input
+                        type="checkbox"
+                        checked={showCashTenderedChangeDue}
+                        onChange={(e) => updateSetting({ showCashTenderedChangeDue: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                    </label>
+                  </div>
 
-              {/* Input 2: Merchant Display Name */}
-              <div className="space-y-1.5">
-                <label className="text-[12.5px] font-semibold text-black flex items-center justify-between">
-                  <span>Merchant Display Name</span>
-                  <span className="text-[11px] text-[#645d58] font-normal">
-                    Visible on Header
-                  </span>
-                </label>
-                <div className="relative">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#7f7570] text-[18px]">
-                    storefront
-                  </span>
-                  <input
-                    type="text"
-                    value={merchantDisplayName}
-                    onChange={(e) => handleTextInput("merchantDisplayName", e.target.value)}
-                    onBlur={(e) => {
-                      if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
-                      updateSetting({ merchantDisplayName: e.target.value });
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
-                        updateSetting({ merchantDisplayName: (e.target as HTMLInputElement).value });
-                      }
-                    }}
-                    placeholder="Your restaurant name"
-                    className="w-full pl-10 pr-3 py-2 rounded-xl bg-[#faf2ee] border border-[#e9e1dd] focus:border-black focus:bg-white focus:outline-none text-[13.5px] text-black transition-all"
-                  />
+                  {/* Input 2: Merchant Display Name */}
+                  <div className="space-y-1.5">
+                    <label className="text-[12.5px] font-semibold text-black flex items-center justify-between">
+                      <span>Merchant Display Name</span>
+                      <span className="text-[11px] text-[#645d58] font-normal">
+                        Visible on Header
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[#7f7570] text-[18px]">
+                        storefront
+                      </span>
+                      <input
+                        type="text"
+                        value={merchantDisplayName}
+                        onChange={(e) => handleTextInput("merchantDisplayName", e.target.value)}
+                        onBlur={(e) => {
+                          if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
+                          updateSetting({ merchantDisplayName: e.target.value });
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            if (debouncedSaveRef.current) clearTimeout(debouncedSaveRef.current);
+                            updateSetting({ merchantDisplayName: (e.target as HTMLInputElement).value });
+                          }
+                        }}
+                        placeholder="Your restaurant name"
+                        className="w-full pl-10 pr-3 py-2 rounded-xl bg-[#faf2ee] border border-[#e9e1dd] focus:border-black focus:bg-white focus:outline-none text-[13.5px] text-black transition-all"
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
+            </ComingSoonOverlay>
           </div>
         </section>
 
         {/* Section 04: After Payment */}
-        <section
-          className="bg-white rounded-2xl p-6 lg:p-8 shadow-xs border border-[#e9e1dd]"
-        >
-          <div>
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-              Section 04
+        <section className="bg-white rounded-2xl p-6 lg:p-8 shadow-xs border border-[#e9e1dd]">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-[#e9e1dd] gap-2">
+            <div>
+              <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+                Section 04
+              </span>
+              <h2 className="font-garamond text-2xl lg:text-[26px] text-[#1e1b19] mt-0.5 font-normal">
+                After Payment
+              </h2>
+              <p className="text-[13px] text-[#645d58] mt-0.5">
+                Actions, surveys, and digital dispatch screens right after the transaction concludes.
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200/80 text-[11px] font-semibold text-amber-700 tracking-wide uppercase self-start sm:self-auto">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              Coming Soon
             </span>
-            <h2 className="font-garamond text-2xl lg:text-[26px] text-[#1e1b19] mt-0.5 font-normal">
-              After Payment
-            </h2>
-            <p className="text-[13px] text-[#645d58] mt-0.5">
-              Actions, surveys, and digital dispatch screens right after the transaction concludes.
-            </p>
           </div>
 
-          <div className="mt-6 space-y-6 pt-6 border-t border-[#e9e1dd]">
-            {/* Toggle: Star Rating Survey */}
-            <div className="flex items-start justify-between gap-4 pb-6 border-b border-[#e9e1dd]">
-              <div className="max-w-xl">
-                <div className="flex items-center gap-2">
-                  <span className="font-garamond text-lg text-black font-medium">
-                    Show Star Rating Survey
-                  </span>
-                  {activeSurvey ? (
-                    <span className="px-2 py-0.5 rounded-full bg-[#eae1da] text-[#6a635e] text-[11px] font-semibold">
-                      Survey Active
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-500 text-[11px] font-medium">
-                      No Active Survey
-                    </span>
-                  )}
+          <div className="mt-4">
+            <ComingSoonOverlay
+              title="After Payment"
+              description="Customer feedback star rating survey, WhatsApp e-receipt delivery, and idle timeout controls will be available soon."
+            >
+              <div className="space-y-6 pt-4">
+                {/* Toggle: Star Rating Survey */}
+                <div className="flex items-start justify-between gap-4 pb-6 border-b border-[#e9e1dd]">
+                  <div className="max-w-xl">
+                    <div className="flex items-center gap-2">
+                      <span className="font-garamond text-lg text-black font-medium">
+                        Show Star Rating Survey
+                      </span>
+                      {activeSurvey ? (
+                        <span className="px-2 py-0.5 rounded-full bg-[#eae1da] text-[#6a635e] text-[11px] font-semibold">
+                          Survey Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-500 text-[11px] font-medium">
+                          No Active Survey
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[12.5px] text-[#645d58] mt-0.5">
+                      Allow customers to rate their experience after payment. Uses the active survey (
+                      <span className="text-black font-medium">
+                        {activeSurvey?.name || "Dinner Experience Feedback"}
+                      </span>
+                      ).
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                    <input
+                      type="checkbox"
+                      checked={showStarRatingSurvey}
+                      onChange={(e) => updateSetting({ showStarRatingSurvey: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                  </label>
                 </div>
-                <p className="text-[12.5px] text-[#645d58] mt-0.5">
-                  Allow customers to rate their experience after payment. Uses the active survey (
-                  <span className="text-black font-medium">
-                    {activeSurvey?.name || "Dinner Experience Feedback"}
-                  </span>
-                  ).
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                <input
-                  type="checkbox"
-                  checked={showStarRatingSurvey}
-                  onChange={(e) => updateSetting({ showStarRatingSurvey: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-              </label>
-            </div>
 
-            {/* Toggle: WhatsApp Receipt Option */}
-            <div className="flex items-start justify-between gap-4 pb-6 border-b border-[#e9e1dd]">
-              <div className="max-w-xl">
-                <span className="font-garamond text-lg text-black font-medium block">
-                  Show WhatsApp Receipt Option
-                </span>
-                <p className="text-[12.5px] text-[#645d58] mt-0.5">
-                  Allow customers to enter their phone number to receive an itemized e-bill via verified WhatsApp Business API.
-                </p>
-              </div>
-              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
-                <input
-                  type="checkbox"
-                  checked={showWhatsappReceipt}
-                  onChange={(e) => updateSetting({ showWhatsappReceipt: e.target.checked })}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-              </label>
-            </div>
+                {/* Toggle: WhatsApp Receipt Option */}
+                <div className="flex items-start justify-between gap-4 pb-6 border-b border-[#e9e1dd]">
+                  <div className="max-w-xl">
+                    <span className="font-garamond text-lg text-black font-medium block">
+                      Show WhatsApp Receipt Option
+                    </span>
+                    <p className="text-[12.5px] text-[#645d58] mt-0.5">
+                      Allow customers to enter their phone number to receive an itemized e-bill via verified WhatsApp Business API.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
+                    <input
+                      type="checkbox"
+                      checked={showWhatsappReceipt}
+                      onChange={(e) => updateSetting({ showWhatsappReceipt: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-[#e9e1dd] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-5 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                  </label>
+                </div>
 
-            {/* Dropdown: Auto-Return Timeout */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-              <div>
-                <span className="font-garamond text-lg text-black font-medium block">
-                  Return to Welcome Screen After
-                </span>
-                <p className="text-[12.5px] text-[#645d58] mt-0.5">
-                  The customer display returns to the idle promotional carousel{" "}
-                  <span className="text-black font-medium">
-                    {returnToWelcomeTimeout} seconds
-                  </span>{" "}
-                  after payment completion.
-                </p>
+                {/* Dropdown: Auto-Return Timeout */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                  <div>
+                    <span className="font-garamond text-lg text-black font-medium block">
+                      Return to Welcome Screen After
+                    </span>
+                    <p className="text-[12.5px] text-[#645d58] mt-0.5">
+                      The customer display returns to the idle promotional carousel{" "}
+                      <span className="text-black font-medium">
+                        {returnToWelcomeTimeout} seconds
+                      </span>{" "}
+                      after payment completion.
+                    </p>
+                  </div>
+                  <div className="relative shrink-0 w-64">
+                    <select
+                      value={returnToWelcomeTimeout}
+                      onChange={(e) => updateSetting({ returnToWelcomeTimeout: Number(e.target.value) })}
+                      className="w-full appearance-none pl-4 pr-10 py-2 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-[13px] font-medium text-black focus:outline-none focus:border-black cursor-pointer transition-all"
+                    >
+                      <option value={5}>5 seconds</option>
+                      <option value={8}>8 seconds (Default)</option>
+                      <option value={10}>10 seconds</option>
+                      <option value={15}>15 seconds</option>
+                    </select>
+                    <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[#7f7570] pointer-events-none text-[18px]">
+                      expand_more
+                    </span>
+                  </div>
+                </div>
               </div>
-              <div className="relative shrink-0 w-64">
-                <select
-                  value={returnToWelcomeTimeout}
-                  onChange={(e) => updateSetting({ returnToWelcomeTimeout: Number(e.target.value) })}
-                  className="w-full appearance-none pl-4 pr-10 py-2 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-[13px] font-medium text-black focus:outline-none focus:border-black cursor-pointer transition-all"
-                >
-                  <option value={5}>5 seconds</option>
-                  <option value={8}>8 seconds (Default)</option>
-                  <option value={10}>10 seconds</option>
-                  <option value={15}>15 seconds</option>
-                </select>
-                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-[#7f7570] pointer-events-none text-[18px]">
-                  expand_more
-                </span>
-              </div>
-            </div>
+            </ComingSoonOverlay>
           </div>
         </section>
 
