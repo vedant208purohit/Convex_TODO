@@ -248,6 +248,11 @@ export default defineSchema({
     // Payment Gateway Identifier (e.g. Razorpay Customer ID from legacy user.razorpay_customer_id)
     razorpayCustomerId: v.optional(v.string()),
 
+    // Clerk Identity & Phone Verification Status
+    clerkUserId: v.optional(v.string()),
+    isPhoneVerified: v.optional(v.boolean()),
+    phoneVerifiedAt: v.optional(v.number()),
+
     // Optional Avatar Asset / Storage reference
     avatarStorageId: v.optional(v.id("_storage")),
     avatarAssetId: v.optional(v.id("organization_assets")),
@@ -259,7 +264,8 @@ export default defineSchema({
   })
     .index("by_phone", ["phone"])
     .index("by_email", ["email"])
-    .index("by_legacy_id", ["legacyId"]),
+    .index("by_legacy_id", ["legacyId"])
+    .index("by_clerk_user_id", ["clerkUserId"]),
 
   // Customer Addresses Domain Table (Migrated from legacy Rails user_addresses)
   userAddresses: defineTable({
@@ -296,6 +302,25 @@ export default defineSchema({
   })
     .index("by_customer", ["customerId"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Customer Mobile Phone OTP Verification Domain Table
+  customerPhoneVerifications: defineTable({
+    phone: v.string(), // E.164 normalized phone, e.g. "+919876543210"
+    countryCode: v.string(), // e.g. "+91"
+    otpHash: v.string(), // Secure SHA-256 hash of normalized phone + OTP + secret
+    expiresAt: v.number(), // Expiration timestamp ms
+    attempts: v.number(), // Failed verification count
+    maxAttempts: v.number(), // Max attempts allowed (e.g. 5)
+    resendAvailableAt: v.number(), // Cooldown timestamp ms
+    verifiedAt: v.optional(v.number()),
+    clerkUserId: v.string(), // Associated Clerk user subject
+    organizationId: v.optional(v.id("organizations")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_clerk_user", ["clerkUserId"])
+    .index("by_phone_and_user", ["phone", "clerkUserId"]),
 
   // Master Global Features Catalog (Super Admin & Base Features)
   features: defineTable({
