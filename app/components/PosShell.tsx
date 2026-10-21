@@ -163,6 +163,24 @@ function CustomersNavIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function ReportsIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
@@ -195,6 +213,11 @@ const navItems: NavItem[] = [
     icon: <CustomersNavIcon className="w-4 h-4" />,
   },
   {
+    href: "/reports",
+    label: "Reports",
+    icon: <ReportsIcon className="w-4 h-4" />,
+  },
+  {
     href: "/cashier",
     label: "Cashier",
     icon: <CashierIcon className="w-4 h-4" />,
@@ -208,7 +231,6 @@ const navItems: NavItem[] = [
     href: "/queue",
     label: "Queue",
     icon: <QueueNavIcon className="w-4 h-4" />,
-    badge: "Coming Soon",
   },
   {
     href: "/inventory",
@@ -219,7 +241,6 @@ const navItems: NavItem[] = [
     href: "/kds",
     label: "KDS",
     icon: <KdsIcon className="w-4 h-4" />,
-    badge: "Coming Soon",
   },
   {
     href: "/qr-codes",
@@ -801,12 +822,8 @@ export function PosShell({
                     {/* Flyout Hover Menu Popover Card */}
                     <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
                       <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
-                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5 flex items-center justify-between">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
                           <span>Inventory</span>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full normal-case font-sans">
-                            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
-                            Coming Soon
-                          </span>
                         </div>
                         {inventorySubItems.map((sub) => {
                           const isSubActive =
@@ -850,10 +867,6 @@ export function PosShell({
                     <div className="flex items-center gap-1.5 min-w-0 text-left">
                       <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
                       <span className="font-medium text-[14px] shrink-0">{item.label}</span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
-                        Coming Soon
-                      </span>
                     </div>
                     <svg
                       className={`w-3.5 h-3.5 text-[#78716c] shrink-0 ml-1 transition-transform duration-200 ${
@@ -904,7 +917,11 @@ export function PosShell({
                 {...item}
                 isCollapsed={isCollapsed}
                 disabled={isCaptainDisabled || item.disabled}
-                disabledTooltip={isCaptainDisabled ? "Dine-in & Captain POS is disabled in Settings > Features" : item.disabledTooltip}
+                disabledTooltip={
+                  isCaptainDisabled
+                    ? "Dine-in & Captain POS is disabled in Settings > Features"
+                    : item.disabledTooltip
+                }
               />
             );
           })}
@@ -979,7 +996,7 @@ export function PosShell({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
+        <main className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</main>
       </div>
     </div>
   );

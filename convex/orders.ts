@@ -1,10 +1,17 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
 import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
 import { validateActivePaymentMode } from "./paymentModes";
 import { resolveOrderItemStation } from "./stations";
+import {
+  convertUnits,
+  deductInventoryForOrderInternal,
+  restoreInventoryForOrderInternal,
+  validateInventoryAvailabilityForItems,
+  checkInventoryAvailabilityForItems,
+} from "./inventory";
 
 // ==========================================
 // ORDER ACTIVITY DURATION & LIFECYCLE HELPER
@@ -388,6 +395,8 @@ export const createOrder = mutation({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
 
@@ -593,6 +602,12 @@ export const createOrder = mutation({
     // Cache tax groups and components
     const taxGroupCache = new Map<string, any>();
     const taxCompCache = new Map<string, any>();
+
+    // 3.5 Validate inventory availability for recipes if negative stock is not allowed
+    const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, args.organizationId);
+    if (stockError) {
+      throw new ConvexError(stockError);
+    }
 
     // 4. Calculate Subtotal, Line Items, and Tax Amounts
     let rawSubTotal = 0;
@@ -870,6 +885,17 @@ export const createOrder = mutation({
           autoQrId = directQr._id;
         }
       } catch { }
+
+      if (!autoQrId) {
+        const qrList = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_legacy_id", (q) => q.eq("legacyId", String(args.qrId)))
+          .collect();
+        const foundQr = qrList.find((q) => q.deletedAt === undefined);
+        if (foundQr) {
+          autoQrId = foundQr._id;
+        }
+      }
     }
 
     if (!autoQrId && args.tableId) {
@@ -880,6 +906,40 @@ export const createOrder = mutation({
       const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
       if (activeQr) {
         autoQrId = activeQr._id;
+      }
+    }
+
+    let effectiveTableId: Id<"organizationTables"> | undefined = args.tableId;
+
+    // If tableId was not passed directly or needs resolution from qrId
+    if (!effectiveTableId && autoQrId) {
+      const qrDoc = await ctx.db.get(autoQrId);
+      if (qrDoc && qrDoc.tableId) {
+        try {
+          const normTblId = ctx.db.normalizeId("organizationTables", qrDoc.tableId);
+          if (normTblId) {
+            const tblDoc = await ctx.db.get(normTblId);
+            if (tblDoc && tblDoc.deletedAt === undefined) {
+              effectiveTableId = tblDoc._id;
+            }
+          }
+        } catch { }
+
+        if (!effectiveTableId) {
+          const allTables = await ctx.db
+            .query("organizationTables")
+            .collect();
+          const found = allTables.find(
+            (t) =>
+              t.deletedAt === undefined &&
+              (t.legacyId === qrDoc.tableId ||
+                (qrDoc.tableNumber &&
+                  t.tableNumber.trim().toLowerCase() === qrDoc.tableNumber.trim().toLowerCase()))
+          );
+          if (found) {
+            effectiveTableId = found._id;
+          }
+        }
       }
     }
 
@@ -921,10 +981,10 @@ export const createOrder = mutation({
       orderSource: args.orderSource ?? "Prest-Cashier",
       orderStatusId: initialStatus?._id,
       orderStatusName: initialStatus?.name ?? "Accepted",
-      isCompleted: args.orderType === "DineIn" ? false : resolvedPaymentStatus === "Paid",
+      isCompleted: false,
       isRejected: false,
       isModify: false,
-      tableId: args.tableId,
+      tableId: effectiveTableId,
       qrId: autoQrId,
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
@@ -984,6 +1044,13 @@ export const createOrder = mutation({
         stationId,
         createdAt: now,
       });
+    }
+
+    // 7.5 Auto-deduct inventory stock for recipe ingredients
+    try {
+      await deductInventoryForOrderInternal(ctx, orderId);
+    } catch (e) {
+      console.warn("Auto inventory deduction notice for order", orderId, e);
     }
 
     // 8. Log Initial Activity Entry
@@ -1220,6 +1287,24 @@ export const getOrderDetails = query({
       .withIndex("by_active", (q) => q.eq("active", true))
       .first();
 
+    let enrichedDeliveryAddress = order.deliveryAddress;
+    if (order.userAddressId) {
+      const userAddr = await ctx.db.get(order.userAddressId);
+      if (userAddr) {
+        enrichedDeliveryAddress = {
+          ...enrichedDeliveryAddress,
+          latitude: enrichedDeliveryAddress?.latitude ?? userAddr.latitude,
+          longitude: enrichedDeliveryAddress?.longitude ?? userAddr.longitude,
+          addressLine1: enrichedDeliveryAddress?.addressLine1 || userAddr.addressLine1,
+          addressLine2: enrichedDeliveryAddress?.addressLine2 || userAddr.addressLine2,
+          landmark: enrichedDeliveryAddress?.landmark || userAddr.landmark,
+          city: enrichedDeliveryAddress?.city || userAddr.city,
+          zipCode: enrichedDeliveryAddress?.zipCode || userAddr.zipCode,
+          addressType: enrichedDeliveryAddress?.addressType || userAddr.addressType,
+        };
+      }
+    }
+
     if (activeSurvey) {
       const attempt = await ctx.db
         .query("surveyAttempts")
@@ -1237,6 +1322,29 @@ export const getOrderDetails = query({
           ? `${baseUrl.replace(/\/$/, "")}/attempts/${attempt._id}`
           : `/attempts/${attempt._id}`;
       }
+    }
+
+    // Look up active delivery attempt if any exists
+    const activeDelivery = await ctx.db
+      .query("orderDelivers")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .order("desc")
+      .first();
+
+    let deliveryPartner: any = null;
+    if (activeDelivery) {
+      deliveryPartner = {
+        provider: activeDelivery.provider,
+        status: activeDelivery.status,
+        trackingUrl: activeDelivery.trackingUrl,
+        name: activeDelivery.partnerInfo?.name,
+        phone: activeDelivery.partnerInfo?.phone,
+        vehicleNumber: activeDelivery.partnerInfo?.vehicleNumber,
+        vehicleType: activeDelivery.partnerInfo?.vehicleType,
+        latitude: activeDelivery.partnerInfo?.latitude,
+        longitude: activeDelivery.partnerInfo?.longitude,
+      };
     }
 
     const org = await ctx.db.get(order.organizationId);
@@ -1275,12 +1383,14 @@ export const getOrderDetails = query({
 
     return {
       ...order,
+      deliveryAddress: enrichedDeliveryAddress,
       restaurant: restaurantInfo,
       scheduledPickupDate: (order as any).scheduledPickupDate || order.scheduledDeliveryDate || null,
       scheduledPickupTime: (order as any).scheduledPickupTime || order.scheduledDeliveryTime || null,
       paymentStatus: effectivePaymentStatus,
       orderStatusName: effectiveOrderStatusName,
       surveyQrUrl,
+      deliveryPartner: deliveryPartner || (order as any).deliveryPartner || null,
       totalCredit,
       totalDebit,
       netPaid,
@@ -1590,11 +1700,25 @@ export const updateOrderStatus = mutation({
       now,
     });
 
+    const statusLower = process.name.toLowerCase();
+    const isCancelOrReject =
+      statusLower.includes("cancel") ||
+      statusLower.includes("reject");
+
     await ctx.db.patch(order._id, {
       orderStatusId: process._id,
       orderStatusName: process.name,
+      ...(isCancelOrReject ? { isRejected: true } : {}),
       updatedAt: now,
     });
+
+    if (isCancelOrReject) {
+      try {
+        await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
+      } catch (err) {
+        console.error("Failed to restore inventory on order status cancel/reject:", err);
+      }
+    }
 
     // 4. Resolve process notifications if order status actually transitioned and not suppressed
     let notifications: any[] = [];
@@ -1732,76 +1856,11 @@ export const completeOrder = mutation({
       }
     }
 
-    // 4. AUTOMATIC INVENTORY STOCK DEDUCTION HOOK
-    const orderItems = await ctx.db
-      .query("orderItems")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    for (const orderItem of orderItems) {
-      // 4a. Deduct stock for base menu item recipes
-      const itemRecipes = await ctx.db
-        .query("recipes")
-        .withIndex("by_item", (q) => q.eq("itemId", orderItem.itemId))
-        .collect();
-
-      for (const recipe of itemRecipes) {
-        const invItem = await ctx.db.get(recipe.inventoryItemId);
-        if (invItem) {
-          const consumedQty = recipe.quantity * orderItem.quantity;
-          const newStock = Math.max(0, invItem.availableStock - consumedQty);
-
-          await ctx.db.insert("inventoryItemStocks", {
-            organizationId: order.organizationId,
-            inventoryItemId: invItem._id,
-            stockType: "debit",
-            quantity: consumedQty,
-            unit: recipe.unit,
-            sourceType: "OrderSale",
-            orderId: order._id,
-            createdAt: now,
-          });
-
-          await ctx.db.patch(invItem._id, {
-            availableStock: newStock,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // 4b. Deduct stock for customization option recipes
-      if (orderItem.customizations) {
-        for (const cust of orderItem.customizations) {
-          const custRecipes = await ctx.db
-            .query("recipes")
-            .withIndex("by_customization", (q) => q.eq("customizationItemId", cust.optionId))
-            .collect();
-
-          for (const recipe of custRecipes) {
-            const invItem = await ctx.db.get(recipe.inventoryItemId);
-            if (invItem) {
-              const consumedQty = recipe.quantity * orderItem.quantity;
-              const newStock = Math.max(0, invItem.availableStock - consumedQty);
-
-              await ctx.db.insert("inventoryItemStocks", {
-                organizationId: order.organizationId,
-                inventoryItemId: invItem._id,
-                stockType: "debit",
-                quantity: consumedQty,
-                unit: recipe.unit,
-                sourceType: "OrderSale",
-                orderId: order._id,
-                createdAt: now,
-              });
-
-              await ctx.db.patch(invItem._id, {
-                availableStock: newStock,
-                updatedAt: now,
-              });
-            }
-          }
-        }
-      }
+    // 4. AUTOMATIC INVENTORY STOCK DEDUCTION HOOK (Unified & Idempotent)
+    try {
+      await deductInventoryForOrderInternal(ctx, order._id);
+    } catch (e) {
+      console.warn("Auto inventory deduction notice for completeOrder", order._id, e);
     }
 
     // 5. Automated Provider Payment Transfer Hook (Fail-safe marketplace payout routing)
@@ -2026,7 +2085,7 @@ export const addOrderPayment = mutation({
 
     if (netPaid >= order.totalAmount) {
       nextPaymentStatus = "Paid";
-      isCompleted = true;
+      isCompleted = order.isCompleted;
       isRejected = false;
       if (nextOrderStatusName === "Cancelled / Refunded") {
         nextOrderStatusName = "Accepted";
@@ -2053,11 +2112,81 @@ export const addOrderPayment = mutation({
       updatedAt: now,
     });
 
+    // 3. Restore inventory if order has been refunded or cancelled
+    if (
+      args.paymentType === "Debit" &&
+      (nextPaymentStatus === "Refunded" ||
+        nextOrderStatusName === "Cancelled / Refunded" ||
+        isRejected === true)
+    ) {
+      try {
+        await restoreInventoryForOrderInternal(ctx, order._id, "Refund");
+      } catch (e) {
+        console.error("Failed to restore inventory on refund in addOrderPayment:", e);
+      }
+    }
+
     return {
       success: true,
       netPaid: (netPaid / 100).toFixed(2),
       paymentStatus: nextPaymentStatus,
     };
+  },
+});
+
+// ==========================================
+// 8. CUSTOMER ONLINE PAYMENT CONFIRMATION
+// ==========================================
+
+export const confirmOrderPayment = mutation({
+  args: {
+    orderId: v.id("orders"),
+    paymentMode: v.optional(v.string()),
+    transactionReference: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+
+    const now = Date.now();
+    const payModeName = args.paymentMode || order.paymentMode || "Razorpay";
+
+    // Mark payment status Paid WITHOUT prematurely completing the order
+    await ctx.db.patch(order._id, {
+      paymentStatus: "Paid",
+      paymentMode: payModeName,
+      updatedAt: now,
+    });
+
+    // Record Credit entry in orderPayments
+    await ctx.db.insert("orderPayments", {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      paymentModeName: payModeName,
+      paymentType: "Credit",
+      amount: order.totalAmount,
+      payAmount: order.totalAmount,
+      refundAmount: 0,
+      transactionReference: args.transactionReference,
+      createdAt: now,
+    });
+
+    return { success: true, orderId: order._id, paymentStatus: "Paid" };
+  },
+});
+
+export const reopenOrderForKitchen = mutation({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    await ctx.db.patch(order._id, {
+      isCompleted: false,
+      updatedAt: Date.now(),
+    });
+    return { success: true, orderId: order._id };
   },
 });
 
@@ -2079,6 +2208,8 @@ export const updateOrderCustomer = mutation({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
   },
@@ -2205,6 +2336,13 @@ export const cancelOrder = mutation({
       now,
     });
 
+    // Restore inventory stock back to available stock
+    try {
+      await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
+    } catch (e) {
+      console.error("Failed to restore inventory on cancelOrder:", e);
+    }
+
     return { success: true };
   },
 });
@@ -2268,6 +2406,12 @@ export const addItemsToExistingOrder = mutation({
     }
 
     const now = Date.now();
+    // Validate inventory availability for new items if negative stock is not allowed
+    const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, order.organizationId);
+    if (stockError) {
+      throw new ConvexError(stockError);
+    }
+
     let additionalSubTotal = 0;
     const lineItemConfigs: Array<any> = [];
 
