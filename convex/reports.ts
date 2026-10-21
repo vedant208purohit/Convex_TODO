@@ -1,6 +1,16 @@
 import { query, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
+import {
+  formatStoreDate,
+  formatStoreTime,
+  formatStoreDateTime,
+  formatPriceWithSymbol,
+  formatCurrencyAmount,
+  getTimezoneForCountry,
+  getPhoneCodeForCountry,
+  formatPhoneNumberWithCountryCode,
+} from "../lib/constants/countries";
 
 // Helper: Resolve organization ID or fallback to first available organization
 async function resolveOrganizationId(
@@ -24,22 +34,121 @@ function formatHourRange(hour: number): string {
   return `${start} - ${end}`;
 }
 
-// Helper: Convert UTC timestamp to YYYY-MM-DD
-function getLocalDateKey(timestamp: number): string {
-  const d = new Date(timestamp);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+// Helper: Extract integer hour (0-23) in store's regional timezone
+function getStoreHourInTz(
+  timestamp: number,
+  timezone?: string,
+  country?: string
+): number {
+  const targetTz = timezone || getTimezoneForCountry(country || "");
+  if (!targetTz) return new Date(timestamp).getHours();
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: targetTz,
+      hour: "numeric",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(new Date(timestamp));
+    const hp = parts.find((p) => p.type === "hour");
+    if (hp) {
+      const h = parseInt(hp.value, 10);
+      return h === 24 ? 0 : h;
+    }
+  } catch {
+    // fallback
+  }
+  return new Date(timestamp).getHours();
 }
 
-// Helper: Format date for display DD/MM/YYYY
-function formatDisplayDate(dateKey: string): string {
-  const parts = dateKey.split("-");
-  if (parts.length === 3) {
-    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+// Helper: Parse store operational timing into valid operating hours
+function parseOperationalHourRange(operationTiming: any): {
+  validHours: Set<number>;
+  sortedHours: number[];
+  startHour: number;
+  endHour: number;
+} {
+  const validHours = new Set<number>();
+  if (!operationTiming || typeof operationTiming !== "object") {
+    for (let h = 10; h <= 23; h++) validHours.add(h);
+    return {
+      validHours,
+      sortedHours: Array.from(validHours).sort((a, b) => a - b),
+      startHour: 10,
+      endHour: 23,
+    };
   }
-  return dateKey;
+
+  const parseH = (str?: string): number | null => {
+    if (!str || typeof str !== "string") return null;
+    const clean = str.trim();
+    if (clean.includes("T")) {
+      const timePart = clean.split("T")[1];
+      const h = parseInt(timePart.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    if (clean.includes(":")) {
+      const h = parseInt(clean.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    const h = parseInt(clean, 10);
+    return isNaN(h) ? null : h;
+  };
+
+  let minH = 24;
+  let maxH = -1;
+  let foundAny = false;
+
+  for (const dayKey of Object.keys(operationTiming)) {
+    const day = operationTiming[dayKey];
+    if (!day || typeof day !== "object") continue;
+
+    const isActive = day.active ?? day.is_open ?? true;
+    if (!isActive) continue;
+
+    foundAny = true;
+
+    if (day.is_open_all_day) {
+      for (let h = 0; h <= 23; h++) validHours.add(h);
+      minH = 0;
+      maxH = 23;
+      continue;
+    }
+
+    if (day.open) {
+      const oh = parseH(day.open);
+      const ch = day.close ? parseH(day.close) : 23;
+      if (oh !== null) {
+        const end = ch !== null ? ch : 23;
+        for (let h = oh; h <= end && h <= 23; h++) validHours.add(h);
+        minH = Math.min(minH, oh);
+        maxH = Math.max(maxH, end);
+      }
+    }
+
+    if (Array.isArray(day.hours)) {
+      for (const slot of day.hours) {
+        if (!slot) continue;
+        const sh = parseH(slot.start_time || slot.open || slot.start);
+        const eh = parseH(slot.end_time || slot.close || slot.end);
+        if (sh !== null) {
+          const end = eh !== null ? eh : 23;
+          for (let h = sh; h <= end && h <= 23; h++) validHours.add(h);
+          minH = Math.min(minH, sh);
+          maxH = Math.max(maxH, end);
+        }
+      }
+    }
+  }
+
+  if (!foundAny || validHours.size === 0) {
+    for (let h = 10; h <= 23; h++) validHours.add(h);
+  }
+
+  minH = Math.max(0, Math.min(23, minH === 24 ? 10 : minH));
+  maxH = Math.max(minH, Math.min(23, maxH === -1 ? 23 : maxH));
+  const sortedHours = Array.from(validHours).sort((a, b) => a - b);
+
+  return { validHours, sortedHours, startHour: minH, endHour: maxH };
 }
 
 // =========================================================================
@@ -73,6 +182,10 @@ export const getSalesReport = query({
         orderTypeBreakdown: [],
       };
     }
+
+    const org = await ctx.db.get(orgId);
+    const country = org?.country || "IN";
+    const timezone = org?.organizationTimeZone || getTimezoneForCountry(country);
 
     // 1. Fetch completed orders within range using by_created_at index
     const orders = await ctx.db
@@ -133,10 +246,10 @@ export const getSalesReport = query({
       totalRefundPaise += orderRefund;
       totalNetPaise += net;
 
-      const dateKey = getLocalDateKey(order.createdAt);
+      const dateKey = formatStoreDate(order.createdAt, country, timezone);
       const existing = dailyMap.get(dateKey) || {
         date: dateKey,
-        displayDate: formatDisplayDate(dateKey),
+        displayDate: dateKey,
         grossPaise: 0,
         refundPaise: 0,
         taxPaise: 0,
@@ -194,6 +307,11 @@ export const getOrdersReport = query({
       };
     }
 
+    const org = await ctx.db.get(orgId);
+    const country = org?.country || "IN";
+    const timezone = org?.organizationTimeZone || getTimezoneForCountry(country);
+    const { validHours } = parseOperationalHourRange(org?.operationTiming);
+
     const orders = await ctx.db
       .query("orders")
       .withIndex("by_created_at", (q) =>
@@ -217,23 +335,24 @@ export const getOrdersReport = query({
     );
     const avgOrderValue = totalOrders > 0 ? Math.round(totalGrossSales / totalOrders) : 0;
 
-    // Peak Hour calculation
+    // Peak Hour calculation (restricted strictly to store's operational hours in store timezone)
     const hourlyCounts: Record<number, number> = {};
     for (const o of validOrders) {
-      const hour = new Date(o.createdAt).getHours();
+      const hour = getStoreHourInTz(o.createdAt, timezone, country);
       hourlyCounts[hour] = (hourlyCounts[hour] || 0) + 1;
     }
 
     let peakHour = -1;
     let maxHourCount = 0;
     for (const [hourStr, count] of Object.entries(hourlyCounts)) {
-      if (count > maxHourCount) {
+      const h = parseInt(hourStr, 10);
+      if (validHours.has(h) && count > maxHourCount) {
         maxHourCount = count;
-        peakHour = parseInt(hourStr, 10);
+        peakHour = h;
       }
     }
     const peakOrderTimeFrame =
-      peakHour !== -1 ? formatHourRange(peakHour) : "No peak time";
+      peakHour !== -1 && maxHourCount > 0 ? formatHourRange(peakHour) : "No peak time";
 
     // Fulfillment / Delivery durations from orderActivities
     let totalDurationSeconds = 0;
@@ -308,24 +427,29 @@ export const getOrdersReport = query({
         totalValuePaise: number;
         itemsCount: number;
         channelCounts: Record<string, number>;
+        hourlyCounts: Record<number, number>;
       }
     >();
 
     for (const order of validOrders) {
-      const dateKey = getLocalDateKey(order.createdAt);
+      const dateKey = formatStoreDate(order.createdAt, country, timezone);
       const existing = dailyMap.get(dateKey) || {
         date: dateKey,
-        displayDate: formatDisplayDate(dateKey),
+        displayDate: dateKey,
         totalOrders: 0,
         totalValuePaise: 0,
         itemsCount: 0,
         channelCounts: {},
+        hourlyCounts: {},
       };
 
       existing.totalOrders += 1;
       existing.totalValuePaise += order.totalAmount || 0;
       existing.channelCounts[order.orderType] =
         (existing.channelCounts[order.orderType] || 0) + 1;
+
+      const orderHour = getStoreHourInTz(order.createdAt, timezone, country);
+      existing.hourlyCounts[orderHour] = (existing.hourlyCounts[orderHour] || 0) + 1;
 
       // Count order items
       const items = await ctx.db
@@ -348,6 +472,19 @@ export const getOrdersReport = query({
             maxChan = chan;
           }
         }
+
+        let dayPeakHour = -1;
+        let dayMaxCount = 0;
+        for (const [hourStr, count] of Object.entries(d.hourlyCounts)) {
+          const h = parseInt(hourStr, 10);
+          if (validHours.has(h) && count > dayMaxCount) {
+            dayMaxCount = count;
+            dayPeakHour = h;
+          }
+        }
+        const dayPeakTimeFrame =
+          dayPeakHour !== -1 && dayMaxCount > 0 ? formatHourRange(dayPeakHour) : "No peak time";
+
         return {
           date: d.date,
           displayDate: d.displayDate,
@@ -355,7 +492,7 @@ export const getOrdersReport = query({
           avgOrderValue:
             d.totalOrders > 0 ? Math.round(d.totalValuePaise / d.totalOrders) : 0,
           averageDeliveryTime,
-          peakOrderTimeFrame,
+          peakOrderTimeFrame: dayPeakTimeFrame,
           avgItemsPerOrder:
             d.totalOrders > 0
               ? Math.round((d.itemsCount / d.totalOrders) * 10) / 10
@@ -690,11 +827,15 @@ export const getCustomerReport = query({
       }
     >();
 
+    const org = await ctx.db.get(orgId);
+    const country = org?.country || "IN";
+    const timezone = org?.organizationTimeZone || getTimezoneForCountry(country);
+
     for (const order of validOrders) {
-      const dateKey = getLocalDateKey(order.createdAt);
+      const dateKey = formatStoreDate(order.createdAt, country, timezone);
       const existing = dailyMap.get(dateKey) || {
         date: dateKey,
-        displayDate: formatDisplayDate(dateKey),
+        displayDate: dateKey,
         customerKeys: new Set<string>(),
         totalSpendPaise: 0,
       };
@@ -852,11 +993,15 @@ export const getOperationalReport = query({
       }
     >();
 
+    const org = await ctx.db.get(orgId);
+    const country = org?.country || "IN";
+    const timezone = org?.organizationTimeZone || getTimezoneForCountry(country);
+
     for (const order of validOrders) {
-      const dateKey = getLocalDateKey(order.createdAt);
+      const dateKey = formatStoreDate(order.createdAt, country, timezone);
       const existing = dailyPaymentMap.get(dateKey) || {
         date: dateKey,
-        displayDate: formatDisplayDate(dateKey),
+        displayDate: dateKey,
         totalPayments: 0,
         totalPaymentValuePaise: 0,
         modeCounts: {},
@@ -1022,110 +1167,4 @@ export const getOperationalReport = query({
   },
 });
 
-// =========================================================================
-// 6. Z-REPORT REGISTER CLOSEOUT (api.reports.getZReportShiftSummary)
-// =========================================================================
-export const getZReportShiftSummary = query({
-  args: {
-    organizationId: v.optional(v.id("organizations")),
-    fromTimestamp: v.number(),
-    toTimestamp: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const orgId = await resolveOrganizationId(ctx, args.organizationId);
-    if (!orgId) {
-      return {
-        registerCloseTime: Date.now(),
-        periodStart: args.fromTimestamp,
-        periodEnd: args.toTimestamp,
-        grossSales: 0,
-        netSales: 0,
-        totalTax: 0,
-        totalDiscounts: 0,
-        totalRefunds: 0,
-        orderCount: 0,
-        paymentBreakdown: [],
-        cashSummary: { expectedCash: 0, countedCash: 0, variance: 0 },
-        taxDetails: [],
-      };
-    }
 
-    const orders = await ctx.db
-      .query("orders")
-      .withIndex("by_created_at", (q) =>
-        q
-          .eq("organizationId", orgId)
-          .gte("createdAt", args.fromTimestamp)
-          .lte("createdAt", args.toTimestamp)
-      )
-      .collect();
-
-    const completedOrders = orders.filter((o) => !o.isRejected);
-    const rejectedOrders = orders.filter((o) => o.isRejected);
-
-    let grossSalesPaise = 0;
-    let taxTotalPaise = 0;
-    let discountTotalPaise = 0;
-    let cashSalesPaise = 0;
-    let cardSalesPaise = 0;
-    let upiSalesPaise = 0;
-    let otherSalesPaise = 0;
-    let totalRefundsPaise = 0;
-
-    for (const order of completedOrders) {
-      grossSalesPaise += order.totalAmount || 0;
-      taxTotalPaise += order.taxTotal || 0;
-      discountTotalPaise += order.discountAmount || 0;
-
-      const payments = await ctx.db
-        .query("orderPayments")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
-
-      for (const p of payments) {
-        const net = (p.payAmount || p.amount || 0) - (p.refundAmount || 0);
-        const refund = p.refundAmount || 0;
-        totalRefundsPaise += refund;
-
-        const modeLower = (p.paymentModeName || "").toLowerCase();
-        if (modeLower.includes("cash")) {
-          cashSalesPaise += net;
-        } else if (modeLower.includes("card")) {
-          cardSalesPaise += net;
-        } else if (modeLower.includes("upi")) {
-          upiSalesPaise += net;
-        } else {
-          otherSalesPaise += net;
-        }
-      }
-    }
-
-    const netSalesPaise = grossSalesPaise - taxTotalPaise - totalRefundsPaise;
-
-    return {
-      reportGeneratedAt: Date.now(),
-      shiftPeriod: {
-        fromTimestamp: args.fromTimestamp,
-        toTimestamp: args.toTimestamp,
-      },
-      orderMetrics: {
-        totalOrdersCount: orders.length,
-        completedOrdersCount: completedOrders.length,
-        voidedOrCancelledOrdersCount: rejectedOrders.length,
-      },
-      revenueMetrics: {
-        grossSalesPaise,
-        taxTotalPaise,
-        discountTotalPaise,
-        totalRefundsPaise,
-        netSalesPaise,
-      },
-      paymentTenderBreakdown: {
-        cashSalesPaise,
-        cardSalesPaise,
-        upiSalesPaise,
-        otherSalesPaise,
-      },
-    };
-  },
-});

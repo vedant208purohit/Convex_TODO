@@ -5,21 +5,27 @@ import Link from "next/link";
 import {
   formatPriceWithSymbol,
   formatStoreDate,
+  formatStoreTime,
+  getTimezoneForCountry,
+  getCurrencyForCountry,
 } from "../../../lib/constants/countries";
-import { DateRange } from "./ReportHeader";
+import { DateRange, ChevronRightIcon } from "./ReportHeader";
 import {
   computeSalesReportData,
   isDataZero,
+  parseOperationalHourRange,
 } from "../../reports/reportCalculations";
 import { Toast, type ToastMessage } from "../Toast";
+import { OrderDateRangePicker } from "../OrderDateRangePicker";
 
 interface SalesReportViewProps {
   orders: any[];
   backendData?: any;
   loading?: boolean;
-  currencySymbol: string;
+  currencySymbol?: string;
   countryCode?: string;
   timezone?: string;
+  operationTiming?: any;
   selectedRange?: DateRange;
   onRangeChange?: (range: DateRange) => void;
 }
@@ -28,12 +34,15 @@ export function SalesReportView({
   orders = [],
   backendData,
   loading = false,
-  currencySymbol = "₹",
+  currencySymbol: passedCurrencySymbol,
   countryCode = "IN",
   timezone,
+  operationTiming,
   selectedRange,
   onRangeChange,
 }: SalesReportViewProps) {
+  const currencySymbol =
+    passedCurrencySymbol || getCurrencyForCountry(countryCode || "IN").symbol || "$";
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
 
@@ -162,22 +171,26 @@ export function SalesReportView({
         total_gross_sales: formatPriceWithSymbol(
           backendData.totalGrossSales || 0,
           currencySymbol,
-          countryCode
+          countryCode,
+          true
         ),
         total_net_sales: formatPriceWithSymbol(
           backendData.totalNetSales || 0,
           currencySymbol,
-          countryCode
+          countryCode,
+          true
         ),
         total_tax_collected: formatPriceWithSymbol(
           backendData.totalTaxCollected || 0,
           currencySymbol,
-          countryCode
+          countryCode,
+          true
         ),
         total_refund: formatPriceWithSymbol(
           backendData.totalRefund || 0,
           currencySymbol,
-          countryCode
+          countryCode,
+          true
         ),
         total_orders: backendData.totalOrders || 0,
         sales_data: (backendData.salesData || []).map((d: any) => ({
@@ -185,22 +198,26 @@ export function SalesReportView({
           gross_sales: formatPriceWithSymbol(
             d.grossPaise || 0,
             currencySymbol,
-            countryCode
+            countryCode,
+            true
           ),
           refunds: formatPriceWithSymbol(
             d.refundPaise || 0,
             currencySymbol,
-            countryCode
+            countryCode,
+            true
           ),
           taxes_collected: formatPriceWithSymbol(
             d.taxPaise || 0,
             currencySymbol,
-            countryCode
+            countryCode,
+            true
           ),
           net_sales: formatPriceWithSymbol(
             d.netPaise || 0,
             currencySymbol,
-            countryCode
+            countryCode,
+            true
           ),
           total_orders: d.totalOrders || 0,
         })),
@@ -227,7 +244,27 @@ export function SalesReportView({
     let deliveryRuns = 0;
 
     for (const o of orders) {
-      if (o.isRejected) continue;
+      const isCancelled =
+        Boolean(o.isRejected) ||
+        o.orderStatus === "Cancelled" ||
+        o.status === "Cancelled" ||
+        (o.orderStatusName || "").toLowerCase().includes("cancel");
+      if (isCancelled) continue;
+
+      const isPaid =
+        o.paymentStatus === "Paid" ||
+        o.isPaid === true ||
+        (Array.isArray(o.payments) &&
+          o.payments.length > 0 &&
+          o.payments.some(
+            (p: any) => p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName)
+          ));
+
+      // Exclude pending/unpaid orders from realized gross/tax
+      if (!isPaid && o.paymentStatus !== "Refunded" && o.paymentStatus !== "Partially Refunded") {
+        continue;
+      }
+
       const amount = o.totalAmount || 0;
       grossPaise += amount;
       taxPaise += o.taxTotal || 0;
@@ -282,18 +319,44 @@ export function SalesReportView({
     };
   }, [orders]);
 
-  // 3. Calculate Hourly Cadence & Peaks
+  // 3. Calculate Hourly Cadence & Peaks (restricted strictly to restaurant's operational timing)
   const hourlyData = useMemo(() => {
-    const hours = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+    const { sortedHours, validHours } = parseOperationalHourRange(operationTiming);
+    const hours =
+      sortedHours.length > 0
+        ? sortedHours
+        : [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
+
     const buckets: Record<number, { count: number; grossPaise: number }> = {};
     hours.forEach((h) => {
       buckets[h] = { count: 0, grossPaise: 0 };
     });
 
+    const targetTz =
+      timezone || (countryCode ? getTimezoneForCountry(countryCode) : undefined);
+
     for (const o of orders) {
       if (o.isRejected) continue;
-      const h = new Date(o.createdAt).getHours();
-      if (buckets[h]) {
+      let h = new Date(o.createdAt).getHours();
+      if (targetTz) {
+        try {
+          const formatter = new Intl.DateTimeFormat("en-US", {
+            timeZone: targetTz,
+            hour: "numeric",
+            hour12: false,
+          });
+          const parts = formatter.formatToParts(new Date(o.createdAt));
+          const hp = parts.find((p) => p.type === "hour");
+          if (hp) {
+            const parsed = parseInt(hp.value, 10);
+            h = parsed === 24 ? 0 : parsed;
+          }
+        } catch {
+          // fallback to local getHours
+        }
+      }
+
+      if (buckets[h] !== undefined) {
         buckets[h].count += 1;
         buckets[h].grossPaise += o.totalAmount || 0;
       }
@@ -306,30 +369,33 @@ export function SalesReportView({
       }
     });
 
-    let lunchPeakHour = 13;
-    let lunchPeakGross = buckets[13]?.grossPaise || 0;
-    [12, 13, 14, 15].forEach((h) => {
+    // Find overall peak hour within operational hours
+    let overallPeakHour = hours[0] || 12;
+    let maxVal = 0;
+    hours.forEach((h) => {
+      if (buckets[h].grossPaise > maxVal) {
+        maxVal = buckets[h].grossPaise;
+        overallPeakHour = h;
+      }
+    });
+
+    const lunchHours = hours.filter((h) => h >= 11 && h <= 15);
+    let lunchPeakHour = lunchHours[0] || 13;
+    let lunchPeakGross = buckets[lunchPeakHour]?.grossPaise || 0;
+    lunchHours.forEach((h) => {
       if ((buckets[h]?.grossPaise || 0) > lunchPeakGross) {
         lunchPeakGross = buckets[h]?.grossPaise || 0;
         lunchPeakHour = h;
       }
     });
 
-    let dinnerPeakHour = 20;
-    let dinnerPeakGross = buckets[20]?.grossPaise || 0;
-    [18, 19, 20, 21, 22].forEach((h) => {
+    const dinnerHours = hours.filter((h) => h >= 18 && h <= 23);
+    let dinnerPeakHour = dinnerHours[0] || 20;
+    let dinnerPeakGross = buckets[dinnerPeakHour]?.grossPaise || 0;
+    dinnerHours.forEach((h) => {
       if ((buckets[h]?.grossPaise || 0) > dinnerPeakGross) {
         dinnerPeakGross = buckets[h]?.grossPaise || 0;
         dinnerPeakHour = h;
-      }
-    });
-
-    let overallPeakHour = 20;
-    let maxVal = 0;
-    hours.forEach((h) => {
-      if (buckets[h].grossPaise > maxVal) {
-        maxVal = buckets[h].grossPaise;
-        overallPeakHour = h;
       }
     });
 
@@ -349,7 +415,7 @@ export function SalesReportView({
       },
       overallPeakHour,
     };
-  }, [orders]);
+  }, [orders, timezone, countryCode, operationTiming]);
 
   // 4. Channel / Order Type Performance
   const channelPerformance = useMemo(() => {
@@ -751,25 +817,28 @@ export function SalesReportView({
       {/* Editorial Page Header */}
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 mb-2">
         <div className="flex flex-col max-w-2xl space-y-1">
-          <nav className="flex items-center gap-2 mb-1">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
+          >
             <Link
               href="/reports"
-              className="text-[11px] tracking-widest text-[#645d58] hover:text-[#1e1b19] uppercase font-semibold transition-colors cursor-pointer"
+              className="hover:text-[#141010] transition-colors cursor-pointer"
             >
               Reports
             </Link>
-            <span className="text-[#d0c4be] text-xs">/</span>
-            <span className="text-[11px] tracking-widest text-[#1e1b19] uppercase font-semibold">
+            <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+            <span className="text-[#141010] font-semibold">
               Sales Report
             </span>
           </nav>
           <h1
-            className="text-3xl sm:text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-tight sm:leading-none font-normal"
+            className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Sales Report
           </h1>
-          <p className="text-xs sm:text-sm text-[#645d58] leading-relaxed pt-0.5">
+          <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal leading-relaxed">
             Track restaurant sales, revenue, discounts, tax collections, and net
             settlement cadence across service consoles.
           </p>
@@ -778,43 +847,16 @@ export function SalesReportView({
         {/* Right Controls: Global Range Selector & CSV Export */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 self-start sm:self-end shrink-0 w-full sm:w-auto">
           {selectedRange && onRangeChange && (
-            <div className="relative" ref={dropdownRef}>
-              <button
-                type="button"
-                onClick={() => setIsDateOpen(!isDateOpen)}
-                className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-4 pr-9 py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
-              >
-                <span>{currentDateLabel}</span>
-                <svg
-                  className="w-4 h-4 text-[#7f7570] absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
-
-              {isDateOpen && (
-                <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
-                  {datePresets.map((preset) => (
-                    <button
-                      key={preset}
-                      type="button"
-                      className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${
-                        currentDateLabel === preset
-                          ? "font-semibold text-[#1e1b19] bg-[#faf2ee]"
-                          : "text-[#645d58] hover:bg-[#eee7e3]"
-                      }`}
-                      onClick={() => handleSelectPreset(preset)}
-                    >
-                      {preset}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+            <OrderDateRangePicker
+              startDate={selectedRange.startDate}
+              endDate={selectedRange.endDate}
+              preset={selectedRange.preset}
+              onChange={onRangeChange}
+              countryCode={countryCode}
+              timezone={timezone}
+              variant="pill"
+              align="right"
+            />
           )}
 
           <button
@@ -1143,104 +1185,112 @@ export function SalesReportView({
           {/* SVG Bar Chart with Responsive Height */}
           <div className="overflow-x-auto w-full no-scrollbar pb-2">
             <div className="relative min-w-[500px] h-56 pt-2">
-              <svg
-                className="w-full h-full overflow-visible"
-                viewBox="0 0 680 180"
-                preserveAspectRatio="none"
-              >
-              {/* Subtle Gridlines */}
-              <line
-                x1="0"
-                y1="30"
-                x2="680"
-                y2="30"
-                stroke="#f4ece8"
-                strokeDasharray="3 3"
-              />
-              <line
-                x1="0"
-                y1="80"
-                x2="680"
-                y2="80"
-                stroke="#f4ece8"
-                strokeDasharray="3 3"
-              />
-              <line
-                x1="0"
-                y1="130"
-                x2="680"
-                y2="130"
-                stroke="#f4ece8"
-                strokeDasharray="3 3"
-              />
-
-              {hourlyData.hours.map((h, i) => {
-                const slot = hourlyData.buckets[h] || {
-                  count: 0,
-                  grossPaise: 0,
-                };
-                const barHeight =
-                  hourlyData.maxGross > 0
-                    ? Math.round((slot.grossPaise / hourlyData.maxGross) * 120)
-                    : 0;
-                const x = 30 + i * 58;
-                const y = 150 - barHeight;
-                const isPeak =
-                  h === hourlyData.overallPeakHour && slot.grossPaise > 0;
-
+              {(() => {
+                const numHours = hourlyData.hours.length || 1;
+                const totalWidth = Math.max(680, 40 + numHours * 56);
+                const step = (totalWidth - 60) / numHours;
+                const barWidth = Math.min(34, Math.max(16, step - 14));
                 return (
-                  <g key={h} className="cursor-pointer group">
-                    {/* Background Bar */}
-                    <rect
-                      x={x}
-                      y="30"
-                      width="34"
-                      height="120"
-                      rx="6"
-                      fill="#faf2ee"
-                      className="group-hover:fill-[#f4ece8] transition-colors"
+                  <svg
+                    className="w-full h-full overflow-visible"
+                    viewBox={`0 0 ${totalWidth} 180`}
+                    preserveAspectRatio="none"
+                  >
+                    {/* Subtle Gridlines */}
+                    <line
+                      x1="0"
+                      y1="30"
+                      x2={totalWidth}
+                      y2="30"
+                      stroke="#f4ece8"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1="0"
+                      y1="80"
+                      x2={totalWidth}
+                      y2="80"
+                      stroke="#f4ece8"
+                      strokeDasharray="3 3"
+                    />
+                    <line
+                      x1="0"
+                      y1="130"
+                      x2={totalWidth}
+                      y2="130"
+                      stroke="#f4ece8"
+                      strokeDasharray="3 3"
                     />
 
-                    {/* Actual Gross Sales Bar */}
-                    {barHeight > 0 && (
-                      <rect
-                        x={x}
-                        y={y}
-                        width="34"
-                        height={barHeight}
-                        rx="6"
-                        fill={isPeak ? "#1e1b19" : "#645d58"}
-                        className="transition-all duration-300"
-                      />
-                    )}
+                    {hourlyData.hours.map((h, i) => {
+                      const slot = hourlyData.buckets[h] || {
+                        count: 0,
+                        grossPaise: 0,
+                      };
+                      const barHeight =
+                        hourlyData.maxGross > 0
+                          ? Math.round((slot.grossPaise / hourlyData.maxGross) * 120)
+                          : 0;
+                      const x = 30 + i * step;
+                      const y = 150 - barHeight;
+                      const isPeak =
+                        h === hourlyData.overallPeakHour && slot.grossPaise > 0;
 
-                    {/* Peak Tag */}
-                    {isPeak && (
-                      <circle
-                        cx={x + 17}
-                        cy={Math.max(10, y - 8)}
-                        r="3"
-                        fill="#1b873f"
-                      />
-                    )}
+                      return (
+                        <g key={h} className="cursor-pointer group">
+                          {/* Background Bar */}
+                          <rect
+                            x={x}
+                            y="30"
+                            width={barWidth}
+                            height="120"
+                            rx="6"
+                            fill="#faf2ee"
+                            className="group-hover:fill-[#f4ece8] transition-colors"
+                          />
 
-                    {/* Hour Axis Label */}
-                    <text
-                      x={x + 17}
-                      y="168"
-                      textAnchor="middle"
-                      fill="#645d58"
-                      fontSize="10"
-                      fontWeight="500"
-                      fontFamily="sans-serif"
-                    >
-                      {getHourLabel(h)}
-                    </text>
-                    <title>{`${getHourLabel(h)}: ${slot.count} Orders | ${formatPriceWithSymbol(slot.grossPaise, currencySymbol, countryCode, true)}`}</title>
-                  </g>
+                          {/* Actual Gross Sales Bar */}
+                          {barHeight > 0 && (
+                            <rect
+                              x={x}
+                              y={y}
+                              width={barWidth}
+                              height={barHeight}
+                              rx="6"
+                              fill={isPeak ? "#1e1b19" : "#645d58"}
+                              className="transition-all duration-300"
+                            />
+                          )}
+
+                          {/* Peak Tag */}
+                          {isPeak && (
+                            <circle
+                              cx={x + barWidth / 2}
+                              cy={Math.max(10, y - 8)}
+                              r="3"
+                              fill="#1b873f"
+                            />
+                          )}
+
+                          {/* Hour Axis Label */}
+                          <text
+                            x={x + barWidth / 2}
+                            y="168"
+                            textAnchor="middle"
+                            fill="#645d58"
+                            fontSize="10"
+                            fontWeight="500"
+                            fontFamily="sans-serif"
+                          >
+                            {getHourLabel(h)}
+                          </text>
+                          <title>{`${getHourLabel(h)}: ${slot.count} Orders | ${formatPriceWithSymbol(slot.grossPaise, currencySymbol, countryCode, true)}`}</title>
+                        </g>
+                      );
+                    })}
+                  </svg>
                 );
-              })}
-            </svg>
+              })()}
             </div>
           </div>
 

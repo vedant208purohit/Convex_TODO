@@ -94,7 +94,26 @@ export function computeSalesReportData(
   >();
 
   for (const order of orders) {
-    if (order.isRejected) continue; // Exclude rejected/cancelled from revenue
+    const isCancelled =
+      Boolean(order.isRejected) ||
+      order.orderStatus === "Cancelled" ||
+      order.status === "Cancelled" ||
+      (order.orderStatusName || "").toLowerCase().includes("cancel");
+    if (isCancelled) continue; // Exclude rejected/cancelled from revenue
+
+    const isPaid =
+      order.paymentStatus === "Paid" ||
+      order.isPaid === true ||
+      (Array.isArray(order.payments) &&
+        order.payments.length > 0 &&
+        order.payments.some(
+          (p: any) => p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName)
+        ));
+
+    // Exclude pending/unpaid orders from realized sales revenue
+    if (!isPaid && order.paymentStatus !== "Refunded" && order.paymentStatus !== "Partially Refunded") {
+      continue;
+    }
 
     const orderTotal = order.totalAmount || 0;
     const orderTax = order.taxTotal || 0;
@@ -230,11 +249,103 @@ function formatOrderTypeDisplayName(type?: string): string {
   return type;
 }
 
+// Helper: Parse store operational timing into valid operating hours
+export function parseOperationalHourRange(operationTiming: any): {
+  validHours: Set<number>;
+  sortedHours: number[];
+  startHour: number;
+  endHour: number;
+} {
+  const validHours = new Set<number>();
+  if (!operationTiming || typeof operationTiming !== "object") {
+    for (let h = 10; h <= 23; h++) validHours.add(h);
+    return {
+      validHours,
+      sortedHours: Array.from(validHours).sort((a, b) => a - b),
+      startHour: 10,
+      endHour: 23,
+    };
+  }
+
+  const parseH = (str?: string): number | null => {
+    if (!str || typeof str !== "string") return null;
+    const clean = str.trim();
+    if (clean.includes("T")) {
+      const timePart = clean.split("T")[1];
+      const h = parseInt(timePart.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    if (clean.includes(":")) {
+      const h = parseInt(clean.split(":")[0], 10);
+      return isNaN(h) ? null : h;
+    }
+    const h = parseInt(clean, 10);
+    return isNaN(h) ? null : h;
+  };
+
+  let minH = 24;
+  let maxH = -1;
+  let foundAny = false;
+
+  for (const dayKey of Object.keys(operationTiming)) {
+    const day = operationTiming[dayKey];
+    if (!day || typeof day !== "object") continue;
+
+    const isActive = day.active ?? day.is_open ?? true;
+    if (!isActive) continue;
+
+    foundAny = true;
+
+    if (day.is_open_all_day) {
+      for (let h = 0; h <= 23; h++) validHours.add(h);
+      minH = 0;
+      maxH = 23;
+      continue;
+    }
+
+    if (day.open) {
+      const oh = parseH(day.open);
+      const ch = day.close ? parseH(day.close) : 23;
+      if (oh !== null) {
+        const end = ch !== null ? ch : 23;
+        for (let h = oh; h <= end && h <= 23; h++) validHours.add(h);
+        minH = Math.min(minH, oh);
+        maxH = Math.max(maxH, end);
+      }
+    }
+
+    if (Array.isArray(day.hours)) {
+      for (const slot of day.hours) {
+        if (!slot) continue;
+        const sh = parseH(slot.start_time || slot.open || slot.start);
+        const eh = parseH(slot.end_time || slot.close || slot.end);
+        if (sh !== null) {
+          const end = eh !== null ? eh : 23;
+          for (let h = sh; h <= end && h <= 23; h++) validHours.add(h);
+          minH = Math.min(minH, sh);
+          maxH = Math.max(maxH, end);
+        }
+      }
+    }
+  }
+
+  if (!foundAny || validHours.size === 0) {
+    for (let h = 10; h <= 23; h++) validHours.add(h);
+  }
+
+  minH = Math.max(0, Math.min(23, minH === 24 ? 10 : minH));
+  maxH = Math.max(minH, Math.min(23, maxH === -1 ? 23 : maxH));
+  const sortedHours = Array.from(validHours).sort((a, b) => a - b);
+
+  return { validHours, sortedHours, startHour: minH, endHour: maxH };
+}
+
 export function computeOrdersReportData(
   orders: any[],
   currencySymbol: string,
   countryCode?: string,
   timezone?: string,
+  operationTiming?: any,
 ): OrdersReportOutput {
   let validOrdersCount = 0;
   let totalGrossPaise = 0;
@@ -269,7 +380,13 @@ export function computeOrdersReportData(
   >();
 
   for (const order of orders) {
-    if (order.isRejected) continue;
+    const isCancelled =
+      Boolean(order.isRejected) ||
+      order.orderStatus === "Cancelled" ||
+      order.status === "Cancelled" ||
+      (order.orderStatusName || "").toLowerCase().includes("cancel");
+    if (isCancelled) continue; // Exclude cancelled orders
+
     validOrdersCount += 1;
     const gross = order.totalAmount || 0;
     totalGrossPaise += gross;
@@ -339,16 +456,17 @@ export function computeOrdersReportData(
     dailyMap.set(dateKey, existingDay);
   }
 
-  // Peak Hour
-  let peakHour = 0;
+  // Peak Hour restricted strictly to store's operational timing
+  const { validHours } = parseOperationalHourRange(operationTiming);
+  let peakHour = -1;
   let maxHourlyCount = 0;
   for (let h = 0; h < 24; h++) {
-    if (hourlyCounts[h] > maxHourlyCount) {
+    if (validHours.has(h) && hourlyCounts[h] > maxHourlyCount) {
       maxHourlyCount = hourlyCounts[h];
       peakHour = h;
     }
   }
-  const peak_order_time_frame = maxHourlyCount > 0 ? formatHourWindow(peakHour) : "-";
+  const peak_order_time_frame = peakHour !== -1 && maxHourlyCount > 0 ? formatHourWindow(peakHour) : "No peak time";
 
   // Average Delivery Time
   const avgDeliverySecs =
@@ -393,16 +511,16 @@ export function computeOrdersReportData(
         ? formatDeliveryTime(Math.round(d.deliverySecs / d.deliveryCount))
         : "-";
 
-    // Day peak hour
-    let dayPeakH = 0;
+    // Day peak hour restricted strictly to store's operational timing
+    let dayPeakH = -1;
     let dayMaxH = 0;
     for (let h = 0; h < 24; h++) {
-      if (d.hourlyCounts[h] > dayMaxH) {
+      if (validHours.has(h) && d.hourlyCounts[h] > dayMaxH) {
         dayMaxH = d.hourlyCounts[h];
         dayPeakH = h;
       }
     }
-    const dayPeak = dayMaxH > 0 ? formatHourWindow(dayPeakH) : "-";
+    const dayPeak = dayPeakH !== -1 && dayMaxH > 0 ? formatHourWindow(dayPeakH) : "No peak time";
 
     // Day avg items
     const avgItems =
@@ -474,6 +592,13 @@ export function computeCustomerReportData(
 
   // Process all historical orders to determine each customer's first order timestamp
   for (const o of orders) {
+    const isCancelled =
+      Boolean(o.isRejected) ||
+      o.orderStatus === "Cancelled" ||
+      o.status === "Cancelled" ||
+      (o.orderStatusName || "").toLowerCase().includes("cancel");
+    if (isCancelled) continue; // Exclude cancelled orders from customer spend and order history
+
     const custKey =
       o.customerId ||
       (o.customerPhone ? o.customerPhone.trim() : null) ||
@@ -711,7 +836,12 @@ export function computeMenuReportData(
   let totalMenuGrossPaise = 0;
 
   for (const order of orders) {
-    if (order.isRejected) continue;
+    const isCancelled =
+      Boolean(order.isRejected) ||
+      order.orderStatus === "Cancelled" ||
+      order.status === "Cancelled" ||
+      (order.orderStatusName || "").toLowerCase().includes("cancel");
+    if (isCancelled) continue; // Exclude cancelled orders from items sold
     if (!order.items || !Array.isArray(order.items)) continue;
 
     // Approximate tax proportion per item based on order tax ratio
@@ -960,6 +1090,7 @@ export function computeOperationalReportData(
   currencySymbol: string,
   countryCode?: string,
   timezone?: string,
+  operationTiming?: any,
 ): OperationalReportOutput {
   // ------------------------------------------
   // A. PAYMENT MODE BREAKDOWN
@@ -1190,7 +1321,7 @@ export function computeOperationalReportData(
     };
     existingLayout.ordersServed += 1;
     existingLayout.revenuePaise += o.totalAmount || 0;
-    const h = new Date(o.createdAt).getHours();
+    const h = getStoreHourInTz(o.createdAt, countryCode, timezone);
     existingLayout.hourlyOccupancy[h] += 1;
     layoutStatsMap.set(lName, existingLayout);
 
@@ -1255,16 +1386,17 @@ export function computeOperationalReportData(
       ? `${((occupiedTablesCount / totalTablesCount) * 100).toFixed(1)}%`
       : "0.0%";
 
+  const { validHours: layoutValidHours } = parseOperationalHourRange(operationTiming);
   const layouts_breakdown = allLayoutsList.map((l) => {
-    let peakH = 0;
+    let peakH = -1;
     let maxHCount = 0;
     for (let h = 0; h < 24; h++) {
-      if (l.hourlyOccupancy[h] > maxHCount) {
+      if (layoutValidHours.has(h) && l.hourlyOccupancy[h] > maxHCount) {
         maxHCount = l.hourlyOccupancy[h];
         peakH = h;
       }
     }
-    const peakTime = maxHCount > 0 ? formatHourWindow(peakH) : "-";
+    const peakTime = peakH !== -1 && maxHCount > 0 ? formatHourWindow(peakH) : "-";
     const revContribution =
       totalDineInRevenuePaise > 0
         ? `${((l.revenuePaise / totalDineInRevenuePaise) * 100).toFixed(1)}%`
@@ -1436,263 +1568,4 @@ export function computeOperationalReportData(
   };
 }
 
-// ==========================================
-// 6. Z-REPORT (SHIFT CLOSEOUT) CALCULATION
-// ==========================================
 
-export interface ZReportOutput {
-  shift_start_time: string;
-  shift_end_time: string;
-  total_orders: number;
-  completed_orders: number;
-  cancelled_orders: number;
-  gross_sales_paise: number;
-  gross_sales: string;
-  net_sales_paise: number;
-  net_sales: string;
-  tax_collected_paise: number;
-  tax_collected: string;
-  discounts_paise: number;
-  discounts: string;
-  refunds_paise: number;
-  refunds: string;
-  cash_sales_paise: number;
-  cash_sales: string;
-  card_sales_paise: number;
-  card_sales: string;
-  upi_sales_paise: number;
-  upi_sales: string;
-  other_sales_paise: number;
-  other_sales: string;
-  payment_methods: Array<{
-    mode: string;
-    count: number;
-    total_paise: number;
-    display_total: string;
-    percentage: string;
-  }>;
-}
-
-export function computeZReportData(
-  orders: any[],
-  currencySymbol: string,
-  countryCode?: string,
-  timezone?: string,
-): ZReportOutput {
-  let grossSalesPaise = 0;
-  let taxCollectedPaise = 0;
-  let discountsPaise = 0;
-  let refundsPaise = 0;
-  let completedOrders = 0;
-  let cancelledOrders = 0;
-
-  const tenderMap = new Map<string, { count: number; totalPaise: number }>();
-
-  let earliestTs = Infinity;
-  let latestTs = 0;
-
-  for (const o of orders) {
-    if (o.createdAt) {
-      if (o.createdAt < earliestTs) earliestTs = o.createdAt;
-      if (o.createdAt > latestTs) latestTs = o.createdAt;
-    }
-
-    if (
-      o.isRejected ||
-      (o.orderStatusName || "").toLowerCase().includes("cancel") ||
-      (o.orderStatusName || "").toLowerCase().includes("reject")
-    ) {
-      cancelledOrders += 1;
-      continue;
-    }
-
-    completedOrders += 1;
-    const gross = o.totalAmount || 0;
-    const tax = o.taxTotal || 0;
-    const disc = o.discountAmount || 0;
-
-    grossSalesPaise += gross;
-    taxCollectedPaise += tax;
-    discountsPaise += disc;
-
-    let ordRefund = 0;
-    if (o.paymentStatus === "Refunded") {
-      ordRefund = gross;
-    } else if (o.paymentStatus === "Partially Refunded") {
-      if (o.payments && Array.isArray(o.payments)) {
-        for (const p of o.payments) {
-          ordRefund += p.refundAmount || 0;
-        }
-      }
-      if (ordRefund === 0 && o.discountAmount) {
-        ordRefund = o.discountAmount;
-      }
-    }
-    refundsPaise += ordRefund;
-
-    // Tenders
-    if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
-      for (const p of o.payments) {
-        const mode = p.paymentMode || p.mode || o.paymentMode || "Cash";
-        const amt = p.payAmount || p.amount || 0;
-        const cur = tenderMap.get(mode) || { count: 0, totalPaise: 0 };
-        cur.count += 1;
-        cur.totalPaise += amt;
-        tenderMap.set(mode, cur);
-      }
-    } else {
-      const mode = o.paymentMode || o.paymentMethod || "Cash";
-      const amt = gross;
-      const cur = tenderMap.get(mode) || { count: 0, totalPaise: 0 };
-      cur.count += 1;
-      cur.totalPaise += amt;
-      tenderMap.set(mode, cur);
-    }
-  }
-
-  const netSalesPaise = Math.max(0, grossSalesPaise - taxCollectedPaise - refundsPaise);
-
-  let cashSalesPaise = 0;
-  let cardSalesPaise = 0;
-  let upiSalesPaise = 0;
-  let otherSalesPaise = 0;
-
-  const payment_methods: Array<{
-    mode: string;
-    count: number;
-    total_paise: number;
-    display_total: string;
-    percentage: string;
-  }> = [];
-
-  const totalTenderPaise = Array.from(tenderMap.values()).reduce(
-    (sum, t) => sum + t.totalPaise,
-    0,
-  );
-
-  Array.from(tenderMap.entries()).forEach(([mode, data]) => {
-    const lower = mode.toLowerCase();
-    if (lower.includes("cash")) {
-      cashSalesPaise += data.totalPaise;
-    } else if (
-      lower.includes("card") ||
-      lower.includes("credit") ||
-      lower.includes("debit") ||
-      lower.includes("pos")
-    ) {
-      cardSalesPaise += data.totalPaise;
-    } else if (
-      lower.includes("upi") ||
-      lower.includes("qr") ||
-      lower.includes("gpay") ||
-      lower.includes("paytm") ||
-      lower.includes("phonepe")
-    ) {
-      upiSalesPaise += data.totalPaise;
-    } else {
-      otherSalesPaise += data.totalPaise;
-    }
-
-    const pct =
-      totalTenderPaise > 0
-        ? `${((data.totalPaise / totalTenderPaise) * 100).toFixed(1)}%`
-        : "0.0%";
-    payment_methods.push({
-      mode,
-      count: data.count,
-      total_paise: data.totalPaise,
-      display_total: formatPriceWithSymbol(
-        data.totalPaise,
-        currencySymbol,
-        countryCode,
-        true,
-      ),
-      percentage: pct,
-    });
-  });
-
-  const startTimeStr =
-    earliestTs < Infinity
-      ? formatStoreDate(earliestTs, countryCode, timezone) +
-        " " +
-        new Date(earliestTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : "Shift Open";
-  const endTimeStr =
-    latestTs > 0
-      ? formatStoreDate(latestTs, countryCode, timezone) +
-        " " +
-        new Date(latestTs).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-      : "Shift Close";
-
-  return {
-    shift_start_time: startTimeStr,
-    shift_end_time: endTimeStr,
-    total_orders: orders.length,
-    completed_orders: completedOrders,
-    cancelled_orders: cancelledOrders,
-    gross_sales_paise: grossSalesPaise,
-    gross_sales: formatPriceWithSymbol(
-      grossSalesPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    net_sales_paise: netSalesPaise,
-    net_sales: formatPriceWithSymbol(
-      netSalesPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    tax_collected_paise: taxCollectedPaise,
-    tax_collected: formatPriceWithSymbol(
-      taxCollectedPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    discounts_paise: discountsPaise,
-    discounts: formatPriceWithSymbol(
-      discountsPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    refunds_paise: refundsPaise,
-    refunds: formatPriceWithSymbol(
-      refundsPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    cash_sales_paise: cashSalesPaise,
-    cash_sales: formatPriceWithSymbol(
-      cashSalesPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    card_sales_paise: cardSalesPaise,
-    card_sales: formatPriceWithSymbol(
-      cardSalesPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    upi_sales_paise: upiSalesPaise,
-    upi_sales: formatPriceWithSymbol(
-      upiSalesPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    other_sales_paise: otherSalesPaise,
-    other_sales: formatPriceWithSymbol(
-      otherSalesPaise,
-      currencySymbol,
-      countryCode,
-      true,
-    ),
-    payment_methods,
-  };
-}

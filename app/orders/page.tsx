@@ -17,6 +17,7 @@ import {
   formatStoreDate,
   formatStoreTime,
   formatStoreDateTime,
+  getTimezoneForCountry,
 } from "../../lib/constants/countries";
 
 function formatOrderPhoneDisplay(phone?: string): string {
@@ -77,6 +78,36 @@ function formatOrderTypeLabel(type?: string): string {
   if (type === "TakeAway") return "Takeaway";
   if (type === "DineIn") return "Dine-In";
   return type.replace(/([A-Z])/g, " $1").trim();
+}
+
+function formatRelativeTime(timestamp?: number): string {
+  if (!timestamp) return "";
+  const diffMs = Math.max(0, Date.now() - timestamp);
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMins < 1) {
+    return "just now";
+  }
+  if (diffMins < 60) {
+    return `${diffMins} ${diffMins === 1 ? "min" : "mins"} ago`;
+  }
+  if (diffHours < 24) {
+    return `${diffHours}h ago`;
+  }
+  if (diffDays < 30) {
+    return `${diffDays} ${diffDays === 1 ? "day" : "days"} ago`;
+  }
+  if (diffDays < 365) {
+    const diffMonths = Math.max(1, Math.floor(diffDays / 30));
+    if (diffMonths >= 12) {
+      return "1 year ago";
+    }
+    return `${diffMonths} ${diffMonths === 1 ? "month" : "months"} ago`;
+  }
+  const diffYears = Math.max(1, Math.floor(diffDays / 365));
+  return `${diffYears} ${diffYears === 1 ? "year" : "years"} ago`;
 }
 
 // ==========================================
@@ -423,7 +454,7 @@ function TimelineIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
 }
 
 function formatDateDisplay(d: Date, country?: string, timezone?: string): string {
-  return formatStoreDate(d, country, timezone);
+  return formatStoreDate(d, country || "IN", timezone);
 }
 
 const MONTH_NAMES = [
@@ -507,6 +538,10 @@ export default function OrdersPage() {
   const organizations = useQuery(api.organizations.list);
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
+
+  const countryCode = activeOrg?.country || "IN";
+  const storeTz =
+    (activeOrg as any)?.timezone || getTimezoneForCountry(countryCode);
 
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
@@ -699,8 +734,8 @@ export default function OrdersPage() {
   }, []);
 
   const formattedDateRangeText = useMemo(() => {
-    return `${formatDateDisplay(appliedStartDate)} - ${formatDateDisplay(appliedEndDate)}`;
-  }, [appliedStartDate, appliedEndDate]);
+    return `${formatDateDisplay(appliedStartDate, countryCode, storeTz)} - ${formatDateDisplay(appliedEndDate, countryCode, storeTz)}`;
+  }, [appliedStartDate, appliedEndDate, countryCode, storeTz]);
 
   const [sortField, setSortField] = useState<"createdAt" | "totalAmount">(
     () => initialFilters?.sortField || "createdAt",
@@ -2947,8 +2982,8 @@ export default function OrdersPage() {
                   {/* Bottom Footer Bar */}
                   <div className="border-t border-[#e5e7eb] px-4 py-2.5 bg-white flex items-center justify-between">
                     <div className="text-xs font-medium text-stone-700">
-                      {formatDateDisplay(draftStartDate)} -{" "}
-                      {formatDateDisplay(draftEndDate)}
+                      {formatDateDisplay(draftStartDate, countryCode, storeTz)} -{" "}
+                      {formatDateDisplay(draftEndDate, countryCode, storeTz)}
                     </div>
                     <div className="flex items-center gap-2.5">
                       <button
@@ -3207,15 +3242,10 @@ export default function OrdersPage() {
                       activeOrg?.organizationTimeZone,
                     );
 
-                    // Format relative time
-                    const diffMins = Math.max(
-                      1,
-                      Math.round((Date.now() - order.createdAt) / 60000),
+                    // Format relative time: mins ago, hours ago, days ago, months ago, years ago
+                    const timeAgoText = formatRelativeTime(
+                      order.createdAt || order._creationTime,
                     );
-                    const timeAgoText =
-                      diffMins < 60
-                        ? `${diffMins} mins ago`
-                        : `${Math.round(diffMins / 60)}h ago`;
 
                     return (
                       <tr

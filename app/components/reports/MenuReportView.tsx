@@ -2,13 +2,17 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
-import { formatPriceWithSymbol } from "../../../lib/constants/countries";
-import { DateRange } from "./ReportHeader";
+import {
+  formatPriceWithSymbol,
+  getCurrencyForCountry,
+} from "../../../lib/constants/countries";
+import { DateRange, ChevronRightIcon } from "./ReportHeader";
 import {
   computeMenuReportData,
   isDataZero,
 } from "../../reports/reportCalculations";
 import { Toast, type ToastMessage } from "../Toast";
+import { OrderDateRangePicker } from "../OrderDateRangePicker";
 
 interface MenuReportViewProps {
   orders: any[];
@@ -18,6 +22,8 @@ interface MenuReportViewProps {
   loading?: boolean;
   currencySymbol?: string;
   countryCode?: string;
+  timezone?: string;
+  operationTiming?: any;
   selectedRange?: DateRange;
   onRangeChange?: (range: DateRange) => void;
 }
@@ -28,11 +34,15 @@ export function MenuReportView({
   allItems = [],
   allCategories = [],
   loading = false,
-  currencySymbol = "₹",
+  currencySymbol: passedCurrencySymbol,
   countryCode = "IN",
+  timezone,
+  operationTiming,
   selectedRange,
   onRangeChange,
 }: MenuReportViewProps) {
+  const currencySymbol =
+    passedCurrencySymbol || getCurrencyForCountry(countryCode || "IN").symbol || "$";
   // Tabs: 'item' | 'categories' (matches defx-pos-frontend MenuReport.jsx)
   const [reportBy, setReportBy] = useState<"item" | "categories">("item");
   const [itemPage, setItemPage] = useState(1);
@@ -75,7 +85,8 @@ export function MenuReportView({
           avg_item_price: formatPriceWithSymbol(
             backendData.avgItemPrice || 0,
             currencySymbol,
-            countryCode
+            countryCode,
+            true
           ),
           top_performing_item: { item_name: backendData.topPerformingItem || "-" },
           least_performing_item: { item_name: backendData.leastPerformingItem || "-" },
@@ -86,26 +97,31 @@ export function MenuReportView({
             item_price: formatPriceWithSymbol(
               it.itemPricePaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             gross_sales: formatPriceWithSymbol(
               it.grossSalesPaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             item_sold: it.totalQuantity || 0,
             tax_collected: formatPriceWithSymbol(
               it.taxesPaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             net_sales: formatPriceWithSymbol(
               it.netSalesPaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             sales_percentage: `${it.salesPercentage || 0}%`,
           })),
+          length: (backendData.itemTableData || []).length,
         },
         salesByCategory: {
           total_items_sold_by_category: backendData.totalItemsSold || 0,
@@ -114,7 +130,8 @@ export function MenuReportView({
           avg_item_price_by_category: formatPriceWithSymbol(
             backendData.avgItemPrice || 0,
             currencySymbol,
-            countryCode
+            countryCode,
+            true
           ),
           table_data: (backendData.categoryTableData || []).map((c: any) => ({
             category_name: c.categoryName,
@@ -122,25 +139,30 @@ export function MenuReportView({
             gross_sales: formatPriceWithSymbol(
               c.grossSalesPaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             tax_collected: formatPriceWithSymbol(
               c.taxesPaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             net_sales: formatPriceWithSymbol(
               c.netSalesPaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             avg_item_price: formatPriceWithSymbol(
               c.avgItemPricePaise || 0,
               currencySymbol,
-              countryCode
+              countryCode,
+              true
             ),
             sales_percentage: `${c.salesPercentage || 0}%`,
           })),
+          length: (backendData.categoryTableData || []).length,
         },
       };
     }
@@ -292,7 +314,7 @@ export function MenuReportView({
         "Tax Collected",
         "Net Sales",
       ];
-      const rows = salesByItem.table_data.map((it) => [
+      const rows = salesByItem.table_data.map((it: any) => [
         `"${it.item_name}"`,
         `"${it.item_price}"`,
         `"${it.gross_sales}"`,
@@ -302,7 +324,7 @@ export function MenuReportView({
       ]);
       const csvContent =
         "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+        [headers.join(","), ...rows.map((e: any) => e.join(","))].join("\n");
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
@@ -330,7 +352,7 @@ export function MenuReportView({
         "Net Sales",
         "Avg Item Price",
       ];
-      const rows = salesByCategory.table_data.map((c) => [
+      const rows = salesByCategory.table_data.map((c: any) => [
         `"${c.category_name}"`,
         c.items_sold,
         `"${c.gross_sales}"`,
@@ -340,7 +362,7 @@ export function MenuReportView({
       ]);
       const csvContent =
         "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+        [headers.join(","), ...rows.map((e: any) => e.join(","))].join("\n");
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement("a");
       link.setAttribute("href", encodedUri);
@@ -357,25 +379,28 @@ export function MenuReportView({
       {/* Editorial Page Header & Controls */}
       <header className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 mb-2">
         <div className="flex flex-col max-w-2xl space-y-1">
-          <nav className="flex items-center gap-2 mb-1">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
+          >
             <Link
               href="/reports"
-              className="text-[11px] tracking-widest text-[#645d58] hover:text-[#1e1b19] uppercase font-semibold transition-colors cursor-pointer"
+              className="hover:text-[#141010] transition-colors cursor-pointer"
             >
               Reports
             </Link>
-            <span className="text-[#d0c4be] text-xs">/</span>
-            <span className="text-[11px] tracking-widest text-[#1e1b19] uppercase font-semibold">
+            <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+            <span className="text-[#141010] font-semibold">
               Menu Report
             </span>
           </nav>
           <h1
-            className="text-3xl sm:text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-none font-normal"
+            className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Menu Report
           </h1>
-          <p className="text-xs sm:text-sm text-[#645d58] leading-relaxed pt-0.5">
+          <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal leading-relaxed">
             Audit item sales velocity, category mix performance, units sold, and
             net revenue across service channels.
           </p>
@@ -383,50 +408,19 @@ export function MenuReportView({
 
         {/* Right Controls: Date Range Selector & CSV Export */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 self-start lg:self-end shrink-0 w-full sm:w-auto">
-          {/* Date Range Dropdown */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setIsDateOpen(!isDateOpen)}
-              type="button"
-              className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-3.5 sm:pl-4 pr-8 sm:pr-9 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
-            >
-              <span>{currentDateLabel}</span>
-              <svg
-                className="w-4 h-4 text-[#7f7570] absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-
-            {isDateOpen && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
-                {[
-                  "Today",
-                  "Yesterday",
-                  "Last 7 Days",
-                  "This Month",
-                  "Last Month",
-                ].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${
-                      currentDateLabel === preset
-                        ? "font-semibold text-[#1e1b19] bg-[#faf2ee]"
-                        : "text-[#645d58] hover:bg-[#eee7e3]"
-                    }`}
-                    onClick={() => handleSelectPreset(preset)}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {/* Order Calendar Date Range Picker */}
+          {selectedRange && onRangeChange ? (
+            <OrderDateRangePicker
+              startDate={selectedRange.startDate}
+              endDate={selectedRange.endDate}
+              preset={selectedRange.preset}
+              onChange={onRangeChange}
+              countryCode={countryCode}
+              timezone={timezone}
+              variant="pill"
+              align="right"
+            />
+          ) : null}
 
           {/* Export CSV Button */}
           <button
@@ -547,8 +541,8 @@ export function MenuReportView({
             <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
             <span className="text-[10px] sm:text-[11px] text-[#1e1b19] tabular-nums font-medium truncate">
               {reportBy === "item"
-                ? `${salesByItem?.length || 0} unique items`
-                : `${salesByCategory?.length || 0} categories`}
+                ? `${(salesByItem as any)?.length || (salesByItem as any)?.table_data?.length || 0} unique items`
+                : `${(salesByCategory as any)?.length || (salesByCategory as any)?.table_data?.length || 0} categories`}
             </span>
           </div>
         </div>
@@ -724,7 +718,7 @@ export function MenuReportView({
                       </td>
                     </tr>
                   ) : (
-                    salesByItem?.top_performing_items?.map((it, idx) => (
+                    salesByItem?.top_performing_items?.map((it: any, idx: number) => (
                       <tr
                         key={idx}
                         className="hover:bg-[#faf2ee] transition-colors"
@@ -802,7 +796,7 @@ export function MenuReportView({
                       </td>
                     </tr>
                   ) : (
-                    salesByItem?.least_performing_items?.map((it, idx) => (
+                    salesByItem?.least_performing_items?.map((it: any, idx: number) => (
                       <tr
                         key={idx}
                         className="hover:bg-[#faf2ee] transition-colors"
@@ -891,7 +885,7 @@ export function MenuReportView({
                       </td>
                     </tr>
                   ) : (
-                    paginatedItems.map((it, idx) => (
+                    paginatedItems.map((it: any, idx: number) => (
                       <tr
                         key={idx}
                         className="hover:bg-[#faf2ee] transition-colors"
@@ -1049,7 +1043,7 @@ export function MenuReportView({
                       </td>
                     </tr>
                   ) : (
-                    paginatedCategories.map((c, idx) => (
+                    paginatedCategories.map((c: any, idx: number) => (
                       <tr
                         key={idx}
                         className="hover:bg-[#faf2ee] transition-colors"

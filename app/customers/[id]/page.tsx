@@ -24,6 +24,24 @@ import {
   getTimezoneForCountry,
 } from "../../../lib/constants/countries";
 
+function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M9 5l7 7-7 7"
+      />
+    </svg>
+  );
+}
+
 export default function CustomerProfilePage() {
   const params = useParams();
   const router = useRouter();
@@ -512,19 +530,23 @@ export default function CustomerProfilePage() {
               <span>←</span>
               <span>Back to Customers</span>
             </button>
-            <div className="flex items-center gap-1.5 text-xs text-stone-500">
-              <span
+            <nav
+              aria-label="Breadcrumb"
+              className="flex items-center text-[13px] text-[#5e5e5e] gap-2 font-sans font-medium"
+            >
+              <button
+                type="button"
                 onClick={() => router.push("/customers")}
-                className="cursor-pointer hover:underline"
+                className="hover:text-[#141010] transition-colors cursor-pointer"
               >
                 Customers
-              </span>
-              <span>›</span>
-              <span className="text-stone-900 font-semibold">
+              </button>
+              <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+              <span className="text-[#141010] font-semibold">
                 {displayName}
                 {formattedPhone !== "—" ? ` (${formattedPhone})` : ""}
               </span>
-            </div>
+            </nav>
           </div>
 
           {/* Guest Profile Header Badge (New Order button removed per user request) */}

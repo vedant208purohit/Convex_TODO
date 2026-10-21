@@ -10,6 +10,7 @@ import {
   getPhoneCodeForCountry,
   formatPhoneNumberWithCountryCode,
   getTimezoneForCountry,
+  getCurrencyForCountry,
 } from "../../../lib/constants/countries";
 import { DateRange } from "./ReportHeader";
 import {
@@ -17,6 +18,7 @@ import {
   CustomerReportOutput,
 } from "../../reports/reportCalculations";
 import { Toast, type ToastMessage } from "../Toast";
+import { OrderDateRangePicker } from "../OrderDateRangePicker";
 
 interface CustomerReportViewProps {
   orders: any[];
@@ -25,6 +27,7 @@ interface CustomerReportViewProps {
   currencySymbol?: string;
   countryCode?: string;
   timezone?: string;
+  operationTiming?: any;
   startDateMs?: number;
   selectedRange?: DateRange;
   onRangeChange?: (range: DateRange) => void;
@@ -35,6 +38,9 @@ export interface RecentOrderItem {
   check: string;
   session: string;
   amountPaise: number;
+  orderNumber?: string;
+  orderType?: string;
+  createdAt?: number;
 }
 
 export interface DinerRecord {
@@ -66,12 +72,32 @@ interface LiveCustomerAgg {
   recentOrders: RecentOrderItem[];
 }
 
+function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M9 5l7 7-7 7"
+      />
+    </svg>
+  );
+}
+
 export function CustomerReportView({
   orders = [],
+  backendData,
   loading = false,
-  currencySymbol = "₹",
+  currencySymbol,
   countryCode = "IN",
   timezone,
+  operationTiming,
   startDateMs,
   selectedRange,
   onRangeChange,
@@ -81,13 +107,16 @@ export function CustomerReportView({
   const [activeFilter, setActiveFilter] = useState<
     "all" | "repeat" | "single" | "high-value"
   >("all");
-  const [viewMode, setViewMode] = useState<"directory" | "daily">("directory");
   const [selectedDiner, setSelectedDiner] = useState<DinerRecord | null>(null);
-  const [isDateOpen, setIsDateOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [dailyPage, setDailyPage] = useState(1);
-  const dateDropdownRef = useRef<HTMLDivElement>(null);
   const pageSize = 10;
+  const [drawerOrderPage, setDrawerOrderPage] = useState(1);
+  const drawerPageSize = 5;
+
+  const handleOpenDinerProfile = (diner: DinerRecord) => {
+    setSelectedDiner(diner);
+    setDrawerOrderPage(1);
+  };
 
   // Standard Menu Toaster Notification State
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -99,22 +128,10 @@ export function CustomerReportView({
     setToast({ message, type, subtext });
   };
 
-  // Close date dropdown on outside click
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dateDropdownRef.current &&
-        !dateDropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsDateOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   const phoneDialCode = getPhoneCodeForCountry(countryCode || "IN");
   const storeTz = timezone || getTimezoneForCountry(countryCode || "IN");
+  const resolvedCurrencySymbol =
+    currencySymbol || getCurrencyForCountry(countryCode || "IN").symbol || "₹";
 
   // 1. Calculate Summary & Daily Breakdown (matching old defx-pos-frontend report data model)
   const summaryReport: CustomerReportOutput = useMemo(() => {
@@ -126,8 +143,9 @@ export function CustomerReportView({
         retention_rate: `${backendData.retentionRate || 0}%`,
         avg_customer_spend: formatPriceWithSymbol(
           backendData.avgCustomerSpend || 0,
-          currencySymbol,
-          countryCode
+          resolvedCurrencySymbol,
+          countryCode,
+          true
         ),
         table_data: (backendData.tableData || []).map((d: any) => ({
           date: d.displayDate || d.date,
@@ -137,8 +155,9 @@ export function CustomerReportView({
           retention_rate: `${d.retentionRate || 0}%`,
           avg_customer_spend: formatPriceWithSymbol(
             d.avgCustomerSpend || 0,
-            currencySymbol,
-            countryCode
+            resolvedCurrencySymbol,
+            countryCode,
+            true
           ),
         })),
         length: backendData.tableData ? backendData.tableData.length : 0,
@@ -146,13 +165,13 @@ export function CustomerReportView({
     }
     return computeCustomerReportData(
       orders,
-      currencySymbol,
+      resolvedCurrencySymbol,
       countryCode,
       storeTz,
       startDateMs,
       priorCustomerKeys,
     );
-  }, [backendData, orders, currencySymbol, countryCode, storeTz, startDateMs, priorCustomerKeys]);
+  }, [backendData, orders, resolvedCurrencySymbol, countryCode, storeTz, startDateMs, priorCustomerKeys]);
 
   // 2. Compute live customer aggregations dynamically from orders (NO hardcoded data)
   const liveCustomerData = useMemo(() => {
@@ -201,7 +220,8 @@ export function CustomerReportView({
 
       const spend =
         order.totalAmount || order.finalAmount || order.totalPrice || 0;
-      const orderTime = order.createdAt || order._creationTime || Date.now();
+      const orderTime =
+        Number(order.createdAt || order._creationTime) || Date.now();
       const orderType = order.orderType || order.serviceType || "DineIn";
       const tableSession =
         order.tableName || order.table?.number
@@ -237,16 +257,24 @@ export function CustomerReportView({
         }
       }
 
+      const formattedOrderNumber = order.orderNumber
+        ? (order.orderNumber.startsWith("#") ? order.orderNumber : `#${order.orderNumber}`)
+        : `#${existing.orders}`;
+
       existing.recentOrders.push({
-        check: order.orderNumber
-          ? `Check #${order.orderNumber}`
-          : `Check #${existing.orders}`,
+        check: formattedOrderNumber,
         session: `${formatStoreDateTime(orderTime, countryCode, storeTz)} • ${tableSession}`,
         amountPaise: spend,
+        orderNumber: order.orderNumber,
+        orderType,
+        createdAt: orderTime,
       });
     }
 
     const liveList = Array.from(customerMap.values()).map((c) => {
+      // Sort orders descending (latest / newest first)
+      c.recentOrders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
       const avgOrderValuePaise =
         c.orders > 0
           ? Math.round(c.totalSpendPaise / c.orders)
@@ -285,8 +313,8 @@ export function CustomerReportView({
         storeTz,
       );
 
-      // Sort recent orders newest first
-      c.recentOrders.sort((a, b) => b.amountPaise - a.amountPaise);
+      // Sort recent orders newest / latest first
+      c.recentOrders.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
       return {
         id: c.id,
@@ -302,7 +330,7 @@ export function CustomerReportView({
         isHighValue,
         source: predominantSource,
         sourceIcon,
-        recentOrders: c.recentOrders.slice(0, 5),
+        recentOrders: c.recentOrders,
       };
     });
 
@@ -310,21 +338,43 @@ export function CustomerReportView({
     return liveList;
   }, [orders, countryCode, storeTz]);
 
-  // Purely dynamic diner data - ZERO hardcoded mock users
-  const diners = liveCustomerData;
+  // Pure live customer diner data from store orders (NO sample/demo fallback)
+  const diners: DinerRecord[] = liveCustomerData;
 
-  // Exact KPI metrics calculated from real data
-  const totalDiners = summaryReport.total_customers;
+  // Exact KPI metrics calculated from real database orders
+  const totalDiners =
+    summaryReport.total_customers > 0
+      ? summaryReport.total_customers
+      : diners.length;
   const repeatDiners = diners.filter(
-    (d) => d.retentionType === "repeat",
+    (d: DinerRecord) => d.retentionType === "repeat",
   ).length;
-  const newDiners = summaryReport.new_customers;
-  const repeatRatio = summaryReport.retention_rate;
+  const singleDiners = diners.filter(
+    (d: DinerRecord) => d.retentionType === "single",
+  ).length;
+  const newDiners =
+    summaryReport.new_customers > 0
+      ? summaryReport.new_customers
+      : singleDiners > 0
+        ? singleDiners
+        : Math.max(0, totalDiners - repeatDiners);
+  const repeatRatio =
+    summaryReport.retention_rate && summaryReport.retention_rate !== "0%"
+      ? summaryReport.retention_rate
+      : totalDiners > 0
+        ? `${((repeatDiners / totalDiners) * 100).toFixed(1)}%`
+        : "0.0%";
   const acquisitionIndex =
     totalDiners > 0 ? ((newDiners / totalDiners) * 100).toFixed(1) : "0.0";
 
-  const totalSpendPaise = diners.reduce((sum, d) => sum + d.totalSpendPaise, 0);
-  const totalCompletedOrders = diners.reduce((sum, d) => sum + d.orders, 0);
+  const totalSpendPaise = diners.reduce(
+    (sum: number, d: DinerRecord) => sum + d.totalSpendPaise,
+    0,
+  );
+  const totalCompletedOrders = diners.reduce(
+    (sum: number, d: DinerRecord) => sum + d.orders,
+    0,
+  );
   const avgSpendPerDinerPaise =
     totalDiners > 0 ? Math.round(totalSpendPaise / totalDiners) : 0;
 
@@ -358,174 +408,58 @@ export function CustomerReportView({
     return filteredDiners.slice(start, start + pageSize);
   }, [filteredDiners, currentPage, pageSize]);
 
-  // Paginated Daily Summary Rows
-  const dailyTableData = summaryReport.table_data || [];
-  const totalDailyPages = Math.ceil(dailyTableData.length / pageSize) || 1;
-  const paginatedDailyData = useMemo(() => {
-    const start = (dailyPage - 1) * pageSize;
-    return dailyTableData.slice(start, start + pageSize);
-  }, [dailyTableData, dailyPage, pageSize]);
+  // Paginated Drawer Orders (guaranteed sorted newest / latest first)
+  const allDrawerOrders = useMemo(() => {
+    const list = [...(selectedDiner?.recentOrders || [])];
+    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return list;
+  }, [selectedDiner]);
+  const totalDrawerOrderPages = Math.ceil(allDrawerOrders.length / drawerPageSize) || 1;
+  const paginatedDrawerOrders = useMemo(() => {
+    const start = (drawerOrderPage - 1) * drawerPageSize;
+    return allDrawerOrders.slice(start, start + drawerPageSize);
+  }, [allDrawerOrders, drawerOrderPage, drawerPageSize]);
 
-  // Date Preset Selection
-  const currentDateLabel = selectedRange?.preset || "Today";
-
-  const handleSelectPreset = (presetName: string) => {
-    setIsDateOpen(false);
-    if (!onRangeChange) return;
-
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (presetName === "Today") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        0,
-        0,
-        0,
-      );
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "Yesterday") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1,
-        0,
-        0,
-        0,
-      );
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1,
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "Last 7 Days") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 6,
-        0,
-        0,
-        0,
-      );
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "This Month") {
-      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "Last Month") {
-      start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-    } else {
-      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      end = new Date();
-    }
-
-    onRangeChange({ startDate: start, endDate: end, preset: presetName });
-  };
-
-  // Export CSV (Exports active view data)
+  // Export CSV (Exports customer registry ledger data)
   const handleExportCsv = () => {
-    if (viewMode === "directory") {
-      if (filteredDiners.length === 0) {
-        showToast("No customer records available to export.", "warning");
-        return;
-      }
-      const headers = [
-        "Customer Name",
-        "Mobile",
-        "Orders",
-        "Last Order",
-        "Total Spend",
-        "Retention Tier",
-        "Primary Source",
-        "Avg Order Value",
-      ];
-
-      const rows = filteredDiners.map((d) => [
-        `"${d.name}"`,
-        `"${d.phone}"`,
-        d.orders,
-        `"${d.lastOrderDate}"`,
-        (d.totalSpendPaise / 100).toFixed(2),
-        `"${d.retentionTier}"`,
-        `"${d.source}"`,
-        (d.avgOrderValuePaise / 100).toFixed(2),
-      ]);
-
-      const csvContent =
-        "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `customer-registry-${Date.now()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast("Customer registry CSV exported successfully", "success");
-    } else {
-      if (dailyTableData.length === 0) {
-        showToast("No customer daily records available to export.", "warning");
-        return;
-      }
-      const headers = [
-        "Date",
-        "Total Customers",
-        "New Customers",
-        "Repeat Customers",
-        "Retention Rate",
-        "Avg Customer Spend",
-      ];
-
-      const rows = dailyTableData.map((d) => [
-        `"${d.date}"`,
-        d.total_customers,
-        d.new_customers,
-        d.repeat_customers,
-        `"${d.retention_rate}"`,
-        `"${d.avg_customer_spend}"`,
-      ]);
-
-      const csvContent =
-        "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `customer-daily-report-${Date.now()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast("Customer daily report CSV exported successfully", "success");
+    if (filteredDiners.length === 0) {
+      showToast("No customer records available to export.", "warning");
+      return;
     }
+    const headers = [
+      "Customer Name",
+      "Mobile",
+      "Orders",
+      "Last Order",
+      "Total Spend",
+      "Retention Tier",
+      "Primary Source",
+      "Avg Order Value",
+    ];
+
+    const rows = filteredDiners.map((d) => [
+      `"${d.name}"`,
+      `"${d.phone}"`,
+      d.orders,
+      `"${d.lastOrderDate}"`,
+      (d.totalSpendPaise / 100).toFixed(2),
+      `"${d.retentionTier}"`,
+      `"${d.source}"`,
+      (d.avgOrderValuePaise / 100).toFixed(2),
+    ]);
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `customer-registry-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Customer registry CSV exported successfully", "success");
   };
 
   return (
@@ -534,171 +468,71 @@ export function CustomerReportView({
       <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 sm:gap-6 mb-6 sm:mb-8">
         <div>
           {/* Breadcrumbs */}
-          <nav className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-widest text-[#645d58] mb-1">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
+          >
             <Link
               href="/reports"
-              className="hover:text-[#000000] transition-colors cursor-pointer"
+              className="hover:text-[#141010] transition-colors cursor-pointer"
             >
               Reports
             </Link>
-            <span className="text-[#d0c4be]">/</span>
-            <span className="text-[#000000] font-semibold">
+            <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+            <span className="text-[#141010] font-semibold">
               Customer Report
             </span>
           </nav>
           {/* Title */}
           <h1
-            className="text-3xl sm:text-4xl lg:text-5xl text-[#000000] tracking-tight leading-tight mb-1 font-normal"
+            className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Customer Report
           </h1>
-          <p className="text-xs sm:text-sm text-[#645d58] max-w-xl">
-            Audit guest retention rates, cumulative dining spend, and patron
-            return frequency derived in real-time from active store
-            transactions.
+          <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal max-w-xl">
+            Understand guest patronage, cumulative spend trajectories, and repeat dining cadences across service consoles.
           </p>
         </div>
 
-        {/* Date Range Selector & Export Action */}
+        {/* Date Range Selector & Action Bar */}
         <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap sm:flex-nowrap w-full sm:w-auto self-start lg:self-end shrink-0">
-          {/* Date Preset Dropdown */}
-          <div className="relative" ref={dateDropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsDateOpen(!isDateOpen)}
-              className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-3.5 sm:pl-4 pr-8 sm:pr-9 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
-            >
-              <span>{currentDateLabel}</span>
-              <svg
-                className="w-4 h-4 text-[#7f7570] absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+          {/* Order Calendar Date Range Picker */}
+          {selectedRange && onRangeChange ? (
+            <OrderDateRangePicker
+              startDate={selectedRange.startDate}
+              endDate={selectedRange.endDate}
+              preset={selectedRange.preset}
+              onChange={onRangeChange}
+              countryCode={countryCode}
+              timezone={storeTz}
+              align="right"
+            />
+          ) : null}
 
-            {isDateOpen && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
-                {[
-                  "Today",
-                  "Yesterday",
-                  "Last 7 Days",
-                  "This Month",
-                  "Last Month",
-                ].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${
-                      currentDateLabel === preset
-                        ? "font-semibold text-[#1e1b19] bg-[#faf2ee]"
-                        : "text-[#645d58] hover:bg-[#eee7e3]"
-                    }`}
-                    onClick={() => handleSelectPreset(preset)}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Export CSV Button */}
+          {/* Export CSV Action */}
           <button
             onClick={handleExportCsv}
             type="button"
-            style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-            className="btn-primary inline-flex items-center gap-2 bg-[#0c0a09] !text-white text-xs font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
+            className="h-10 px-4 bg-white text-[#0c0a09] rounded-lg shadow-2xs border border-[#e7e5e4] flex items-center gap-2 hover:bg-[#f1edec] transition-all text-xs font-medium cursor-pointer"
           >
-            <svg
-              className="w-4 h-4 !text-white stroke-white"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-              />
-              <polyline
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                points="7 10 12 15 17 10"
-              />
-              <line
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                x1="12"
-                y1="15"
-                x2="12"
-                y2="3"
-              />
-            </svg>
-            <span
-              className="!text-white font-semibold"
-              style={{ color: "#ffffff" }}
-            >
-              Export {viewMode === "directory" ? "Ledger" : "Summary"}
-            </span>
+            <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">file_download</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </div>
 
-      {/* View Mode Tabs: Customer Directory vs Daily Summary */}
-      <div className="border-b border-[#e9e1dd] flex items-center gap-4 sm:gap-6 mb-6 overflow-x-auto no-scrollbar whitespace-nowrap">
-        <button
-          type="button"
-          onClick={() => {
-            setViewMode("directory");
-            setCurrentPage(1);
-          }}
-          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors cursor-pointer relative ${
-            viewMode === "directory"
-              ? "text-[#1e1b19]"
-              : "text-[#7f7570] hover:text-[#1e1b19]"
-          }`}
-        >
-          <span>Customer Directory</span>
-          {viewMode === "directory" && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1e1b19] rounded-full"></span>
-          )}
-        </button>
 
-        <button
-          type="button"
-          onClick={() => {
-            setViewMode("daily");
-            setDailyPage(1);
-          }}
-          className={`pb-3 text-xs sm:text-sm font-semibold transition-colors cursor-pointer relative ${
-            viewMode === "daily"
-              ? "text-[#1e1b19]"
-              : "text-[#7f7570] hover:text-[#1e1b19]"
-          }`}
-        >
-          <span>Daily Summary</span>
-          {viewMode === "daily" && (
-            <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#1e1b19] rounded-full"></span>
-          )}
-        </button>
-      </div>
-
-      {/* 4 Core Analytical Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8">
-        {/* Card 1: Total Customers */}
-        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
-              Total Customers
+      {/* 4 Core Analytical Metric Cards (Exact Orders Screen Alignment) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6 sm:mb-8 font-sans">
+        {/* Card 1: Registry Volume */}
+        <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#5e5e5e] font-semibold leading-tight">
+              Registry Volume
             </span>
-            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
+            <span className="w-7 h-7 rounded-full bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] shrink-0 border border-[#e7e5e4]">
+              <span className="material-symbols-outlined text-[16px]">
                 groups
               </span>
             </span>
@@ -706,138 +540,42 @@ export function CustomerReportView({
           <div>
             {loading ? (
               <div className="animate-pulse space-y-2">
-                <div className="h-8 bg-[#f4ece8] rounded w-1/2"></div>
-                <div className="h-4 bg-[#f4ece8] rounded w-3/4"></div>
+                <div className="h-8 bg-[#f1edec] rounded w-1/2"></div>
+                <div className="h-4 bg-[#f1edec] rounded w-3/4"></div>
               </div>
             ) : (
               <>
                 <div className="flex items-baseline gap-1.5">
                   <span
-                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal truncate"
+                    className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {totalDiners}
                   </span>
-                  <span className="text-[11px] sm:text-xs text-[#645d58] font-normal">
-                    patrons
+                  <span className="text-[11px] sm:text-xs text-[#5e5e5e]">
+                    diner records
                   </span>
                 </div>
-                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
-                  Unique guests in selected period
+                <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
+                  Registered diners in directory
                 </p>
               </>
             )}
           </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541] shrink-0"></span>
-            <span className="truncate">Active dining ledger</span>
+          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#5e5e5e] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#78716c] shrink-0"></span>
+            <span className="truncate">Active diner registry</span>
           </div>
         </div>
 
-        {/* Card 2: Customer Retention Rate */}
-        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
-              Retention Rate
+        {/* Card 2: First-Time Patrons */}
+        <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#5e5e5e] font-semibold leading-tight">
+              First-Time Patrons
             </span>
-            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
-                sync_alt
-              </span>
-            </span>
-          </div>
-          <div>
-            {loading ? (
-              <div className="animate-pulse space-y-2">
-                <div className="h-8 bg-[#f4ece8] rounded w-1/2"></div>
-                <div className="h-4 bg-[#f4ece8] rounded w-3/4"></div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-1.5">
-                  <span
-                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal truncate"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {repeatRatio}
-                  </span>
-                  <span className="text-[11px] sm:text-xs text-[#645d58] font-normal">
-                    rate
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
-                  {repeatDiners} returning patrons
-                </p>
-              </>
-            )}
-          </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#000000] shrink-0"></span>
-            <span className="truncate">Repeat guest patronage</span>
-          </div>
-        </div>
-
-        {/* Card 3: Avg Customer Spend */}
-        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
-              Avg Guest Spend
-            </span>
-            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
-                payments
-              </span>
-            </span>
-          </div>
-          <div>
-            {loading ? (
-              <div className="animate-pulse space-y-2">
-                <div className="h-8 bg-[#f4ece8] rounded w-1/2"></div>
-                <div className="h-4 bg-[#f4ece8] rounded w-3/4"></div>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-1.5">
-                  <span
-                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal tabular-nums truncate"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {formatPriceWithSymbol(
-                      avgSpendPerDinerPaise,
-                      currencySymbol,
-                      countryCode,
-                      true,
-                    )}
-                  </span>
-                </div>
-                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
-                  Across {totalCompletedOrders} completed orders
-                </p>
-              </>
-            )}
-          </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541] shrink-0"></span>
-            <span className="truncate">
-              Pool:{" "}
-              {formatPriceWithSymbol(
-                totalSpendPaise,
-                currencySymbol,
-                countryCode,
-                true,
-              )}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 4: New Customers */}
-        <div className="bg-white p-3.5 sm:p-5 lg:p-6 rounded-2xl shadow-xs border border-[#d0c4be]/40 flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2 sm:mb-3">
-            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#645d58] font-semibold leading-tight">
-              New Customers
-            </span>
-            <span className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#f4ece8] flex items-center justify-center text-[#645d58] shrink-0">
-              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">
+            <span className="w-7 h-7 rounded-full bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] shrink-0 border border-[#e7e5e4]">
+              <span className="material-symbols-outlined text-[16px]">
                 person_add
               </span>
             </span>
@@ -845,43 +583,138 @@ export function CustomerReportView({
           <div>
             {loading ? (
               <div className="animate-pulse space-y-2">
-                <div className="h-8 bg-[#f4ece8] rounded w-1/2"></div>
-                <div className="h-4 bg-[#f4ece8] rounded w-3/4"></div>
+                <div className="h-8 bg-[#f1edec] rounded w-1/2"></div>
+                <div className="h-4 bg-[#f1edec] rounded w-3/4"></div>
               </div>
             ) : (
               <>
                 <div className="flex items-baseline gap-1.5">
                   <span
-                    className="text-xl sm:text-2xl lg:text-3xl text-[#000000] tracking-tight font-normal truncate"
+                    className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {newDiners}
                   </span>
-                  <span className="text-[11px] sm:text-xs text-[#645d58] font-normal">
-                    profiles
+                  <span className="text-[11px] sm:text-xs text-[#5e5e5e]">
+                    new profiles
                   </span>
                 </div>
-                <p className="text-[11px] sm:text-xs text-[#645d58] mt-0.5 sm:mt-1 truncate">
-                  First visit registered in this period
+                <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
+                  First visit recorded in this period
                 </p>
               </>
             )}
           </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 text-[#645d58] text-[10px] sm:text-xs font-semibold whitespace-nowrap truncate">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#4d4541] shrink-0"></span>
-            <span className="truncate">{acquisitionIndex}% acquisition rate</span>
+          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#5e5e5e] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#78716c] shrink-0"></span>
+            <span className="truncate">{acquisitionIndex}% acquisition index</span>
+          </div>
+        </div>
+
+        {/* Card 3: Repeat Patronage */}
+        <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#5e5e5e] font-semibold leading-tight">
+              Repeat Patronage
+            </span>
+            <span className="w-7 h-7 rounded-full bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] shrink-0 border border-[#e7e5e4]">
+              <span className="material-symbols-outlined text-[16px]">
+                sync_alt
+              </span>
+            </span>
+          </div>
+          <div>
+            {loading ? (
+              <div className="animate-pulse space-y-2">
+                <div className="h-8 bg-[#f1edec] rounded w-1/2"></div>
+                <div className="h-4 bg-[#f1edec] rounded w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
+                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                  >
+                    {repeatRatio}
+                  </span>
+                  <span className="text-[11px] sm:text-xs text-[#5e5e5e]">
+                    ratio
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
+                  {repeatDiners} diners with ≥ 2 completed orders
+                </p>
+              </>
+            )}
+          </div>
+          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#5e5e5e] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0c0a09] shrink-0"></span>
+            <span className="truncate">High-retention dining roster</span>
+          </div>
+        </div>
+
+        {/* Card 4: Average Spend / Diner */}
+        <div className="bg-white p-4 sm:p-5 lg:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[10px] sm:text-xs uppercase tracking-widest text-[#5e5e5e] font-semibold leading-tight">
+              Average Spend / Diner
+            </span>
+            <span className="w-7 h-7 rounded-full bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] shrink-0 border border-[#e7e5e4]">
+              <span className="material-symbols-outlined text-[16px]">
+                payments
+              </span>
+            </span>
+          </div>
+          <div>
+            {loading ? (
+              <div className="animate-pulse space-y-2">
+                <div className="h-8 bg-[#f1edec] rounded w-1/2"></div>
+                <div className="h-4 bg-[#f1edec] rounded w-3/4"></div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-1.5">
+                  <span
+                    className="font-garamond text-3xl font-medium text-[#141010] tracking-tight tabular-nums truncate"
+                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                  >
+                    {formatPriceWithSymbol(
+                      avgSpendPerDinerPaise,
+                      resolvedCurrencySymbol,
+                      countryCode,
+                      true,
+                    )}
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
+                  Calculated across {totalCompletedOrders} total completed orders
+                </p>
+              </>
+            )}
+          </div>
+          <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#5e5e5e] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#78716c] shrink-0"></span>
+            <span className="truncate">
+              Gross sales pool:{" "}
+              {formatPriceWithSymbol(
+                totalSpendPaise,
+                resolvedCurrencySymbol,
+                countryCode,
+                true,
+              )}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* VIEW MODE 1: DINER LEDGER & PROFILES */}
-      {viewMode === "directory" && (
-        <>
+      {/* DINER LEDGER & PROFILES */}
+      <>
           {/* Search & Segment Filtration Ribbon */}
-          <div className="bg-white p-3.5 sm:p-4 rounded-2xl shadow-xs border border-[#d0c4be]/40 mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4">
+          <div className="bg-white p-3.5 sm:p-4 rounded-xl shadow-xs border border-[#e7e5e4] mb-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 sm:gap-4 font-sans">
             {/* Search Field */}
             <div className="relative flex-1 min-w-[200px] sm:min-w-[260px]">
-              <span className="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-[#645d58] text-[20px]">
+              <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5e5e5e] text-[20px]">
                 search
               </span>
               <input
@@ -891,8 +724,8 @@ export function CustomerReportView({
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                placeholder={`Search patron by name, mobile (${phoneDialCode}...)...`}
-                className="w-full pl-11 pr-4 py-2.5 bg-[#faf2ee] text-[#1e1b19] rounded-full text-xs placeholder:text-[#7f7570] focus:outline-none focus:bg-white focus:shadow-xs transition-all border border-transparent focus:border-[#d0c4be]"
+                placeholder={`Search customer by name, mobile number (${phoneDialCode}...)...`}
+                className="w-full pl-10 pr-4 py-2.5 bg-[#fdf8f7] text-[#0c0a09] rounded-lg text-xs placeholder:text-[#5e5e5e] focus:outline-none focus:bg-white focus:border-[#0c0a09] transition-all border border-[#e7e5e4]"
               />
             </div>
 
@@ -904,13 +737,13 @@ export function CustomerReportView({
                   setActiveFilter("all");
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "all"
-                    ? "bg-[#000000] text-white"
-                    : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
+                    ? "bg-[#0c0a09] text-white"
+                    : "bg-white hover:bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4]"
                 }`}
               >
-                All Diners ({diners.length})
+                All Customers ({diners.length})
               </button>
               <button
                 type="button"
@@ -918,13 +751,13 @@ export function CustomerReportView({
                   setActiveFilter("repeat");
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "repeat"
-                    ? "bg-[#000000] text-white"
-                    : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
+                    ? "bg-[#0c0a09] text-white"
+                    : "bg-white hover:bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4]"
                 }`}
               >
-                Repeat Patrons ({repeatDiners})
+                Repeat Diners ({repeatDiners})
               </button>
               <button
                 type="button"
@@ -932,14 +765,13 @@ export function CustomerReportView({
                   setActiveFilter("single");
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "single"
-                    ? "bg-[#000000] text-white"
-                    : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
+                    ? "bg-[#0c0a09] text-white"
+                    : "bg-white hover:bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4]"
                 }`}
               >
-                Single Visit (
-                {diners.filter((d) => d.retentionType === "single").length})
+                Single Visit ({singleDiners})
               </button>
               <button
                 type="button"
@@ -947,16 +779,16 @@ export function CustomerReportView({
                   setActiveFilter("high-value");
                   setCurrentPage(1);
                 }}
-                className={`px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
+                className={`px-3.5 sm:px-4 py-2 rounded-lg text-xs font-semibold whitespace-nowrap shadow-xs transition-all cursor-pointer ${
                   activeFilter === "high-value"
-                    ? "bg-[#000000] text-white"
-                    : "bg-[#eee7e3] hover:bg-[#e9e1dd] text-[#1e1b19]"
+                    ? "bg-[#0c0a09] text-white"
+                    : "bg-white hover:bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4]"
                 }`}
               >
                 High Value (&gt;{" "}
                 {formatPriceWithSymbol(
                   300000,
-                  currencySymbol,
+                  resolvedCurrencySymbol,
                   countryCode,
                   true,
                 ).replace(/\.00$/, "")}
@@ -965,55 +797,49 @@ export function CustomerReportView({
             </div>
           </div>
 
-          {/* Customer Performance Table Panel */}
-          <div className="bg-white rounded-2xl shadow-xs border border-[#d0c4be]/40 overflow-hidden flex flex-col">
+          {/* Customer Performance Table Panel (Styled matching Orders Table) */}
+          <div className="bg-white rounded-xl shadow-xs border border-[#e7e5e4] overflow-hidden flex flex-col font-sans">
             {/* Table Header Info Bar */}
-            <div className="px-6 py-3.5 bg-[#faf2ee] flex items-center justify-between border-b border-[#e9e1dd]">
-              <div className="flex items-center gap-3">
-                <span
-                  className="text-lg text-[#000000] font-normal"
-                  style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                >
+            <div className="px-5 py-3.5 bg-[#fdf8f7] flex items-center justify-between border-b border-[#e7e5e4]">
+              <div className="flex items-center gap-2.5">
+                <span className="text-sm font-semibold text-[#0c0a09]">
                   Diner Ledger &amp; Velocity
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full bg-[#f4ece8] text-[11px] font-semibold text-[#645d58] border border-[#e9e1dd]">
+                <span className="px-2 py-0.5 rounded-full bg-[#f1edec] text-[11px] font-medium text-[#5e5e5e] border border-[#e7e5e4]">
                   {filteredDiners.length} matching records
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-[#645d58]">
-                <span className="material-symbols-outlined text-[16px]">
+              <div className="flex items-center gap-1.5 text-xs text-[#5e5e5e]">
+                <span className="material-symbols-outlined text-[16px] text-emerald-600">
                   verified
                 </span>
-                <span>Active Customer Ledger</span>
+                <span className="font-medium">Active Customer Ledger</span>
               </div>
             </div>
 
             {/* Data Table */}
             <div className="overflow-x-auto w-full">
-              <table className="w-full text-left border-collapse min-w-[900px]">
+              <table className="w-full text-left border-collapse min-w-[1000px]">
                 <thead>
-                  <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-6">Customer Profile</th>
-                    <th className="py-3 px-4 text-center">Total Orders</th>
-                    <th className="py-3 px-4">Last Order</th>
-                    <th className="py-3 px-4 text-right">Total Spend</th>
-                    <th className="py-3 px-4">Retention Tier</th>
-                    <th className="py-3 px-4">Primary Source</th>
-                    <th className="py-3 px-4 text-right">Avg Order Value</th>
-                    <th className="py-3 px-6 text-right">Action</th>
+                  <tr className="border-b border-[#e7e5e4] bg-[#fdf8f7] text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                    <th className="py-3 px-4 font-semibold whitespace-nowrap min-w-[170px]">Customer Profile</th>
+                    <th className="py-3 px-3 font-semibold text-center whitespace-nowrap min-w-[90px]">Total Orders</th>
+                    <th className="py-3 px-4 font-semibold whitespace-nowrap min-w-[170px]">Last Order</th>
+                    <th className="py-3 px-4 font-semibold text-right whitespace-nowrap min-w-[110px]">Total Spend</th>
+                    <th className="py-3 px-4 font-semibold whitespace-nowrap min-w-[140px]">Retention Tier</th>
+                    <th className="py-3 px-4 font-semibold whitespace-nowrap min-w-[110px]">Primary Source</th>
+                    <th className="py-3 px-4 font-semibold text-right whitespace-nowrap min-w-[120px]">Avg Order Value</th>
+                    <th className="py-3 px-4 font-semibold text-right whitespace-nowrap min-w-[110px]">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#f4ece8] text-xs">
+                <tbody className="divide-y divide-[#f0e8e2] text-xs">
                   {loading ? (
                     Array.from({ length: 5 }).map((_, i) => (
                       <tr key={i}>
-                        <td colSpan={8} className="py-4 px-6">
-                          <div className="animate-pulse flex items-center gap-4">
-                            <div className="w-9 h-9 rounded-full bg-[#f4ece8]"></div>
-                            <div className="flex-1 space-y-2">
-                              <div className="h-4 bg-[#f4ece8] rounded w-1/4"></div>
-                              <div className="h-3 bg-[#f4ece8] rounded w-1/6"></div>
-                            </div>
+                        <td colSpan={8} className="py-3.5 px-4">
+                          <div className="animate-pulse space-y-2">
+                            <div className="h-4 bg-[#f1edec] rounded w-1/4"></div>
+                            <div className="h-3 bg-[#f1edec] rounded w-1/6"></div>
                           </div>
                         </td>
                       </tr>
@@ -1028,10 +854,10 @@ export function CustomerReportView({
                           <span className="material-symbols-outlined text-[48px] text-[#b4a9a4]">
                             person_off
                           </span>
-                          <p className="font-semibold text-base text-[#1e1b19]">
+                          <p className="font-semibold text-base text-[#0c0a09]">
                             No Customer Records Found
                           </p>
-                          <p className="text-xs text-[#645d58] max-w-sm">
+                          <p className="text-xs text-[#5e5e5e] max-w-sm">
                             {orders.length === 0
                               ? "No customer orders have been recorded in this selected timeframe. Transactions will appear dynamically as orders are created."
                               : "No customers match the active search keyword or segment filter."}
@@ -1043,7 +869,7 @@ export function CustomerReportView({
                                 setActiveFilter("all");
                               }}
                               type="button"
-                              className="mt-2 px-4 py-1.5 rounded-full bg-[#000000] text-white text-xs font-semibold cursor-pointer shadow-xs"
+                              className="mt-2 px-4 py-1.5 rounded-lg bg-[#0c0a09] text-white text-xs font-semibold cursor-pointer shadow-xs"
                             >
                               Clear Filter Query
                             </button>
@@ -1052,120 +878,101 @@ export function CustomerReportView({
                       </td>
                     </tr>
                   ) : (
-                    paginatedDiners.map((row) => {
-                      const initials =
-                        row.name
-                          .split(" ")
-                          .filter(Boolean)
-                          .map((n) => n[0])
-                          .join("")
-                          .substring(0, 2)
-                          .toUpperCase() || "GU";
-
-                      return (
-                        <tr
-                          key={row.id}
-                          className="hover:bg-[#faf2ee]/50 transition-colors group"
-                        >
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-[#eae1da] text-[#1f1b17] flex items-center justify-center text-xs font-semibold shrink-0">
-                                {initials}
-                              </div>
-                              <div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-semibold text-[#000000] text-sm">
-                                    {row.name}
-                                  </span>
-                                  <span
-                                    className={`w-2 h-2 rounded-full ${
-                                      row.retentionType === "repeat"
-                                        ? "bg-[#000000]"
-                                        : "bg-[#d0c4be]"
-                                    }`}
-                                    title={
-                                      row.retentionType === "repeat"
-                                        ? "Active regular patron"
-                                        : "First visit patron"
-                                    }
-                                  ></span>
-                                </div>
-                                <div className="text-[11px] text-[#645d58] font-mono tracking-tight">
-                                  {formatPhoneNumberWithCountryCode(
-                                    row.phone,
-                                    phoneDialCode,
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-center tabular-nums font-semibold text-[#000000]">
-                            #{row.orders}
-                          </td>
-                          <td className="py-4 px-4 text-[#000000]">
-                            <div className="font-medium text-xs">
-                              {row.lastOrderDate}
-                            </div>
-                            <div className="text-[11px] text-[#645d58]">
-                              {row.lastOrderSession}
-                            </div>
-                          </td>
-                          <td className="py-4 px-4 text-right tabular-nums font-bold text-[#000000]">
-                            {formatPriceWithSymbol(
-                              row.totalSpendPaise,
-                              currencySymbol,
-                              countryCode,
-                              true,
-                            )}
-                          </td>
-                          <td className="py-4 px-4">
-                            {row.retentionType === "repeat" ? (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#000000] text-white text-[11px] font-semibold">
-                                <span className="material-symbols-outlined text-[13px]">
-                                  military_tech
-                                </span>
-                                <span>{row.retentionTier}</span>
+                    paginatedDiners.map((row) => (
+                      <tr
+                        key={row.id}
+                        className="hover:bg-[#fdf8f7] transition-colors group cursor-default"
+                      >
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-[#0c0a09] text-[13px] whitespace-nowrap">
+                                {row.name}
                               </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-[#f4ece8] text-[#645d58] text-[11px] font-semibold">
-                                <span className="material-symbols-outlined text-[13px]">
-                                  person
-                                </span>
-                                <span>{row.retentionTier}</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="py-4 px-4">
-                            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#eee7e3] text-[#1e1b19] text-[11px] font-semibold">
-                              <span className="material-symbols-outlined text-[14px] text-[#645d58]">
-                                {row.sourceIcon}
-                              </span>
-                              <span>{row.source}</span>
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${
+                                  row.retentionType === "repeat"
+                                    ? "bg-[#0c0a09]"
+                                    : "bg-[#d0c4be]"
+                                }`}
+                                title={
+                                  row.retentionType === "repeat"
+                                    ? "Active regular patron"
+                                    : "First visit patron"
+                                }
+                              ></span>
                             </div>
-                          </td>
-                          <td className="py-4 px-4 text-right tabular-nums font-medium text-[#645d58]">
-                            {formatPriceWithSymbol(
-                              row.avgOrderValuePaise,
-                              currencySymbol,
-                              countryCode,
-                              true,
-                            )}
-                          </td>
-                          <td className="py-4 px-6 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedDiner(row)}
-                              className="h-8 px-4 bg-[#eee7e3] hover:bg-[#000000] hover:text-white text-[#000000] text-xs font-semibold rounded-full transition-all inline-flex items-center gap-1 cursor-pointer shadow-xs"
-                            >
-                              <span>View Profile</span>
-                              <span className="material-symbols-outlined text-[14px]">
-                                arrow_forward
+                            <div className="text-[12px] text-[#5e5e5e] font-sans whitespace-nowrap">
+                              {formatPhoneNumberWithCountryCode(
+                                row.phone,
+                                phoneDialCode,
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-3 text-center font-medium text-[#0c0a09] text-[13px] tabular-nums whitespace-nowrap">
+                          {row.orders}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <div className="font-medium text-[#0c0a09] text-[13px] whitespace-nowrap">
+                            {row.lastOrderDate}
+                          </div>
+                          <div className="text-[11px] text-[#5e5e5e] whitespace-nowrap">
+                            {row.lastOrderSession}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-right tabular-nums font-bold text-[#0c0a09] text-[13px] whitespace-nowrap">
+                          {formatPriceWithSymbol(
+                            row.totalSpendPaise,
+                            resolvedCurrencySymbol,
+                            countryCode,
+                            true,
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          {row.retentionType === "repeat" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#0c0a09] text-white text-[11px] font-medium whitespace-nowrap">
+                              <span className="material-symbols-outlined text-[13px]">
+                                military_tech
                               </span>
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                              <span>{row.retentionTier}</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#f1edec] text-[#0c0a09] text-[11px] font-medium border border-[#e7e5e4] whitespace-nowrap">
+                              <span className="material-symbols-outlined text-[13px] text-[#5e5e5e]">
+                                person
+                              </span>
+                              <span>{row.retentionTier}</span>
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 whitespace-nowrap">
+                          <span className="inline-block px-2.5 py-0.5 rounded-md bg-[#f1edec] text-[#0c0a09] text-[11px] font-medium border border-[#e7e5e4] whitespace-nowrap">
+                            {row.source}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-right tabular-nums font-bold text-[#0c0a09] text-[13px] whitespace-nowrap">
+                          {formatPriceWithSymbol(
+                            row.avgOrderValuePaise,
+                            resolvedCurrencySymbol,
+                            countryCode,
+                            true,
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDinerProfile(row)}
+                            className="h-8 px-3.5 bg-[#f1edec] hover:bg-[#0c0a09] hover:text-white text-[#0c0a09] text-xs font-semibold rounded-lg border border-[#e7e5e4] transition-all inline-flex items-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
+                          >
+                            <span>View Profile</span>
+                            <span className="material-symbols-outlined text-[14px]">
+                              arrow_forward
+                            </span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
@@ -1173,25 +980,25 @@ export function CustomerReportView({
 
             {/* Pagination Footer */}
             {filteredDiners.length > 0 && (
-              <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#faf2ee] flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 border-t border-[#e9e1dd] text-center sm:text-left">
-                <div className="text-xs text-[#645d58]">
+              <div className="px-5 py-4 bg-[#fdf8f7] flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-[#e7e5e4] text-center sm:text-left">
+                <div className="text-xs text-[#5e5e5e]">
                   Showing{" "}
-                  <span className="font-semibold text-[#000000]">
+                  <span className="font-semibold text-[#0c0a09]">
                     {(currentPage - 1) * pageSize + 1} –{" "}
                     {Math.min(currentPage * pageSize, filteredDiners.length)}
                   </span>{" "}
                   of{" "}
-                  <span className="font-semibold text-[#000000]">
+                  <span className="font-semibold text-[#0c0a09]">
                     {filteredDiners.length}
                   </span>{" "}
-                  customers
+                  Customers
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end">
                   <button
                     type="button"
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    className="px-3 py-1 rounded-full text-xs font-semibold text-[#645d58] bg-[#f4ece8] disabled:opacity-40 hover:bg-[#eee7e3] transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#0c0a09] bg-[#f1edec] border border-[#e7e5e4] disabled:opacity-40 hover:bg-[#e7e5e4] transition-colors cursor-pointer"
                   >
                     Previous
                   </button>
@@ -1200,10 +1007,10 @@ export function CustomerReportView({
                       key={i}
                       type="button"
                       onClick={() => setCurrentPage(i + 1)}
-                      className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
+                      className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                         currentPage === i + 1
-                          ? "bg-[#000000] text-white shadow-xs"
-                          : "hover:bg-[#eee7e3] text-[#1e1b19]"
+                          ? "bg-[#0c0a09] text-white shadow-xs"
+                          : "hover:bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4]"
                       }`}
                     >
                       {i + 1}
@@ -1217,7 +1024,7 @@ export function CustomerReportView({
                     onClick={() =>
                       setCurrentPage((p) => Math.min(totalDinerPages, p + 1))
                     }
-                    className="px-3 py-1 rounded-full text-xs font-semibold text-[#1e1b19] bg-[#f4ece8] disabled:opacity-40 hover:bg-[#eee7e3] transition-colors cursor-pointer"
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-[#0c0a09] bg-[#f1edec] border border-[#e7e5e4] disabled:opacity-40 hover:bg-[#e7e5e4] transition-colors cursor-pointer"
                   >
                     Next
                   </button>
@@ -1226,166 +1033,10 @@ export function CustomerReportView({
             )}
           </div>
         </>
-      )}
-
-      {/* VIEW MODE 2: DAILY PATRONAGE SUMMARY (Exact Match with Old Project defx-pos-frontend Table) */}
-      {viewMode === "daily" && (
-        <div className="bg-white rounded-2xl shadow-xs border border-[#d0c4be]/40 overflow-hidden flex flex-col">
-          {/* Table Header Info Bar */}
-          <div className="px-4 sm:px-6 py-3 sm:py-3.5 bg-[#faf2ee] flex items-center justify-between border-b border-[#e9e1dd]">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <span
-                className="text-base sm:text-lg text-[#000000] font-normal"
-                style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-              >
-                Daily Customer Patronage Ledger
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-[#f4ece8] text-[10px] sm:text-[11px] font-semibold text-[#645d58] border border-[#e9e1dd]">
-                {dailyTableData.length} dates
-              </span>
-            </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs text-[#645d58]">
-              <span className="material-symbols-outlined text-[16px]">
-                calendar_view_day
-              </span>
-              <span>Daily Breakdown</span>
-            </div>
-          </div>
-
-          {/* Daily Table (Matches columns: Date, Total customers, New customers, Repeat customers, Retention rate, Avg customer spend) */}
-          <div className="overflow-x-auto w-full">
-            <table className="w-full text-left border-collapse min-w-[700px]">
-              <thead>
-                <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider font-semibold">
-                  <th className="py-3 px-6">Date</th>
-                  <th className="py-3 px-4 text-center">Total Customers</th>
-                  <th className="py-3 px-4 text-center">New Customers</th>
-                  <th className="py-3 px-4 text-center">Repeat Customers</th>
-                  <th className="py-3 px-4 text-center">Retention Rate</th>
-                  <th className="py-3 px-6 text-right">Avg Customer Spend</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#f4ece8] text-xs">
-                {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={i}>
-                      <td colSpan={6} className="py-4 px-6">
-                        <div className="animate-pulse h-4 bg-[#f4ece8] rounded w-full"></div>
-                      </td>
-                    </tr>
-                  ))
-                ) : paginatedDailyData.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="py-16 text-center text-[#7f7570]"
-                    >
-                      <div className="flex flex-col items-center justify-center space-y-2">
-                        <span className="material-symbols-outlined text-[48px] text-[#b4a9a4]">
-                          event_busy
-                        </span>
-                        <p className="font-semibold text-base text-[#1e1b19]">
-                          No Daily Customer Transactions Available
-                        </p>
-                        <p className="text-xs text-[#645d58] max-w-sm">
-                          Daily records will appear dynamically once customer
-                          transactions are logged during this date range.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                ) : (
-                  paginatedDailyData.map((row, idx) => (
-                    <tr
-                      key={idx}
-                      className="hover:bg-[#faf2ee]/50 transition-colors"
-                    >
-                      <td className="py-4 px-6 font-semibold text-[#000000]">
-                        {row.date}
-                      </td>
-                      <td className="py-4 px-4 text-center tabular-nums font-semibold text-[#000000]">
-                        {row.total_customers}
-                      </td>
-                      <td className="py-4 px-4 text-center tabular-nums text-[#645d58]">
-                        {row.new_customers}
-                      </td>
-                      <td className="py-4 px-4 text-center tabular-nums text-[#000000]">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#f4ece8] font-semibold text-[11px]">
-                          {row.repeat_customers}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4 text-center tabular-nums font-semibold text-[#000000]">
-                        {row.retention_rate}
-                      </td>
-                      <td className="py-4 px-6 text-right tabular-nums font-bold text-[#000000]">
-                        {row.avg_customer_spend}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Daily Pagination Footer */}
-          {dailyTableData.length > 0 && (
-            <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#faf2ee] flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 border-t border-[#e9e1dd] text-center sm:text-left">
-              <div className="text-xs text-[#645d58]">
-                Showing{" "}
-                <span className="font-semibold text-[#000000]">
-                  {(dailyPage - 1) * pageSize + 1} –{" "}
-                  {Math.min(dailyPage * pageSize, dailyTableData.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-[#000000]">
-                  {dailyTableData.length}
-                </span>{" "}
-                days
-              </div>
-              <div className="flex items-center gap-1.5 flex-wrap justify-center sm:justify-end">
-                <button
-                  type="button"
-                  disabled={dailyPage === 1}
-                  onClick={() => setDailyPage((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 rounded-full text-xs font-semibold text-[#645d58] bg-[#f4ece8] disabled:opacity-40 hover:bg-[#eee7e3] transition-colors cursor-pointer"
-                >
-                  Previous
-                </button>
-                {Array.from({ length: totalDailyPages }).map((_, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setDailyPage(i + 1)}
-                    className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
-                      dailyPage === i + 1
-                        ? "bg-[#000000] text-white shadow-xs"
-                        : "hover:bg-[#eee7e3] text-[#1e1b19]"
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={
-                    dailyPage === totalDailyPages || totalDailyPages === 0
-                  }
-                  onClick={() =>
-                    setDailyPage((p) => Math.min(totalDailyPages, p + 1))
-                  }
-                  className="px-3 py-1 rounded-full text-xs font-semibold text-[#1e1b19] bg-[#f4ece8] disabled:opacity-40 hover:bg-[#eee7e3] transition-colors cursor-pointer"
-                >
-                  Next
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Detail Profile Slide-Over Drawer Modal */}
       {selectedDiner && (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-50 flex justify-end font-sans">
           {/* Backdrop Wash */}
           <div
             className="absolute inset-0 bg-black/25 backdrop-blur-xs transition-opacity"
@@ -1393,10 +1044,10 @@ export function CustomerReportView({
           ></div>
 
           {/* Modal Card Sheet */}
-          <div className="relative w-full max-w-full sm:max-w-md bg-white shadow-2xl flex flex-col justify-between p-4 sm:p-6 lg:p-8 overflow-y-auto z-10 border-l border-[#e9e1dd]">
+          <div className="relative w-full max-w-full sm:max-w-md bg-white shadow-2xl flex flex-col justify-between p-4 sm:p-6 overflow-y-auto z-10 border-l border-[#e7e5e4]">
             <div>
-              <div className="flex items-center justify-between pb-3 sm:pb-4 mb-3 sm:mb-4 border-b border-[#f4ece8]">
-                <div className="flex items-center gap-2 text-[#645d58] text-[11px] sm:text-xs uppercase tracking-wider font-semibold">
+              <div className="flex items-center justify-between pb-3 sm:pb-4 mb-3 sm:mb-4 border-b border-[#e7e5e4]">
+                <div className="flex items-center gap-2 text-[#5e5e5e] text-[11px] sm:text-xs uppercase tracking-wider font-semibold">
                   <span className="material-symbols-outlined text-[16px]">
                     account_box
                   </span>
@@ -1405,7 +1056,7 @@ export function CustomerReportView({
                 <button
                   type="button"
                   onClick={() => setSelectedDiner(null)}
-                  className="w-8 h-8 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] flex items-center justify-center text-[#1e1b19] transition-colors cursor-pointer shrink-0"
+                  className="w-8 h-8 rounded-full bg-[#f1edec] hover:bg-[#e7e5e4] flex items-center justify-center text-[#0c0a09] transition-colors cursor-pointer shrink-0"
                 >
                   <span className="material-symbols-outlined text-[18px]">
                     close
@@ -1414,11 +1065,8 @@ export function CustomerReportView({
               </div>
 
               {/* Customer Identity Core */}
-              <div className="text-center py-4 sm:py-6 bg-[#faf2ee] rounded-2xl mb-4 sm:mb-6 border border-[#e9e1dd]">
-                <div
-                  className="w-14 h-14 sm:w-16 sm:h-16 rounded-full bg-[#eae1da] text-[#1f1b17] flex items-center justify-center text-lg sm:text-xl font-normal mx-auto mb-2"
-                  style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                >
+              <div className="text-center py-5 bg-[#fdf8f7] rounded-xl mb-4 border border-[#e7e5e4]">
+                <div className="w-14 h-14 rounded-full bg-[#f1edec] text-[#0c0a09] flex items-center justify-center text-lg font-bold mx-auto mb-2 border border-[#e7e5e4]">
                   {selectedDiner.name
                     .split(" ")
                     .filter(Boolean)
@@ -1427,19 +1075,16 @@ export function CustomerReportView({
                     .substring(0, 2)
                     .toUpperCase() || "GU"}
                 </div>
-                <h2
-                  className="text-xl sm:text-2xl text-[#000000] leading-tight font-normal"
-                  style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                >
+                <h2 className="text-xl text-[#0c0a09] leading-tight font-bold">
                   {selectedDiner.name}
                 </h2>
-                <p className="text-xs text-[#645d58] font-mono mt-0.5">
+                <p className="text-xs text-[#5e5e5e] mt-0.5">
                   {formatPhoneNumberWithCountryCode(
                     selectedDiner.phone,
                     phoneDialCode,
                   )}
                 </p>
-                <div className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-1 rounded-full bg-[#000000] text-white text-xs font-semibold">
+                <div className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#0c0a09] text-white text-xs font-semibold">
                   <span className="material-symbols-outlined text-[13px]">
                     military_tech
                   </span>
@@ -1448,79 +1093,96 @@ export function CustomerReportView({
               </div>
 
               {/* Metric Grid */}
-              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-4 sm:mb-6">
-                <div className="bg-[#faf2ee] p-3 sm:p-4 rounded-xl border border-[#e9e1dd]">
-                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-1 truncate">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-4">
+                <div className="bg-[#fdf8f7] p-3 sm:p-4 rounded-xl border border-[#e7e5e4]">
+                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold block mb-1 truncate">
                     Cumulative Spend
                   </span>
                   <span
-                    className="text-lg sm:text-xl text-[#000000] font-normal tabular-nums"
+                    className="font-garamond text-2xl font-medium text-[#141010] tabular-nums"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     {formatPriceWithSymbol(
                       selectedDiner.totalSpendPaise,
-                      currencySymbol,
+                      resolvedCurrencySymbol,
                       countryCode,
                       true,
                     )}
                   </span>
                 </div>
-                <div className="bg-[#faf2ee] p-3 sm:p-4 rounded-xl border border-[#e9e1dd]">
-                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-1 truncate">
+                <div className="bg-[#fdf8f7] p-3 sm:p-4 rounded-xl border border-[#e7e5e4]">
+                  <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold block mb-1 truncate">
                     Orders Placed
                   </span>
-                  <span
-                    className="text-lg sm:text-xl text-[#000000] font-normal tabular-nums"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {selectedDiner.orders} Orders
-                  </span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span
+                      className="font-garamond text-2xl font-medium text-[#141010] tabular-nums"
+                      style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                    >
+                      {selectedDiner.orders}
+                    </span>
+                    <span className="text-xs font-medium text-[#5e5e5e] font-sans">
+                      {selectedDiner.orders === 1 ? "Order" : "Orders"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Service Channel Habit */}
-              <div className="mb-4 sm:mb-6">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-2">
+              <div className="mb-4">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold block mb-2">
                   Service Channel Preference
                 </span>
-                <div className="flex items-center justify-between p-3 sm:p-4 bg-[#faf2ee] rounded-xl border border-[#e9e1dd]">
-                  <span className="text-xs text-[#1e1b19] flex items-center gap-2 font-medium">
-                    <span className="material-symbols-outlined text-[18px] text-[#645d58]">
+                <div className="flex items-center justify-between p-3 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4]">
+                  <span className="text-xs text-[#0c0a09] flex items-center gap-2 font-medium">
+                    <span className="material-symbols-outlined text-[18px] text-[#5e5e5e]">
                       {selectedDiner.sourceIcon}
                     </span>
                     <span>Primary Channel</span>
                   </span>
-                  <span className="text-xs font-semibold text-[#000000]">
+                  <span className="text-xs font-semibold text-[#0c0a09]">
                     {selectedDiner.source}
                   </span>
                 </div>
               </div>
 
-              {/* Recent Audit Chronology */}
+              {/* Order History Chronology with Pagination */}
               <div>
-                <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold block mb-2">
-                  Order History Chronology
-                </span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+                    Order History Chronology
+                  </span>
+                  <span className="px-2 py-0.5 rounded-full bg-[#f1edec] text-[10px] font-semibold text-[#5e5e5e] border border-[#e7e5e4]">
+                    {allDrawerOrders.length} {allDrawerOrders.length === 1 ? "Order" : "Orders"}
+                  </span>
+                </div>
+
                 <div className="space-y-2">
-                  {selectedDiner.recentOrders &&
-                  selectedDiner.recentOrders.length > 0 ? (
-                    selectedDiner.recentOrders.map((ro, i) => (
+                  {paginatedDrawerOrders.length > 0 ? (
+                    paginatedDrawerOrders.map((ro, i) => (
                       <div
                         key={i}
-                        className="p-3 bg-[#faf2ee] rounded-xl border border-[#e9e1dd] flex items-center justify-between text-xs"
+                        className="p-3 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] flex items-center justify-between text-xs hover:border-[#d0c4be] transition-colors"
                       >
-                        <div>
-                          <div className="font-semibold text-[#000000]">
-                            {ro.check}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-[#0c0a09] text-[13px]">
+                              {ro.check}
+                            </span>
+                            {ro.orderType && (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-[#f1edec] border border-[#e7e5e4] text-[#5e5e5e]">
+                                {ro.orderType}
+                              </span>
+                            )}
                           </div>
-                          <div className="text-[11px] text-[#645d58]">
+                          <div className="text-[11px] text-[#5e5e5e]">
                             {ro.session}
                           </div>
                         </div>
-                        <span className="font-bold tabular-nums text-[#000000]">
+                        <span className="font-bold tabular-nums text-[#0c0a09] text-[13px]">
                           {formatPriceWithSymbol(
                             ro.amountPaise,
-                            currencySymbol,
+                            resolvedCurrencySymbol,
                             countryCode,
                             true,
                           )}
@@ -1528,37 +1190,74 @@ export function CustomerReportView({
                       </div>
                     ))
                   ) : (
-                    <div className="p-3 bg-[#faf2ee] rounded-xl border border-[#e9e1dd] flex items-center justify-between text-xs">
-                      <div>
-                        <div className="font-semibold text-[#000000]">
-                          Order Checkout
-                        </div>
-                        <div className="text-[11px] text-[#645d58]">
-                          {selectedDiner.lastOrderDate}
-                        </div>
-                      </div>
-                      <span className="font-bold tabular-nums text-[#000000]">
-                        {formatPriceWithSymbol(
-                          selectedDiner.totalSpendPaise,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </span>
+                    <div className="p-4 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] text-center text-xs text-[#5e5e5e]">
+                      No individual orders recorded for this customer in this period.
                     </div>
                   )}
                 </div>
+
+                {/* Drawer Order Pagination Controls */}
+                {totalDrawerOrderPages > 1 && (
+                  <div className="mt-3 pt-3 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#5e5e5e]">
+                    <div>
+                      Showing{" "}
+                      <span className="font-semibold text-[#0c0a09]">
+                        {(drawerOrderPage - 1) * drawerPageSize + 1}–{Math.min(drawerOrderPage * drawerPageSize, allDrawerOrders.length)}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-semibold text-[#0c0a09]">
+                        {allDrawerOrders.length}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={drawerOrderPage === 1}
+                        onClick={() => setDrawerOrderPage((p) => Math.max(1, p - 1))}
+                        className="px-2 py-1 rounded text-xs font-semibold text-[#0c0a09] bg-[#f1edec] border border-[#e7e5e4] disabled:opacity-40 hover:bg-[#e7e5e4] transition-colors cursor-pointer"
+                      >
+                        Prev
+                      </button>
+                      {Array.from({ length: totalDrawerOrderPages }).map((_, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => setDrawerOrderPage(idx + 1)}
+                          className={`w-6 h-6 rounded text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
+                            drawerOrderPage === idx + 1
+                              ? "bg-[#0c0a09] text-white shadow-xs"
+                              : "hover:bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4]"
+                          }`}
+                        >
+                          {idx + 1}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={drawerOrderPage === totalDrawerOrderPages}
+                        onClick={() =>
+                          setDrawerOrderPage((p) =>
+                            Math.min(totalDrawerOrderPages, p + 1),
+                          )
+                        }
+                        className="px-2 py-1 rounded text-xs font-semibold text-[#0c0a09] bg-[#f1edec] border border-[#e7e5e4] disabled:opacity-40 hover:bg-[#e7e5e4] transition-colors cursor-pointer"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Footer CTA */}
-            <div className="pt-6 mt-6 border-t border-[#f4ece8]">
+            <div className="pt-4 mt-4 border-t border-[#e7e5e4]">
               <button
                 type="button"
                 onClick={() => setSelectedDiner(null)}
-                className="w-full py-2.5 rounded-full bg-[#000000] text-white text-xs font-semibold shadow-xs hover:bg-neutral-800 transition-colors cursor-pointer"
+                className="w-full py-2.5 rounded-lg bg-[#0c0a09] text-white text-xs font-semibold shadow-xs hover:bg-neutral-800 transition-colors cursor-pointer"
               >
-                Close Profile
+                Return to Registry
               </button>
             </div>
           </div>

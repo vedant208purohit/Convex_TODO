@@ -5,12 +5,20 @@ import Link from "next/link";
 import { useQuery } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
-import { generateDemoOrders } from "./demoReportData";
+import {
+  formatPriceWithSymbol,
+  getCurrencyForCountry,
+} from "../../lib/constants/countries";
 
 export default function ReportsIndexPage() {
   const organizations = useQuery(api.organizations.list);
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
+
+  const countryCode = activeOrg?.country || "IN";
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    getCurrencyForCountry(countryCode).symbol;
 
   const now = useMemo(() => Date.now(), []);
   const thirtyDaysAgo = useMemo(() => now - 30 * 86400000, [now]);
@@ -43,21 +51,13 @@ export default function ReportsIndexPage() {
     activeOrg ? { organizationId: activeOrg._id, pageSize: 1000 } : "skip",
   );
 
-  const realOrders = useMemo(() => {
+  const orders = useMemo(() => {
     return ordersResponse?.orders || [];
   }, [ordersResponse]);
 
-  const fallbackDemoOrders = useMemo(() => {
-    const end = new Date();
-    const start = new Date(Date.now() - 30 * 86400000);
-    return generateDemoOrders(start, end);
-  }, []);
-
-  const orders = realOrders.length > 0 ? realOrders : fallbackDemoOrders;
-
   // Derive quick dynamic stats from backend when available, or from orders
   const uniqueCustomerCount = useMemo(() => {
-    if (customerReportBackend?.totalCustomers !== undefined && realOrders.length > 0) {
+    if (customerReportBackend?.totalCustomers !== undefined) {
       return customerReportBackend.totalCustomers;
     }
     const custKeys = new Set<string>();
@@ -69,14 +69,14 @@ export default function ReportsIndexPage() {
       if (k) custKeys.add(k);
     });
     return custKeys.size;
-  }, [customerReportBackend, realOrders, orders]);
+  }, [customerReportBackend, orders]);
 
   const totalGrossPaise = useMemo(() => {
-    if (salesReportBackend?.totalGrossSales !== undefined && realOrders.length > 0) {
+    if (salesReportBackend?.totalGrossSales !== undefined) {
       return salesReportBackend.totalGrossSales;
     }
     return orders.reduce((sum: number, o: any) => sum + (o.totalAmount || 0), 0);
-  }, [salesReportBackend, realOrders, orders]);
+  }, [salesReportBackend, orders]);
 
   const totalItemsCount = useMemo(() => {
     return orders.reduce((sum: number, o: any) => {
@@ -98,8 +98,8 @@ export default function ReportsIndexPage() {
 
   return (
     <PosShell title="Reports" subtitle="Overview">
-      <div className="flex-1 min-h-0 overflow-y-auto bg-[#fff8f5] px-4 sm:px-6 lg:px-10 py-5 sm:py-8">
-        <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+      <div className="flex-1 min-h-0 overflow-y-auto bg-[#f5f5f5] px-6 lg:px-8 py-6">
+        <div className="w-full space-y-6">
           {/* Editorial Masthead & Location Breadcrumbs */}
           <header className="w-full pb-3 flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 border-b border-[#e9e1dd]/60">
             <div className="max-w-2xl space-y-1 sm:space-y-1.5">
@@ -144,9 +144,6 @@ export default function ReportsIndexPage() {
                   {branchName}
                 </span>
               </div>
-              <span className="text-[10px] sm:text-[11px] text-[#7f7570] px-1 font-mono tracking-tight">
-                Audit Channel: POS-DIRECT-09
-              </span>
             </div>
           </header>
 
@@ -192,22 +189,22 @@ export default function ReportsIndexPage() {
           </section>
 
           {/* Primary Report Modules Grid */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+          <section className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6">
             {/* MODULE 01: Customer Report */}
             <article className="bg-white rounded-2xl p-6 lg:p-8 flex flex-col justify-between shadow-xs border border-[#e9e1dd] relative overflow-hidden transition-all duration-300 hover:shadow-md">
               <div className="absolute top-0 left-0 right-0 h-1 bg-[#1e1b19]"></div>
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold whitespace-nowrap">
                       Section 01
                     </span>
                     <span className="text-[#d0c4be]">/</span>
-                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold">
+                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold whitespace-nowrap">
                       Patron Ledger
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] shrink-0">
                     <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
                     <span className="text-[11px] text-[#1e1b19] font-semibold tracking-wide">
                       Available
@@ -291,16 +288,16 @@ export default function ReportsIndexPage() {
               <div className="absolute top-0 left-0 right-0 h-1 bg-[#1e1b19]"></div>
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold whitespace-nowrap">
                       Section 02
                     </span>
                     <span className="text-[#d0c4be]">/</span>
-                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold">
+                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold whitespace-nowrap">
                       Fiscal Revenue
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] shrink-0">
                     <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
                     <span className="text-[11px] text-[#1e1b19] font-semibold tracking-wide">
                       Available
@@ -343,7 +340,12 @@ export default function ReportsIndexPage() {
                       Tracked Revenue:{" "}
                       <strong className="text-[#1e1b19] font-semibold tabular-nums">
                         {totalGrossPaise > 0
-                          ? `₹${(totalGrossPaise / 100).toLocaleString()}`
+                          ? formatPriceWithSymbol(
+                              totalGrossPaise,
+                              currencySymbol,
+                              countryCode,
+                              true,
+                            )
                           : "Active"}
                       </strong>
                     </span>
@@ -384,16 +386,16 @@ export default function ReportsIndexPage() {
               <div className="absolute top-0 left-0 right-0 h-1 bg-[#1e1b19]"></div>
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold whitespace-nowrap">
                       Section 03
                     </span>
                     <span className="text-[#d0c4be]">/</span>
-                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold">
+                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold whitespace-nowrap">
                       Product Mix
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] shrink-0">
                     <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
                     <span className="text-[11px] text-[#1e1b19] font-semibold tracking-wide">
                       Available
@@ -478,16 +480,16 @@ export default function ReportsIndexPage() {
               <div className="absolute top-0 left-0 right-0 h-1 bg-[#1e1b19]"></div>
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold whitespace-nowrap">
                       Section 04
                     </span>
                     <span className="text-[#d0c4be]">/</span>
-                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold">
+                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold whitespace-nowrap">
                       Table Cadence
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] shrink-0">
                     <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
                     <span className="text-[11px] text-[#1e1b19] font-semibold tracking-wide">
                       Available
@@ -567,20 +569,20 @@ export default function ReportsIndexPage() {
             </article>
 
             {/* MODULE 05: Orders Report */}
-            <article className="bg-white rounded-2xl p-6 lg:p-8 flex flex-col justify-between shadow-xs border border-[#e9e1dd] relative overflow-hidden transition-all duration-300 hover:shadow-md md:col-span-2 lg:col-span-1">
+            <article className="bg-white rounded-2xl p-6 lg:p-8 flex flex-col justify-between shadow-xs border border-[#e9e1dd] relative overflow-hidden transition-all duration-300 hover:shadow-md">
               <div className="absolute top-0 left-0 right-0 h-1 bg-[#1e1b19]"></div>
               <div>
                 <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] uppercase tracking-widest text-[#7f7570] font-semibold whitespace-nowrap">
                       Section 05
                     </span>
                     <span className="text-[#d0c4be]">/</span>
-                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold">
+                    <span className="text-[11px] uppercase tracking-widest text-[#645d58] font-semibold whitespace-nowrap">
                       Order Fulfilment
                     </span>
                   </div>
-                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd]">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] shrink-0">
                     <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
                     <span className="text-[11px] text-[#1e1b19] font-semibold tracking-wide">
                       Available
@@ -658,66 +660,6 @@ export default function ReportsIndexPage() {
               </div>
             </article>
           </section>
-
-          {/* Editorial Supplementary Section: Data Integrity Standard */}
-          <section className="bg-white rounded-2xl p-6 lg:p-8 shadow-xs border border-[#e9e1dd]">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div className="flex items-start gap-4 max-w-3xl">
-                <div className="w-12 h-12 rounded-full bg-[#faf2ee] border border-[#e9e1dd] flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-6 h-6 text-[#1e1b19]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                    <path d="m9 12 2 2 4-4" />
-                  </svg>
-                </div>
-                <div className="space-y-1">
-                  <h3
-                    className="text-lg text-[#1e1b19] font-normal"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    Data Integrity Standard
-                  </h3>
-                  <p className="text-sm text-[#645d58] leading-relaxed">
-                    PREST POS only renders reports backed by verified backend
-                    records. Unconnected data pipelines remain explicitly
-                    unavailable to prevent fabricated restaurant metrics.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <span className="text-[11px] text-[#7f7570] uppercase tracking-wider font-semibold">
-                  Protocol: ISO-27001 / SOC-2
-                </span>
-                <div className="px-4 py-2 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-xs font-semibold text-[#1e1b19]">
-                  Audit Policy
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Terminal Session Stamp */}
-          <footer className="pt-2 pb-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-[#7f7570] text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] uppercase tracking-wider text-[#7f7570] font-semibold">
-                Node ID:
-              </span>
-              <span className="font-mono text-xs text-[#1e1b19] font-medium">
-                SRB-TERMINAL-01
-              </span>
-              <span className="text-[#d0c4be]">•</span>
-              <span>Build v4.18.2-michelin</span>
-            </div>
-            <div className="text-[11px] text-[#7f7570]">
-              PREST Hospitality Systems © 2025. All journals immutable.
-            </div>
-          </footer>
         </div>
       </div>
     </PosShell>

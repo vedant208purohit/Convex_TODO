@@ -2,13 +2,17 @@
 
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
-import { formatPriceWithSymbol } from "../../../lib/constants/countries";
-import { DateRange } from "./ReportHeader";
+import {
+  formatPriceWithSymbol,
+  getCurrencyForCountry,
+} from "../../../lib/constants/countries";
+import { DateRange, ChevronRightIcon } from "./ReportHeader";
 import {
   computeOperationalReportData,
   isDataZero,
 } from "../../reports/reportCalculations";
 import { Toast, type ToastMessage } from "../Toast";
+import { OrderDateRangePicker } from "../OrderDateRangePicker";
 
 interface OperationalReportViewProps {
   orders: any[];
@@ -19,6 +23,7 @@ interface OperationalReportViewProps {
   currencySymbol?: string;
   countryCode?: string;
   timezone?: string;
+  operationTiming?: any;
   selectedRange?: DateRange;
   onRangeChange?: (range: DateRange) => void;
 }
@@ -29,12 +34,15 @@ export function OperationalReportView({
   layouts = [],
   processes = [],
   loading = false,
-  currencySymbol = "₹",
+  currencySymbol: passedCurrencySymbol,
   countryCode = "IN",
   timezone,
+  operationTiming,
   selectedRange,
   onRangeChange,
 }: OperationalReportViewProps) {
+  const currencySymbol =
+    passedCurrencySymbol || getCurrencyForCountry(countryCode || "IN").symbol || "$";
   // 3 Tabs matching defx-pos-frontend OperationalReport.jsx: 'payment' | 'restaurant' | 'order'
   const [operationalTab, setOperationalTab] = useState<
     "payment" | "restaurant" | "order"
@@ -84,6 +92,7 @@ export function OperationalReportView({
       currencySymbol,
       countryCode,
       timezone,
+      operationTiming,
     );
   }, [
     orders,
@@ -93,6 +102,7 @@ export function OperationalReportView({
     currencySymbol,
     countryCode,
     timezone,
+    operationTiming,
   ]);
 
   const { paymentReport, restaurantTableReport, orderProcessReport } =
@@ -331,25 +341,28 @@ export function OperationalReportView({
       {/* Editorial Page Header & Controls */}
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 sm:gap-6 mb-2">
         <div className="flex flex-col max-w-2xl space-y-1">
-          <nav className="flex items-center gap-2 mb-1">
+          <nav
+            aria-label="Breadcrumb"
+            className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
+          >
             <Link
               href="/reports"
-              className="text-[11px] tracking-widest text-[#645d58] hover:text-[#1e1b19] uppercase font-semibold transition-colors cursor-pointer"
+              className="hover:text-[#141010] transition-colors cursor-pointer"
             >
               Reports
             </Link>
-            <span className="text-[#d0c4be] text-xs">/</span>
-            <span className="text-[11px] tracking-widest text-[#1e1b19] uppercase font-semibold">
+            <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
+            <span className="text-[#141010] font-semibold">
               Operational Report
             </span>
           </nav>
           <h1
-            className="text-3xl sm:text-4xl lg:text-5xl text-[#1e1b19] tracking-tight leading-tight sm:leading-none font-normal"
+            className="font-garamond text-[32px] md:text-[36px] text-[#0c0a09] font-normal leading-tight"
             style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
           >
             Operational Report
           </h1>
-          <p className="text-xs sm:text-sm text-[#645d58] leading-relaxed pt-0.5">
+          <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal leading-relaxed">
             Audit tender payment modes, dining table occupancy, and kitchen
             order processing speed.
           </p>
@@ -357,49 +370,18 @@ export function OperationalReportView({
 
         {/* Right Controls: Date Range Selector & CSV Export */}
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 self-start sm:self-end shrink-0 w-full sm:w-auto">
-          <div className="relative" ref={dropdownRef}>
-            <button
-              onClick={() => setIsDateOpen(!isDateOpen)}
-              type="button"
-              className="appearance-none bg-white border border-[#e9e1dd] text-[#1e1b19] text-xs font-semibold pl-3.5 pr-8 sm:pl-4 sm:pr-9 py-2 sm:py-2.5 rounded-full shadow-xs hover:bg-[#faf2ee] transition-colors cursor-pointer flex items-center gap-2"
-            >
-              <span>{currentDateLabel}</span>
-              <svg
-                className="w-4 h-4 text-[#7f7570] absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 pointer-events-none"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-
-            {isDateOpen && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-48 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-xl py-2 z-50 border border-[#e9e1dd]">
-                {[
-                  "Today",
-                  "Yesterday",
-                  "Last 7 Days",
-                  "This Month",
-                  "Last Month",
-                ].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${
-                      currentDateLabel === preset
-                        ? "font-semibold text-[#1e1b19] bg-[#faf2ee]"
-                        : "text-[#645d58] hover:bg-[#eee7e3]"
-                    }`}
-                    onClick={() => handleSelectPreset(preset)}
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          {selectedRange && onRangeChange ? (
+            <OrderDateRangePicker
+              startDate={selectedRange.startDate}
+              endDate={selectedRange.endDate}
+              preset={selectedRange.preset}
+              onChange={onRangeChange}
+              countryCode={countryCode}
+              timezone={timezone}
+              variant="pill"
+              align="right"
+            />
+          ) : null}
 
           <button
             onClick={handleExportCsv}
