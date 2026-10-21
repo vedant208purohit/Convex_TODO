@@ -447,6 +447,7 @@ export const createOrder = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
     const now = Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
@@ -849,8 +850,23 @@ export const createOrder = mutation({
       return `+91 90${timeSlice}${randomSeed}`;
     };
 
-    const resolvedCustomerPhone = args.customerPhone?.trim() || generateUniquePhone();
-    const resolvedCustomerName = args.customerName?.trim() || "Guest Customer";
+    let resolvedCustomerId = args.customerId;
+    if (!resolvedCustomerId && identity?.subject) {
+      const linkedCustomer = await ctx.db
+        .query("customers")
+        .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", identity.subject))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .first();
+      if (linkedCustomer) {
+        resolvedCustomerId = linkedCustomer._id;
+      }
+    }
+
+    const linkedCustDoc = resolvedCustomerId ? await ctx.db.get(resolvedCustomerId) : null;
+    const authPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const resolvedCustomerPhone = args.customerPhone?.trim() || linkedCustDoc?.phone || authPhone || generateUniquePhone();
+    const resolvedCustomerName = args.customerName?.trim() || (linkedCustDoc?.firstName ? `${linkedCustDoc.firstName} ${linkedCustDoc.lastName || ""}`.trim() : "") || identity?.name?.trim() || "Guest Customer";
+    const resolvedCustomerEmail = args.customerEmail?.trim() || linkedCustDoc?.email || identity?.email?.trim();
 
     // 5.5 Validate Payment Mode Availability for Store Checkout
     if (args.paymentMode && args.paymentMode !== "Pending") {
@@ -973,10 +989,10 @@ export const createOrder = mutation({
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
-      customerId: args.customerId,
+      customerId: resolvedCustomerId,
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
-      customerEmail: args.customerEmail,
+      customerEmail: resolvedCustomerEmail,
       subTotal,
       taxTotal,
       discountAmount: args.discountAmount,
@@ -1437,7 +1453,26 @@ export const listCustomerOrders = query({
       allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
     }
 
+    const allowedCustomerIds = new Set<string>();
+
     if (clerkUserId) {
+      const linkedCustomer = await ctx.db
+        .query("customers")
+        .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", clerkUserId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .first();
+
+      if (linkedCustomer) {
+        allowedCustomerIds.add(linkedCustomer._id);
+        if (linkedCustomer.email) allowedEmails.add(linkedCustomer.email.toLowerCase().trim());
+        if (linkedCustomer.phone) {
+          const cDig = linkedCustomer.phone.replace(/\D/g, "");
+          if (cDig.length >= 7) {
+            allowedPhoneDigits.add(cDig.slice(-10));
+          }
+        }
+      }
+
       const userOrgRecords = await ctx.db
         .query("organizationUsers")
         .withIndex("by_user_and_org", (q) =>
@@ -1467,6 +1502,11 @@ export const listCustomerOrders = query({
     const filteredOrders = orgOrders.filter((order) => {
       // Placed in current browser session
       if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      // Matched via authoritative customerId
+      if (order.customerId && allowedCustomerIds.has(order.customerId)) {
         return true;
       }
 
