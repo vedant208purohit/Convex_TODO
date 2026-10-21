@@ -4,6 +4,11 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import {
+  COUNTRY_DIAL_OPTIONS,
+  getPhoneCodeForCountry,
+  formatPhoneNumberWithCountryCode,
+} from "../../../lib/constants/countries";
 
 // Helper Haversine formula for distance calculation in meters
 function calculateHaversineDistance(
@@ -33,12 +38,42 @@ function getTodayDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * Resolves standard mobile number digit length according to country dial code or ISO code.
+ * (e.g., India +91 -> 10 digits, UAE +971 -> 9 digits, US +1 -> 10 digits, Singapore +65 -> 8 digits).
+ */
+function getPhoneMaxLengthForCountry(dialOrIso?: string): number {
+  if (!dialOrIso) return 10;
+  const clean = dialOrIso.trim().toLowerCase();
+  if (clean === "+91" || clean === "in" || clean === "india" || clean === "91") return 10;
+  if (clean === "+971" || clean === "ae" || clean === "uae" || clean === "971") return 9;
+  if (clean === "+1" || clean === "us" || clean === "ca" || clean === "1" || clean === "usa" || clean === "canada") return 10;
+  if (clean === "+44" || clean === "gb" || clean === "uk" || clean === "44") return 10;
+  if (clean === "+33" || clean === "fr" || clean === "france" || clean === "33") return 9;
+  if (clean === "+61" || clean === "au" || clean === "australia" || clean === "61") return 9;
+  if (clean === "+65" || clean === "sg" || clean === "singapore" || clean === "65") return 8;
+  if (clean === "+966" || clean === "sa" || clean === "saudi arabia" || clean === "966") return 9;
+  if (clean === "+974" || clean === "qa" || clean === "qatar" || clean === "974") return 8;
+  if (clean === "+49" || clean === "de" || clean === "germany" || clean === "49") return 11;
+  if (clean === "+81" || clean === "jp" || clean === "japan" || clean === "81") return 10;
+  return 10;
+}
+
+function getPhoneMinLengthForCountry(dialOrIso?: string): number {
+  const max = getPhoneMaxLengthForCountry(dialOrIso);
+  const clean = (dialOrIso || "").trim().toLowerCase();
+  if (clean === "+49" || clean === "de" || clean === "germany" || clean === "49") return 10;
+  return max;
+}
+
+
 export default function CustomerQueuePage() {
   const [activeTab, setActiveTab] = useState<"join" | "status" | "reserve">("join");
 
   // Form Inputs
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
+  const [customerCountryCode, setCustomerCountryCode] = useState("+91");
   const [partySize, setPartySize] = useState<number>(2);
   const [kidsSeat, setKidsSeat] = useState(false);
   const [disabledSeat, setDisabledSeat] = useState(false);
@@ -46,6 +81,19 @@ export default function CustomerQueuePage() {
   const [notes, setNotes] = useState("");
   const [resDate, setResDate] = useState(getTodayDateString());
   const [resTime, setResTime] = useState("19:00");
+
+  // Organization Context
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = useMemo(() => (!organizations || organizations.length === 0 ? null : organizations[0]), [organizations]);
+  const defaultCountryCode = useMemo(() => {
+    return (activeOrg as any)?.phoneCountryCode || (activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+91");
+  }, [activeOrg]);
+
+  useEffect(() => {
+    if (defaultCountryCode) {
+      setCustomerCountryCode(defaultCountryCode);
+    }
+  }, [defaultCountryCode]);
 
   // Ticket & Geo-fence States
   const [createdTicketId, setCreatedTicketId] = useState<Id<"organizationQueues"> | null>(null);
@@ -133,7 +181,15 @@ export default function CustomerQueuePage() {
       return;
     }
 
+    const maxDigits = getPhoneMaxLengthForCountry(customerCountryCode);
+    const minDigits = getPhoneMinLengthForCountry(customerCountryCode);
+    if (customerPhone.length < minDigits) {
+      showToast(`Please enter a valid ${maxDigits}-digit mobile number`);
+      return;
+    }
+
     try {
+      const fullPhone = formatPhoneNumberWithCountryCode(customerPhone, customerCountryCode);
       const newQueue = await createQueue({
         queueType: "waitlist",
         totalGuests: partySize,
@@ -141,7 +197,7 @@ export default function CustomerQueuePage() {
         disabledSeat,
         barbequeSeat,
         reservationDate: getTodayDateString(),
-        notes: `${customerName} (${customerPhone}) ${notes ? "- " + notes : ""}`.trim(),
+        notes: `${customerName} (${fullPhone}) ${notes ? "- " + notes : ""}`.trim(),
       });
 
       setCreatedTicketId(newQueue._id);
@@ -156,6 +212,13 @@ export default function CustomerQueuePage() {
   async function handleReserveTable(e: React.FormEvent) {
     e.preventDefault();
 
+    const maxDigits = getPhoneMaxLengthForCountry(customerCountryCode);
+    const minDigits = getPhoneMinLengthForCountry(customerCountryCode);
+    if (customerPhone.length < minDigits) {
+      showToast(`Please enter a valid ${maxDigits}-digit mobile number`);
+      return;
+    }
+
     try {
       let ts = Date.now();
       if (resTime) {
@@ -165,6 +228,7 @@ export default function CustomerQueuePage() {
         ts = d.getTime();
       }
 
+      const fullPhone = formatPhoneNumberWithCountryCode(customerPhone, customerCountryCode);
       const newQueue = await createQueue({
         queueType: "reservation",
         totalGuests: partySize,
@@ -173,7 +237,7 @@ export default function CustomerQueuePage() {
         barbequeSeat,
         reservationDate: resDate,
         reservationTime: ts,
-        notes: `${customerName} (${customerPhone}) ${notes ? "- " + notes : ""}`.trim(),
+        notes: `${customerName} (${fullPhone}) ${notes ? "- " + notes : ""}`.trim(),
       });
 
       setCreatedTicketId(newQueue._id);
@@ -283,16 +347,42 @@ export default function CustomerQueuePage() {
               <label className="text-xs font-semibold text-[#1e1b19] block">
                 Mobile Number <span className="text-rose-600">*</span>
               </label>
-              <input
-                type="tel"
-                required
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                maxLength={10}
-                inputMode="numeric"
-                placeholder="Enter 10-digit phone number"
-                className="w-full bg-[#f4ece8] px-4 py-2 rounded-full text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
-              />
+              <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  <select
+                    value={customerCountryCode}
+                    onChange={(e) => {
+                      const newCode = e.target.value;
+                      setCustomerCountryCode(newCode);
+                      const maxLen = getPhoneMaxLengthForCountry(newCode);
+                      setCustomerPhone((prev) => prev.slice(0, maxLen));
+                    }}
+                    className="bg-[#f4ece8] pl-3 pr-7 py-2 rounded-xl font-mono text-xs font-semibold text-[#1e1b19] border border-[#e9e1dd] focus:outline-none focus:bg-white cursor-pointer appearance-none shadow-xs"
+                  >
+                    {COUNTRY_DIAL_OPTIONS.map((opt) => (
+                      <option key={opt.code} value={opt.code}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-[#645d58] pointer-events-none">
+                    expand_more
+                  </span>
+                </div>
+                <input
+                  type="tel"
+                  required
+                  value={customerPhone}
+                  onChange={(e) => {
+                    const max = getPhoneMaxLengthForCountry(customerCountryCode);
+                    setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, max));
+                  }}
+                  maxLength={getPhoneMaxLengthForCountry(customerCountryCode)}
+                  inputMode="numeric"
+                  placeholder={`Enter ${getPhoneMaxLengthForCountry(customerCountryCode)}-digit number`}
+                  className="flex-1 bg-[#f4ece8] px-4 py-2 rounded-xl text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
+                />
+              </div>
             </div>
 
             {/* Party Size Stepper */}
@@ -514,16 +604,42 @@ export default function CustomerQueuePage() {
               <label className="text-xs font-semibold text-[#1e1b19] block">
                 Mobile Number <span className="text-rose-600">*</span>
               </label>
-              <input
-                type="tel"
-                required
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                maxLength={10}
-                inputMode="numeric"
-                placeholder="Enter 10-digit phone number"
-                className="w-full bg-[#f4ece8] px-4 py-2 rounded-full text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
-              />
+              <div className="flex items-center gap-2">
+                <div className="relative shrink-0">
+                  <select
+                    value={customerCountryCode}
+                    onChange={(e) => {
+                      const newCode = e.target.value;
+                      setCustomerCountryCode(newCode);
+                      const maxLen = getPhoneMaxLengthForCountry(newCode);
+                      setCustomerPhone((prev) => prev.slice(0, maxLen));
+                    }}
+                    className="bg-[#f4ece8] pl-3 pr-7 py-2 rounded-xl font-mono text-xs font-semibold text-[#1e1b19] border border-[#e9e1dd] focus:outline-none focus:bg-white cursor-pointer appearance-none shadow-xs"
+                  >
+                    {COUNTRY_DIAL_OPTIONS.map((opt) => (
+                      <option key={opt.code} value={opt.code}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="material-symbols-outlined absolute right-1.5 top-1/2 -translate-y-1/2 text-[14px] text-[#645d58] pointer-events-none">
+                    expand_more
+                  </span>
+                </div>
+                <input
+                  type="tel"
+                  required
+                  value={customerPhone}
+                  onChange={(e) => {
+                    const max = getPhoneMaxLengthForCountry(customerCountryCode);
+                    setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, max));
+                  }}
+                  maxLength={getPhoneMaxLengthForCountry(customerCountryCode)}
+                  inputMode="numeric"
+                  placeholder={`Enter ${getPhoneMaxLengthForCountry(customerCountryCode)}-digit number`}
+                  className="flex-1 bg-[#f4ece8] px-4 py-2 rounded-xl text-sm font-mono focus:outline-none focus:bg-white border border-[#e9e1dd]"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

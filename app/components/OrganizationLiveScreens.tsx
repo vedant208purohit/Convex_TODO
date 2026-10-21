@@ -725,22 +725,22 @@ export function OrganizationLiveScreens({
                 {readyOrders.map((ro) => (
                   <div
                     key={ro.order._id || ro.orderNumber}
-                    className="ready-banner-pulse min-w-[250px] max-w-[290px] shrink-0 snap-start rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-md p-2.5 flex items-center justify-between gap-2.5"
+                    className="ready-banner-pulse min-w-[270px] max-w-[320px] shrink-0 snap-start rounded-xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-md p-2.5 sm:p-3 flex items-center justify-between gap-2.5 overflow-hidden border border-emerald-500/30"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-9 h-9 rounded-lg bg-white/15 backdrop-blur-sm shrink-0 flex items-center justify-center font-serif font-black text-base">
+                    <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+                      <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm shrink-0 flex items-center justify-center font-serif font-black text-base border border-white/20">
                         {ro.tokenDisplay}
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-extrabold uppercase tracking-widest text-[9px] text-emerald-200 truncate">
+                      <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+                        <span className="font-extrabold uppercase tracking-wider text-[9px] text-emerald-200 truncate block">
                           Ready to Deliver
                         </span>
-                        <span className="font-serif font-bold text-xs truncate">
+                        <span className="font-serif font-bold text-xs truncate block text-white">
                           Order {ro.orderNumber}
                         </span>
                       </div>
                     </div>
-                    <div className="inline-flex items-center gap-1 rounded-full bg-white/20 font-bold uppercase tracking-wide px-2 py-0.5 text-[10px] shrink-0 whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1 rounded-full bg-white/20 backdrop-blur-sm border border-white/20 font-bold uppercase tracking-wide px-2.5 py-1 text-[10px] shrink-0 whitespace-nowrap">
                       <span className="material-symbols-outlined text-[13px]">room_service</span>
                       <span>{ro.tableLabel}</span>
                     </div>
@@ -749,88 +749,42 @@ export function OrganizationLiveScreens({
               </div>
             </div>
 
-            {/* 2. Tablet, Laptop, PC, Mac (>= sm): Responsive Grid */}
+            {/* 2. Tablet, Laptop, PC, Mac (>= sm): Responsive Grid (Strictly max 3 per row) */}
             <div
               className={`hidden sm:grid ${
                 readyOrders.length <= 1
                   ? "grid-cols-1"
                   : readyOrders.length === 2
                   ? "grid-cols-2"
-                  : readyOrders.length === 3
-                  ? "grid-cols-2 lg:grid-cols-3"
-                  : "grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-              } gap-2.5 lg:gap-3 w-full`}
+                  : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+              } gap-3 sm:gap-4 w-full`}
             >
-              {readyOrders.map((ro) => {
-                const count = readyOrders.length;
-                const isFourCol = count === 4 || count >= 7;
-                const isThreeCol = count === 3 || count === 5 || count === 6;
-
-                return (
-                  <div
-                    key={ro.order._id || ro.orderNumber}
-                    className={`ready-banner-pulse w-full rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-lg flex items-center justify-between transition-all ${
-                      count === 1
-                        ? "p-4 sm:p-5 gap-4"
-                        : isFourCol
-                        ? "p-2.5 sm:p-3 gap-2"
-                        : isThreeCol
-                        ? "p-3 sm:p-3.5 gap-2.5 sm:gap-3"
-                        : "p-3.5 sm:p-4 gap-3 sm:gap-4"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-                      <div
-                        className={`rounded-xl bg-white/15 backdrop-blur-sm flex-shrink-0 flex items-center justify-center font-serif font-black ${
-                          count === 1
-                            ? "w-12 h-12 text-2xl"
-                            : isFourCol
-                            ? "w-9 h-9 sm:w-10 sm:h-10 text-base sm:text-lg"
-                            : "w-10 h-10 sm:w-11 sm:h-11 text-lg sm:text-xl"
-                        }`}
-                      >
-                        {ro.tokenDisplay}
-                      </div>
-                      <div className="flex flex-col min-w-0">
-                        <span
-                          className={`font-extrabold uppercase tracking-widest text-emerald-200 whitespace-nowrap ${
-                            isFourCol ? "text-[9px] sm:text-[10px]" : "text-[10px] sm:text-[11px]"
-                          }`}
-                        >
-                          Ready to Deliver
-                        </span>
-                        <span
-                          className={`font-serif font-bold whitespace-nowrap truncate ${
-                            count === 1
-                              ? "text-lg sm:text-xl"
-                              : isFourCol
-                              ? "text-xs sm:text-sm"
-                              : "text-sm sm:text-base"
-                          }`}
-                        >
-                          Order {ro.orderNumber}
-                        </span>
-                      </div>
+              {readyOrders.map((ro) => (
+                <div
+                  key={ro.order._id || ro.orderNumber}
+                  className="ready-banner-pulse w-full rounded-2xl bg-gradient-to-r from-emerald-600 via-emerald-700 to-teal-800 text-white shadow-lg flex items-center justify-between transition-all p-3.5 sm:p-4 gap-3 overflow-hidden border border-emerald-500/30"
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1 overflow-hidden">
+                    <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-white/20 backdrop-blur-sm shrink-0 flex items-center justify-center font-serif font-black text-lg sm:text-xl border border-white/20 shadow-inner">
+                      {ro.tokenDisplay}
                     </div>
-                    <div
-                      className={`inline-flex items-center gap-1.5 rounded-full bg-white/20 font-bold uppercase tracking-wide flex-shrink-0 whitespace-nowrap ${
-                        isFourCol
-                          ? "px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-[11px]"
-                          : "px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs"
-                      }`}
-                    >
-                      <span
-                        className={`material-symbols-outlined ${
-                          isFourCol ? "text-[14px]" : "text-[15px] sm:text-[16px]"
-                        }`}
-                      >
-                        room_service
+                    <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+                      <span className="font-extrabold uppercase tracking-wider text-emerald-200 text-[10px] sm:text-[11px] truncate block">
+                        Ready to Deliver
                       </span>
-                      <span>{ro.tableLabel}</span>
+                      <span className="font-serif font-bold text-sm sm:text-base text-white truncate block">
+                        Order {ro.orderNumber}
+                      </span>
                     </div>
                   </div>
-                );
-              })}
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur-sm border border-white/20 font-bold uppercase tracking-wide shrink-0 whitespace-nowrap px-3 py-1.5 text-xs text-white shadow-xs">
+                    <span className="material-symbols-outlined text-[15px] sm:text-[16px] text-emerald-100">
+                      room_service
+                    </span>
+                    <span>{ro.tableLabel}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </>
         )}
