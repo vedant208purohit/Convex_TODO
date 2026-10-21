@@ -930,6 +930,97 @@ function CashierPosContent() {
   const deliveryFeePaise = taxCalculation.deliveryFeePaise;
   const totalPayablePaise = taxCalculation.totalPayablePaise;
 
+  // Synchronize Live State with Customer Front Display (CFD) via zero-latency BroadcastChannel
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const channel = new BroadcastChannel("pos_front_display_channel");
+
+      if (completedOrderData) {
+        channel.postMessage({
+          state: "completed",
+          orderNumber: completedOrderData.orderNumber,
+          tokenNumber: completedOrderData.tokenNumber
+            ? `#${completedOrderData.tokenNumber}`
+            : "#12",
+          timestamp: Date.now(),
+        });
+      } else if (!activeCart || !activeCart.items || activeCart.items.length === 0) {
+        channel.postMessage({
+          state: "idle",
+          storeName: activeOrg?.name,
+          terminalId: "terminal-01",
+          timestamp: Date.now(),
+        });
+      } else {
+        const isPayment = currentStep === 3;
+        const isCash = selectedPaymentMode?.toLowerCase().includes("cash");
+        const state = isPayment
+          ? isCash
+            ? "cash_tender"
+            : "payment_qr"
+          : "ringing";
+
+        channel.postMessage({
+          state,
+          storeName: activeOrg?.name,
+          terminalId: "terminal-01",
+          orderNumber: activeCart.label,
+          customer: {
+            name: activeCart.customerName,
+            phone: activeCart.customerPhone,
+          },
+          cartItems: activeCart.items.map((ci) => ({
+            itemId: ci.itemId,
+            name: ci.name,
+            quantity: ci.quantity || 1,
+            unitPrice: ci.price,
+            totalPrice: (ci.price || 0) * (ci.quantity || 1),
+            customizations: ci.customizations?.map((c) => ({
+              groupName: "Option",
+              optionName: c.name,
+              price: 0,
+            })),
+          })),
+          totals: {
+            subTotal: cartSubtotalPaise,
+            discountAmount: 0,
+            taxTotal: taxGstPaise,
+            deliveryCharge: deliveryFeePaise,
+            totalAmount: totalPayablePaise,
+          },
+          payment: {
+            mode: isCash
+              ? "Cash"
+              : selectedPaymentMode === "UPI"
+                ? "UPI"
+                : "Card",
+            tenderedAmount: totalPayablePaise,
+            changeDue: 0,
+            status: "Pending",
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      return () => {
+        channel.close();
+      };
+    } catch {
+      // Ignore broadcast errors in non-supporting contexts
+    }
+  }, [
+    activeCart,
+    currentStep,
+    selectedPaymentMode,
+    completedOrderData,
+    cartSubtotalPaise,
+    taxGstPaise,
+    deliveryFeePaise,
+    totalPayablePaise,
+    activeOrg?.name,
+  ]);
+
   // Dynamic Payment Channels derived from active organization payment modes
   const activePaymentChannels = useMemo(() => {
     if (paymentModesList !== undefined) {

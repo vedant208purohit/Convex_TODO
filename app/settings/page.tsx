@@ -19,6 +19,7 @@ import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrganizationLiveScreens } from "../components/OrganizationLiveScreens";
 import { OrganizationQrManagement } from "../components/OrganizationQrManagement";
+import { OrganizationFrontDisplaySettings } from "../components/OrganizationFrontDisplaySettings";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -283,6 +284,24 @@ function OnlineStoreIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function FrontDisplayIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+      <line x1="12" x2="12" y1="17" y2="21" />
+    </svg>
+  );
+}
+
 type SettingsTab =
   | "organization"
   | "onlineStore"
@@ -296,6 +315,7 @@ type SettingsTab =
   | "tables"
   | "liveScreens"
   | "queue"
+  | "frontDisplay"
   | "branding";
 
 interface SettingsNavOption {
@@ -356,6 +376,11 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     id: "digitalStore",
     label: "Digital Store",
     icon: <DigitalStoreIcon className="w-4 h-4" />,
+  },
+  {
+    id: "frontDisplay",
+    label: "Front display",
+    icon: <FrontDisplayIcon className="w-4 h-4" />,
   },
   {
     id: "branding",
@@ -580,6 +605,7 @@ function SettingsContent() {
             {activeTab === "liveScreens" && <OrganizationLiveScreens />}
             {activeTab === "onlineStore" && <OrganizationOnlineStore />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
+            {activeTab === "frontDisplay" && <OrganizationFrontDisplaySettings />}
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
               activeTab !== "onlineStore" &&
@@ -593,6 +619,7 @@ function SettingsContent() {
               activeTab !== "tables" &&
               activeTab !== "liveScreens" &&
               activeTab !== "digitalStore" &&
+              activeTab !== "frontDisplay" &&
               activeTab !== "branding" && (
                 <div className="py-12 text-center">
                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
