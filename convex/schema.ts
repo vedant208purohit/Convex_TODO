@@ -1239,6 +1239,8 @@ postpaidOrderRequests: defineTable({
     fssaiLicNumber: v.optional(v.string()),
     address: v.optional(v.string()),
     city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
@@ -1256,6 +1258,8 @@ postpaidOrderRequests: defineTable({
     baselineStockLevel: v.optional(v.number()),
     availableStock: v.number(),
     unitCost: v.optional(v.number()),
+    allowNegativeStock: v.optional(v.boolean()),
+    supplierIds: v.optional(v.array(v.id("suppliers"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1269,12 +1273,29 @@ postpaidOrderRequests: defineTable({
     inventoryItemId: v.id("inventoryItems"),
     quantity: v.number(),
     unit: v.string(),
+    yield: v.optional(v.number()),
+    yieldUnit: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_item", ["itemId"])
     .index("by_customization", ["customizationItemId"])
-    .index("by_inventory_item", ["inventoryItemId"]),
+    .index("by_inventory_item", ["inventoryItemId"])
+    .index("by_org", ["organizationId"]),
+
+  recipeAssignments: defineTable({
+    organizationId: v.id("organizations"),
+    sourceRecipeItemId: v.id("items"), // The master recipe / dish item being mapped from
+    targetItemId: v.optional(v.id("items")), // The menu item that gets ordered
+    targetCustomizationItemId: v.optional(v.id("customizationItems")), // Or the modifier option that gets ordered
+    portionMultiplier: v.number(), // Portion deducted per order (e.g. 1, 2, 0.5)
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_source_recipe", ["sourceRecipeItemId"])
+    .index("by_target_item", ["targetItemId"])
+    .index("by_target_customization", ["targetCustomizationItemId"]),
 
   purchaseOrders: defineTable({
     organizationId: v.id("organizations"),
@@ -1299,7 +1320,8 @@ postpaidOrderRequests: defineTable({
   })
     .index("by_org", ["organizationId"])
     .index("by_supplier", ["supplierId"])
-    .index("by_status", ["organizationId", "status"]),
+    .index("by_status", ["organizationId", "status"])
+    .index("by_org_created", ["organizationId", "createdAt"]),
 
   purchaseOrderItems: defineTable({
     organizationId: v.id("organizations"),
@@ -1308,6 +1330,9 @@ postpaidOrderRequests: defineTable({
     unit: v.string(),
     orderedQuantity: v.number(),
     receivedQuantity: v.optional(v.number()),
+    missingQuantity: v.optional(v.number()),
+    isReceived: v.optional(v.boolean()),
+    isMissing: v.optional(v.boolean()),
     unitCost: v.number(),
     totalCost: v.number(),
     createdAt: v.number(),
@@ -1321,16 +1346,22 @@ postpaidOrderRequests: defineTable({
     unit: v.string(),
     sourceType: v.string(), // "PurchaseOrder", "OrderSale", "ManualAdjustment", "DeadStock"
     purchaseOrderId: v.optional(v.id("purchaseOrders")),
+    poNumber: v.optional(v.string()),
     supplierId: v.optional(v.id("suppliers")),
     orderId: v.optional(v.id("orders")),
     isDeadStock: v.optional(v.boolean()),
     reasonForDeadStock: v.optional(v.string()),
+    expiryDate: v.optional(v.number()),
+    receivedDate: v.optional(v.number()),
+    markedDate: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_inventory_item", ["inventoryItemId"])
     .index("by_org", ["organizationId"])
     .index("by_po", ["purchaseOrderId"])
-    .index("by_order", ["orderId"]),
+    .index("by_order", ["orderId"])
+    .index("by_org_created", ["organizationId", "createdAt"])
+    .index("by_org_deadstock", ["organizationId", "isDeadStock"]),
 
   // Organization Schedule Pickups Domain Table
   organizationSchedulePickups: defineTable({

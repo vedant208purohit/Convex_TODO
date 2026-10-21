@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import { formatStoreDate } from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 interface LocalDeadStockRecord {
@@ -16,6 +17,8 @@ interface LocalDeadStockRecord {
   reasonForDeadStock: string;
   markedDate: string;
   supplierId?: string;
+  supplierName?: string;
+  purchaseOrderId?: string;
   poNumber?: string;
 }
 
@@ -24,21 +27,37 @@ export function DeadStockView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
-  const purchaseOrders = [
-    { _id: "po_1", poNumber: "PO-2026-001", supplierName: "Self Employee" },
-    { _id: "po_2", poNumber: "PO-2026-002", supplierName: "Fresh Wholesale" },
-  ];
+  const dbDeadStocks = useQuery(api.inventory.listDeadStock, { organizationId });
+  const dbPurchaseOrders = useQuery(api.inventory.listPurchaseOrders, { organizationId });
+
+  const purchaseOrders = useMemo(() => {
+    if (dbPurchaseOrders && dbPurchaseOrders.length > 0) {
+      return dbPurchaseOrders.map((po) => ({
+        _id: po._id,
+        poNumber: po.poNumber,
+        supplierName: po.supplierName,
+        supplierId: po.supplierId,
+      }));
+    }
+    return [];
+  }, [dbPurchaseOrders]);
 
   const logDeadStockMutation = useMutation(api.inventory.logDeadStock);
+  const updateDeadStockMutation = useMutation(api.inventory.updateDeadStock);
+  const deleteDeadStockMutation = useMutation(api.inventory.deleteDeadStock);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
   // Column Sorting state
-  const [sortField, setSortField] = useState<"itemName" | null>(null);
+  const [sortField, setSortField] = useState<
+    "itemName" | "type" | "quantity" | "reason" | "markedDate" | null
+  >(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Drawer & Log State
@@ -46,17 +65,58 @@ export function DeadStockView({
   const [editingRecord, setEditingRecord] = useState<LocalDeadStockRecord | null>(null);
   const [localLogs, setLocalLogs] = useState<LocalDeadStockRecord[]>([]);
 
+  // Filtered & Sorted Records
+  const allDeadStockLogs = useMemo(() => {
+    const fromDb = (dbDeadStocks ?? []).map((ds: any) => ({
+      _id: ds._id,
+      createdAt: ds.createdAt,
+      inventoryItemId: ds.inventoryItemId,
+      itemName: ds.itemName,
+      quantity: ds.quantity,
+      unit: ds.unit,
+      reasonForDeadStock: ds.reasonForDeadStock,
+      markedDate: ds.markedDate,
+      supplierId: ds.supplierId,
+      supplierName: ds.supplierName,
+      purchaseOrderId: ds.purchaseOrderId,
+      poNumber: ds.poNumber,
+    }));
+    const dbIds = new Set(fromDb.map((d) => d._id));
+    const extraLocal = localLogs.filter((l) => !dbIds.has(l._id));
+    return [...fromDb, ...extraLocal];
+  }, [dbDeadStocks, localLogs]);
+
+  // Allowed dates (only today and yesterday)
+  const { todayStr, yesterdayStr } = useMemo(() => {
+    const toYmd = (d: Date) => {
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    const now = new Date();
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return {
+      todayStr: toYmd(now),
+      yesterdayStr: toYmd(yesterday),
+    };
+  }, []);
+
   // Form State
   const [selectedItemId, setSelectedItemId] = useState<string>("");
   const [itemSearchText, setItemSearchText] = useState<string>("");
   const [showSearchDropdown, setShowSearchDropdown] = useState<boolean>(false);
   const [quantity, setQuantity] = useState<number | "">("");
-  const [unit, setUnit] = useState<string>("litre (l)");
+  const [unit, setUnit] = useState<string>("piece");
   const [supplierId, setSupplierId] = useState<string>("");
   const [poNumber, setPoNumber] = useState<string>("");
-  const [markedDate, setMarkedDate] = useState<string>(
-    new Date().toISOString().slice(0, 10)
-  );
+  const [markedDate, setMarkedDate] = useState<string>(() => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  });
   const [reason, setReason] = useState<string>("Expired");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -64,7 +124,9 @@ export function DeadStockView({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   // Sorting Handler
-  const handleSort = (field: "itemName") => {
+  const handleSort = (
+    field: "itemName" | "type" | "quantity" | "reason" | "markedDate"
+  ) => {
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -75,7 +137,7 @@ export function DeadStockView({
 
   // Filtered & Sorted Records
   const filteredAndSortedLogs = useMemo(() => {
-    let list = [...localLogs];
+    let list = [...allDeadStockLogs];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -83,14 +145,32 @@ export function DeadStockView({
         (l) =>
           l.itemName.toLowerCase().includes(q) ||
           l.reasonForDeadStock.toLowerCase().includes(q) ||
-          l.unit.toLowerCase().includes(q)
+          l.unit.toLowerCase().includes(q) ||
+          (l.supplierName && l.supplierName.toLowerCase().includes(q)) ||
+          (l.poNumber && l.poNumber.toLowerCase().includes(q))
       );
     }
 
     if (sortField) {
       list.sort((a, b) => {
-        const valA = a.itemName.toLowerCase();
-        const valB = b.itemName.toLowerCase();
+        let valA: string | number = "";
+        let valB: string | number = "";
+        if (sortField === "itemName") {
+          valA = a.itemName.toLowerCase();
+          valB = b.itemName.toLowerCase();
+        } else if (sortField === "type") {
+          valA = ((a as any).type || "inventory item").toLowerCase();
+          valB = ((b as any).type || "inventory item").toLowerCase();
+        } else if (sortField === "quantity") {
+          valA = Number(a.quantity) || 0;
+          valB = Number(b.quantity) || 0;
+        } else if (sortField === "reason") {
+          valA = (a.reasonForDeadStock || "").toLowerCase();
+          valB = (b.reasonForDeadStock || "").toLowerCase();
+        } else if (sortField === "markedDate") {
+          valA = a.markedDate || "";
+          valB = b.markedDate || "";
+        }
         if (valA < valB) return sortOrder === "asc" ? -1 : 1;
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
         return 0;
@@ -98,7 +178,7 @@ export function DeadStockView({
     }
 
     return list;
-  }, [localLogs, searchQuery, sortField, sortOrder]);
+  }, [allDeadStockLogs, searchQuery, sortField, sortOrder]);
 
   // Paginated List
   const totalPages = Math.ceil(filteredAndSortedLogs.length / itemsPerPage) || 1;
@@ -112,9 +192,11 @@ export function DeadStockView({
     setSelectedItemId("");
     setItemSearchText("");
     setShowSearchDropdown(false);
-    setUnit("Kilogram");
+    setUnit("piece");
     setQuantity("");
-    setMarkedDate(new Date().toISOString().slice(0, 10));
+    setSupplierId("");
+    setPoNumber("");
+    setMarkedDate(todayStr);
     setReason("Expired");
     setIsDrawerOpen(true);
   };
@@ -126,6 +208,8 @@ export function DeadStockView({
     setShowSearchDropdown(false);
     setQuantity(rec.quantity);
     setUnit(rec.unit);
+    setSupplierId(rec.supplierId || "");
+    setPoNumber(rec.poNumber || "");
     setMarkedDate(rec.markedDate);
     setReason(rec.reasonForDeadStock);
     setActiveMenuId(null);
@@ -137,7 +221,7 @@ export function DeadStockView({
     const found = inventoryItems?.find((i) => i._id === itemId);
     if (found) {
       setItemSearchText(found.name);
-      setUnit(found.buyingUnit || found.servingUnit || "Kilogram");
+      setUnit(found.buyingUnit || found.servingUnit || "piece");
     }
   };
 
@@ -170,11 +254,30 @@ export function DeadStockView({
       return;
     }
 
+    if (markedDate > todayStr || markedDate < yesterdayStr) {
+      alert("Invalid date: only today and yesterday are allowed.");
+      return;
+    }
+
     const selectedItem = inventoryItems?.find((i) => i._id === finalItemId);
+    const selectedSupplier = suppliers?.find((s) => s._id === supplierId);
+    const selectedPo = purchaseOrders.find((p) => p.poNumber === poNumber);
 
     setIsSubmitting(true);
     try {
       if (editingRecord) {
+        if (!editingRecord._id.startsWith("dead_")) {
+          await updateDeadStockMutation({
+            id: editingRecord._id as Id<"inventoryItemStocks">,
+            quantity: numQty,
+            unit: unit.trim(),
+            reasonForDeadStock: reason,
+            supplierId: supplierId ? (supplierId as Id<"suppliers">) : undefined,
+            purchaseOrderId: selectedPo?._id ? (selectedPo._id as Id<"purchaseOrders">) : undefined,
+            poNumber: poNumber || undefined,
+            markedDate: new Date(markedDate).getTime(),
+          });
+        }
         setLocalLogs((prev) =>
           prev.map((l) =>
             l._id === editingRecord._id
@@ -186,12 +289,15 @@ export function DeadStockView({
                   unit,
                   reasonForDeadStock: reason,
                   markedDate,
+                  supplierId: supplierId || undefined,
+                  supplierName: selectedSupplier?.supplierName || l.supplierName,
+                  purchaseOrderId: selectedPo?._id || undefined,
+                  poNumber: poNumber || undefined,
                 }
               : l
           )
         );
       } else {
-        // Log mutation if valid convex ID, else local sync
         if (selectedItem) {
           await logDeadStockMutation({
             organizationId,
@@ -199,20 +305,29 @@ export function DeadStockView({
             quantity: numQty,
             unit: unit.trim(),
             reasonForDeadStock: reason,
+            supplierId: supplierId ? (supplierId as Id<"suppliers">) : undefined,
+            purchaseOrderId: selectedPo?._id ? (selectedPo._id as Id<"purchaseOrders">) : undefined,
+            poNumber: poNumber || undefined,
+            markedDate: new Date(markedDate).getTime(),
           });
+          // Note: Do NOT add to localLogs here because Convex dbDeadStocks automatically updates reactively
+        } else {
+          const newRec: LocalDeadStockRecord = {
+            _id: `dead_${Date.now()}`,
+            createdAt: Date.now(),
+            inventoryItemId: finalItemId,
+            itemName: finalItemName,
+            quantity: numQty,
+            unit: unit.trim(),
+            reasonForDeadStock: reason,
+            markedDate,
+            supplierId: supplierId || undefined,
+            supplierName: selectedSupplier?.supplierName,
+            purchaseOrderId: selectedPo?._id,
+            poNumber: poNumber || undefined,
+          };
+          setLocalLogs((prev) => [newRec, ...prev]);
         }
-
-        const newRec: LocalDeadStockRecord = {
-          _id: `dead_${Date.now()}`,
-          createdAt: Date.now(),
-          inventoryItemId: finalItemId,
-          itemName: selectedItem?.name ?? finalItemName,
-          quantity: numQty,
-          unit: unit.trim(),
-          reasonForDeadStock: reason,
-          markedDate,
-        };
-        setLocalLogs((prev) => [newRec, ...prev]);
       }
       setIsDrawerOpen(false);
     } catch (err) {
@@ -223,8 +338,15 @@ export function DeadStockView({
     }
   };
 
-  const handleDeleteRecord = (id: string) => {
+  const handleDeleteRecord = async (id: string) => {
     if (!confirm("Are you sure you want to delete this dead stock entry?")) return;
+    try {
+      if (!id.startsWith("dead_")) {
+        await deleteDeadStockMutation({ id: id as Id<"inventoryItemStocks"> });
+      }
+    } catch (e) {
+      console.error("Failed to delete dead stock:", e);
+    }
     setLocalLogs((prev) => prev.filter((l) => l._id !== id));
     setActiveMenuId(null);
   };
@@ -241,15 +363,14 @@ export function DeadStockView({
   }
 
   return (
-    <ComingSoonOverlay title="Dead Stock">
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] p-8">
       {/* Page Title & Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
         <div>
-          <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
             Dead stock log
           </h1>
-          <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
+          <p className="text-xs text-stone-500 mt-1">
             Track spoiled, expired, or damaged non-moving inventory logs.
           </p>
         </div>
@@ -258,7 +379,7 @@ export function DeadStockView({
         <div className="flex items-center gap-3">
           <div className="relative w-72">
             <svg
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a8a29e]"
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -272,7 +393,7 @@ export function DeadStockView({
             </svg>
             <input
               type="text"
-              className="w-full pl-9.5 pr-4 py-2 bg-white text-xs text-[#1c1917] border border-[#e7e5e4] rounded-full focus:outline-none focus:ring-1 focus:ring-[#0c0a09] placeholder:text-[#a8a29e] transition shadow-2xs"
+              className="w-full pl-9 pr-3 py-2 bg-white text-xs text-stone-900 border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800 placeholder:text-stone-400 transition shadow-2xs"
               placeholder="Search by item name/recipe name"
               value={searchQuery}
               onChange={(e) => {
@@ -285,7 +406,7 @@ export function DeadStockView({
           <button
             type="button"
             onClick={openAddDrawer}
-            className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-4 py-2.5 rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center space-x-2 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer whitespace-nowrap"
           >
             <svg
               className="w-3.5 h-3.5 text-white stroke-white"
@@ -300,16 +421,16 @@ export function DeadStockView({
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            <span className="text-white !text-white font-medium">Record dead stock</span>
+            <span>Record dead stock</span>
           </button>
         </div>
       </div>
 
       {/* Main Table / Empty State Container */}
-      <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="mt-6 flex-1 flex flex-col">
         {filteredAndSortedLogs.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
-            <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
+            <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-stone-500 mb-4">
               <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
@@ -319,16 +440,16 @@ export function DeadStockView({
                 />
               </svg>
             </div>
-            <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">
+            <h3 className="text-xl font-bold text-stone-900">
               No dead stock logs yet
             </h3>
-            <p className="text-xs md:text-sm text-[#78716c] max-w-sm mt-1 mb-6">
+            <p className="text-xs md:text-sm text-stone-500 max-w-sm mt-1 mb-6">
               Keep an eye on your non-moving inventory. Update dead stock to see logs in this section.
             </p>
             <button
               type="button"
               onClick={openAddDrawer}
-              className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-5 py-2.5 rounded-full transition shadow-sm cursor-pointer"
+              className="inline-flex items-center space-x-2 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition shadow-2xs cursor-pointer"
             >
               <svg
                 className="w-3.5 h-3.5 text-white stroke-white"
@@ -343,28 +464,28 @@ export function DeadStockView({
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              <span className="text-white !text-white font-medium">Record dead stock</span>
+              <span>Record dead stock</span>
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-hidden flex flex-col flex-1">
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-left border-collapse">
+          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9]/80 text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 bg-white z-10 select-none">
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold uppercase tracking-wider text-[#78716c] select-none">
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900"
                       onClick={() => handleSort("itemName")}
                     >
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-1.5">
                         <span>Item name</span>
                         {sortField === "itemName" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-stone-900 font-bold">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3 h-3 text-stone-300"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -379,74 +500,183 @@ export function DeadStockView({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-5 font-normal">Stockable type</th>
-                    <th className="py-3 px-5 font-normal">Quantity</th>
-                    <th className="py-3 px-5 font-normal">Reason</th>
-                    <th className="py-3 px-5 font-normal">Marked date</th>
-                    <th className="py-3 px-5 text-right font-normal">Actions</th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("type")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Stockable type</span>
+                        {sortField === "type" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("quantity")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Quantity</span>
+                        {sortField === "quantity" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("reason")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Reason</span>
+                        {sortField === "reason" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("markedDate")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Marked date</span>
+                        {sortField === "markedDate" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th className="py-3 px-5 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
+                <tbody className="divide-y divide-[#f5f5f4] text-xs">
                   {paginatedLogs.map((log) => (
                     <tr
                       key={log._id}
                       className="hover:bg-[#fafaf9] transition-colors group"
                     >
-                      <td className="py-4 px-5">
+                      <td className="py-3.5 px-5">
                         <div
-                          className="flex items-center space-x-3 cursor-pointer"
+                          className="cursor-pointer"
                           onClick={() => openEditDrawer(log)}
                         >
-                          <div className="w-7 h-7 rounded-full bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center font-serif font-medium text-xs shrink-0">
-                            {log.itemName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-medium text-[#0c0a09] hover:underline">
-                              {log.itemName}
+                          <p className="font-semibold text-stone-900 hover:underline">
+                            {log.itemName}
+                          </p>
+                          {log.poNumber ? (
+                            <p className="text-[11px] font-mono text-stone-500 mt-0.5">
+                              PO: {log.poNumber} {log.supplierName ? `• ${log.supplierName}` : ""}
                             </p>
-                            <p className="text-[11px] text-[#a8a29e]">Recorded log</p>
-                          </div>
+                          ) : log.supplierName ? (
+                            <p className="text-[11px] text-stone-500 mt-0.5">
+                              Supplier: {log.supplierName}
+                            </p>
+                          ) : (
+                            <p className="text-[11px] text-stone-500 mt-0.5">Recorded log</p>
+                          )}
                         </div>
                       </td>
-                      <td className="py-4 px-5 text-[#44403c] font-medium">
+                      <td className="py-3.5 px-5 text-stone-700 font-medium">
                         Inventory Item
                       </td>
-                      <td className="py-4 px-5 font-semibold text-rose-600">
+                      <td className="py-3.5 px-5 font-semibold text-rose-600">
                         {log.quantity} {log.unit}
                       </td>
-                      <td className="py-4 px-5">
-                        <span className="inline-block font-mono text-[11px] bg-rose-50 text-rose-700 px-2.5 py-0.5 rounded border border-rose-200">
+                      <td className="py-3.5 px-5">
+                        <span className="inline-block font-mono text-[11px] bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200 font-medium">
                           {log.reasonForDeadStock}
                         </span>
                       </td>
-                      <td className="py-4 px-5 text-[#57534e] text-[11px]">
-                        {log.markedDate}
+                      <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                        {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || log.markedDate || "—"}
                       </td>
-                      <td className="py-4 px-5 text-right relative">
+                      <td className="py-3.5 px-5 text-right relative">
                         <button
                           type="button"
                           onClick={() =>
                             setActiveMenuId(activeMenuId === log._id ? null : log._id)
                           }
-                          className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded hover:bg-[#e7e5e4]/50 transition cursor-pointer"
+                          className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                         >
                           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                           </svg>
                         </button>
                         {activeMenuId === log._id && (
-                          <div className="absolute right-5 top-12 w-36 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left">
+                          <div className="absolute right-5 top-11 w-36 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans text-xs">
                             <button
                               type="button"
                               onClick={() => openEditDrawer(log)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                              className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                             >
                               Edit record
                             </button>
                             <button
                               type="button"
                               onClick={() => handleDeleteRecord(log._id)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 cursor-pointer"
+                              className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
                             >
                               Delete log
                             </button>
@@ -460,29 +690,36 @@ export function DeadStockView({
             </div>
 
             {/* Pagination Controls */}
-            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/50 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
               <span>
-                Showing <strong className="text-[#0c0a09]">{paginatedLogs.length}</strong>{" "}
-                of <strong className="text-[#0c0a09]">{filteredAndSortedLogs.length}</strong>{" "}
-                dead stock logs
+                Showing{" "}
+                <strong className="text-stone-900">
+                  {filteredAndSortedLogs.length === 0
+                    ? 0
+                    : `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(
+                        currentPage * itemsPerPage,
+                        filteredAndSortedLogs.length
+                      )}`}
+                </strong>{" "}
+                of <strong className="text-stone-900">{filteredAndSortedLogs.length}</strong> dead stock logs
               </span>
               <div className="flex items-center space-x-2 text-xs">
                 <button
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Previous
                 </button>
-                <span className="px-2 font-medium text-[#0c0a09]">
+                <span className="px-2 font-medium text-stone-900">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Next
                 </button>
@@ -533,13 +770,13 @@ export function DeadStockView({
           </button>
         </div>
 
-        {/* Drawer Form Body - Exactly 4 fields matching Image 2 */}
+        {/* Drawer Form Body - All fields matching old screenshot */}
         <form
           id="deadStockFormRecord"
           onSubmit={handleFormSubmit}
           className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-stone-800"
         >
-          {/* Field 1: Inventory item/ Recipe * (Search Input with Icon matching Screenshot 2) */}
+          {/* Field 1: Inventory item/ Recipe * (Search Input with Icon & Clear button) */}
           <div className="relative">
             <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
               Inventory item/ Recipe <span className="text-rose-500">*</span>
@@ -561,7 +798,7 @@ export function DeadStockView({
               <input
                 type="text"
                 required
-                className="w-full pl-10 pr-4 py-2.5 bg-[#fafaf8] text-xs md:text-[13px] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400 font-medium text-stone-800"
+                className="w-full pl-10 pr-9 py-2.5 bg-[#fafaf8] text-xs md:text-[13px] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400 font-medium text-stone-800"
                 placeholder="Search by inventory item name/recipe"
                 value={itemSearchText}
                 onChange={(e) => {
@@ -570,6 +807,22 @@ export function DeadStockView({
                 }}
                 onFocus={() => setShowSearchDropdown(true)}
               />
+              {itemSearchText && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItemSearchText("");
+                    setSelectedItemId("");
+                    setShowSearchDropdown(false);
+                  }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-0.5 cursor-pointer"
+                  title="Clear input"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
               {showSearchDropdown && inventoryItems && inventoryItems.length > 0 && (
                 <div className="absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-white border border-stone-200 rounded-md shadow-lg z-50 py-1">
                   {inventoryItems
@@ -633,7 +886,7 @@ export function DeadStockView({
                   {/* Tooltip Popup on Hover */}
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/tooltip:flex flex-col items-center pointer-events-none z-50 whitespace-nowrap">
                     <div className="bg-[#1c1917] text-white text-[11px] font-semibold px-3 py-1.5 rounded-md shadow-lg border border-stone-800">
-                      Enter the amount of this item being added to stock.
+                      Enter the amount of this item being marked as dead stock.
                     </div>
                     {/* Tooltip Arrow */}
                     <div className="w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-[#1c1917] -mt-px" />
@@ -650,36 +903,139 @@ export function DeadStockView({
             </div>
           </div>
 
-          {/* Field 3: Marked date */}
+          {/* Field 3: Supplier */}
+          <div>
+            <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
+              Supplier
+            </label>
+            <div className="relative">
+              <select
+                className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium appearance-none cursor-pointer pr-9"
+                value={supplierId}
+                onChange={(e) => {
+                  const newSupId = e.target.value;
+                  setSupplierId(newSupId);
+                  if (poNumber) {
+                    const matchingPo = purchaseOrders.find(
+                      (p) => p.poNumber === poNumber && (!newSupId || p.supplierId === newSupId)
+                    );
+                    if (!matchingPo) setPoNumber("");
+                  }
+                }}
+              >
+                <option value="">Select supplier</option>
+                {suppliers?.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.supplierName}
+                  </option>
+                ))}
+              </select>
+              <svg
+                className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Field 4: PO number */}
+          <div>
+            <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
+              PO number
+            </label>
+            <div className="relative">
+              <select
+                className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium appearance-none cursor-pointer pr-9"
+                value={poNumber}
+                onChange={(e) => {
+                  const selectedPoNo = e.target.value;
+                  setPoNumber(selectedPoNo);
+                  if (selectedPoNo) {
+                    const foundPo = purchaseOrders.find((p) => p.poNumber === selectedPoNo);
+                    if (foundPo && foundPo.supplierId) {
+                      setSupplierId(foundPo.supplierId);
+                    }
+                  }
+                }}
+              >
+                <option value="">Search purchase order number</option>
+                {purchaseOrders
+                  .filter((p) => !supplierId || p.supplierId === supplierId)
+                  .map((p) => (
+                    <option key={p._id} value={p.poNumber}>
+                      {p.poNumber} {p.supplierName ? `(${p.supplierName})` : ""}
+                    </option>
+                  ))}
+              </select>
+              <svg
+                className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Field 5: Marked date */}
           <div>
             <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
               Marked date
             </label>
             <input
               type="date"
-              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium"
+              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium cursor-pointer"
               value={markedDate}
-              onChange={(e) => setMarkedDate(e.target.value)}
+              min={yesterdayStr}
+              max={todayStr}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (!val) {
+                  setMarkedDate(val);
+                  return;
+                }
+                if (val > todayStr) {
+                  setMarkedDate(todayStr);
+                } else if (val < yesterdayStr) {
+                  setMarkedDate(yesterdayStr);
+                } else {
+                  setMarkedDate(val);
+                }
+              }}
             />
             <p className="text-[11px] text-stone-500 mt-1.5">
               Note: Select a date to mark dead stock: only today and yesterday are allowed.
             </p>
           </div>
 
-          {/* Field 4: Reason for recording dead stock */}
+          {/* Field 6: Reason for recording dead stock */}
           <div>
             <label className="block font-medium mb-1.5 text-stone-800 text-[13px]">
               Reason for recording dead stock
             </label>
-            <select
-              className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium"
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-            >
-              <option value="Expired">Expired</option>
-              <option value="Damaged">Damaged</option>
-              <option value="Low demand">Low demand</option>
-            </select>
+            <div className="relative">
+              <select
+                className="w-full px-3.5 py-2.5 bg-[#fafaf8] border border-[#e5e7eb] rounded-md focus:outline-none focus:bg-white focus:ring-1 focus:ring-stone-900 transition text-xs md:text-[13px] text-stone-800 font-medium appearance-none cursor-pointer pr-9"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              >
+                <option value="Expired">Expired</option>
+                <option value="Damaged">Damaged</option>
+                <option value="Low demand">Low demand</option>
+              </select>
+              <svg
+                className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 pointer-events-none"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
             <p className="text-[11px] text-stone-500 mt-2 leading-relaxed">
               Note: You can edit dead stock quantities only on the same day they are recorded. After that, editing is locked; you may remove the entry and add a new one if needed.
             </p>
@@ -713,6 +1069,5 @@ export function DeadStockView({
         </div>
       </aside>
     </div>
-    </ComingSoonOverlay>
   );
 }

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { getCurrencyForCountry } from "@/lib/constants/countries";
+import { getCurrencyForCountry, formatStoreDate, formatStoreDateTime } from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 // Preset Buying Units & Relatable Serving Units matching old project
@@ -102,6 +102,83 @@ function getShortUnit(unitName: string): string {
   return unitName;
 }
 
+const UNIT_FACTORS: Record<
+  string,
+  { type: "weight" | "volume" | "count"; factor: number }
+> = {
+  gram: { type: "weight", factor: 1 },
+  g: { type: "weight", factor: 1 },
+  milligram: { type: "weight", factor: 0.001 },
+  mg: { type: "weight", factor: 0.001 },
+  kilogram: { type: "weight", factor: 1000 },
+  kg: { type: "weight", factor: 1000 },
+  pounds: { type: "weight", factor: 453.592 },
+  lbs: { type: "weight", factor: 453.592 },
+  ounce: { type: "weight", factor: 28.3495 },
+  oz: { type: "weight", factor: 28.3495 },
+
+  millilitre: { type: "volume", factor: 1 },
+  ml: { type: "volume", factor: 1 },
+  litre: { type: "volume", factor: 1000 },
+  l: { type: "volume", factor: 1000 },
+  teaspoon: { type: "volume", factor: 4.92892 },
+  tsp: { type: "volume", factor: 4.92892 },
+  tablespoon: { type: "volume", factor: 14.7868 },
+  tbsp: { type: "volume", factor: 14.7868 },
+  "fluid ounce": { type: "volume", factor: 29.5735 },
+  "fl oz": { type: "volume", factor: 29.5735 },
+  gallon: { type: "volume", factor: 3785.41 },
+  gal: { type: "volume", factor: 3785.41 },
+
+  piece: { type: "count", factor: 1 },
+  pc: { type: "count", factor: 1 },
+  portion: { type: "count", factor: 1 },
+  ptn: { type: "count", factor: 1 },
+  packet: { type: "count", factor: 1 },
+  pkt: { type: "count", factor: 1 },
+  dozen: { type: "count", factor: 12 },
+  dzn: { type: "count", factor: 12 },
+  box: { type: "count", factor: 1 },
+};
+
+function formatUnitDisplay(unitName?: string): string {
+  if (!unitName) return "Piece (pc)";
+  const match = BUYING_UNITS.find(
+    (u) => u.value.toLowerCase() === unitName.toLowerCase()
+  );
+  if (match) return match.label;
+  const short = getShortUnit(unitName);
+  return `${unitName.charAt(0).toUpperCase() + unitName.slice(1)} (${short})`;
+}
+
+function convertStockUnits(
+  amount: number,
+  fromUnit?: string,
+  toUnit?: string
+): number {
+  if (!fromUnit || !toUnit) return amount;
+  const cleanFrom = fromUnit
+    .trim()
+    .toLowerCase()
+    .split(" ")[0]
+    .replace(/[\(\)]/g, "");
+  const cleanTo = toUnit
+    .trim()
+    .toLowerCase()
+    .split(" ")[0]
+    .replace(/[\(\)]/g, "");
+
+  const fromSpec =
+    UNIT_FACTORS[cleanFrom] || UNIT_FACTORS[fromUnit.toLowerCase()];
+  const toSpec = UNIT_FACTORS[cleanTo] || UNIT_FACTORS[toUnit.toLowerCase()];
+
+  if (!fromSpec || !toSpec) return amount;
+  if (fromSpec.type !== toSpec.type) return amount;
+
+  const inBase = amount * fromSpec.factor;
+  return inBase / toSpec.factor;
+}
+
 export function ItemLibraryView({
   organizationId,
 }: {
@@ -110,18 +187,18 @@ export function ItemLibraryView({
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
   const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
-  const rawItems = useQuery(api.inventory.listInventoryItems, { organizationId });
+  const rawItems = useQuery(api.inventory.listInventoryItems, organizationId ? { organizationId } : "skip");
   const items = useMemo(() => rawItems ?? [], [rawItems]);
 
-  const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
-  const purchaseOrders = [
-    { _id: "po_1", poNumber: "PO-2026-001", supplierName: "Self Employee" },
-    { _id: "po_2", poNumber: "PO-2026-002", supplierName: "Fresh Wholesale" },
-  ];
+  const suppliers = useQuery(api.inventory.listSuppliers, organizationId ? { organizationId } : "skip");
+  const rawPOs = useQuery(api.inventory.listPurchaseOrders, organizationId ? { organizationId } : "skip");
+  const purchaseOrders = useMemo(() => rawPOs ?? [], [rawPOs]);
 
   const createItemMutation = useMutation(api.inventory.createInventoryItem);
   const updateItemMutation = useMutation(api.inventory.updateInventoryItem);
+  const deleteItemMutation = useMutation(api.inventory.deleteInventoryItem);
   const adjustStockMutation = useMutation(api.inventory.adjustInventoryStock);
+  const backfillStockLogsMutation = useMutation(api.inventory.backfillStockLogsPO);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -129,12 +206,36 @@ export function ItemLibraryView({
 
   // Selected item for full detail page view (e.g. TEA PREMIX)
   const [selectedItemDetail, setSelectedItemDetail] = useState<any | null>(null);
-  const [detailActiveTab, setDetailActiveTab] = useState<"added_logs" | "dead_logs">(
-    "added_logs"
+  const [detailActiveTab, setDetailActiveTab] = useState<
+    "added_logs" | "sales_logs" | "dead_logs"
+  >("added_logs");
+  const [detailPage, setDetailPage] = useState(1);
+  const detailLogsPerPage = 10;
+
+  useEffect(() => {
+    setDetailPage(1);
+  }, [selectedItemDetail?._id, detailActiveTab]);
+
+  // Live Stock Logs for Selected Item
+  const liveItemHistory = useQuery(
+    api.inventory.getItemStockHistory,
+    selectedItemDetail ? { inventoryItemId: selectedItemDetail._id } : "skip"
   );
 
+  // Auto-reconcile unlinked stock logs for selected item
+  useEffect(() => {
+    if (selectedItemDetail?._id) {
+      backfillStockLogsMutation({ inventoryItemId: selectedItemDetail._id }).catch(() => {});
+    }
+  }, [selectedItemDetail?._id, backfillStockLogsMutation]);
+
+  // Negative Stock Flag
+  const [allowNegativeStock, setAllowNegativeStock] = useState<boolean>(true);
+
   // Column Sorting state
-  const [sortField, setSortField] = useState<"name" | "category" | null>(null);
+  const [sortField, setSortField] = useState<
+    "name" | "category" | "sku" | "availableStock" | "createdAt" | null
+  >(null);
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
 
   // Drawer & Modal States
@@ -203,8 +304,10 @@ export function ItemLibraryView({
 
   // Add Item Stock Drawer Form State
   const [addStockQuantity, setAddStockQuantity] = useState<number | "">("");
+  const [addStockUnit, setAddStockUnit] = useState<string>("");
   const [addStockSupplierId, setAddStockSupplierId] = useState<string>("");
   const [addStockPoNumber, setAddStockPoNumber] = useState<string>("");
+  const [addStockPoId, setAddStockPoId] = useState<string>("");
   const [addStockDateReceived, setAddStockDateReceived] = useState<string>(
     new Date().toISOString().slice(0, 10)
   );
@@ -228,7 +331,9 @@ export function ItemLibraryView({
   }, [buyingUnit, servingUnit]);
 
   // Sorting Handler
-  const handleSort = (field: "name" | "category") => {
+  const handleSort = (
+    field: "name" | "category" | "sku" | "availableStock" | "createdAt"
+  ) => {
     if (sortField === field) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
     } else {
@@ -253,14 +358,23 @@ export function ItemLibraryView({
 
     if (sortField) {
       list.sort((a, b) => {
-        let valA = "";
-        let valB = "";
+        let valA: string | number = "";
+        let valB: string | number = "";
         if (sortField === "name") {
           valA = a.name.toLowerCase();
           valB = b.name.toLowerCase();
         } else if (sortField === "category") {
           valA = "dairy items";
           valB = "dairy items";
+        } else if (sortField === "sku") {
+          valA = (a.skuNumber || "").toLowerCase();
+          valB = (b.skuNumber || "").toLowerCase();
+        } else if (sortField === "availableStock") {
+          valA = a.availableStock ?? 0;
+          valB = b.availableStock ?? 0;
+        } else if (sortField === "createdAt") {
+          valA = a.updatedAt || a._creationTime || 0;
+          valB = b.updatedAt || b._creationTime || 0;
         }
         if (valA < valB) return sortOrder === "asc" ? -1 : 1;
         if (valA > valB) return sortOrder === "asc" ? 1 : -1;
@@ -291,6 +405,7 @@ export function ItemLibraryView({
     setBaselineStockLevel("" as any);
     setInitialStock(0);
     setUnitCost(0);
+    setAllowNegativeStock(true);
     setNameError("");
     setCategoryError("");
     setBuyingUnitError("");
@@ -313,6 +428,7 @@ export function ItemLibraryView({
     setBaselineStockLevel(item.baselineStockLevel ?? "");
     setInitialStock(item.availableStock || 0);
     setUnitCost(item.unitCost || 0);
+    setAllowNegativeStock(item.allowNegativeStock !== false);
     setNameError("");
     setCategoryError("");
     setBuyingUnitError("");
@@ -327,8 +443,10 @@ export function ItemLibraryView({
     setEditingItem(item);
     setDrawerMode("assign_stock");
     setAddStockQuantity("");
+    setAddStockUnit(item.buyingUnit || "piece");
     setAddStockSupplierId("");
     setAddStockPoNumber("");
+    setAddStockPoId("");
     setAddStockDateReceived(new Date().toISOString().slice(0, 10));
     setAddStockItemExpiry(new Date().toISOString().slice(0, 10));
     setActiveMenuId(null);
@@ -352,22 +470,35 @@ export function ItemLibraryView({
   const handleFormSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (drawerMode === "assign_stock") {
-      const qty = Number(addStockQuantity);
-      if (!qty || qty <= 0) {
+      const rawQty = Number(addStockQuantity);
+      if (!rawQty || rawQty <= 0) {
         alert("Please enter a valid stock quantity.");
         return;
       }
       setIsSubmitting(true);
       try {
         if (editingItem) {
+          const baseUnit = editingItem.buyingUnit || "piece";
+          const chosenUnit = addStockUnit || baseUnit;
+          const convertedQty = convertStockUnits(rawQty, chosenUnit, baseUnit);
+
           const currentStock = Number(editingItem.availableStock || 0);
-          const newTotalStock = currentStock + qty;
+          const newTotalStock = Math.round((currentStock + convertedQty) * 1000) / 1000;
+
+          const selectedPo = purchaseOrders?.find(
+            (p: any) => p._id === addStockPoId || p.poNumber === addStockPoNumber
+          );
+          const finalSupplierId = addStockSupplierId || selectedPo?.supplierId;
 
           await adjustStockMutation({
             organizationId,
             inventoryItemId: editingItem._id,
             actualStockCount: newTotalStock,
             reason: "Manual Stock Assignment",
+            supplierId: finalSupplierId ? (finalSupplierId as Id<"suppliers">) : undefined,
+            purchaseOrderId: selectedPo?._id ? (selectedPo._id as Id<"purchaseOrders">) : undefined,
+            receivedDate: addStockDateReceived,
+            expiryDate: addStockItemExpiry,
           });
 
           if (unitCost !== undefined && unitCost !== null && Number(unitCost) > 0) {
@@ -381,8 +512,8 @@ export function ItemLibraryView({
           const supplierObj = suppliers?.find((s) => s._id === addStockSupplierId);
           const newLog = {
             _id: `log_${Date.now()}`,
-            quantity: qty,
-            unit: editingItem.buyingUnit || "piece (pc)",
+            quantity: rawQty,
+            unit: formatUnitDisplay(chosenUnit),
             supplierName: supplierObj?.supplierName || undefined,
             poNumber: addStockPoNumber || undefined,
             dateReceived: addStockDateReceived,
@@ -393,6 +524,12 @@ export function ItemLibraryView({
             ...prev,
             [editingItem._id]: [newLog, ...(prev[editingItem._id] || [])],
           }));
+
+          if (selectedItemDetail && selectedItemDetail._id === editingItem._id) {
+            setSelectedItemDetail((prev: any) =>
+              prev ? { ...prev, availableStock: newTotalStock } : null
+            );
+          }
         }
         setIsDrawerOpen(false);
       } catch (err) {
@@ -471,6 +608,7 @@ export function ItemLibraryView({
           description: description.trim() || undefined,
           minimumStockRefillLevel: Number(minimumStockRefillLevel),
           unitCost: Number(unitCost),
+          allowNegativeStock,
         });
       } else {
         await createItemMutation({
@@ -484,6 +622,7 @@ export function ItemLibraryView({
           baselineStockLevel: Number(baselineStockLevel) || undefined,
           initialStock: Number(initialStock),
           unitCost: Number(unitCost),
+          allowNegativeStock,
         });
       }
       setIsDrawerOpen(false);
@@ -495,12 +634,201 @@ export function ItemLibraryView({
     }
   };
 
-  const confirmDelete = () => {
-    if (selectedItemDetail && itemToDelete && selectedItemDetail._id === itemToDelete._id) {
-      setSelectedItemDetail(null);
+  const confirmDelete = async () => {
+    if (itemToDelete) {
+      try {
+        await deleteItemMutation({ id: itemToDelete._id });
+        if (selectedItemDetail && selectedItemDetail._id === itemToDelete._id) {
+          setSelectedItemDetail(null);
+        }
+      } catch (err) {
+        console.error("Failed to delete item:", err);
+        alert("Failed to delete item from inventory.");
+      }
     }
     setIsDeleteModalOpen(false);
     setItemToDelete(null);
+  };
+
+  // Shared Add Item Stock Drawer Content
+  const renderAddStockDrawer = () => {
+    if (!editingItem) return null;
+    const baseUnit = editingItem.buyingUnit || "piece";
+    const servingUnitVal = editingItem.servingUnit || "";
+    const hasDifferentServingUnit =
+      servingUnitVal &&
+      servingUnitVal.toLowerCase() !== baseUnit.toLowerCase();
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="p-6 border-b border-stone-200 flex items-start justify-between bg-white shrink-0">
+          <div>
+            <h2 className="text-xl text-stone-900 font-semibold tracking-tight">
+              Add item stock
+            </h2>
+            <p className="text-xs text-stone-500 mt-0.5">
+              {editingItem.name}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsDrawerOpen(false)}
+            className="text-stone-500 hover:text-stone-900 p-1 rounded-md transition cursor-pointer"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <form
+          id="addStockForm"
+          onSubmit={handleFormSubmit}
+          className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-stone-800"
+        >
+          {/* Quantity & Unit */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="block font-medium mb-1 text-stone-800">
+                Quantity <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="number"
+                required
+                min="0.001"
+                step="any"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400"
+                placeholder="Enter the item quantity"
+                value={addStockQuantity}
+                onChange={(e) =>
+                  setAddStockQuantity(
+                    e.target.value === "" ? "" : Number(e.target.value)
+                  )
+                }
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1 text-stone-800">Unit *</label>
+              <select
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-800 font-medium"
+                value={addStockUnit}
+                onChange={(e) => setAddStockUnit(e.target.value)}
+              >
+                <option value={baseUnit}>
+                  {formatUnitDisplay(baseUnit)} (Buying unit)
+                </option>
+                {hasDifferentServingUnit && (
+                  <option value={servingUnitVal}>
+                    {formatUnitDisplay(servingUnitVal)} (Serving unit)
+                  </option>
+                )}
+              </select>
+            </div>
+          </div>
+          <p className="text-[11px] text-stone-500 leading-normal">
+            {addStockUnit.toLowerCase() !== baseUnit.toLowerCase() ? (
+              <span>
+                Note: Adding in <strong>{formatUnitDisplay(addStockUnit)}</strong> will automatically convert to <strong>{formatUnitDisplay(baseUnit)}</strong> when adding to total inventory.
+              </span>
+            ) : (
+              <span>
+                Note: Buying unit is <strong>{formatUnitDisplay(baseUnit)}</strong>. You can switch to <strong>{formatUnitDisplay(servingUnitVal || baseUnit)}</strong> above if needed.
+              </span>
+            )}
+          </p>
+
+          {/* Supplier */}
+          <div>
+            <label className="block font-medium mb-1 text-stone-800">Supplier</label>
+            <select
+              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
+              value={addStockSupplierId}
+              onChange={(e) => setAddStockSupplierId(e.target.value)}
+            >
+              <option value="">Search supplier</option>
+              {suppliers?.map((s) => (
+                <option key={s._id} value={s._id}>
+                  {s.supplierName} ({s.companyName || "Supplier"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* PO Number */}
+          <div>
+            <label className="block font-medium mb-1 text-stone-800">PO number</label>
+            <select
+              className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
+              value={addStockPoId || addStockPoNumber}
+              onChange={(e) => {
+                const val = e.target.value;
+                setAddStockPoId(val);
+                const selectedPo = purchaseOrders?.find(
+                  (po: any) => po._id === val || po.poNumber === val
+                );
+                setAddStockPoNumber(selectedPo?.poNumber || "");
+                if (selectedPo?.supplierId && !addStockSupplierId) {
+                  setAddStockSupplierId(selectedPo.supplierId);
+                }
+              }}
+            >
+              <option value="">Select purchase order number</option>
+              {purchaseOrders?.map((po: any) => (
+                <option key={po._id} value={po._id}>
+                  {po.poNumber} ({po.supplierName || "PO"})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Date received & Item expiry */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-medium mb-1 text-stone-800">
+                Date received <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="date"
+                required
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+                value={addStockDateReceived}
+                onChange={(e) => setAddStockDateReceived(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block font-medium mb-1 text-stone-800">Item expiry</label>
+              <input
+                type="date"
+                className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+                value={addStockItemExpiry}
+                onChange={(e) => setAddStockItemExpiry(e.target.value)}
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-stone-500 leading-normal">
+            Note: You can edit or remove the stock quantity in 24 hours after it was added. Once the 24 hours are completed, everything is locked.
+          </p>
+        </form>
+
+        <div className="p-4 px-6 border-t border-stone-200 bg-white flex items-center justify-end space-x-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setIsDrawerOpen(false)}
+            className="w-1/2 py-2.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-semibold transition cursor-pointer"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            form="addStockForm"
+            disabled={isSubmitting}
+            className="w-1/2 py-2.5 rounded-lg bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            {isSubmitting ? "Adding..." : "Add stock"}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (rawItems === undefined) {
@@ -516,12 +844,63 @@ export function ItemLibraryView({
 
   // RENDER DETAILED ITEM PAGE (Matching Screenshots 1, 2, 3, 4)
   if (selectedItemDetail) {
-    const itemLogs = stockLogsMap[selectedItemDetail._id] || [];
-    const itemDeadLogs = deadStockLogsMap[selectedItemDetail._id] || [];
+    const liveAddedLogs = (liveItemHistory ?? [])
+      .filter((l) => !l.isDeadStock && l.stockType !== "debit")
+      .map((l) => ({
+        _id: l._id,
+        quantity: l.quantity,
+        unit: l.unit,
+        supplierName: l.supplierName && l.supplierName !== "—" ? l.supplierName : "—",
+        poNumber: l.poNumber && l.poNumber !== "—" ? l.poNumber : "—",
+        dateReceived: l.dateReceived,
+        itemExpiry: l.itemExpiry,
+      }));
+
+    const liveSalesLogs = (liveItemHistory ?? [])
+      .filter((l) => !l.isDeadStock && l.stockType === "debit")
+      .map((l) => ({
+        _id: l._id,
+        quantity: l.quantity,
+        unit: l.unit,
+        sourceType: l.sourceType,
+        date: l.dateReceived || l.createdAt,
+      }));
+
+    const liveDeadLogs = (liveItemHistory ?? [])
+      .filter((l) => l.isDeadStock)
+      .map((l) => ({
+        _id: l._id,
+        quantity: l.quantity,
+        unit: l.unit,
+        reason: l.reason || "Wasted / Expired",
+        markedDate: l.dateReceived,
+      }));
+
+    const itemLogs =
+      liveAddedLogs.length > 0 ? liveAddedLogs : stockLogsMap[selectedItemDetail._id] || [];
+    const itemDeadLogs =
+      liveDeadLogs.length > 0 ? liveDeadLogs : deadStockLogsMap[selectedItemDetail._id] || [];
+
+    const totalDetailPages = Math.max(1, Math.ceil(itemLogs.length / detailLogsPerPage));
+    const paginatedItemLogs = itemLogs.slice(
+      (detailPage - 1) * detailLogsPerPage,
+      detailPage * detailLogsPerPage
+    );
+
+    const totalSalesPages = Math.max(1, Math.ceil(liveSalesLogs.length / detailLogsPerPage));
+    const paginatedSalesLogs = liveSalesLogs.slice(
+      (detailPage - 1) * detailLogsPerPage,
+      detailPage * detailLogsPerPage
+    );
+
+    const totalDeadPages = Math.max(1, Math.ceil(itemDeadLogs.length / detailLogsPerPage));
+    const paginatedDeadLogs = itemDeadLogs.slice(
+      (detailPage - 1) * detailLogsPerPage,
+      detailPage * detailLogsPerPage
+    );
 
     return (
-      <ComingSoonOverlay title="Item Library">
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white p-8">
+      <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] p-8 overflow-y-auto">
         {/* Breadcrumb Navigation */}
         <div className="flex items-center space-x-2 text-xs text-stone-500 mb-4 font-sans">
           <button
@@ -536,8 +915,8 @@ export function ItemLibraryView({
         </div>
 
         {/* Page Title & Header Actions */}
-        <div className="flex items-center justify-between pb-4">
-          <h1 className="text-2xl md:text-3xl font-serif font-bold text-stone-900 tracking-tight">
+        <div className="flex items-center justify-between pb-6">
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
             {selectedItemDetail.name}
           </h1>
 
@@ -546,7 +925,7 @@ export function ItemLibraryView({
             <button
               type="button"
               onClick={() => openEditDrawer(selectedItemDetail)}
-              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-100 rounded-lg transition cursor-pointer"
+              className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-200/60 rounded-lg transition cursor-pointer"
               title="Edit item"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -581,16 +960,16 @@ export function ItemLibraryView({
               <button
                 type="button"
                 onClick={() => openAssignStockDrawer(selectedItemDetail)}
-                className="bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow-xs cursor-pointer"
+                className="bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer inline-flex items-center space-x-1.5"
               >
-                Add item stock
+                <span>Add item stock</span>
               </button>
             )}
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center space-x-8 border-b border-stone-200 text-xs font-medium">
+        <div className="flex items-center space-x-8 border-b border-[#e7e5e4] text-xs font-medium mb-6">
           <button
             type="button"
             onClick={() => setDetailActiveTab("added_logs")}
@@ -601,6 +980,17 @@ export function ItemLibraryView({
             }`}
           >
             Added Stock Logs
+          </button>
+          <button
+            type="button"
+            onClick={() => setDetailActiveTab("sales_logs")}
+            className={`pb-3 transition-colors cursor-pointer border-b-2 font-semibold ${
+              detailActiveTab === "sales_logs"
+                ? "border-stone-900 text-stone-900"
+                : "border-transparent text-stone-500 hover:text-stone-900"
+            }`}
+          >
+            Order Sales Deductions
           </button>
           <button
             type="button"
@@ -616,19 +1006,18 @@ export function ItemLibraryView({
         </div>
 
         {/* Tab Contents */}
-        <div className="flex-1 flex flex-col justify-center items-center py-12">
+        <div className="flex-1 flex flex-col min-h-0">
           {detailActiveTab === "added_logs" ? (
             itemLogs.length === 0 ? (
-              /* Added Stock Logs Empty State (Screenshot 1) */
-              <div className="flex flex-col items-center justify-center text-center">
-                {/* Box icon with x */}
+              /* Added Stock Logs Empty State */
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs p-12 flex flex-col items-center justify-center text-center">
                 <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
                   <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 10l4 4m0-4l-4 4" />
                   </svg>
                 </div>
-                <h3 className="font-semibold text-stone-800 text-sm">
+                <h3 className="font-bold text-stone-900 text-base">
                   No stock logs available for this item
                 </h3>
                 <p className="text-xs text-stone-500 max-w-sm mt-1 mb-5">
@@ -637,59 +1026,183 @@ export function ItemLibraryView({
                 <button
                   type="button"
                   onClick={() => openAssignStockDrawer(selectedItemDetail)}
-                  className="bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-xs cursor-pointer"
+                  className="bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer"
                 >
                   Add item stock
                 </button>
               </div>
             ) : (
               /* Added Stock Logs Table */
-              <div className="w-full h-full flex flex-col">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="border-b border-stone-200 bg-stone-50 uppercase tracking-wider text-stone-500 font-medium select-none">
-                      <th className="py-3 px-4 font-normal">Quantity Added</th>
-                      <th className="py-3 px-4 font-normal">Supplier</th>
-                      <th className="py-3 px-4 font-normal">PO Number</th>
-                      <th className="py-3 px-4 font-normal">Date Received</th>
-                      <th className="py-3 px-4 font-normal">Expiry Date</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-stone-100">
-                    {itemLogs.map((log) => (
-                      <tr key={log._id} className="hover:bg-stone-50">
-                        <td className="py-3.5 px-4 font-medium text-stone-900">
-                          {log.quantity} {log.unit}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600">
-                          {log.supplierName || "—"}
-                        </td>
-                        <td className="py-3.5 px-4 font-mono text-stone-600">
-                          {log.poNumber || "—"}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {log.dateReceived}
-                        </td>
-                        <td className="py-3.5 px-4 text-stone-600 font-mono">
-                          {log.itemExpiry || "—"}
-                        </td>
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-10 select-none">
+                        <th className="py-3 px-5">Quantity added</th>
+                        <th className="py-3 px-5">Supplier</th>
+                        <th className="py-3 px-5">PO number</th>
+                        <th className="py-3 px-5">Date received</th>
+                        <th className="py-3 px-5">Expiry date</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-[#f5f5f4]">
+                      {paginatedItemLogs.map((log) => (
+                        <tr key={log._id} className="hover:bg-stone-50/80 transition-colors">
+                          <td className="py-3.5 px-5 font-semibold text-stone-900">
+                            {log.quantity} {formatUnitDisplay(log.unit)}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-700 font-medium">
+                            {log.supplierName || "—"}
+                          </td>
+                          <td className="py-3.5 px-5 font-mono text-stone-600">
+                            {log.poNumber || "—"}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                            {formatStoreDate(log.dateReceived, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                            {log.itemExpiry && log.itemExpiry !== "—"
+                              ? formatStoreDate(log.itemExpiry, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"
+                              : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                  <span>
+                    Showing{" "}
+                    <strong className="text-stone-900">
+                      {itemLogs.length === 0
+                        ? 0
+                        : `${(detailPage - 1) * detailLogsPerPage + 1} - ${Math.min(
+                            detailPage * detailLogsPerPage,
+                            itemLogs.length
+                          )}`}
+                    </strong>{" "}
+                    of <strong className="text-stone-900">{itemLogs.length}</strong> logs
+                  </span>
+                  <div className="flex items-center space-x-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={detailPage <= 1}
+                      onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2 font-medium text-stone-900">
+                      {detailPage} / {totalDetailPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={detailPage >= totalDetailPages}
+                      onClick={() => setDetailPage((p) => Math.min(totalDetailPages, p + 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          ) : detailActiveTab === "sales_logs" ? (
+            liveSalesLogs.length === 0 ? (
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs p-12 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
+                  <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-stone-900 text-base">
+                  No POS deductions yet
+                </h3>
+                <p className="text-xs text-stone-500 max-w-sm mt-1">
+                  When menu items linked to this ingredient are sold at POS, recipe usage logs will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-10 select-none">
+                        <th className="py-3 px-5">Quantity deducted</th>
+                        <th className="py-3 px-5">Source</th>
+                        <th className="py-3 px-5">Date & Time</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#f5f5f4]">
+                      {paginatedSalesLogs.map((log) => (
+                        <tr key={log._id} className="hover:bg-stone-50/80 transition-colors">
+                          <td className="py-3.5 px-5 font-semibold text-rose-600">
+                            - {log.quantity} {formatUnitDisplay(log.unit)}
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-700 font-medium">
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-medium bg-stone-100 text-stone-700 border border-stone-200">
+                              POS Order Sale
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                            {formatStoreDate(log.date, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                  <span>
+                    Showing{" "}
+                    <strong className="text-stone-900">
+                      {liveSalesLogs.length === 0
+                        ? 0
+                        : `${(detailPage - 1) * detailLogsPerPage + 1} - ${Math.min(
+                            detailPage * detailLogsPerPage,
+                            liveSalesLogs.length
+                          )}`}
+                    </strong>{" "}
+                    of <strong className="text-stone-900">{liveSalesLogs.length}</strong> deductions
+                  </span>
+                  <div className="flex items-center space-x-2 text-xs">
+                    <button
+                      type="button"
+                      disabled={detailPage <= 1}
+                      onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Previous
+                    </button>
+                    <span className="px-2 font-medium text-stone-900">
+                      {detailPage} / {totalSalesPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={detailPage >= totalSalesPages}
+                      onClick={() => setDetailPage((p) => Math.min(totalSalesPages, p + 1))}
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
               </div>
             )
           ) : itemDeadLogs.length === 0 ? (
-            /* Dead Stock Logs Empty State (Screenshot 2) */
-            <div className="flex flex-col items-center justify-center text-center">
-              {/* Box icon with x */}
+            /* Dead Stock Logs Empty State */
+            <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs p-12 flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 rounded-2xl bg-stone-100/80 border border-stone-200 flex items-center justify-center text-stone-400 mb-4">
                 <svg className="w-8 h-8 stroke-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 10l4 4m0-4l-4 4" />
                 </svg>
               </div>
-              <h3 className="font-semibold text-stone-800 text-sm">
+              <h3 className="font-bold text-stone-900 text-base">
                 No dead stock logs yet
               </h3>
               <p className="text-xs text-stone-500 max-w-sm mt-1">
@@ -698,31 +1211,70 @@ export function ItemLibraryView({
             </div>
           ) : (
             /* Dead Stock Logs Table */
-            <div className="w-full h-full flex flex-col">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="border-b border-stone-200 bg-stone-50 uppercase tracking-wider text-stone-500 font-medium select-none">
-                    <th className="py-3 px-4 font-normal">Wasted Quantity</th>
-                    <th className="py-3 px-4 font-normal">Reason</th>
-                    <th className="py-3 px-4 font-normal">Marked Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-stone-100">
-                  {itemDeadLogs.map((log) => (
-                    <tr key={log._id} className="hover:bg-stone-50">
-                      <td className="py-3.5 px-4 font-medium text-rose-600">
-                        {log.quantity} {log.unit}
-                      </td>
-                      <td className="py-3.5 px-4 text-stone-600 font-medium">
-                        {log.reason}
-                      </td>
-                      <td className="py-3.5 px-4 text-stone-600 font-mono">
-                        {log.markedDate}
-                      </td>
+            <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-10 select-none">
+                      <th className="py-3 px-5">Wasted quantity</th>
+                      <th className="py-3 px-5">Reason</th>
+                      <th className="py-3 px-5">Marked date</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-[#f5f5f4]">
+                    {paginatedDeadLogs.map((log) => (
+                      <tr key={log._id} className="hover:bg-stone-50/80 transition-colors">
+                        <td className="py-3.5 px-5 font-semibold text-rose-600">
+                          {log.quantity} {formatUnitDisplay(log.unit)}
+                        </td>
+                        <td className="py-3.5 px-5 text-stone-700 font-medium">
+                          {log.reason}
+                        </td>
+                        <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                          {formatStoreDate(log.markedDate, activeOrg?.country, activeOrg?.organizationTimeZone) || "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                <span>
+                  Showing{" "}
+                  <strong className="text-stone-900">
+                    {itemDeadLogs.length === 0
+                      ? 0
+                      : `${(detailPage - 1) * detailLogsPerPage + 1} - ${Math.min(
+                          detailPage * detailLogsPerPage,
+                          itemDeadLogs.length
+                        )}`}
+                  </strong>{" "}
+                  of <strong className="text-stone-900">{itemDeadLogs.length}</strong> logs
+                </span>
+                <div className="flex items-center space-x-2 text-xs">
+                  <button
+                    type="button"
+                    disabled={detailPage <= 1}
+                    onClick={() => setDetailPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-2 font-medium text-stone-900">
+                    {detailPage} / {totalDeadPages}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={detailPage >= totalDeadPages}
+                    onClick={() => setDetailPage((p) => Math.min(totalDeadPages, p + 1))}
+                    className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -731,7 +1283,7 @@ export function ItemLibraryView({
         {isDeleteModalOpen && itemToDelete && (
           <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
             <div className="bg-white border border-stone-200 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-              <h3 className="font-serif text-xl text-stone-900 font-medium">
+              <h3 className="text-xl text-stone-900 font-bold">
                 Delete {itemToDelete.name}
               </h3>
               <div className="space-y-2 text-xs text-stone-600">
@@ -745,14 +1297,14 @@ export function ItemLibraryView({
                 <button
                   type="button"
                   onClick={() => setIsDeleteModalOpen(false)}
-                  className="px-4 py-2 text-xs font-medium text-stone-600 hover:text-stone-900 border border-stone-200 rounded-full hover:bg-stone-50 transition cursor-pointer"
+                  className="px-4 py-2 text-xs font-semibold text-stone-700 hover:text-stone-900 border border-stone-200 rounded-lg hover:bg-stone-50 transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
                   onClick={confirmDelete}
-                  className="px-5 py-2 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer shadow-xs"
+                  className="px-5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer shadow-xs"
                 >
                   Confirm
                 </button>
@@ -776,144 +1328,7 @@ export function ItemLibraryView({
           }`}
         >
           {drawerMode === "assign_stock" && editingItem ? (
-            /* ADD ITEM STOCK DRAWER MODE (Screenshot 4) */
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="p-6 border-b border-stone-200 flex items-start justify-between bg-white shrink-0">
-                <h2 className="text-xl text-stone-900 font-semibold tracking-tight">
-                  Add item stock
-                </h2>
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="text-stone-500 hover:text-stone-900 p-1 rounded-md transition cursor-pointer"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              <form
-                id="addStockForm"
-                onSubmit={handleFormSubmit}
-                className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-stone-800"
-              >
-                {/* Quantity & Unit */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="col-span-2">
-                    <label className="block font-medium mb-1 text-stone-800">
-                      Quantity <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min="0.01"
-                      step="any"
-                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition placeholder:text-stone-400"
-                      placeholder="Enter the item quantity"
-                      value={addStockQuantity}
-                      onChange={(e) =>
-                        setAddStockQuantity(
-                          e.target.value === "" ? "" : Number(e.target.value)
-                        )
-                      }
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium mb-1 text-stone-800">Unit *</label>
-                    <input
-                      type="text"
-                      disabled
-                      className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
-                      value={`${editingItem.buyingUnit || "piece"} (pc)`}
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-stone-500 leading-normal">
-                  Note: To change the unit for this item, you have to change the Buying unit from Edit item screen
-                </p>
-
-                {/* Supplier */}
-                <div>
-                  <label className="block font-medium mb-1 text-stone-800">Supplier</label>
-                  <select
-                    className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
-                    value={addStockSupplierId}
-                    onChange={(e) => setAddStockSupplierId(e.target.value)}
-                  >
-                    <option value="">Search supplier</option>
-                    {suppliers?.map((s) => (
-                      <option key={s._id} value={s._id}>
-                        {s.supplierName} ({s.companyName || "Supplier"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* PO Number */}
-                <div>
-                  <label className="block font-medium mb-1 text-stone-800">PO number</label>
-                  <select
-                    className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition text-stone-700"
-                    value={addStockPoNumber}
-                    onChange={(e) => setAddStockPoNumber(e.target.value)}
-                  >
-                    <option value="">Select purchase order number</option>
-                    {purchaseOrders?.map((po: any) => (
-                      <option key={po._id} value={po.poNumber}>
-                        {po.poNumber} ({po.supplierName || "PO"})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Date received & Item expiry */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block font-medium mb-1 text-stone-800">
-                      Date received <span className="text-rose-500">*</span>
-                    </label>
-                    <input
-                      type="date"
-                      required
-                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
-                      value={addStockDateReceived}
-                      onChange={(e) => setAddStockDateReceived(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block font-medium mb-1 text-stone-800">Item expiry</label>
-                    <input
-                      type="date"
-                      className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
-                      value={addStockItemExpiry}
-                      onChange={(e) => setAddStockItemExpiry(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <p className="text-[11px] text-stone-500 leading-normal">
-                  Note: You can edit or remove the stock quantity in 24 hours after it was added. Once the 24 hours are completed, everything is locked.
-                </p>
-              </form>
-
-              <div className="p-4 px-6 border-t border-stone-200 bg-white flex items-center justify-end space-x-3 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsDrawerOpen(false)}
-                  className="w-1/2 py-2.5 rounded-lg border border-stone-300 text-stone-700 hover:bg-stone-50 text-xs font-semibold transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  form="addStockForm"
-                  disabled={isSubmitting}
-                  className="w-1/2 py-2.5 rounded-lg bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
-                >
-                  Add stock
-                </button>
-              </div>
-            </div>
+            renderAddStockDrawer()
           ) : (
             /* EDIT ITEM DRAWER MODE (Screenshot 3) */
             <div className="flex-1 flex flex-col overflow-hidden">
@@ -993,14 +1408,23 @@ export function ItemLibraryView({
                 <div className="pt-2">
                   <h3 className="text-base font-semibold text-stone-900 mb-3">Unit details</h3>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
+                    <div className={drawerMode === "edit" ? "opacity-50 select-none" : ""}>
                       <label className="block font-medium mb-1 text-stone-800">
                         Buying unit <span className="text-rose-500">*</span>
                       </label>
                       <select
-                        className="w-full px-3 py-2 bg-white border border-stone-300 rounded-md focus:outline-none focus:ring-1 focus:ring-stone-900 transition"
+                        disabled={drawerMode === "edit"}
+                        className={`w-full px-3 py-2 text-xs border rounded-md transition ${
+                          drawerMode === "edit"
+                            ? "bg-stone-200 text-stone-500 cursor-not-allowed border-stone-300 opacity-60"
+                            : "bg-white border-stone-300 focus:outline-none focus:ring-1 focus:ring-stone-900"
+                        }`}
                         value={buyingUnit}
-                        onChange={(e) => handleBuyingUnitChange(e.target.value)}
+                        onChange={(e) => {
+                          if (drawerMode !== "edit") {
+                            handleBuyingUnitChange(e.target.value);
+                          }
+                        }}
                       >
                         {BUYING_UNITS.map((u) => (
                           <option key={u.value} value={u.value}>
@@ -1045,12 +1469,12 @@ export function ItemLibraryView({
                         onChange={(e) => setMinimumStockRefillLevel(Number(e.target.value))}
                       />
                     </div>
-                    <div>
+                    <div className="opacity-50 select-none">
                       <label className="block font-medium mb-1 text-stone-800">Unit *</label>
                       <input
                         type="text"
                         disabled
-                        className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
+                        className="w-full px-3 py-2 bg-stone-200 text-stone-500 border border-stone-300 rounded-md capitalize font-medium cursor-not-allowed opacity-60"
                         value={buyingUnit}
                       />
                     </div>
@@ -1069,14 +1493,37 @@ export function ItemLibraryView({
                         onChange={(e) => setBaselineStockLevel(Number(e.target.value))}
                       />
                     </div>
-                    <div>
+                    <div className="opacity-50 select-none">
                       <label className="block font-medium mb-1 text-stone-800">Unit *</label>
                       <input
                         type="text"
                         disabled
-                        className="w-full px-3 py-2 bg-stone-100 text-stone-600 border border-stone-300 rounded-md capitalize font-medium"
+                        className="w-full px-3 py-2 bg-stone-200 text-stone-500 border border-stone-300 rounded-md capitalize font-medium cursor-not-allowed opacity-60"
                         value={buyingUnit}
                       />
+                    </div>
+                  </div>
+
+                  {/* Negative Stock Toggle */}
+                  <div className="pt-3 border-t border-stone-100 mt-3">
+                    <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-200">
+                      <div>
+                        <span className="block font-semibold text-stone-900 text-xs">
+                          Allow Negative Stock
+                        </span>
+                        <span className="text-[11px] text-stone-500">
+                          Orders can deduct inventory past 0 during rush hours without halting sales.
+                        </span>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                        <input
+                          type="checkbox"
+                          checked={allowNegativeStock}
+                          onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-9 h-5 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                      </label>
                     </div>
                   </div>
                 </div>
@@ -1103,21 +1550,19 @@ export function ItemLibraryView({
           )}
         </aside>
       </div>
-    </ComingSoonOverlay>
-  );
+    );
 }
 
   // RENDER ITEM LIBRARY MAIN TABLE PAGE
   return (
-    <ComingSoonOverlay title="Item Library">
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] p-8">
       {/* Page Title & Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
         <div>
-          <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
             Item library
           </h1>
-          <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
+          <p className="text-xs text-stone-500 mt-1">
             Manage raw ingredient catalog, buying units, serving units, and refill alert levels.
           </p>
         </div>
@@ -1126,7 +1571,7 @@ export function ItemLibraryView({
         <div className="flex items-center gap-3">
           <div className="relative w-72">
             <svg
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a8a29e]"
+              className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -1140,7 +1585,7 @@ export function ItemLibraryView({
             </svg>
             <input
               type="text"
-              className="w-full pl-9.5 pr-4 py-2 bg-white text-xs text-[#1c1917] border border-[#e7e5e4] rounded-full focus:outline-none focus:ring-1 focus:ring-[#0c0a09] placeholder:text-[#a8a29e] transition shadow-2xs"
+              className="w-full pl-9 pr-3 py-2 bg-white text-xs text-stone-900 border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800 placeholder:text-stone-400 transition shadow-2xs"
               placeholder="Search by item name, SKU no"
               value={searchQuery}
               onChange={(e) => {
@@ -1153,7 +1598,7 @@ export function ItemLibraryView({
           <button
             type="button"
             onClick={openAddDrawer}
-            className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-4 py-2.5 rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center space-x-2 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer whitespace-nowrap"
           >
             <svg
               className="w-3.5 h-3.5 text-white stroke-white"
@@ -1168,16 +1613,16 @@ export function ItemLibraryView({
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            <span className="text-white !text-white font-medium">Add new item</span>
+            <span>Add new item</span>
           </button>
         </div>
       </div>
 
       {/* Main Table / Empty State Container */}
-      <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="mt-6 flex-1 flex flex-col">
         {filteredAndSortedItems.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
-            <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
+            <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-stone-500 mb-4">
               <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
                   strokeLinecap="round"
@@ -1187,14 +1632,14 @@ export function ItemLibraryView({
                 />
               </svg>
             </div>
-            <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">Empty item Shelf</h3>
-            <p className="text-xs md:text-sm text-[#78716c] max-w-sm mt-1 mb-6">
+            <h3 className="text-xl font-bold text-stone-900">Empty item shelf</h3>
+            <p className="text-xs md:text-sm text-stone-500 max-w-sm mt-1 mb-6">
               No items have been added yet. Start building your inventory list.
             </p>
             <button
               type="button"
               onClick={openAddDrawer}
-              className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-5 py-2.5 rounded-full transition shadow-sm cursor-pointer"
+              className="inline-flex items-center space-x-2 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-5 py-2.5 rounded-lg transition shadow-2xs cursor-pointer"
             >
               <svg
                 className="w-3.5 h-3.5 text-white stroke-white"
@@ -1209,28 +1654,28 @@ export function ItemLibraryView({
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              <span className="text-white !text-white font-medium">Add new item</span>
+              <span>Add new item</span>
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-hidden flex flex-col flex-1">
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-left border-collapse">
+          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 z-20 select-none">
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-20 select-none">
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900"
                       onClick={() => handleSort("name")}
                     >
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-1.5">
                         <span>Item name</span>
                         {sortField === "name" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-stone-900 font-bold">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3 h-3 text-stone-300"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -1246,18 +1691,18 @@ export function ItemLibraryView({
                       </div>
                     </th>
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900"
                       onClick={() => handleSort("category")}
                     >
-                      <div className="flex items-center space-x-1">
+                      <div className="flex items-center space-x-1.5">
                         <span>Category</span>
                         {sortField === "category" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-stone-900 font-bold">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3 h-3 text-stone-300"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -1272,13 +1717,91 @@ export function ItemLibraryView({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-5 font-normal">SKU no.</th>
-                    <th className="py-3 px-5 font-normal w-72">Available stock</th>
-                    <th className="py-3 px-5 font-normal">Created/update time</th>
-                    <th className="py-3 px-5 text-right font-normal">Actions</th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("sku")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>SKU no.</span>
+                        {sortField === "sku" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none w-72"
+                      onClick={() => handleSort("availableStock")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Available stock</span>
+                        {sortField === "availableStock" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("createdAt")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Created/update time</span>
+                        {sortField === "createdAt" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th className="py-3 px-5 text-right font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
+                <tbody className="divide-y divide-[#f5f5f4] text-xs">
                   {paginatedItems.map((item) => {
                     const available = item.availableStock || 0;
                     const minRefill = item.minimumStockRefillLevel || 0;
@@ -1296,71 +1819,71 @@ export function ItemLibraryView({
                     const basePct = Math.min(100, (baseline / maxScale) * 100);
 
                     const barColor =
-                      available > baseline
+                      available < 0
+                        ? "#9333ea"
+                        : available > baseline
                         ? "#219653"
                         : available > minRefill
                         ? "#FFB400"
                         : "#EB5757";
 
-                    const formattedDate = new Date(
-                      item.updatedAt || item.createdAt || Date.now()
-                    ).toLocaleString("en-IN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                    });
+                    const formattedDate = formatStoreDateTime(
+                      item.updatedAt || item.createdAt || Date.now(),
+                      activeOrg?.country,
+                      activeOrg?.organizationTimeZone
+                    );
 
                     return (
                       <tr
                         key={item._id}
                         className="hover:bg-[#fafaf9] transition-colors group"
                       >
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 px-5">
                           <div
-                            className="flex items-center space-x-3 cursor-pointer"
+                            className="cursor-pointer"
                             onClick={() => setSelectedItemDetail(item)}
                           >
-                            <div className="w-7 h-7 rounded-full bg-[#f5f5f4] text-[#44403c] border border-[#e7e5e4] flex items-center justify-center font-serif font-medium text-xs shrink-0">
-                              {item.name.charAt(0).toUpperCase()}
+                            <div className="flex items-center space-x-2">
+                              <span className="font-semibold text-stone-900 hover:underline">
+                                {item.name}
+                              </span>
+                              {available < 0 ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                                  DEFICIT
+                                </span>
+                              ) : (item.isLowStock || available <= minRefill) ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  LOW
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  OK
+                                </span>
+                              )}
                             </div>
-                            <div>
-                              <div className="flex items-center space-x-2">
-                                <p className="font-medium text-[#0c0a09] hover:underline">
-                                  {item.name}
-                                </p>
-                                {(item.isLowStock || available <= minRefill) ? (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                    🔴 LOW
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                    🟢 OK
-                                  </span>
-                                )}
-                              </div>
-                              <p className="text-[11px] text-[#a8a29e]">
-                                {item.description || "Raw ingredient"}
-                              </p>
-                            </div>
+                            <p className="text-[11px] text-stone-500 mt-0.5">
+                              {item.description || "Raw ingredient"}
+                            </p>
                           </div>
                         </td>
-                        <td className="py-4 px-5 text-[#44403c] font-medium">
+                        <td className="py-3.5 px-5 text-stone-700 font-medium">
                           Dairy items
                         </td>
-                        <td className="py-4 px-5 font-mono text-[11px] text-[#57534e]">
+                        <td className="py-3.5 px-5 font-mono text-[11px] text-stone-600">
                           {item.skuNumber || "—"}
                         </td>
-                        <td className="py-4 px-5">
+                        <td className="py-3.5 px-5">
                           {/* Visual Stock Bar Slider Component */}
                           <div className="space-y-1.5">
-                            <div className="text-center text-[11px] font-semibold text-[#0c0a09]">
-                              {available.toFixed(2)}
+                            <div className={`text-center text-[11px] font-semibold ${available < 0 ? "text-purple-700 font-bold" : "text-stone-900"}`}>
+                              {shortUnit === "pc"
+                                ? available.toFixed(2)
+                                : Math.round(available * 100) / 100 !== available
+                                ? available.toFixed(3)
+                                : available.toFixed(2)}
                               {shortUnit}
                             </div>
-                            <div className="relative w-full h-3 bg-[#f5f5f4] border border-[#e7e5e4] rounded-full overflow-hidden">
+                            <div className="relative w-full h-2.5 bg-stone-100 border border-stone-200 rounded-full overflow-hidden">
                               {/* Filled Available Stock Bar */}
                               <div
                                 className="h-full rounded-full transition-all duration-300"
@@ -1372,64 +1895,64 @@ export function ItemLibraryView({
                               />
                               {/* Min Refill Level Marker */}
                               <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-rose-600"
+                                className="absolute top-0 bottom-0 w-0.5 bg-rose-500"
                                 style={{ left: `${minPct}%` }}
                                 title={`Minimum Stock Refill level: ${minRefill}${shortUnit}`}
                               />
                               {/* Baseline Stock Level Marker */}
                               <div
-                                className="absolute top-0 bottom-0 w-0.5 bg-sky-600"
+                                className="absolute top-0 bottom-0 w-0.5 bg-sky-500"
                                 style={{ left: `${basePct}%` }}
                                 title={`Baseline stock level: ${baseline}${shortUnit}`}
                               />
                             </div>
                           </div>
                         </td>
-                        <td className="py-4 px-5 text-[#57534e] text-[11px]">
+                        <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="py-4 px-5 text-right relative">
+                        <td className="py-3.5 px-5 text-right relative">
                           <button
                             type="button"
                             onClick={() =>
                               setActiveMenuId(activeMenuId === item._id ? null : item._id)
                             }
-                            className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded hover:bg-[#e7e5e4]/50 transition cursor-pointer"
+                            className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition cursor-pointer"
                           >
                             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                               <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                             </svg>
                           </button>
                           {activeMenuId === item._id && (
-                            <div className="absolute right-5 top-12 w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans">
+                            <div className="absolute right-5 top-11 w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans text-xs">
                               <button
                                 type="button"
                                 onClick={() => {
                                   setSelectedItemDetail(item);
                                   setActiveMenuId(null);
                                 }}
-                                className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                               >
                                 View item logs
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openAssignStockDrawer(item)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                               >
                                 Add item stock
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openEditDrawer(item)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
                               >
                                 Edit item
                               </button>
                               <button
                                 type="button"
                                 onClick={() => openDeleteModal(item)}
-                                className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
                               >
                                 Delete item
                               </button>
@@ -1444,29 +1967,36 @@ export function ItemLibraryView({
             </div>
 
             {/* Pagination Controls */}
-            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/50 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
               <span>
-                Showing <strong className="text-[#0c0a09]">{paginatedItems.length}</strong>{" "}
-                of <strong className="text-[#0c0a09]">{filteredAndSortedItems.length}</strong>{" "}
-                items
+                Showing{" "}
+                <strong className="text-stone-900">
+                  {filteredAndSortedItems.length === 0
+                    ? 0
+                    : `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(
+                        currentPage * itemsPerPage,
+                        filteredAndSortedItems.length
+                      )}`}
+                </strong>{" "}
+                of <strong className="text-stone-900">{filteredAndSortedItems.length}</strong> items
               </span>
               <div className="flex items-center space-x-2 text-xs">
                 <button
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Previous
                 </button>
-                <span className="px-2 font-medium text-[#0c0a09]">
+                <span className="px-2 font-medium text-stone-900">
                   {currentPage} / {totalPages}
                 </span>
                 <button
                   type="button"
                   disabled={currentPage >= totalPages}
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Next
                 </button>
@@ -1478,12 +2008,12 @@ export function ItemLibraryView({
 
       {/* Delete Confirmation Dialog Modal */}
       {isDeleteModalOpen && itemToDelete && (
-        <div className="fixed inset-0 bg-[#0c0a09]/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e7e5e4] rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-serif text-xl text-[#0c0a09] font-medium">
+        <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-stone-200 rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 className="text-xl text-stone-900 font-bold">
               Delete {itemToDelete.name}
             </h3>
-            <div className="space-y-2 text-xs text-[#57534e]">
+            <div className="space-y-2 text-xs text-stone-600">
               <p>Are you sure you want to delete this item from the inventory?</p>
               <p className="text-rose-600 font-medium bg-rose-50 p-2.5 rounded-lg border border-rose-200">
                 Warning: By deleting this item, all the items linked to this particular item will become unavailable everywhere.
@@ -1494,14 +2024,14 @@ export function ItemLibraryView({
               <button
                 type="button"
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-[#57534e] hover:text-[#0c0a09] border border-[#e7e5e4] rounded-full hover:bg-[#f5f5f4] transition cursor-pointer"
+                className="px-4 py-2 text-xs font-semibold text-stone-700 hover:text-stone-900 border border-stone-200 rounded-lg hover:bg-stone-50 transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={confirmDelete}
-                className="px-5 py-2 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer shadow-xs"
+                className="px-5 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer shadow-xs"
               >
                 Confirm
               </button>
@@ -1518,17 +2048,20 @@ export function ItemLibraryView({
         />
       )}
 
-      {/* Slide-over Drawer for Add / Edit Item */}
+      {/* Slide-over Drawer for Add / Edit Item or Add Stock */}
       <aside
         className={`fixed top-0 right-0 h-full w-full max-w-md md:max-w-lg bg-white border-l border-[#e7e5e4] shadow-2xl z-50 transform transition-transform duration-300 ease-out flex flex-col ${
           isDrawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        {/* ADD / EDIT ITEM DRAWER MODE */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        {drawerMode === "assign_stock" && editingItem ? (
+          renderAddStockDrawer()
+        ) : (
+          /* ADD / EDIT ITEM DRAWER MODE */
+          <div className="flex-1 flex flex-col overflow-hidden">
           <div className="p-6 border-b border-[#e7e5e4] flex items-start justify-between bg-white shrink-0">
             <div>
-              <h2 className="font-serif text-2xl text-[#0c0a09] font-medium tracking-tight">
+              <h2 className="text-xl font-bold text-[#0c0a09] tracking-tight">
                 {drawerMode === "edit" ? "Edit item" : "Add new item"}
               </h2>
               <p className="text-xs text-[#78716c] mt-0.5">
@@ -1645,20 +2178,25 @@ export function ItemLibraryView({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <div>
+                <div className={drawerMode === "edit" ? "opacity-50 select-none" : ""}>
                   <label className="block font-medium text-[#1c1917] mb-1">
                     Buying unit <span className="text-rose-500">*</span>
                   </label>
                   <select
-                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
-                      buyingUnitError
-                        ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500"
-                        : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
+                    disabled={drawerMode === "edit"}
+                    className={`w-full px-3 py-2 text-xs border ${
+                      drawerMode === "edit"
+                        ? "bg-[#e7e5e4] text-[#78716c] cursor-not-allowed border-[#d6d3d1] opacity-60"
+                        : buyingUnitError
+                        ? "bg-[#fbf9f8] hover:bg-white border-rose-500 focus:ring-rose-500 focus:border-rose-500"
+                        : "bg-[#fbf9f8] hover:bg-white border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
                     } rounded-lg focus:outline-none focus:ring-1 transition`}
                     value={buyingUnit}
                     onChange={(e) => {
-                      handleBuyingUnitChange(e.target.value);
-                      if (buyingUnitError) setBuyingUnitError("");
+                      if (drawerMode !== "edit") {
+                        handleBuyingUnitChange(e.target.value);
+                        if (buyingUnitError) setBuyingUnitError("");
+                      }
                     }}
                   >
                     <option value="">Select buying unit</option>
@@ -1734,12 +2272,12 @@ export function ItemLibraryView({
                     <p className="text-[11px] text-rose-500 mt-1">{minRefillError}</p>
                   )}
                 </div>
-                <div>
+                <div className="opacity-50 select-none">
                   <label className="block font-medium text-[#78716c] mb-1">Unit</label>
                   <input
                     type="text"
                     disabled
-                    className="w-full px-3 py-2 bg-[#f5f5f4] text-xs border border-[#e7e5e4] rounded-lg text-[#78716c] font-mono capitalize"
+                    className="w-full px-3 py-2 bg-[#e7e5e4] text-xs border border-[#d6d3d1] rounded-lg text-[#78716c] font-mono capitalize cursor-not-allowed opacity-60"
                     value={buyingUnit}
                   />
                 </div>
@@ -1768,14 +2306,37 @@ export function ItemLibraryView({
                     <p className="text-[11px] text-rose-500 mt-1">{baselineError}</p>
                   )}
                 </div>
-                <div>
+                <div className="opacity-50 select-none">
                   <label className="block font-medium text-[#78716c] mb-1">Unit</label>
                   <input
                     type="text"
                     disabled
-                    className="w-full px-3 py-2 bg-[#f5f5f4] text-xs border border-[#e7e5e4] rounded-lg text-[#78716c] font-mono capitalize"
+                    className="w-full px-3 py-2 bg-[#e7e5e4] text-xs border border-[#d6d3d1] rounded-lg text-[#78716c] font-mono capitalize cursor-not-allowed opacity-60"
                     value={buyingUnit}
                   />
+                </div>
+              </div>
+
+              {/* Allow Negative Stock Toggle */}
+              <div className="pt-2">
+                <div className="flex items-center justify-between p-3.5 bg-[#fbf9f8] rounded-xl border border-[#e7e5e4]">
+                  <div>
+                    <span className="block font-medium text-[#1c1917] text-xs">
+                      Allow Negative Stock
+                    </span>
+                    <span className="text-[11px] text-[#78716c]">
+                      Permit orders to deduct stock past 0 without blocking checkout (auto-reconciles on PO restock).
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-4">
+                    <input
+                      type="checkbox"
+                      checked={allowNegativeStock}
+                      onChange={(e) => setAllowNegativeStock(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-[#d6d3d1] peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-[#d6d3d1] after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#0c0a09]"></div>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1785,7 +2346,7 @@ export function ItemLibraryView({
             <button
               type="button"
               onClick={() => setIsDrawerOpen(false)}
-              className="px-5 py-2.5 rounded-full border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-medium transition cursor-pointer"
+              className="px-4 py-2 rounded-lg border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-semibold transition cursor-pointer"
             >
               Cancel
             </button>
@@ -1793,16 +2354,16 @@ export function ItemLibraryView({
               type="submit"
               form="itemFormMain"
               disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-full bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium transition shadow-sm cursor-pointer disabled:opacity-50"
+              className="px-5 py-2 rounded-lg bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold transition shadow-xs cursor-pointer disabled:opacity-50"
             >
-              <span className="text-white !text-white font-medium">
+              <span>
                 {isSubmitting ? "Saving..." : drawerMode === "edit" ? "Update" : "Create"}
               </span>
             </button>
           </div>
         </div>
-      </aside>
+      )}
+    </aside>
     </div>
-    </ComingSoonOverlay>
   );
 }

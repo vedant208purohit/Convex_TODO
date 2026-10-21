@@ -25,7 +25,7 @@ function ItemLibraryContent() {
     return (
       <div className="flex-1 flex items-center justify-center p-12 bg-[#fbf9f8]">
         <div className="bg-white border border-[#e7e5e4] rounded-2xl p-8 max-w-md text-center shadow-xs">
-          <h2 className="font-serif text-xl font-medium text-[#0c0a09]">No Active Organization</h2>
+          <h2 className="text-xl font-bold text-[#0c0a09]">No Active Organization</h2>
           <p className="text-xs text-[#78716c] mt-2">
             Please select or set up an organization to access item library features.
           </p>
@@ -35,7 +35,7 @@ function ItemLibraryContent() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8]">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8]">
       <ItemLibraryView organizationId={activeOrg._id} />
     </div>
   );

@@ -1,17 +1,50 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { COUNTRIES_MASTER, getStatesForCountry } from "@/lib/constants/countries";
+import {
+  COUNTRIES_MASTER,
+  COUNTRY_OPTIONS,
+  PHONE_CODE_OPTIONS,
+  getStatesForCountry,
+  getPhoneCodeForCountry,
+  formatPhoneNumberWithCountryCode,
+  getCountryMaster,
+} from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
+
+function parseLocalPhoneDigits(
+  rawPhone: string | undefined | null,
+  dialCode: string = "+91"
+): string {
+  if (!rawPhone || !rawPhone.trim()) return "";
+  let trimmed = rawPhone.trim();
+  if (trimmed.startsWith("+")) {
+    const match = PHONE_CODE_OPTIONS.find((opt) => trimmed.startsWith(opt.code));
+    if (match) {
+      trimmed = trimmed.slice(match.code.length).trim();
+    }
+  }
+  const digits = trimmed.replace(/\D/g, "");
+  const dialDigits = dialCode.replace(/\D/g, "");
+  if (dialDigits && digits.startsWith(dialDigits) && digits.length > 10) {
+    return digits.slice(dialDigits.length);
+  }
+  return digits.slice(0, 10);
+}
 
 export function SuppliersView({
   organizationId,
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
+  const orgCountryCode = activeOrg?.country || "IN";
+  const orgPhoneCode = getPhoneCodeForCountry(orgCountryCode);
+
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });
   const inventoryItems = useQuery(api.inventory.listInventoryItems, {
     organizationId,
@@ -20,6 +53,7 @@ export function SuppliersView({
   const createSupplierMutation = useMutation(api.inventory.createSupplier);
   const updateSupplierMutation = useMutation(api.inventory.updateSupplier);
   const deleteSupplierMutation = useMutation(api.inventory.deleteSupplier);
+  const assignItemsMutation = useMutation(api.inventory.assignItemsToSupplier);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,18 +89,31 @@ export function SuppliersView({
   const openAssignModal = (s: any) => {
     setSupplierToAssign(s);
     setAssignSearchQuery("");
-    const existing = assignedItemIdsMap[s._id] || [];
+    const existing = (inventoryItems ?? [])
+      .filter((it: any) =>
+        (it.supplierIds ?? []).some((id: any) => String(id) === String(s._id))
+      )
+      .map((it: any) => it._id);
     setTempAssignedItemIds(existing);
     setActiveMenuId(null);
     setIsAssignModalOpen(true);
   };
 
-  const handleSaveAssignments = () => {
+  const handleSaveAssignments = async () => {
     if (!supplierToAssign) return;
-    setAssignedItemIdsMap((prev) => ({
-      ...prev,
-      [supplierToAssign._id]: tempAssignedItemIds,
-    }));
+    try {
+      await assignItemsMutation({
+        organizationId,
+        supplierId: supplierToAssign._id as Id<"suppliers">,
+        itemIds: tempAssignedItemIds as Id<"inventoryItems">[],
+      });
+      setAssignedItemIdsMap((prev) => ({
+        ...prev,
+        [supplierToAssign._id]: tempAssignedItemIds,
+      }));
+    } catch (e) {
+      console.error("Failed to assign items to supplier:", e);
+    }
     setIsAssignModalOpen(false);
   };
 
@@ -91,8 +138,31 @@ export function SuppliersView({
 
   const availableStates = useMemo(() => getStatesForCountry(country), [country]);
 
+  // Filter items specifically assigned to the currently viewed supplier
+  const supplierAssignedItems = useMemo(() => {
+    if (!selectedSupplier || !inventoryItems) return [];
+    return inventoryItems.filter((item: any) =>
+      (item.supplierIds ?? []).some((id: any) => String(id) === String(selectedSupplier._id))
+    );
+  }, [selectedSupplier, inventoryItems]);
+
   // Active Dropdown menu state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number; openUp: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const handleClose = () => {
+      setActiveMenuId(null);
+      setMenuPos(null);
+    };
+    window.addEventListener("scroll", handleClose, true);
+    window.addEventListener("resize", handleClose);
+    return () => {
+      window.removeEventListener("scroll", handleClose, true);
+      window.removeEventListener("resize", handleClose);
+    };
+  }, [activeMenuId]);
 
   // Sorting Handler
   const handleSort = (field: "supplierName" | "companyName") => {
@@ -156,8 +226,12 @@ export function SuppliersView({
     setGstNumber("");
     setFssaiLicNumber("");
     setAddress("");
-    setCountry("India");
-    setState("Gujarat");
+    const defaultCountry = activeOrg?.country || "India";
+    const master = getCountryMaster(defaultCountry);
+    const countryName = master?.name || defaultCountry;
+    setCountry(countryName);
+    const states = getStatesForCountry(countryName);
+    setState(states[0]?.name || "Gujarat");
     setCity("");
     setPhoneError("");
     setWhatsappError("");
@@ -170,14 +244,18 @@ export function SuppliersView({
     setDrawerMode("edit");
     setSupplierName(s.supplierName || "");
     setCompanyName(s.companyName || "");
-    setPhoneNumber(s.phoneNumber || "");
-    setWhatsappNumber(s.whatsappNumber || "");
+    const sCountry = s.country || activeOrg?.country || "India";
+    const master = getCountryMaster(sCountry);
+    const countryName = master?.name || sCountry;
+    setCountry(countryName);
+    setState(s.state || "Gujarat");
+    const sDialCode = getPhoneCodeForCountry(countryName);
+    setPhoneNumber(parseLocalPhoneDigits(s.phoneNumber, sDialCode));
+    setWhatsappNumber(parseLocalPhoneDigits(s.whatsappNumber, sDialCode));
     setEmail(s.email || "");
     setGstNumber(s.gstNumber || "");
     setFssaiLicNumber(s.fssaiLicNumber || "");
     setAddress(s.address || "");
-    setCountry("India");
-    setState("Gujarat");
     setCity(s.city || "");
     setPhoneError("");
     setWhatsappError("");
@@ -212,10 +290,10 @@ export function SuppliersView({
       return;
     }
 
-    // Phone number validation (10 digits max/exact if provided)
-    const cleanPhone = phoneNumber.trim();
-    if (cleanPhone) {
-      if (!/^\d{10}$/.test(cleanPhone)) {
+    const currentDialCode = getPhoneCodeForCountry(country || orgCountryCode);
+    const cleanPhoneDigits = phoneNumber.replace(/\D/g, "");
+    if (cleanPhoneDigits) {
+      if (cleanPhoneDigits.length !== 10) {
         setPhoneError("Please enter a valid 10-digit phone number.");
         hasValidationError = true;
       } else {
@@ -225,10 +303,9 @@ export function SuppliersView({
       setPhoneError("");
     }
 
-    // WhatsApp number validation (10 digits max/exact if provided)
-    const cleanWhatsapp = whatsappNumber.trim();
-    if (cleanWhatsapp) {
-      if (!/^\d{10}$/.test(cleanWhatsapp)) {
+    const cleanWhatsappDigits = whatsappNumber.replace(/\D/g, "");
+    if (cleanWhatsappDigits) {
+      if (cleanWhatsappDigits.length !== 10) {
         setWhatsappError("Please enter a valid 10-digit WhatsApp number.");
         hasValidationError = true;
       } else {
@@ -256,6 +333,9 @@ export function SuppliersView({
       return;
     }
 
+    const fullPhone = cleanPhoneDigits ? `${currentDialCode}${cleanPhoneDigits}` : undefined;
+    const fullWhatsapp = cleanWhatsappDigits ? `${currentDialCode}${cleanWhatsappDigits}` : undefined;
+
     setIsSubmitting(true);
     try {
       if (drawerMode === "edit" && selectedSupplier) {
@@ -263,23 +343,30 @@ export function SuppliersView({
           id: selectedSupplier._id,
           supplierName: supplierName.trim(),
           companyName: companyName.trim() || undefined,
-          phoneNumber: phoneNumber.trim() || undefined,
+          phoneNumber: fullPhone,
+          whatsappNumber: fullWhatsapp,
           email: email.trim() || undefined,
+          gstNumber: gstNumber.trim() || undefined,
+          fssaiLicNumber: fssaiLicNumber.trim() || undefined,
           address: address.trim() || undefined,
           city: city.trim() || undefined,
+          country: country.trim() || undefined,
+          state: state.trim() || undefined,
         });
       } else {
         await createSupplierMutation({
           organizationId,
           supplierName: supplierName.trim(),
           companyName: companyName.trim() || undefined,
-          phoneNumber: phoneNumber.trim() || undefined,
-          whatsappNumber: whatsappNumber.trim() || undefined,
+          phoneNumber: fullPhone,
+          whatsappNumber: fullWhatsapp,
           email: email.trim() || undefined,
           gstNumber: gstNumber.trim() || undefined,
           fssaiLicNumber: fssaiLicNumber.trim() || undefined,
           address: address.trim() || undefined,
           city: city.trim() || undefined,
+          country: country.trim() || undefined,
+          state: state.trim() || undefined,
         });
       }
       setIsDrawerOpen(false);
@@ -320,24 +407,30 @@ export function SuppliersView({
   }
 
   return (
-    <ComingSoonOverlay title="Suppliers">
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8">
+    <div className="flex-1 flex flex-col min-w-0 bg-[#fbf9f8] p-6 md:p-8 space-y-6">
       {/* Page Title & Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]">
         <div>
-          <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
-            Suppliers
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
+            Supplier
           </h1>
-          <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
-            Manage the people and companies you buy ingredients from.
-          </p>
         </div>
 
         {/* Actions & Search */}
-        <div className="flex items-center gap-3">
-          <div className="relative w-72">
+        <div className="flex items-center space-x-3 shrink-0">
+          <div className="relative w-64 sm:w-80">
+            <input
+              type="text"
+              className="w-full pl-9 pr-4 py-2 text-xs bg-white border border-[#e7e5e4] rounded-lg focus:outline-none focus:border-stone-800 shadow-2xs"
+              placeholder="Search by supplier name, company name"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+            />
             <svg
-              className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#a8a29e]"
+              className="w-4 h-4 text-stone-400 absolute left-3 top-2.5"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -349,22 +442,12 @@ export function SuppliersView({
                 d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
               />
             </svg>
-            <input
-              type="text"
-              className="w-full pl-9.5 pr-4 py-2 bg-white text-xs text-[#1c1917] border border-[#e7e5e4] rounded-full focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] placeholder:text-[#a8a29e] transition shadow-2xs"
-              placeholder="Search supplier, company, phone, city..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
-            />
           </div>
 
           <button
             type="button"
             onClick={openAddDrawer}
-            className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-4 py-2.5 rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
+            className="px-4 py-2 bg-[#1c1917] hover:bg-[#292524] text-white !text-white rounded-lg text-xs font-semibold transition cursor-pointer flex items-center space-x-2 shadow-2xs whitespace-nowrap"
           >
             <svg
               className="w-3.5 h-3.5 text-white stroke-white"
@@ -379,15 +462,15 @@ export function SuppliersView({
                 d="M12 4v16m8-8H4"
               />
             </svg>
-            <span className="text-white !text-white font-medium">
-              Add Supplier
+            <span className="text-white !text-white font-semibold">
+              Add new supplier
             </span>
           </button>
         </div>
       </div>
 
       {/* Main Table / Empty State Container */}
-      <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col">
         {filteredAndSortedSuppliers.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
             <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
@@ -405,7 +488,7 @@ export function SuppliersView({
                 />
               </svg>
             </div>
-            <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">
+            <h3 className="text-xl font-bold text-[#0c0a09]">
               Your Supplier List is Empty!
             </h3>
             <p className="text-xs md:text-sm text-[#78716c] max-w-sm mt-1 mb-6">
@@ -415,7 +498,7 @@ export function SuppliersView({
             <button
               type="button"
               onClick={openAddDrawer}
-              className="inline-flex items-center space-x-2 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-5 py-2.5 rounded-full transition shadow-sm cursor-pointer"
+              className="px-4 py-2 bg-[#1c1917] hover:bg-[#292524] text-white !text-white text-xs font-semibold rounded-lg transition shadow-2xs cursor-pointer inline-flex items-center space-x-2"
             >
               <svg
                 className="w-3.5 h-3.5 text-white stroke-white"
@@ -430,30 +513,30 @@ export function SuppliersView({
                   d="M12 4v16m8-8H4"
                 />
               </svg>
-              <span className="text-white !text-white font-medium">
-                Add Supplier
+              <span className="text-white !text-white font-semibold">
+                Add new supplier
               </span>
             </button>
           </div>
         ) : (
-          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-hidden flex flex-col flex-1">
-            <div className="overflow-x-auto overflow-y-auto flex-1">
-              <table className="w-full text-left border-collapse">
+          <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
                 <thead>
-                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9]/80 text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 bg-white z-10 select-none">
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold text-[#78716c]">
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3.5 px-6 cursor-pointer hover:text-[#0c0a09] transition select-none"
                       onClick={() => handleSort("supplierName")}
                     >
-                      <div className="flex items-center space-x-1">
-                        <span>Supplier Name</span>
+                      <div className="flex items-center space-x-1.5">
+                        <span>Supplier name</span>
                         {sortField === "supplierName" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-[#0c0a09] font-bold text-xs">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3.5 h-3.5 text-[#a8a29e]"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -469,18 +552,18 @@ export function SuppliersView({
                       </div>
                     </th>
                     <th
-                      className="py-3 px-5 font-normal cursor-pointer hover:text-[#0c0a09]"
+                      className="py-3.5 px-6 cursor-pointer hover:text-[#0c0a09] transition select-none"
                       onClick={() => handleSort("companyName")}
                     >
-                      <div className="flex items-center space-x-1">
-                        <span>Company Name</span>
+                      <div className="flex items-center space-x-1.5">
+                        <span>Company name</span>
                         {sortField === "companyName" ? (
-                          <span className="text-[#0c0a09] font-bold">
+                          <span className="text-[#0c0a09] font-bold text-xs">
                             {sortOrder === "asc" ? "↑" : "↓"}
                           </span>
                         ) : (
                           <svg
-                            className="w-3 h-3 text-[#d6d3d1]"
+                            className="w-3.5 h-3.5 text-[#a8a29e]"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -495,47 +578,39 @@ export function SuppliersView({
                         )}
                       </div>
                     </th>
-                    <th className="py-3 px-5 font-normal">Phone No</th>
-                    <th className="py-3 px-5 font-normal">GST No</th>
-                    <th className="py-3 px-5 text-right font-normal">
+                    <th className="py-3.5 px-6 font-semibold">Phone no.</th>
+                    <th className="py-3.5 px-6 font-semibold">GST number</th>
+                    <th className="py-3.5 px-6 text-right font-semibold">
                       Actions
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
+                <tbody className="divide-y divide-[#f5f5f4] text-xs">
                   {paginatedSuppliers.map((s) => (
                     <tr
                       key={s._id}
-                      className="hover:bg-[#fafaf9] transition-colors group"
+                      className="hover:bg-[#fafaf9] transition-colors"
                     >
-                      <td className="py-4 px-5">
-                        <div
-                          className="flex items-center space-x-3 cursor-pointer"
+                      <td className="py-4 px-6">
+                        <span
+                          className="font-semibold text-[#0c0a09] hover:underline cursor-pointer text-xs"
                           onClick={() => openViewDrawer(s)}
                         >
-                          <div className="w-7 h-7 rounded-full bg-[#f5f5f4] text-[#44403c] border border-[#e7e5e4] flex items-center justify-center font-serif font-medium text-xs shrink-0">
-                            {s.supplierName.charAt(0).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-medium text-[#0c0a09] hover:underline">
-                              {s.supplierName}
-                            </p>
-                            <p className="text-[11px] text-[#a8a29e]">
-                              {s.email ||
-                                (s.city
-                                  ? `City: ${s.city}`
-                                  : "Primary contact")}
-                            </p>
-                          </div>
-                        </div>
+                          {s.supplierName}
+                        </span>
                       </td>
-                      <td className="py-4 px-5 text-[#44403c] font-medium">
+                      <td className="py-4 px-6 text-[#44403c] font-medium text-xs">
                         {s.companyName || "—"}
                       </td>
-                      <td className="py-4 px-5 text-[#57534e] font-mono text-[11px]">
+                      <td className="py-4 px-6 text-[#57534e] text-xs">
                         {s.phoneNumber ? (
                           <div className="flex items-center space-x-2">
-                            <span>{s.phoneNumber}</span>
+                            <span>
+                              {formatPhoneNumberWithCountryCode(
+                                s.phoneNumber,
+                                getPhoneCodeForCountry((s as any).country || orgCountryCode)
+                              )}
+                            </span>
                             {s.whatsappNumber && (
                               <a
                                 href={`https://wa.me/${s.whatsappNumber.replace(/[^0-9]/g, "")}`}
@@ -553,24 +628,30 @@ export function SuppliersView({
                           "—"
                         )}
                       </td>
-                      <td className="py-4 px-5">
-                        {s.gstNumber ? (
-                          <span className="inline-block font-mono text-[11px] bg-[#f5f5f4] text-[#44403c] px-2 py-0.5 rounded border border-[#e7e5e4]">
-                            {s.gstNumber}
-                          </span>
-                        ) : (
-                          <span className="text-[#a8a29e]">—</span>
-                        )}
+                      <td className="py-4 px-6 text-[#57534e] text-xs">
+                        {s.gstNumber || "—"}
                       </td>
-                      <td className="py-4 px-5 text-right relative">
+                      <td className="py-4 px-6 text-right relative">
                         <button
                           type="button"
-                          onClick={() =>
-                            setActiveMenuId(
-                              activeMenuId === s._id ? null : s._id,
-                            )
-                          }
-                          className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded hover:bg-[#e7e5e4]/50 transition cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (activeMenuId === s._id) {
+                              setActiveMenuId(null);
+                              setMenuPos(null);
+                            } else {
+                              const rect = e.currentTarget.getBoundingClientRect();
+                              const spaceBelow = window.innerHeight - rect.bottom;
+                              const openUp = spaceBelow < 220;
+                              setMenuPos({
+                                top: openUp ? rect.top - 6 : rect.bottom + 6,
+                                right: window.innerWidth - rect.right,
+                                openUp,
+                              });
+                              setActiveMenuId(s._id);
+                            }
+                          }}
+                          className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded-lg hover:bg-[#e7e5e4]/50 transition cursor-pointer"
                         >
                           <svg
                             className="w-4 h-4"
@@ -580,37 +661,71 @@ export function SuppliersView({
                             <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
                           </svg>
                         </button>
-                        {activeMenuId === s._id && (
-                          <div className="absolute right-5 top-12 w-40 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans">
-                            <button
-                              type="button"
-                              onClick={() => openEditDrawer(s)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
+                        {activeMenuId === s._id && menuPos && (
+                          <>
+                            <div
+                              className="fixed inset-0 z-40"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveMenuId(null);
+                                setMenuPos(null);
+                              }}
+                            />
+                            <div
+                              className="fixed z-50 w-44 bg-white border border-[#e7e5e4] rounded-xl shadow-xl py-1.5 text-left text-xs"
+                              style={{
+                                top: menuPos.openUp ? undefined : `${menuPos.top}px`,
+                                bottom: menuPos.openUp ? `${window.innerHeight - menuPos.top}px` : undefined,
+                                right: `${menuPos.right}px`,
+                              }}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              Edit supplier
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openViewDrawer(s)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
-                            >
-                              View supplier
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openAssignModal(s)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-[#0c0a09] hover:bg-[#fafaf9] cursor-pointer"
-                            >
-                              Assign item
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => openDeleteModal(s)}
-                              className="w-full text-left px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50 cursor-pointer"
-                            >
-                              Delete supplier
-                            </button>
-                          </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setMenuPos(null);
+                                  openEditDrawer(s);
+                                }}
+                                className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                              >
+                                Edit supplier
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setMenuPos(null);
+                                  openViewDrawer(s);
+                                }}
+                                className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                              >
+                                View supplier
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setMenuPos(null);
+                                  openAssignModal(s);
+                                }}
+                                className="w-full text-left px-3.5 py-2 text-stone-700 hover:bg-stone-50 transition cursor-pointer"
+                              >
+                                Assign item
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveMenuId(null);
+                                  setMenuPos(null);
+                                  openDeleteModal(s);
+                                }}
+                                className="w-full text-left px-3.5 py-2 text-rose-600 hover:bg-rose-50 font-medium transition cursor-pointer"
+                              >
+                                Delete supplier
+                              </button>
+                            </div>
+                          </>
                         )}
                       </td>
                     </tr>
@@ -620,11 +735,16 @@ export function SuppliersView({
             </div>
 
             {/* Pagination Controls */}
-            <div className="py-3.5 px-5 border-t border-[#e7e5e4] bg-[#fafaf9]/50 flex items-center justify-between text-xs text-[#78716c] shrink-0">
+            <div className="py-3.5 px-6 border-t border-[#e7e5e4] bg-[#fafaf9]/60 flex items-center justify-between text-xs text-[#78716c] shrink-0">
               <span>
                 Showing{" "}
                 <strong className="text-[#0c0a09]">
-                  {paginatedSuppliers.length}
+                  {filteredAndSortedSuppliers.length === 0
+                    ? 0
+                    : `${(currentPage - 1) * itemsPerPage + 1} - ${Math.min(
+                        currentPage * itemsPerPage,
+                        filteredAndSortedSuppliers.length
+                      )}`}
                 </strong>{" "}
                 of{" "}
                 <strong className="text-[#0c0a09]">
@@ -637,7 +757,7 @@ export function SuppliersView({
                   type="button"
                   disabled={currentPage <= 1}
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Previous
                 </button>
@@ -650,7 +770,7 @@ export function SuppliersView({
                   onClick={() =>
                     setCurrentPage((p) => Math.min(totalPages, p + 1))
                   }
-                  className="px-3 py-1 border border-[#e7e5e4] rounded bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-[#1c1917] hover:bg-[#f5f5f4] disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                 >
                   Next
                 </button>
@@ -664,7 +784,7 @@ export function SuppliersView({
       {isDeleteModalOpen && supplierToDelete && (
         <div className="fixed inset-0 bg-[#0c0a09]/40 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-[#e7e5e4] rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
-            <h3 className="font-serif text-xl text-[#0c0a09] font-medium">
+            <h3 className="text-xl font-bold text-[#0c0a09]">
               Delete supplier
             </h3>
             <div className="space-y-1 text-xs text-[#57534e] bg-[#fafaf9] p-3 rounded-lg border border-[#e7e5e4]">
@@ -689,7 +809,7 @@ export function SuppliersView({
               <button
                 type="button"
                 onClick={() => setIsDeleteModalOpen(false)}
-                className="px-4 py-2 text-xs font-medium text-[#57534e] hover:text-[#0c0a09] border border-[#e7e5e4] rounded-full hover:bg-[#f5f5f4] transition cursor-pointer"
+                className="px-4 py-2 text-xs font-medium text-[#57534e] hover:text-[#0c0a09] border border-[#e7e5e4] rounded-lg hover:bg-[#f5f5f4] transition cursor-pointer"
               >
                 Cancel
               </button>
@@ -697,7 +817,7 @@ export function SuppliersView({
                 type="button"
                 disabled={isDeleting}
                 onClick={confirmDelete}
-                className="px-5 py-2 text-xs font-medium text-white bg-rose-600 hover:bg-rose-700 rounded-full transition cursor-pointer shadow-xs disabled:opacity-50"
+                className="px-4 py-2 text-xs font-semibold text-white bg-rose-600 hover:bg-rose-700 rounded-lg transition cursor-pointer shadow-2xs disabled:opacity-50"
               >
                 {isDeleting ? "Deleting..." : "Confirm"}
               </button>
@@ -725,13 +845,13 @@ export function SuppliersView({
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Drawer Header */}
             <div className="p-6 border-b border-[#e7e5e4] flex items-center justify-between bg-white shrink-0">
-              <h2 className="font-serif text-2xl text-[#0c0a09] font-medium tracking-tight">
+              <h2 className="text-xl font-bold text-[#0c0a09] tracking-tight">
                 View Supplier
               </h2>
               <button
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
-                className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded-full hover:bg-[#f5f5f4] transition cursor-pointer"
+                className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded-lg hover:bg-[#f5f5f4] transition cursor-pointer"
               >
                 <svg
                   className="w-5 h-5"
@@ -776,8 +896,8 @@ export function SuppliersView({
                     <p className="text-[11px] font-medium text-[#78716c] uppercase">
                       Phone no
                     </p>
-                    <p className="font-mono text-[#1c1917] mt-0.5">
-                      {selectedSupplier.phoneNumber}
+                    <p className="text-xs text-[#1c1917] mt-0.5">
+                      {formatPhoneNumberWithCountryCode(selectedSupplier.phoneNumber, getPhoneCodeForCountry(selectedSupplier.country || orgCountryCode))}
                     </p>
                   </div>
                 )}
@@ -786,8 +906,8 @@ export function SuppliersView({
                     <p className="text-[11px] font-medium text-[#78716c] uppercase">
                       WhatsApp no
                     </p>
-                    <p className="font-mono text-[#1c1917] mt-0.5">
-                      {selectedSupplier.whatsappNumber}
+                    <p className="text-xs text-[#1c1917] mt-0.5">
+                      {formatPhoneNumberWithCountryCode(selectedSupplier.whatsappNumber, getPhoneCodeForCountry(selectedSupplier.country || orgCountryCode))}
                     </p>
                   </div>
                 )}
@@ -806,7 +926,7 @@ export function SuppliersView({
                     <p className="text-[11px] font-medium text-[#78716c] uppercase">
                       GST no
                     </p>
-                    <p className="font-mono text-[#1c1917] mt-0.5">
+                    <p className="text-xs text-[#1c1917] mt-0.5">
                       {selectedSupplier.gstNumber}
                     </p>
                   </div>
@@ -816,7 +936,7 @@ export function SuppliersView({
                     <p className="text-[11px] font-medium text-[#78716c] uppercase">
                       FSSAI Lic no
                     </p>
-                    <p className="font-mono text-[#1c1917] mt-0.5">
+                    <p className="text-xs text-[#1c1917] mt-0.5">
                       {selectedSupplier.fssaiLicNumber}
                     </p>
                   </div>
@@ -846,13 +966,12 @@ export function SuppliersView({
               {/* Assigned Items Section */}
               <div className="space-y-3 pt-2">
                 <div className="pb-1 border-b border-[#e7e5e4]">
-                  <h4 className="font-serif text-lg font-medium text-[#0c0a09]">
-                    Assigned items ({inventoryItems ? inventoryItems.length : 0}
-                    )
+                  <h4 className="text-base font-bold text-[#0c0a09]">
+                    Assigned items ({supplierAssignedItems.length})
                   </h4>
                 </div>
 
-                {inventoryItems && inventoryItems.length > 0 ? (
+                {supplierAssignedItems.length > 0 ? (
                   <div className="border border-[#e7e5e4] rounded-lg overflow-hidden bg-white">
                     <table className="w-full text-left border-collapse">
                       <thead>
@@ -862,12 +981,12 @@ export function SuppliersView({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#e7e5e4] text-xs">
-                        {inventoryItems.map((item) => (
+                        {supplierAssignedItems.map((item: any) => (
                           <tr key={item._id} className="hover:bg-[#fafaf9]">
                             <td className="py-2.5 px-3 font-medium text-[#0c0a09]">
                               {item.name}
                             </td>
-                            <td className="py-2.5 px-3 font-mono text-[#57534e] text-[11px]">
+                            <td className="py-2.5 px-3 text-[#78716c] text-[11px]">
                               {item.skuNumber || "—"}
                             </td>
                           </tr>
@@ -888,7 +1007,7 @@ export function SuppliersView({
               <button
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
-                className="px-5 py-2.5 rounded-full border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-medium transition cursor-pointer"
+                className="px-4 py-2 rounded-lg border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-semibold transition cursor-pointer shadow-2xs"
               >
                 Close
               </button>
@@ -900,7 +1019,7 @@ export function SuppliersView({
             {/* Drawer Header */}
             <div className="p-6 border-b border-[#e7e5e4] flex items-start justify-between bg-white shrink-0">
               <div>
-                <h2 className="font-serif text-2xl text-[#0c0a09] font-medium tracking-tight">
+                <h2 className="text-xl font-bold text-[#0c0a09] tracking-tight">
                   {drawerMode === "edit" ? "Edit Supplier" : "Add Supplier"}
                 </h2>
                 <p className="text-xs text-[#78716c] mt-0.5">
@@ -911,7 +1030,7 @@ export function SuppliersView({
               <button
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
-                className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded-full hover:bg-[#f5f5f4] transition cursor-pointer"
+                className="text-[#78716c] hover:text-[#0c0a09] p-1.5 rounded-lg hover:bg-[#f5f5f4] transition cursor-pointer"
               >
                 <svg
                   className="w-5 h-5"
@@ -938,7 +1057,7 @@ export function SuppliersView({
               {/* Group 1: Contact Details */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between pb-1 border-b border-[#f5f5f4]">
-                  <h4 className="font-mono text-[11px] font-semibold tracking-wider uppercase text-[#78716c]">
+                  <h4 className="text-[11px] font-semibold tracking-wider uppercase text-[#78716c]">
                     Contact Details
                   </h4>
                   <span className="text-[10px] text-[#a8a29e]">
@@ -978,20 +1097,29 @@ export function SuppliersView({
                   <label className="block font-medium text-[#1c1917] mb-1">
                     Phone no
                   </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
-                      phoneError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
-                    } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition font-mono`}
-                    placeholder="Enter 10-digit contact number"
-                    value={phoneNumber}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                      setPhoneNumber(val);
-                      if (phoneError) setPhoneError("");
-                    }}
-                  />
+                  <div
+                    className={`flex rounded-lg border ${
+                      phoneError
+                        ? "border-rose-500 focus-within:ring-rose-500 focus-within:border-rose-500"
+                        : "border-[#e7e5e4] focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09]"
+                    } bg-[#fbf9f8] hover:bg-white focus-within:bg-white focus-within:ring-1 transition overflow-hidden`}
+                  >
+                    <span className="inline-flex items-center px-3 py-2 bg-stone-100 border-r border-[#e7e5e4] text-xs font-medium text-stone-600 select-none whitespace-nowrap">
+                      {getPhoneCodeForCountry(country || orgCountryCode)}
+                    </span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      className="flex-1 px-3 py-2 bg-transparent text-xs text-[#0c0a09] placeholder:text-[#a8a29e] focus:outline-none"
+                      placeholder="Enter 10-digit contact number"
+                      value={phoneNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setPhoneNumber(val);
+                        if (phoneError) setPhoneError("");
+                      }}
+                    />
+                  </div>
                   {phoneError && (
                     <p className="text-[11px] text-rose-500 mt-1">{phoneError}</p>
                   )}
@@ -1001,20 +1129,29 @@ export function SuppliersView({
                   <label className="block font-medium text-[#1c1917] mb-1">
                     WhatsApp no
                   </label>
-                  <input
-                    type="tel"
-                    maxLength={10}
-                    className={`w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border ${
-                      whatsappError ? "border-rose-500 focus:ring-rose-500 focus:border-rose-500" : "border-[#e7e5e4] focus:ring-[#0c0a09] focus:border-[#0c0a09]"
-                    } rounded-lg focus:outline-none focus:ring-1 focus:bg-white placeholder:text-[#a8a29e] transition font-mono`}
-                    placeholder="Enter 10-digit WhatsApp number"
-                    value={whatsappNumber}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                      setWhatsappNumber(val);
-                      if (whatsappError) setWhatsappError("");
-                    }}
-                  />
+                  <div
+                    className={`flex rounded-lg border ${
+                      whatsappError
+                        ? "border-rose-500 focus-within:ring-rose-500 focus-within:border-rose-500"
+                        : "border-[#e7e5e4] focus-within:ring-[#0c0a09] focus-within:border-[#0c0a09]"
+                    } bg-[#fbf9f8] hover:bg-white focus-within:bg-white focus-within:ring-1 transition overflow-hidden`}
+                  >
+                    <span className="inline-flex items-center px-3 py-2 bg-stone-100 border-r border-[#e7e5e4] text-xs font-medium text-stone-600 select-none whitespace-nowrap">
+                      {getPhoneCodeForCountry(country || orgCountryCode)}
+                    </span>
+                    <input
+                      type="tel"
+                      maxLength={10}
+                      className="flex-1 px-3 py-2 bg-transparent text-xs text-[#0c0a09] placeholder:text-[#a8a29e] focus:outline-none"
+                      placeholder="Enter 10-digit WhatsApp number"
+                      value={whatsappNumber}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                        setWhatsappNumber(val);
+                        if (whatsappError) setWhatsappError("");
+                      }}
+                    />
+                  </div>
                   {whatsappError && (
                     <p className="text-[11px] text-rose-500 mt-1">{whatsappError}</p>
                   )}
@@ -1045,7 +1182,7 @@ export function SuppliersView({
               {/* Group 2: Business Details */}
               <div className="space-y-4 pt-2">
                 <div className="pb-1 border-b border-[#f5f5f4]">
-                  <h4 className="font-mono text-[11px] font-semibold tracking-wider uppercase text-[#78716c]">
+                  <h4 className="text-[11px] font-semibold tracking-wider uppercase text-[#78716c]">
                     Business Details
                   </h4>
                 </div>
@@ -1056,10 +1193,10 @@ export function SuppliersView({
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 uppercase bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition font-mono"
-                    placeholder="Enter supplier gst number"
+                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] text-[#0c0a09] transition"
+                    placeholder="Enter supplier GST number"
                     value={gstNumber}
-                    onChange={(e) => setGstNumber(e.target.value)}
+                    onChange={(e) => setGstNumber(e.target.value.toUpperCase())}
                   />
                 </div>
 
@@ -1069,8 +1206,8 @@ export function SuppliersView({
                   </label>
                   <input
                     type="text"
-                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition font-mono"
-                    placeholder="Enter supplier fssai license number"
+                    className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] text-[#0c0a09] transition"
+                    placeholder="Enter supplier FSSAI license number"
                     value={fssaiLicNumber}
                     onChange={(e) => setFssaiLicNumber(e.target.value)}
                   />
@@ -1080,7 +1217,7 @@ export function SuppliersView({
               {/* Group 3: Registered Address */}
               <div className="space-y-4 pt-2">
                 <div className="pb-1 border-b border-[#f5f5f4]">
-                  <h4 className="font-mono text-[11px] font-semibold tracking-wider uppercase text-[#78716c]">
+                  <h4 className="text-[11px] font-semibold tracking-wider uppercase text-[#78716c]">
                     Registered Address
                   </h4>
                 </div>
@@ -1103,26 +1240,49 @@ export function SuppliersView({
                     <label className="block font-medium text-[#1c1917] mb-1">
                       Country
                     </label>
-                    <input
-                      type="text"
-                      className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition"
-                      placeholder="Select a country"
+                    <select
+                      className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white text-[#0c0a09] transition"
                       value={country}
-                      onChange={(e) => setCountry(e.target.value)}
-                    />
+                      onChange={(e) => {
+                        const newCountry = e.target.value;
+                        setCountry(newCountry);
+                        const states = getStatesForCountry(newCountry);
+                        setState(states[0]?.name || "");
+                      }}
+                    >
+                      {COUNTRY_OPTIONS.map((cName) => (
+                        <option key={cName} value={cName}>
+                          {cName}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   <div>
                     <label className="block font-medium text-[#1c1917] mb-1">
                       State
                     </label>
-                    <input
-                      type="text"
-                      className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition"
-                      placeholder="Select a state"
-                      value={state}
-                      onChange={(e) => setState(e.target.value)}
-                    />
+                    {availableStates.length > 0 ? (
+                      <select
+                        className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white text-[#0c0a09] transition"
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                      >
+                        {availableStates.map((st) => (
+                          <option key={st.code} value={st.name}>
+                            {st.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        className="w-full px-3 py-2 bg-[#fbf9f8] hover:bg-white text-xs border border-[#e7e5e4] rounded-lg focus:outline-none focus:ring-1 focus:ring-[#0c0a09] focus:border-[#0c0a09] focus:bg-white placeholder:text-[#a8a29e] transition text-[#0c0a09]"
+                        placeholder="Enter state"
+                        value={state}
+                        onChange={(e) => setState(e.target.value)}
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -1146,7 +1306,7 @@ export function SuppliersView({
               <button
                 type="button"
                 onClick={() => setIsDrawerOpen(false)}
-                className="px-5 py-2.5 rounded-full border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-medium transition cursor-pointer"
+                className="px-4 py-2 rounded-lg border border-[#e7e5e4] text-[#57534e] hover:text-[#0c0a09] hover:bg-white text-xs font-semibold transition cursor-pointer shadow-2xs"
               >
                 Cancel
               </button>
@@ -1154,9 +1314,9 @@ export function SuppliersView({
                 type="submit"
                 form="supplierForm"
                 disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-full bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium transition shadow-sm cursor-pointer disabled:opacity-50"
+                className="px-5 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold transition shadow-2xs cursor-pointer disabled:opacity-50"
               >
-                <span className="text-white !text-white font-medium">
+                <span className="text-white !text-white font-semibold">
                   {isSubmitting
                     ? "Saving..."
                     : drawerMode === "edit"
@@ -1178,7 +1338,7 @@ export function SuppliersView({
                 <span className="text-[11px] font-mono text-[#78716c] uppercase">
                   INVENTORY ASSIGNMENT
                 </span>
-                <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">
+                <h3 className="text-xl font-bold text-[#0c0a09]">
                   Assign Items to {supplierToAssign.supplierName}
                 </h3>
                 <p className="text-xs text-[#78716c]">
@@ -1325,14 +1485,14 @@ export function SuppliersView({
               <button
                 type="button"
                 onClick={() => setIsAssignModalOpen(false)}
-                className="px-4 py-2 rounded-full border border-[#e7e5e4] text-[#57534e] hover:bg-stone-50 text-xs font-medium cursor-pointer"
+                className="px-4 py-2 rounded-lg border border-[#e7e5e4] text-[#57534e] hover:bg-stone-50 text-xs font-semibold cursor-pointer shadow-2xs"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleSaveAssignments}
-                className="px-5 py-2 rounded-full bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold shadow-sm transition cursor-pointer"
+                className="px-4 py-2 rounded-lg bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-semibold shadow-2xs transition cursor-pointer"
               >
                 Save Assignments
               </button>
@@ -1341,6 +1501,5 @@ export function SuppliersView({
         </div>
       )}
     </div>
-    </ComingSoonOverlay>
   );
 }

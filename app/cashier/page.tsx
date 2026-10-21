@@ -383,15 +383,25 @@ function CashierPosContent() {
     }, 4000);
   };
 
-  // Always purge legacy localStorage persistence on mount so cashier starts fresh
+  // Hydrate cart tabs and active tab from localStorage on mount (preserves cart across page refreshes)
   useEffect(() => {
     try {
-      localStorage.removeItem("pos_cashier_cart_tabs");
-      localStorage.removeItem("pos_cashier_active_cart_id");
+      const savedTabs = localStorage.getItem("pos_cashier_cart_tabs");
+      if (savedTabs) {
+        try {
+          const parsed = JSON.parse(savedTabs);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setCartTabs(parsed);
+          }
+        } catch (e) {
+          console.error("Error parsing saved cart tabs:", e);
+        }
+      }
 
       const sp = new URLSearchParams(window.location.search);
       const urlStep = sp.get("step");
       const urlCart = sp.get("cart");
+      const savedCartId = localStorage.getItem("pos_cashier_active_cart_id");
 
       if (urlStep === "2") setCurrentStep(2);
       else if (urlStep === "3") setCurrentStep(3);
@@ -399,6 +409,8 @@ function CashierPosContent() {
 
       if (urlCart) {
         setActiveCartId(urlCart);
+      } else if (savedCartId) {
+        setActiveCartId(savedCartId);
       }
     } catch (e) {
       console.error("Error initializing cashier state", e);
@@ -406,6 +418,26 @@ function CashierPosContent() {
       setIsHydrated(true);
     }
   }, []);
+
+  // Persist cart tabs to localStorage on change (only after initial hydration)
+  useEffect(() => {
+    if (!isHydrated || typeof window === "undefined") return;
+    try {
+      localStorage.setItem("pos_cashier_cart_tabs", JSON.stringify(cartTabs));
+    } catch (e) {
+      console.error("Error saving cart tabs to localStorage:", e);
+    }
+  }, [cartTabs, isHydrated]);
+
+  // Persist active cart ID to localStorage
+  useEffect(() => {
+    if (!isHydrated || typeof window === "undefined") return;
+    try {
+      localStorage.setItem("pos_cashier_active_cart_id", activeCartId);
+    } catch (e) {
+      console.error("Error saving active cart ID to localStorage:", e);
+    }
+  }, [activeCartId, isHydrated]);
 
   // Synchronize Step & URL query parameter seamlessly
   const goToStep = useCallback(
@@ -1919,6 +1951,12 @@ function CashierPosContent() {
         items: itemsPayload,
       });
 
+      if ((res as any)?.error) {
+        showToast((res as any).error);
+        setIsProcessingOrder(false);
+        return;
+      }
+
       const itemsSnapshot = activeCart.items.map((ci) => {
         const itemRate = ci.price;
         const itemQty = ci.quantity || 1;
@@ -1991,7 +2029,9 @@ function CashierPosContent() {
       goToStep(1);
       showToast(`Order ${res.orderNumber} created successfully!`);
     } catch (err: any) {
-      showToast(err.message || "Failed to create order");
+      const msg = err.data || err.message;
+      const cleanMsg = typeof msg === "string" ? msg.replace(/^[\s\S]*(?:Server Error|Uncaught Error:)\s*/, "").trim() : "Failed to create order";
+      showToast(cleanMsg);
     } finally {
       setIsProcessingOrder(false);
     }

@@ -485,7 +485,6 @@ function SettingsContent() {
                 }
 
                 const isComingSoon =
-                  tab.id === "queue" ||
                   tab.id === "printers" ||
                   tab.id === "digitalStore" ||
                   tab.id === "branding";
