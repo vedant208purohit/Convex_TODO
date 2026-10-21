@@ -4,7 +4,6 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Toast, type ToastMessage } from "./Toast";
-import { ComingSoonOverlay } from "./ComingSoonOverlay";
 
 // ----------------------------------------------------
 // TYPES & INTERFACES
@@ -912,8 +911,7 @@ export function OrganizationQueueSettings() {
   }
 
   return (
-    <ComingSoonOverlay title="Queue & Waitlist Settings">
-      <div className="flex flex-col h-full overflow-hidden font-sans">
+    <div className="flex flex-col h-full overflow-hidden font-sans">
       {/* Sticky / Fixed Top Header (Title + Subtitle + Sub-Nav Tabs) */}
       <div className="shrink-0 space-y-2 bg-[#fdf8f7] pb-1 border-b border-[#e7e5e4]">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -2471,6 +2469,5 @@ export function OrganizationQueueSettings() {
         </div>
       )}
     </div>
-    </ComingSoonOverlay>
   );
 }

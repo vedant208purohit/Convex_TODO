@@ -481,7 +481,6 @@ function SettingsContent() {
                 }
 
                 const isComingSoon =
-                  tab.id === "queue" ||
                   tab.id === "printers" ||
                   tab.id === "digitalStore";
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
