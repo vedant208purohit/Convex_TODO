@@ -59,6 +59,7 @@ import type * as surveyQuestions from "../surveyQuestions.js";
 import type * as surveys from "../surveys.js";
 import type * as taxation from "../taxation.js";
 import type * as userAddresses from "../userAddresses.js";
+import type * as workstation from "../workstation.js";
 
 import type {
   ApiFromModules,
@@ -118,6 +119,7 @@ declare const fullApi: ApiFromModules<{
   surveys: typeof surveys;
   taxation: typeof taxation;
   userAddresses: typeof userAddresses;
+  workstation: typeof workstation;
 }>;
 
 /**

@@ -22,7 +22,19 @@ function DashboardIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function WorkstationIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+      <line x1="12" x2="12" y1="17" y2="21" />
+      <circle cx="12" cy="10" r="2" />
+    </svg>
+  );
+}
+
 function MenuIcon({ className = "w-4 h-4" }: { className?: string }) {
+
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
@@ -211,6 +223,11 @@ const navItems: NavItem[] = [
     href: "/customers",
     label: "Customers",
     icon: <CustomersNavIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/workstation",
+    label: "Workstation",
+    icon: <WorkstationIcon className="w-4 h-4" />,
   },
   {
     href: "/reports",
