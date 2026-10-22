@@ -1572,6 +1572,14 @@ postpaidOrderRequests: defineTable({
         lessThanOrEqualTo: v.optional(v.number()),
       })
     ),
+    ratingDisplayMode: v.optional(
+      v.union(v.literal("stars"), v.literal("numeric"))
+    ),
+    lowLabel: v.optional(v.string()),
+    highLabel: v.optional(v.string()),
+    frequency: v.optional(
+      v.union(v.literal("once_per_order"), v.literal("per_order_item"))
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1600,6 +1608,8 @@ postpaidOrderRequests: defineTable({
     legacyId: v.optional(v.string()),
     attemptId: v.id("surveyAttempts"),
     questionId: v.id("surveyQuestions"),
+    orderItemId: v.optional(v.string()),
+    orderItemName: v.optional(v.string()),
     answerText: v.optional(v.string()),
     selectedOptions: v.optional(v.array(v.string())),
     numericValue: v.optional(v.number()),

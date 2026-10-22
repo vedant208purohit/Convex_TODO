@@ -173,6 +173,8 @@ export const submit = mutation({
     answers: v.array(
       v.object({
         questionId: v.id("surveyQuestions"),
+        orderItemId: v.optional(v.string()),
+        orderItemName: v.optional(v.string()),
         answerText: v.optional(v.string()),
         selectedOptions: v.optional(v.array(v.string())),
         numericValue: v.optional(v.number()),
@@ -321,12 +323,20 @@ export const submit = mutation({
 
     // Upsert each answer idempotently for (attemptId, questionId)
     for (const ans of args.answers) {
-      const existing = await ctx.db
-        .query("surveyAnswers")
-        .withIndex("by_attempt_question", (q) =>
-          q.eq("attemptId", attempt._id).eq("questionId", ans.questionId)
-        )
-        .first();
+      const existing = ans.orderItemId
+        ? await ctx.db
+            .query("surveyAnswers")
+            .withIndex("by_attempt_question", (q) =>
+              q.eq("attemptId", attempt._id).eq("questionId", ans.questionId)
+            )
+            .filter((q) => q.eq(q.field("orderItemId"), ans.orderItemId))
+            .first()
+        : await ctx.db
+            .query("surveyAnswers")
+            .withIndex("by_attempt_question", (q) =>
+              q.eq("attemptId", attempt._id).eq("questionId", ans.questionId)
+            )
+            .first();
 
       const numVal =
         ans.numericValue !== undefined
@@ -337,6 +347,8 @@ export const submit = mutation({
 
       if (existing) {
         await ctx.db.patch(existing._id, {
+          orderItemId: ans.orderItemId,
+          orderItemName: ans.orderItemName,
           answerText: ans.answerText,
           selectedOptions: ans.selectedOptions,
           numericValue: numVal,
@@ -346,6 +358,8 @@ export const submit = mutation({
         await ctx.db.insert("surveyAnswers", {
           attemptId: attempt._id,
           questionId: ans.questionId,
+          orderItemId: ans.orderItemId,
+          orderItemName: ans.orderItemName,
           answerText: ans.answerText,
           selectedOptions: ans.selectedOptions,
           numericValue: numVal,
