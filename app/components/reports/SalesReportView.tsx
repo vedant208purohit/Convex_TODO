@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo } from "react";
 import Link from "next/link";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import {
   formatPriceWithSymbol,
   formatStoreDate,
@@ -11,9 +13,10 @@ import {
 } from "../../../lib/constants/countries";
 import { DateRange, ChevronRightIcon } from "./ReportHeader";
 import {
-  computeSalesReportData,
-  isDataZero,
   parseOperationalHourRange,
+  isOrderRefunded,
+  isOrderUnpaidCancelled,
+  getOrderRefundAmount,
 } from "../../reports/reportCalculations";
 import { Toast, type ToastMessage } from "../Toast";
 import { OrderDateRangePicker } from "../OrderDateRangePicker";
@@ -28,11 +31,11 @@ interface SalesReportViewProps {
   operationTiming?: any;
   selectedRange?: DateRange;
   onRangeChange?: (range: DateRange) => void;
+  activeOrg?: any;
 }
 
 export function SalesReportView({
   orders = [],
-  backendData,
   loading = false,
   currencySymbol: passedCurrencySymbol,
   countryCode = "IN",
@@ -40,13 +43,28 @@ export function SalesReportView({
   operationTiming,
   selectedRange,
   onRangeChange,
+  activeOrg: passedActiveOrg,
 }: SalesReportViewProps) {
+  // Query organizations as reliable fallback if passedActiveOrg isn't provided
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg =
+    passedActiveOrg ||
+    (organizations && organizations.length > 0 ? organizations[0] : null);
+
+  // Settings -> Payment Modes query
+  const paymentModesFromSettings = useQuery(api.organizationPaymentModes.list);
+
+  // Settings -> Feature flags for sales channels
+  const isDineInActive = activeOrg ? activeOrg.isDineIn !== false : true;
+  const isTakeAwayActive = Boolean(activeOrg?.isTakeAway);
+  const isDeliveryActive = Boolean(activeOrg?.isDelivery);
+
   const currencySymbol =
     passedCurrencySymbol || getCurrencyForCountry(countryCode || "IN").symbol || "$";
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 5;
+  const pageSize = 10;
 
-  // Toast Notification state (matching Menu toaster)
+  // Toast Notification state
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const showToast = (
     message: string,
@@ -57,182 +75,52 @@ export function SalesReportView({
   };
 
   // Selected Day state for Drawer
-  const [selectedDayForDrawer, setSelectedDayForDrawer] = useState<any | null>(
-    null,
-  );
+  const [selectedDayForDrawer, setSelectedDayForDrawer] = useState<any | null>(null);
 
-  // Date Range Dropdown State (matches MenuReportView)
-  const [isDateOpen, setIsDateOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-  const datePresets = [
-    "Today",
-    "Yesterday",
-    "Last 7 Days",
-    "This Month",
-    "Last Month",
-  ];
+  // Localized Tax Labels
+  const taxLabel = useMemo(() => {
+    if (countryCode === "IN") return "CGST 2.5% + SGST 2.5%";
+    if (countryCode === "AE") return "VAT (5%)";
+    if (countryCode === "US") return "State & Local Tax";
+    return "Audited taxes on sales";
+  }, [countryCode]);
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setIsDateOpen(false);
-      }
+  const taxColumnLabel = useMemo(() => {
+    if (countryCode === "IN") return "Tax (CGST/SGST)";
+    if (countryCode === "AE") return "Tax (VAT)";
+    return "Tax (CGST/SGST)";
+  }, [countryCode]);
+
+  // Check if a single day is selected (e.g. Today / Yesterday / specific date)
+  const isSingleDay = useMemo(() => {
+    if (!selectedRange?.startDate || !selectedRange?.endDate) return false;
+    return (
+      selectedRange.startDate.getFullYear() === selectedRange.endDate.getFullYear() &&
+      selectedRange.startDate.getMonth() === selectedRange.endDate.getMonth() &&
+      selectedRange.startDate.getDate() === selectedRange.endDate.getDate()
+    );
+  }, [selectedRange]);
+
+  const targetDateTimestamp = useMemo(() => {
+    if (isSingleDay && selectedRange?.startDate) {
+      return selectedRange.startDate.getTime();
     }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+    return undefined;
+  }, [isSingleDay, selectedRange]);
 
-  const currentDateLabel = selectedRange?.preset || "Today";
-
-  const handleSelectPreset = (presetName: string) => {
-    setIsDateOpen(false);
-    if (!onRangeChange) return;
-
-    const now = new Date();
-    let start = new Date();
-    let end = new Date();
-
-    if (presetName === "Today") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        0,
-        0,
-        0,
-      );
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "Yesterday") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1,
-        0,
-        0,
-        0,
-      );
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 1,
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "Last 7 Days") {
-      start = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate() - 6,
-        0,
-        0,
-        0,
-      );
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "This Month") {
-      start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-      end = new Date(
-        now.getFullYear(),
-        now.getMonth(),
-        now.getDate(),
-        23,
-        59,
-        59,
-      );
-    } else if (presetName === "Last Month") {
-      start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0);
-      end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
-    }
-
-    onRangeChange({ startDate: start, endDate: end, preset: presetName });
-  };
-
-  // 1. Calculate Old Project Sales Report Data (matches defx-pos-frontend SalesReport.jsx)
-  const salesReport = useMemo(() => {
-    if (backendData) {
-      return {
-        total_gross_sales: formatPriceWithSymbol(
-          backendData.totalGrossSales || 0,
-          currencySymbol,
-          countryCode,
-          true
-        ),
-        total_net_sales: formatPriceWithSymbol(
-          backendData.totalNetSales || 0,
-          currencySymbol,
-          countryCode,
-          true
-        ),
-        total_tax_collected: formatPriceWithSymbol(
-          backendData.totalTaxCollected || 0,
-          currencySymbol,
-          countryCode,
-          true
-        ),
-        total_refund: formatPriceWithSymbol(
-          backendData.totalRefund || 0,
-          currencySymbol,
-          countryCode,
-          true
-        ),
-        total_orders: backendData.totalOrders || 0,
-        sales_data: (backendData.salesData || []).map((d: any) => ({
-          date: d.displayDate || d.date,
-          gross_sales: formatPriceWithSymbol(
-            d.grossPaise || 0,
-            currencySymbol,
-            countryCode,
-            true
-          ),
-          refunds: formatPriceWithSymbol(
-            d.refundPaise || 0,
-            currencySymbol,
-            countryCode,
-            true
-          ),
-          taxes_collected: formatPriceWithSymbol(
-            d.taxPaise || 0,
-            currencySymbol,
-            countryCode,
-            true
-          ),
-          net_sales: formatPriceWithSymbol(
-            d.netPaise || 0,
-            currencySymbol,
-            countryCode,
-            true
-          ),
-          total_orders: d.totalOrders || 0,
-        })),
-        length: backendData.salesData ? backendData.salesData.length : 0,
-      };
-    }
-    return computeSalesReportData(
-      orders,
-      currencySymbol,
+  // Dynamically resolve operational schedule and service timing label from operationTiming
+  const operationalSchedule = useMemo(() => {
+    return parseOperationalHourRange(
+      operationTiming,
       countryCode,
       timezone,
+      targetDateTimestamp,
     );
-  }, [backendData, orders, currencySymbol, countryCode, timezone]);
+  }, [operationTiming, countryCode, timezone, targetDateTimestamp]);
 
-  // 2. Calculate Detailed Aggregates
+  const operationTimingLabel = operationalSchedule.serviceTimingLabel;
+
+  // 1. Calculate Detailed Aggregates (Strictly Paid/Completed & Excluding Cancelled)
   const aggregates = useMemo(() => {
     let grossPaise = 0;
     let taxPaise = 0;
@@ -244,63 +132,52 @@ export function SalesReportView({
     let deliveryRuns = 0;
 
     for (const o of orders) {
-      const isCancelled =
-        Boolean(o.isRejected) ||
-        o.orderStatus === "Cancelled" ||
-        o.status === "Cancelled" ||
-        (o.orderStatusName || "").toLowerCase().includes("cancel");
-      if (isCancelled) continue;
+      if (isOrderUnpaidCancelled(o)) continue;
 
+      // Exclude pending / unpaid orders until payment is completed
       const isPaid =
         o.paymentStatus === "Paid" ||
         o.isPaid === true ||
         (Array.isArray(o.payments) &&
           o.payments.length > 0 &&
           o.payments.some(
-            (p: any) => p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName)
+            (p: any) =>
+              (p.paymentType === "Credit" || !p.paymentType) &&
+              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
           ));
 
-      // Exclude pending/unpaid orders from realized gross/tax
-      if (!isPaid && o.paymentStatus !== "Refunded" && o.paymentStatus !== "Partially Refunded") {
+      if (!isPaid && !isOrderRefunded(o)) {
         continue;
       }
 
       const amount = o.totalAmount || 0;
+      const subTotal = o.subTotal || 0;
+      const discount = o.discountAmount || 0;
+      const delivery = o.deliveryFee || o.deliveryCharge || 0;
+
+      // Exclusive tax only (tax charged on top of subtotal)
+      const orderExclusiveTax =
+        amount > 0 && subTotal > 0
+          ? Math.max(0, amount - subTotal + discount - delivery)
+          : (o.taxInfoSnapshot?.tax_mode === "exclusive" ? (o.taxTotal || 0) : 0);
+
       grossPaise += amount;
-      taxPaise += o.taxTotal || 0;
-      discountPaise += o.discountAmount || 0;
+      taxPaise += orderExclusiveTax;
+      discountPaise += discount;
 
-      if (o.deliveryFee || o.deliveryCharge) {
-        deliveryPaise += o.deliveryFee || o.deliveryCharge || 0;
-        deliveryRuns += 1;
-      } else if (
-        o.orderType === "Delivery" ||
-        o.orderType === "ScheduledDelivery"
-      ) {
+      if (delivery > 0 || o.orderType === "Delivery" || o.orderType === "ScheduledDelivery") {
+        deliveryPaise += delivery;
         deliveryRuns += 1;
       }
 
-      let orderRefund = 0;
-      if (o.paymentStatus === "Refunded") {
-        orderRefund = amount;
-      } else if (o.paymentStatus === "Partially Refunded") {
-        if (o.payments && Array.isArray(o.payments)) {
-          for (const p of o.payments) {
-            orderRefund += p.refundAmount || 0;
-          }
-        }
-        if (orderRefund === 0 && o.discountAmount) {
-          orderRefund = o.discountAmount;
-        }
-      }
+      const orderRefund = getOrderRefundAmount(o);
+
       if (orderRefund > 0) {
         refundPaise += orderRefund;
         refundOrdersCount += 1;
       }
 
-      if (o.isCompleted || o.paymentStatus === "Paid") {
-        completedOrders += 1;
-      }
+      completedOrders += 1;
     }
 
     const netPaise = Math.max(0, grossPaise - taxPaise - refundPaise);
@@ -313,18 +190,16 @@ export function SalesReportView({
       refundPaise,
       refundOrdersCount,
       netPaise,
-      completedOrders:
-        completedOrders || (orders.length > 0 ? orders.length : 0),
+      completedOrders,
       deliveryRuns,
     };
   }, [orders]);
 
-  // 3. Calculate Hourly Cadence & Peaks (restricted strictly to restaurant's operational timing)
+  // 2. Hourly Cadence & Peaks (localized in store timezone and operational hours)
   const hourlyData = useMemo(() => {
-    const { sortedHours, validHours } = parseOperationalHourRange(operationTiming);
     const hours =
-      sortedHours.length > 0
-        ? sortedHours
+      operationalSchedule.sortedHours.length > 0
+        ? operationalSchedule.sortedHours
         : [11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
 
     const buckets: Record<number, { count: number; grossPaise: number }> = {};
@@ -336,7 +211,23 @@ export function SalesReportView({
       timezone || (countryCode ? getTimezoneForCountry(countryCode) : undefined);
 
     for (const o of orders) {
-      if (o.isRejected) continue;
+      if (isOrderUnpaidCancelled(o)) continue;
+
+      const isPaid =
+        o.paymentStatus === "Paid" ||
+        o.isPaid === true ||
+        (Array.isArray(o.payments) &&
+          o.payments.length > 0 &&
+          o.payments.some(
+            (p: any) =>
+              (p.paymentType === "Credit" || !p.paymentType) &&
+              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+          ));
+
+      if (!isPaid && !isOrderRefunded(o)) {
+        continue;
+      }
+
       let h = new Date(o.createdAt).getHours();
       if (targetTz) {
         try {
@@ -352,7 +243,7 @@ export function SalesReportView({
             h = parsed === 24 ? 0 : parsed;
           }
         } catch {
-          // fallback to local getHours
+          // fallback
         }
       }
 
@@ -369,16 +260,7 @@ export function SalesReportView({
       }
     });
 
-    // Find overall peak hour within operational hours
-    let overallPeakHour = hours[0] || 12;
-    let maxVal = 0;
-    hours.forEach((h) => {
-      if (buckets[h].grossPaise > maxVal) {
-        maxVal = buckets[h].grossPaise;
-        overallPeakHour = h;
-      }
-    });
-
+    // Lunch Peak (11 AM – 3 PM)
     const lunchHours = hours.filter((h) => h >= 11 && h <= 15);
     let lunchPeakHour = lunchHours[0] || 13;
     let lunchPeakGross = buckets[lunchPeakHour]?.grossPaise || 0;
@@ -389,6 +271,7 @@ export function SalesReportView({
       }
     });
 
+    // Dinner Peak (6 PM – 11 PM)
     const dinnerHours = hours.filter((h) => h >= 18 && h <= 23);
     let dinnerPeakHour = dinnerHours[0] || 20;
     let dinnerPeakGross = buckets[dinnerPeakHour]?.grossPaise || 0;
@@ -396,6 +279,16 @@ export function SalesReportView({
       if ((buckets[h]?.grossPaise || 0) > dinnerPeakGross) {
         dinnerPeakGross = buckets[h]?.grossPaise || 0;
         dinnerPeakHour = h;
+      }
+    });
+
+    // Overall peak hour
+    let overallPeakHour = hours[0] || 12;
+    let maxVal = 0;
+    hours.forEach((h) => {
+      if (buckets[h].grossPaise > maxVal) {
+        maxVal = buckets[h].grossPaise;
+        overallPeakHour = h;
       }
     });
 
@@ -415,9 +308,9 @@ export function SalesReportView({
       },
       overallPeakHour,
     };
-  }, [orders, timezone, countryCode, operationTiming]);
+  }, [orders, timezone, countryCode, operationalSchedule]);
 
-  // 4. Channel / Order Type Performance
+  // 3. Channel / Order Type Performance
   const channelPerformance = useMemo(() => {
     const channels: Record<string, { count: number; grossPaise: number }> = {
       DineIn: { count: 0, grossPaise: 0 },
@@ -425,8 +318,27 @@ export function SalesReportView({
       Delivery: { count: 0, grossPaise: 0 },
     };
 
+    let totalOrders = 0;
+
     for (const o of orders) {
-      if (o.isRejected) continue;
+      if (isOrderUnpaidCancelled(o)) continue;
+
+      const isPaid =
+        o.paymentStatus === "Paid" ||
+        o.isPaid === true ||
+        (Array.isArray(o.payments) &&
+          o.payments.length > 0 &&
+          o.payments.some(
+            (p: any) =>
+              (p.paymentType === "Credit" || !p.paymentType) &&
+              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+          ));
+
+      if (!isPaid && !isOrderRefunded(o)) {
+        continue;
+      }
+
+      totalOrders += 1;
       const type = o.orderType || "DineIn";
       const key =
         type === "Delivery" || type === "ScheduledDelivery"
@@ -438,8 +350,6 @@ export function SalesReportView({
       channels[key].count += 1;
       channels[key].grossPaise += o.totalAmount || 0;
     }
-
-    const totalOrders = orders.length || 0;
 
     return [
       {
@@ -484,57 +394,7 @@ export function SalesReportView({
     ];
   }, [orders]);
 
-  // Tender / Payment mode breakdown across selected period
-  const overallTenders = useMemo(() => {
-    const modes: Record<string, { count: number; grossPaise: number }> = {
-      Cash: { count: 0, grossPaise: 0 },
-      Card: { count: 0, grossPaise: 0 },
-      UPI: { count: 0, grossPaise: 0 },
-      Other: { count: 0, grossPaise: 0 },
-    };
-
-    let totalSettled = 0;
-
-    for (const o of orders) {
-      if (o.isRejected) continue;
-      const amount = o.totalAmount || 0;
-      totalSettled += amount;
-
-      const m = (o.paymentMode || o.paymentMethod || "Cash").toLowerCase();
-      let key = "Other";
-      if (m.includes("cash")) key = "Cash";
-      else if (
-        m.includes("card") ||
-        m.includes("credit") ||
-        m.includes("debit") ||
-        m.includes("pos")
-      )
-        key = "Card";
-      else if (
-        m.includes("upi") ||
-        m.includes("qr") ||
-        m.includes("gpay") ||
-        m.includes("paytm") ||
-        m.includes("phonepe")
-      )
-        key = "UPI";
-
-      modes[key].count += 1;
-      modes[key].grossPaise += amount;
-    }
-
-    return Object.entries(modes).map(([mode, data]) => ({
-      mode,
-      count: data.count,
-      grossPaise: data.grossPaise,
-      percentage:
-        totalSettled > 0
-          ? `${Math.round((data.grossPaise / totalSettled) * 100)}%`
-          : "0%",
-    }));
-  }, [orders]);
-
-  // 5. Daily Ledger Settlement Table Data (matches defx-pos-frontend columns: Date, Gross sales, Refunds, Taxes collected, Net sales, Total orders)
+  // 4. Daily Ledger Settlement Table Data (Matching Prototype Columns)
   const dailyLedger = useMemo(() => {
     const dayMap = new Map<
       string,
@@ -552,7 +412,23 @@ export function SalesReportView({
     >();
 
     for (const o of orders) {
-      if (o.isRejected) continue;
+      if (isOrderUnpaidCancelled(o)) continue;
+
+      const isPaid =
+        o.paymentStatus === "Paid" ||
+        o.isPaid === true ||
+        (Array.isArray(o.payments) &&
+          o.payments.length > 0 &&
+          o.payments.some(
+            (p: any) =>
+              (p.paymentType === "Credit" || !p.paymentType) &&
+              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+          ));
+
+      if (!isPaid && !isOrderRefunded(o)) {
+        continue;
+      }
+
       const dateKey = formatStoreDate(o.createdAt, countryCode, timezone);
       const existing = dayMap.get(dateKey) || {
         dateLabel: dateKey,
@@ -567,30 +443,25 @@ export function SalesReportView({
       };
 
       const orderTotal = o.totalAmount || 0;
-      const orderTax = o.taxTotal || 0;
-      let orderRefund = 0;
-      if (o.paymentStatus === "Refunded") {
-        orderRefund = orderTotal;
-      } else if (o.paymentStatus === "Partially Refunded") {
-        if (o.payments && Array.isArray(o.payments)) {
-          for (const p of o.payments) {
-            orderRefund += p.refundAmount || 0;
-          }
-        }
-        if (orderRefund === 0 && o.discountAmount) {
-          orderRefund = o.discountAmount;
-        }
-      }
+      const subTotal = o.subTotal || 0;
+      const discount = o.discountAmount || 0;
+      const delivery = o.deliveryFee || o.deliveryCharge || 0;
+
+      // Exclusive tax calculation
+      const orderExclusiveTax =
+        orderTotal > 0 && subTotal > 0
+          ? Math.max(0, orderTotal - subTotal + discount - delivery)
+          : (o.taxInfoSnapshot?.tax_mode === "exclusive" ? (o.taxTotal || 0) : 0);
+
+      const orderRefund = getOrderRefundAmount(o);
 
       existing.ordersCount += 1;
       existing.grossPaise += orderTotal;
-      existing.taxPaise += orderTax;
+      existing.taxPaise += orderExclusiveTax;
       existing.refundPaise += orderRefund;
-      existing.discountPaise += o.discountAmount || 0;
-      if (o.deliveryFee || o.deliveryCharge) {
-        existing.deliveryPaise += o.deliveryFee || o.deliveryCharge || 0;
-      }
-      existing.netPaise += Math.max(0, orderTotal - orderTax - orderRefund);
+      existing.discountPaise += discount;
+      existing.deliveryPaise += delivery;
+      existing.netPaise += Math.max(0, orderTotal - orderExclusiveTax - orderRefund);
 
       dayMap.set(dateKey, existing);
     }
@@ -603,18 +474,35 @@ export function SalesReportView({
   const paginatedDays = useMemo(() => {
     const start = (currentPage - 1) * pageSize;
     return dailyLedger.slice(start, start + pageSize);
-  }, [dailyLedger, currentPage]);
+  }, [dailyLedger, currentPage, pageSize]);
 
-  // 6. Drawer Detailed Computations for Selected Day
+  // 5. Drawer Detailed Computations for Selected Day
   const drawerStats = useMemo(() => {
     if (!selectedDayForDrawer) return null;
 
-    const dayOrders = orders.filter(
-      (o) =>
-        !o.isRejected &&
+    const dayOrders = orders.filter((o) => {
+      if (isOrderUnpaidCancelled(o)) return false;
+
+      const isPaid =
+        o.paymentStatus === "Paid" ||
+        o.isPaid === true ||
+        (Array.isArray(o.payments) &&
+          o.payments.length > 0 &&
+          o.payments.some(
+            (p: any) =>
+              (p.paymentType === "Credit" || !p.paymentType) &&
+              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+          ));
+
+      if (!isPaid && !isOrderRefunded(o)) {
+        return false;
+      }
+
+      return (
         formatStoreDate(o.createdAt, countryCode, timezone) ===
-          selectedDayForDrawer.dateLabel,
-    );
+        selectedDayForDrawer.dateLabel
+      );
+    });
 
     let gross = 0;
     let discounts = 0;
@@ -626,44 +514,51 @@ export function SalesReportView({
       DineIn: { count: 0, amount: 0 },
       TakeAway: { count: 0, amount: 0 },
       Delivery: { count: 0, amount: 0 },
-      OnlineStore: { count: 0, amount: 0 },
     };
+
+    // Resolve active payment modes dynamically from Settings -> Payment Modes
+    const activeSettingModes: string[] = [];
+    if (paymentModesFromSettings && Array.isArray(paymentModesFromSettings)) {
+      for (const m of paymentModesFromSettings) {
+        if (m.active !== false && m.deletedAt === undefined && m.name) {
+          activeSettingModes.push(m.name.trim());
+        }
+      }
+    }
 
     const paymentModes: Record<
       string,
       { txns: number; gross: number; refunds: number; net: number }
-    > = {
-      Cash: { txns: 0, gross: 0, refunds: 0, net: 0 },
-      "UPI / QR Scan": { txns: 0, gross: 0, refunds: 0, net: 0 },
-      "Credit / Debit Card": { txns: 0, gross: 0, refunds: 0, net: 0 },
-      Aggregator: { txns: 0, gross: 0, refunds: 0, net: 0 },
-    };
+    > = {};
+
+    // Initialize only active modes from Settings (or Cash if settings list is empty)
+    if (activeSettingModes.length > 0) {
+      for (const name of activeSettingModes) {
+        paymentModes[name] = { txns: 0, gross: 0, refunds: 0, net: 0 };
+      }
+    } else {
+      paymentModes["Cash"] = { txns: 0, gross: 0, refunds: 0, net: 0 };
+    }
 
     for (const o of dayOrders) {
       const val = o.totalAmount || 0;
-      gross += val;
-      discounts += o.discountAmount || 0;
-      taxes += o.taxTotal || 0;
-      if (o.deliveryFee || o.deliveryCharge) {
-        delivery += o.deliveryFee || o.deliveryCharge || 0;
-      }
+      const sub = o.subTotal || 0;
+      const disc = o.discountAmount || 0;
+      const del = o.deliveryFee || o.deliveryCharge || 0;
+      const orderExclusiveTax =
+        val > 0 && sub > 0
+          ? Math.max(0, val - sub + disc - del)
+          : (o.taxInfoSnapshot?.tax_mode === "exclusive" ? (o.taxTotal || 0) : 0);
 
-      let orderRef = 0;
-      if (o.paymentStatus === "Refunded") {
-        orderRef = val;
-      } else if (o.paymentStatus === "Partially Refunded") {
-        if (o.payments && Array.isArray(o.payments)) {
-          for (const p of o.payments) {
-            orderRef += p.refundAmount || 0;
-          }
-        }
-        if (orderRef === 0 && o.discountAmount) {
-          orderRef = o.discountAmount;
-        }
-      }
+      gross += val;
+      discounts += disc;
+      taxes += orderExclusiveTax;
+      delivery += del;
+
+      const orderRef = getOrderRefundAmount(o);
       refunds += orderRef;
 
-      // Channels
+      // Channels (DineIn, TakeAway, Delivery)
       const oType = o.orderType || "DineIn";
       if (oType === "Delivery" || oType === "ScheduledDelivery") {
         channelCounts.Delivery.count += 1;
@@ -671,62 +566,95 @@ export function SalesReportView({
       } else if (oType === "TakeAway" || oType === "ScheduledPickup") {
         channelCounts.TakeAway.count += 1;
         channelCounts.TakeAway.amount += val;
-      } else if (o.source === "online" || o.orderSource === "web") {
-        channelCounts.OnlineStore.count += 1;
-        channelCounts.OnlineStore.amount += val;
       } else {
         channelCounts.DineIn.count += 1;
         channelCounts.DineIn.amount += val;
       }
 
-      // Payments
+      // Dynamic Payment Modes Attribution
       if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
+        let hasDebitOrRefund = false;
         for (const p of o.payments) {
-          const m = (p.mode || p.paymentMode || "Cash").toLowerCase();
-          let targetKey = "Cash";
-          if (m.includes("upi") || m.includes("qr"))
-            targetKey = "UPI / QR Scan";
-          else if (
-            m.includes("card") ||
-            m.includes("debit") ||
-            m.includes("credit")
-          )
-            targetKey = "Credit / Debit Card";
-          else if (
-            m.includes("swiggy") ||
-            m.includes("zomato") ||
-            m.includes("aggregator")
-          )
-            targetKey = "Aggregator";
+          if (p.paymentType === "Debit" || (typeof p.refundAmount === "number" && p.refundAmount > 0)) {
+            hasDebitOrRefund = true;
+            break;
+          }
+        }
 
-          const pGross = p.amount || 0;
-          const pRef = p.refundAmount || 0;
-          paymentModes[targetKey].txns += 1;
-          paymentModes[targetKey].gross += pGross;
-          paymentModes[targetKey].refunds += pRef;
-          paymentModes[targetKey].net += Math.max(0, pGross - pRef);
+        for (const p of o.payments) {
+          const rawM = (p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || "Cash").trim();
+          let targetKey = Object.keys(paymentModes).find(
+            (k) => k.toLowerCase() === rawM.toLowerCase()
+          );
+
+          if (!targetKey) {
+            targetKey = Object.keys(paymentModes).find((k) => {
+              const kLower = k.toLowerCase();
+              const rLower = rawM.toLowerCase();
+              return (
+                (rLower.includes("upi") && kLower.includes("upi")) ||
+                (rLower.includes("qr") && kLower.includes("qr")) ||
+                (rLower.includes("card") && kLower.includes("card")) ||
+                (rLower.includes("cash") && kLower.includes("cash")) ||
+                (rLower.includes("swiggy") && kLower.includes("swiggy")) ||
+                (rLower.includes("zomato") && kLower.includes("zomato"))
+              );
+            });
+          }
+
+          const finalKey: string = targetKey || rawM || "Cash";
+          if (!paymentModes[finalKey]) {
+            paymentModes[finalKey] = { txns: 0, gross: 0, refunds: 0, net: 0 };
+          }
+
+          const isDebit = p.paymentType === "Debit";
+          if (isDebit) {
+            const pRef = p.refundAmount || p.amount || 0;
+            paymentModes[finalKey].refunds += pRef;
+          } else {
+            const pGross = p.payAmount !== undefined ? p.payAmount : (p.amount || 0);
+            let pRef = p.refundAmount || 0;
+            if (!hasDebitOrRefund && orderRef > 0) {
+              pRef = orderRef;
+            }
+            paymentModes[finalKey].txns += 1;
+            paymentModes[finalKey].gross += pGross;
+            paymentModes[finalKey].refunds += pRef;
+          }
+          paymentModes[finalKey].net =
+            paymentModes[finalKey].gross - paymentModes[finalKey].refunds;
         }
       } else {
-        const m = (o.paymentMode || "Cash").toLowerCase();
-        let targetKey = "Cash";
-        if (m.includes("upi") || m.includes("qr")) targetKey = "UPI / QR Scan";
-        else if (
-          m.includes("card") ||
-          m.includes("debit") ||
-          m.includes("credit")
-        )
-          targetKey = "Credit / Debit Card";
-        else if (
-          m.includes("swiggy") ||
-          m.includes("zomato") ||
-          m.includes("online")
-        )
-          targetKey = "Aggregator";
+        const rawM = (o.paymentMode || "Cash").trim();
+        let targetKey = Object.keys(paymentModes).find(
+          (k) => k.toLowerCase() === rawM.toLowerCase()
+        );
 
-        paymentModes[targetKey].txns += 1;
-        paymentModes[targetKey].gross += val;
-        paymentModes[targetKey].refunds += orderRef;
-        paymentModes[targetKey].net += Math.max(0, val - orderRef);
+        if (!targetKey) {
+          targetKey = Object.keys(paymentModes).find((k) => {
+            const kLower = k.toLowerCase();
+            const rLower = rawM.toLowerCase();
+            return (
+              (rLower.includes("upi") && kLower.includes("upi")) ||
+              (rLower.includes("qr") && kLower.includes("qr")) ||
+              (rLower.includes("card") && kLower.includes("card")) ||
+              (rLower.includes("cash") && kLower.includes("cash")) ||
+              (rLower.includes("swiggy") && kLower.includes("swiggy")) ||
+              (rLower.includes("zomato") && kLower.includes("zomato"))
+            );
+          });
+        }
+
+        const finalKey: string = targetKey || rawM || "Cash";
+        if (!paymentModes[finalKey]) {
+          paymentModes[finalKey] = { txns: 0, gross: 0, refunds: 0, net: 0 };
+        }
+
+        paymentModes[finalKey].txns += 1;
+        paymentModes[finalKey].gross += val;
+        paymentModes[finalKey].refunds += orderRef;
+        paymentModes[finalKey].net =
+          paymentModes[finalKey].gross - paymentModes[finalKey].refunds;
       }
     }
 
@@ -737,13 +665,12 @@ export function SalesReportView({
     let totalPaymentTxns = 0;
     let totalPaymentGross = 0;
     let totalPaymentRefunds = 0;
-    let totalPaymentNet = 0;
     for (const p of Object.values(paymentModes)) {
       totalPaymentTxns += p.txns;
       totalPaymentGross += p.gross;
       totalPaymentRefunds += p.refunds;
-      totalPaymentNet += p.net;
     }
+    const totalPaymentNet = Math.max(0, totalPaymentGross - totalPaymentRefunds);
 
     return {
       dateLabel: selectedDayForDrawer.dateLabel,
@@ -762,7 +689,7 @@ export function SalesReportView({
       totalPaymentRefunds,
       totalPaymentNet,
     };
-  }, [selectedDayForDrawer, orders, countryCode, timezone]);
+  }, [selectedDayForDrawer, orders, countryCode, timezone, paymentModesFromSettings]);
 
   // Export CSV handler
   const handleExportCsv = () => {
@@ -776,20 +703,22 @@ export function SalesReportView({
 
     const headers = [
       "Date",
-      "Gross Sales",
-      "Refunds",
-      "Taxes Collected",
-      "Net Sales",
-      "Total Orders",
+      "Orders",
+      "Gross Revenue",
+      "Discounts",
+      taxColumnLabel,
+      "Delivery",
+      "Net Revenue",
     ];
 
     const rows = dailyLedger.map((d) => [
       `"${d.dateLabel}"`,
-      (d.grossPaise / 100).toFixed(2),
-      (d.refundPaise / 100).toFixed(2),
-      (d.taxPaise / 100).toFixed(2),
-      (d.netPaise / 100).toFixed(2),
       d.ordersCount,
+      (d.grossPaise / 100).toFixed(2),
+      (d.discountPaise / 100).toFixed(2),
+      (d.taxPaise / 100).toFixed(2),
+      (d.deliveryPaise / 100).toFixed(2),
+      (d.netPaise / 100).toFixed(2),
     ]);
 
     const csvContent =
@@ -799,7 +728,7 @@ export function SalesReportView({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `sales-report-${Date.now()}.csv`);
+    link.setAttribute("download", `sales-ledger-${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -839,8 +768,7 @@ export function SalesReportView({
             Sales Report
           </h1>
           <p className="text-[#5e5e5e] text-[14px] mt-1 font-normal leading-relaxed">
-            Track restaurant sales, revenue, discounts, tax collections, and net
-            settlement cadence across service consoles.
+            Track restaurant sales, revenue, discounts, tax collections, and net settlement cadence across service consoles.
           </p>
         </div>
 
@@ -862,364 +790,275 @@ export function SalesReportView({
           <button
             onClick={handleExportCsv}
             type="button"
-            style={{ backgroundColor: "#0c0a09", color: "#ffffff" }}
-            className="btn-primary inline-flex items-center gap-2 bg-[#0c0a09] !text-white text-xs font-semibold px-5 py-2.5 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
+            className="inline-flex items-center gap-1.5 bg-[#0c0a09] text-white text-xs font-semibold px-4 py-2 rounded-full shadow-xs hover:bg-[#262626] transition-colors cursor-pointer shrink-0"
           >
-            <svg
-              className="w-4 h-4 !text-white stroke-white"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#ffffff"
-              strokeWidth="2"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"
-              />
-              <polyline
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                points="7 10 12 15 17 10"
-              />
-              <line
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                x1="12"
-                y1="15"
-                x2="12"
-                y2="3"
-              />
-            </svg>
-            <span
-              className="!text-white font-semibold"
-              style={{ color: "#ffffff" }}
-            >
-              Export CSV
-            </span>
+            <span className="material-symbols-outlined text-[16px]">download</span>
+            <span>Export CSV</span>
           </button>
         </div>
       </header>
 
-      {/* 5 KPI Cards Matching defx-pos-frontend SalesReport.jsx */}
-      <section className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
-        {/* Card 1: Total gross sales */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
-              Total gross sales
+      {/* 5 Compact KPI Cards Matching Prototype */}
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+        {/* Card 1: Gross Sales */}
+        <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+              Gross Sales
             </span>
-            <svg
-              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <rect x="2" y="4" width="20" height="16" rx="2" />
-              <line x1="2" y1="10" x2="22" y2="10" />
-            </svg>
+            <span className="material-symbols-outlined text-[18px] text-[#78716c]">
+              payments
+            </span>
           </div>
           <div>
             <div
-              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
+              className="text-2xl lg:text-3xl font-normal text-[#0c0a09] tabular-nums leading-tight truncate"
               style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
             >
-              {loading ? "..." : isDataZero(salesReport.total_gross_sales)}
+              {loading ? "..." : formatPriceWithSymbol(aggregates.grossPaise, currencySymbol, countryCode, true)}
             </div>
-            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
+            <div className="text-xs text-[#78716c] mt-1 truncate">
               Sum before deductions
             </div>
           </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
-            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] tabular-nums font-medium whitespace-nowrap truncate">
+          <div className="mt-3 pt-1 flex items-center gap-1.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-2.5 py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#0c0a09] shrink-0"></span>
+            <span className="text-[11px] text-[#0c0a09] tabular-nums font-medium whitespace-nowrap truncate">
               {aggregates.completedOrders} completed orders
             </span>
           </div>
         </div>
 
-        {/* Card 2: Total net sales */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
-              Total net sales
+        {/* Card 2: Total Discounts */}
+        <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+              Total Discounts
             </span>
-            <svg
-              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-            </svg>
+            <span className="material-symbols-outlined text-[18px] text-[#78716c]">
+              sell
+            </span>
           </div>
           <div>
-            <div
-              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] leading-tight tabular-nums truncate"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-            >
-              {loading ? "..." : isDataZero(salesReport.total_net_sales)}
-            </div>
-            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
-              Gross less tax &amp; refunds
-            </div>
-          </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58] shrink-0"></span>
-            <span className="text-[10px] sm:text-[11px] text-[#645d58] font-medium tabular-nums whitespace-nowrap truncate">
-              AOV:{" "}
-              {aggregates.completedOrders > 0
-                ? formatPriceWithSymbol(
-                    Math.round(
-                      aggregates.grossPaise / aggregates.completedOrders,
-                    ),
-                    currencySymbol,
-                    countryCode,
-                    true,
-                  )
-                : "—"}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 3: Total tax collected */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
-              Total tax collected
-            </span>
-            <svg
-              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <line x1="3" y1="21" x2="21" y2="21" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-              <polyline points="5 6 12 3 19 6" />
-              <line x1="6" y1="10" x2="6" y2="21" />
-              <line x1="10" y1="10" x2="10" y2="21" />
-              <line x1="14" y1="10" x2="14" y2="21" />
-              <line x1="18" y1="10" x2="18" y2="21" />
-            </svg>
-          </div>
-          <div>
-            <div
-              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-            >
-              {loading ? "..." : isDataZero(salesReport.total_tax_collected)}
-            </div>
-            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
-              Taxes collected on sales
-            </div>
-          </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1b873f] shrink-0"></span>
-            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] font-medium whitespace-nowrap truncate">
-              {aggregates.taxPaise > 0
-                ? "Audited & compliant"
-                : "100% compliant"}
-            </span>
-          </div>
-        </div>
-
-        {/* Card 4: Total Refund given */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
-          <div className="flex items-start justify-between gap-1 mb-2">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#645d58] font-semibold leading-tight">
-              Total Refund given
-            </span>
-            <svg
-              className="w-4 h-4 text-[#7f7570] shrink-0 mt-0.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <polyline points="1 4 1 10 7 10" />
-              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-            </svg>
-          </div>
-          <div>
-            <div
-              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-            >
-              {loading ? "..." : isDataZero(salesReport.total_refund)}
-            </div>
-            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
-              Refunds &amp; reversals
-            </div>
-          </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#645d58] shrink-0"></span>
-            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] tabular-nums font-medium whitespace-nowrap truncate">
-              {aggregates.refundOrdersCount} refunded
-            </span>
-          </div>
-        </div>
-
-        {/* Card 5: Total orders */}
-        <div className="bg-white border border-[#e9e1dd] rounded-2xl p-3.5 sm:p-5 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between col-span-2 lg:col-span-1">
-          <div className="flex items-start justify-between gap-1 mb-2">
-            <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#1e1b19] font-bold leading-tight">
-              Total orders
-            </span>
-            <svg
-              className="w-4 h-4 text-[#1e1b19] shrink-0 mt-0.5"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" />
-              <line x1="3" y1="6" x2="21" y2="6" />
-              <path d="M16 10a4 4 0 0 1-8 0" />
-            </svg>
-          </div>
-          <div>
-            <div
-              className="text-xl sm:text-2xl lg:text-3xl font-normal text-[#1e1b19] tabular-nums leading-tight truncate"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-            >
-              {loading
-                ? "..."
-                : salesReport.total_orders === 0
-                  ? "-"
-                  : salesReport.total_orders}
-            </div>
-            <div className="text-[11px] sm:text-xs text-[#7f7570] mt-0.5 sm:mt-1 truncate">
-              Transactions in period
-            </div>
-          </div>
-          <div className="mt-3 sm:mt-4 pt-1 flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] rounded-full px-2.5 sm:px-3 py-0.5 sm:py-1 w-fit max-w-full">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#1e1b19] shrink-0"></span>
-            <span className="text-[10px] sm:text-[11px] text-[#1e1b19] font-medium whitespace-nowrap truncate">
-              All Channels
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Payment-Method Breakdown Section */}
-      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-4 sm:p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-4">
-          <div>
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-              Settlement Ledger
-            </span>
-            <h2
-              className="text-lg sm:text-xl text-[#1e1b19] font-normal"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-            >
-              Payment-Method Breakdown
-            </h2>
-          </div>
-          <span className="text-xs text-[#7f7570]">
-            Audited Tenders
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-          {overallTenders.map((t) => (
-            <div
-              key={t.mode}
-              className="p-3.5 bg-[#faf2ee]/70 border border-[#e9e1dd] rounded-xl flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-[#1e1b19]">
-                  {t.mode}
-                </span>
-                <span className="text-[10px] px-2 py-0.5 bg-[#1e1b19] text-white rounded-full font-medium tabular-nums">
-                  {t.percentage}
-                </span>
-              </div>
-              <div className="mt-2">
+            {aggregates.discountPaise > 0 ? (
+              <>
                 <div
-                  className="text-lg sm:text-xl font-normal text-[#1e1b19] tabular-nums"
+                  className="text-2xl lg:text-3xl font-normal text-[#0c0a09] tabular-nums leading-tight truncate"
                   style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                 >
-                  {formatPriceWithSymbol(t.grossPaise, currencySymbol, countryCode, true)}
+                  {formatPriceWithSymbol(aggregates.discountPaise, currencySymbol, countryCode, true)}
                 </div>
-                <div className="text-[11px] text-[#645d58]">
-                  {t.count} {t.count === 1 ? "transaction" : "transactions"}
+                <div className="text-xs text-[#78716c] mt-1 truncate">
+                  Discount &amp; comp reductions
                 </div>
-              </div>
+              </>
+            ) : (
+              <>
+                <div
+                  className="text-xl lg:text-2xl font-normal text-[#78716c] leading-tight"
+                  style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                >
+                  Coming Soon
+                </div>
+                <div className="text-xs text-[#78716c] mt-1 truncate">
+                  Discount tracking integration in progress
+                </div>
+              </>
+            )}
+          </div>
+          <div className="mt-3 pt-1 flex items-center gap-1.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-2.5 py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#78716c] shrink-0"></span>
+            <span className="text-[11px] text-[#5e5e5e] font-medium whitespace-nowrap truncate">
+              {aggregates.discountPaise > 0
+                ? `${((aggregates.discountPaise / (aggregates.grossPaise || 1)) * 100).toFixed(1)}% discount rate`
+                : "Telemetry coming soon"}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Taxes Collected */}
+        <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+              Taxes Collected
+            </span>
+            <span className="material-symbols-outlined text-[18px] text-[#78716c]">
+              account_balance
+            </span>
+          </div>
+          <div>
+            <div
+              className="text-2xl lg:text-3xl font-normal text-[#0c0a09] tabular-nums leading-tight truncate"
+              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+            >
+              {loading ? "..." : formatPriceWithSymbol(aggregates.taxPaise, currencySymbol, countryCode, true)}
             </div>
-          ))}
+            <div className="text-xs text-[#78716c] mt-1 truncate">
+              {taxLabel}
+            </div>
+          </div>
+          <div className="mt-3 pt-1 flex items-center gap-1.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-2.5 py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0"></span>
+            <span className="text-[11px] text-[#0c0a09] font-medium whitespace-nowrap truncate">
+              100% compliant
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Delivery Charges */}
+        <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+              Delivery Charges
+            </span>
+            <span className="material-symbols-outlined text-[18px] text-[#78716c]">
+              moped
+            </span>
+          </div>
+          <div>
+            <div
+              className="text-2xl lg:text-3xl font-normal text-[#0c0a09] tabular-nums leading-tight truncate"
+              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+            >
+              {loading ? "..." : formatPriceWithSymbol(aggregates.deliveryPaise, currencySymbol, countryCode, true)}
+            </div>
+            <div className="text-xs text-[#78716c] mt-1 truncate">
+              Packaging &amp; dispatch
+            </div>
+          </div>
+          <div className="mt-3 pt-1 flex items-center gap-1.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-2.5 py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#78716c] shrink-0"></span>
+            <span className="text-[11px] text-[#0c0a09] tabular-nums font-medium whitespace-nowrap truncate">
+              {aggregates.deliveryRuns} delivery runs
+            </span>
+          </div>
+        </div>
+
+        {/* Card 5: Net Settlement */}
+        <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs hover:shadow-md transition-shadow flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+              Net Settlement
+            </span>
+            <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">
+              verified
+            </span>
+          </div>
+          <div>
+            <div
+              className="text-2xl lg:text-3xl font-normal text-[#0c0a09] tabular-nums leading-tight truncate"
+              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+            >
+              {loading ? "..." : formatPriceWithSymbol(aggregates.netPaise, currencySymbol, countryCode, true)}
+            </div>
+            <div className="text-xs text-[#78716c] mt-1 truncate">
+              Net revenue settled
+            </div>
+          </div>
+          <div className="mt-3 pt-1 flex items-center gap-1.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-2.5 py-1 w-fit max-w-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0"></span>
+            <span className="text-[11px] text-[#0c0a09] font-medium whitespace-nowrap truncate">
+              Audited folio
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* Split Performance Section: Hourly Cadence & Channel Performance */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* Split Performance Section: Hourly Cadence & Channel Breakdown (12 Columns: 8 and 4) */}
+      <section className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* Left 8 Cols: Hourly Cadence Bar Chart */}
-        <div className="lg:col-span-8 bg-white border border-[#e9e1dd] rounded-2xl p-6 shadow-xs flex flex-col justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div className="lg:col-span-8 bg-white border border-[#e7e5e4] rounded-xl p-5 shadow-xs flex flex-col justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
             <div>
-              <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+              <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
                 Hourly Volume &amp; Intake
               </span>
               <h2
-                className="text-xl text-[#1e1b19] font-normal"
+                className="text-xl text-[#0c0a09] font-normal"
                 style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
               >
                 Sales Overview &amp; Hourly Cadence
               </h2>
             </div>
-            <div className="flex items-center gap-4 text-[#645d58] text-xs">
+            <div className="flex items-center gap-4 text-[#5e5e5e] text-xs">
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#1e1b19] inline-block"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-[#0c0a09] inline-block"></span>
                 <span>Gross Value</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#e9e1dd] inline-block"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-[#e7e5e4] inline-block"></span>
                 <span>Volume (Orders)</span>
               </div>
             </div>
           </div>
 
-          {/* SVG Bar Chart with Responsive Height */}
+          {/* Peak Annotations Banner */}
+          <div className="flex flex-wrap items-center justify-between gap-2 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-4 py-2 mb-3">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-amber-600">
+                wb_sunny
+              </span>
+              <span className="text-xs text-[#5e5e5e]">Lunch Peak:</span>
+              <span className="text-xs font-semibold text-[#0c0a09]">
+                {hourlyData.lunchPeak.hourLabel} ({hourlyData.lunchPeak.orders} orders • {formatPriceWithSymbol(hourlyData.lunchPeak.amount, currencySymbol, countryCode, true)})
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[16px] text-indigo-600">
+                nights_stay
+              </span>
+              <span className="text-xs text-[#5e5e5e]">Dinner Peak:</span>
+              <span className="text-xs font-semibold text-[#0c0a09]">
+                {hourlyData.dinnerPeak.hourLabel} ({hourlyData.dinnerPeak.orders} orders • {formatPriceWithSymbol(hourlyData.dinnerPeak.amount, currencySymbol, countryCode, true)})
+              </span>
+            </div>
+          </div>
+
+          {/* SVG Cadence Bar Chart */}
           <div className="overflow-x-auto w-full no-scrollbar pb-2">
             <div className="relative min-w-[500px] h-56 pt-2">
               {(() => {
                 const numHours = hourlyData.hours.length || 1;
                 const totalWidth = Math.max(680, 40 + numHours * 56);
                 const step = (totalWidth - 60) / numHours;
-                const barWidth = Math.min(34, Math.max(16, step - 14));
+                const barWidth = Math.min(32, Math.max(16, step - 14));
                 return (
                   <svg
                     className="w-full h-full overflow-visible"
                     viewBox={`0 0 ${totalWidth} 180`}
                     preserveAspectRatio="none"
                   >
-                    {/* Subtle Gridlines */}
+                    {/* Horizontal guidelines */}
                     <line
-                      x1="0"
+                      x1="20"
                       y1="30"
-                      x2={totalWidth}
+                      x2={totalWidth - 20}
                       y2="30"
-                      stroke="#f4ece8"
-                      strokeDasharray="3 3"
+                      stroke="#f0e8e2"
+                      strokeDasharray="2 3"
                     />
                     <line
-                      x1="0"
-                      y1="80"
-                      x2={totalWidth}
-                      y2="80"
-                      stroke="#f4ece8"
-                      strokeDasharray="3 3"
+                      x1="20"
+                      y1="75"
+                      x2={totalWidth - 20}
+                      y2="75"
+                      stroke="#f0e8e2"
+                      strokeDasharray="2 3"
                     />
                     <line
-                      x1="0"
-                      y1="130"
-                      x2={totalWidth}
-                      y2="130"
-                      stroke="#f4ece8"
-                      strokeDasharray="3 3"
+                      x1="20"
+                      y1="120"
+                      x2={totalWidth - 20}
+                      y2="120"
+                      stroke="#f0e8e2"
+                      strokeDasharray="2 3"
+                    />
+                    <line
+                      x1="20"
+                      y1="150"
+                      x2={totalWidth - 20}
+                      y2="150"
+                      stroke="#e7e5e4"
                     />
 
                     {hourlyData.hours.map((h, i) => {
@@ -1229,7 +1068,7 @@ export function SalesReportView({
                       };
                       const barHeight =
                         hourlyData.maxGross > 0
-                          ? Math.round((slot.grossPaise / hourlyData.maxGross) * 120)
+                          ? Math.round((slot.grossPaise / hourlyData.maxGross) * 110)
                           : 0;
                       const x = 30 + i * step;
                       const y = 150 - barHeight;
@@ -1241,10 +1080,10 @@ export function SalesReportView({
                           {/* Background Bar */}
                           <rect
                             x={x}
-                            y="30"
+                            y="35"
                             width={barWidth}
-                            height="120"
-                            rx="6"
+                            height="115"
+                            rx="5"
                             fill="#faf2ee"
                             className="group-hover:fill-[#f4ece8] transition-colors"
                           />
@@ -1256,28 +1095,43 @@ export function SalesReportView({
                               y={y}
                               width={barWidth}
                               height={barHeight}
-                              rx="6"
-                              fill={isPeak ? "#1e1b19" : "#645d58"}
-                              className="transition-all duration-300"
+                              rx="5"
+                              fill={isPeak ? "#0c0a09" : "#5e5e5e"}
+                              className="group-hover:fill-[#0c0a09] transition-all duration-300"
                             />
                           )}
 
                           {/* Peak Tag */}
                           {isPeak && (
-                            <circle
-                              cx={x + barWidth / 2}
-                              cy={Math.max(10, y - 8)}
-                              r="3"
-                              fill="#1b873f"
-                            />
+                            <>
+                              <circle
+                                cx={x + barWidth / 2}
+                                cy={Math.max(16, y - 8)}
+                                r="3.5"
+                                fill="#0c0a09"
+                                stroke="#ffffff"
+                                strokeWidth="1.5"
+                              />
+                              <text
+                                x={x + barWidth / 2}
+                                y={Math.max(10, y - 14)}
+                                textAnchor="middle"
+                                fill="#0c0a09"
+                                fontSize="9"
+                                fontWeight="700"
+                                fontFamily="sans-serif"
+                              >
+                                Peak
+                              </text>
+                            </>
                           )}
 
                           {/* Hour Axis Label */}
                           <text
                             x={x + barWidth / 2}
-                            y="168"
+                            y="166"
                             textAnchor="middle"
-                            fill="#645d58"
+                            fill="#78716c"
                             fontSize="10"
                             fontWeight="500"
                             fontFamily="sans-serif"
@@ -1294,158 +1148,119 @@ export function SalesReportView({
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-[#645d58] text-xs pt-2 border-t border-[#e9e1dd]">
-            <span>Audited Hourly Cadence</span>
-            <span className="tabular-nums">{orders.length} Total Orders</span>
+          <div className="mt-3 pt-2.5 border-t border-[#e7e5e4] flex items-center justify-between text-[#5e5e5e] text-xs">
+            <span>Operating Service: {operationTimingLabel}</span>
+            <span className="tabular-nums">Audited Hourly Folios: {hourlyData.hours.length} Periods</span>
           </div>
         </div>
 
-        {/* Right 4 Cols: Sales By Order Type (Channel Performance) */}
-        <div className="lg:col-span-4 bg-white border border-[#e9e1dd] rounded-2xl p-6 shadow-xs flex flex-col justify-between">
+        {/* Right 4 Cols: Total Discounts (Coming Soon) */}
+        <div className="lg:col-span-4 bg-white border border-[#e7e5e4] rounded-xl p-5 shadow-xs flex flex-col justify-between">
           <div>
-            <div className="mb-4">
-              <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-                Channel Performance
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+                Total Discounts
               </span>
-              <h2
-                className="text-xl text-[#1e1b19] font-normal"
-                style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-              >
-                Sales by Order Type
-              </h2>
+              <span className="material-symbols-outlined text-[18px] text-[#78716c]">
+                sell
+              </span>
             </div>
 
-            <div className="space-y-3.5">
-              {channelPerformance.map((ch) => (
-                <div
-                  key={ch.type}
-                  className="p-3 bg-[#faf2ee]/70 border border-[#e9e1dd] rounded-xl space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[#1e1b19]">
-                      {ch.type}
-                    </span>
-                    <span className="text-[11px] px-2 py-0.5 bg-[#1e1b19] text-white rounded-full font-medium tabular-nums">
-                      {ch.percentage} share
-                    </span>
-                  </div>
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-sm font-semibold text-[#1e1b19] tabular-nums">
-                      {formatPriceWithSymbol(
-                        ch.grossPaise,
-                        currencySymbol,
-                        countryCode,
-                        true,
-                      )}
-                    </span>
-                    <span className="text-xs text-[#645d58] tabular-nums">
-                      {ch.count} Orders
-                    </span>
-                  </div>
-                  <div className="w-full bg-[#e9e1dd] h-1.5 rounded-full overflow-hidden">
-                    <div
-                      className="bg-[#1e1b19] h-full rounded-full transition-all duration-300"
-                      style={{ width: ch.percentage }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between text-[11px] text-[#645d58]">
-                    <span>Avg Order Value</span>
-                    <span className="font-medium text-[#1e1b19] tabular-nums">
-                      {formatPriceWithSymbol(
-                        ch.avgTicketPaise,
-                        currencySymbol,
-                        countryCode,
-                        true,
-                      )}
-                    </span>
-                  </div>
-                </div>
-              ))}
+            <div className="pt-8 pb-6">
+              <h2
+                className="text-2xl sm:text-3xl font-normal text-[#0c0a09] leading-tight"
+                style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+              >
+                Coming Soon
+              </h2>
+              <p className="text-xs text-[#78716c] mt-1.5">
+                Discount tracking integration in progress
+              </p>
             </div>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-[#e9e1dd] flex items-center justify-between text-xs text-[#645d58]">
-            <span>Active Channels: 3</span>
-            <span className="font-semibold text-[#1e1b19]">
-              100% Reconciled
-            </span>
+          <div className="mt-4 pt-3 border-t border-[#e7e5e4] flex items-center justify-between">
+            <div className="flex items-center gap-1.5 bg-[#fdf8f7] border border-[#e7e5e4] rounded-full px-2.5 py-1 w-fit">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#78716c] shrink-0"></span>
+              <span className="text-[11px] text-[#5e5e5e] font-medium whitespace-nowrap">
+                Telemetry coming soon
+              </span>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Sales Audit Summary Table: Daily Ledger Settlement matching defx-pos-frontend */}
-      <section className="bg-white border border-[#e9e1dd] rounded-2xl p-4 sm:p-6 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+      {/* Daily Ledger Settlement Table Panel (Matching Customer Report Table Styling) */}
+      <section className="bg-white rounded-xl shadow-xs border border-[#e7e5e4] overflow-hidden flex flex-col font-sans">
+        {/* Table Header Info Bar */}
+        <div className="px-5 py-3.5 bg-[#fdf8f7] flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#e7e5e4]">
           <div>
-            <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-              Ledger Verification
-            </span>
-            <h2
-              className="text-xl text-[#1e1b19] font-normal"
-              style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-            >
-              Daily Ledger Settlement
-            </h2>
-            <p className="text-xs text-[#7f7570]">
-              Audited against store order receipts &amp; checkout transactions
+            <div className="flex items-center gap-2.5">
+              <span className="text-sm font-semibold text-[#0c0a09]">
+                Daily Ledger Settlement
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-[#f1edec] text-[11px] font-medium text-[#5e5e5e] border border-[#e7e5e4]">
+                {dailyLedger.length} settlement days
+              </span>
+            </div>
+            <p className="text-xs text-[#5e5e5e] mt-0.5">
+              Audited against terminal POS folios &amp; counter receipts
             </p>
           </div>
-          <div className="flex items-center gap-2.5">
+
+          <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               type="button"
               onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] hover:bg-[#eee7e3] px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#f1edec] px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer shadow-2xs"
             >
-              <svg
-                className="w-3.5 h-3.5 text-[#645d58]"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <polyline points="6 9 6 2 18 2 18 9" />
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                <rect x="6" y="14" width="12" height="8" />
-              </svg>
+              <span className="material-symbols-outlined text-[15px] text-[#5e5e5e]">
+                print
+              </span>
               <span>Print Journal</span>
             </button>
           </div>
         </div>
 
-        {/* Responsive Table Matching defx-pos-frontend columns */}
+        {/* Responsive Table */}
         <div className="overflow-x-auto w-full">
-          <table className="w-full text-left border-collapse min-w-[640px]">
+          <table className="w-full text-left border-collapse min-w-[850px]">
             <thead>
-              <tr className="bg-[#faf2ee] text-[#645d58] text-[11px] uppercase tracking-wider border-b border-[#e9e1dd]">
-                <th className="py-3 px-4 font-semibold">Date</th>
-                <th className="py-3 px-4 font-semibold text-right">
-                  Gross Sales
-                </th>
-                <th className="py-3 px-4 font-semibold text-right">Refunds</th>
-                <th className="py-3 px-4 font-semibold text-right">
-                  Taxes Collected
-                </th>
-                <th className="py-3 px-4 font-semibold text-right">
-                  Net Sales
-                </th>
-                <th className="py-3 px-4 font-semibold text-center">
-                  Total Orders
-                </th>
-                <th className="py-3 px-4 font-semibold text-center">Action</th>
+              <tr className="border-b border-[#e7e5e4] bg-[#fdf8f7] text-[11px] font-semibold text-[#5e5e5e] uppercase tracking-wider">
+                <th className="py-3 px-4 font-semibold whitespace-nowrap min-w-[150px]">Date</th>
+                <th className="py-3 px-3 font-semibold text-center whitespace-nowrap min-w-[95px]">Orders</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[110px]">Gross Revenue</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[95px]">Discounts</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[120px]">{taxColumnLabel}</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[95px]">Delivery</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[115px]">Net Revenue</th>
+                <th className="py-3 px-4 font-semibold text-center whitespace-nowrap min-w-[105px]">Action</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f4ece8] text-[#1e1b19] text-xs">
-              {paginatedDays.length === 0 ? (
+            <tbody className="divide-y divide-[#f0e8e2] text-xs">
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i}>
+                    <td colSpan={8} className="py-3.5 px-4">
+                      <div className="animate-pulse space-y-2">
+                        <div className="h-4 bg-[#f1edec] rounded w-1/4"></div>
+                        <div className="h-3 bg-[#f1edec] rounded w-1/6"></div>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : paginatedDays.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-[#7f7570]">
+                  <td colSpan={8} className="py-14 text-center text-[#7f7570]">
                     <div className="flex flex-col items-center justify-center space-y-2">
-                      <span className="text-2xl">📋</span>
-                      <p className="font-medium text-sm text-[#1e1b19]">
-                        No Reports Available Yet
+                      <span className="material-symbols-outlined text-[44px] text-[#b4a9a4]">
+                        receipt_long
+                      </span>
+                      <p className="font-semibold text-sm text-[#0c0a09]">
+                        No Settlement Records Found
                       </p>
-                      <p className="text-xs text-[#7f7570]">
-                        Reports will appear once you start recording
-                        transactions.
+                      <p className="text-xs text-[#5e5e5e] max-w-sm">
+                        No sales ledger entries matched the selected date range.
                       </p>
                     </div>
                   </td>
@@ -1456,68 +1271,52 @@ export function SalesReportView({
                   return (
                     <tr
                       key={d.dateLabel}
-                      className="hover:bg-[#faf2ee] transition-colors group"
+                      className="hover:bg-[#fdf8f7] transition-colors group cursor-default"
                     >
-                      <td className="py-3.5 px-4">
+                      <td className="py-3 px-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           {isFirstRow && (
-                            <span className="w-2 h-2 rounded-full bg-[#1b873f]"></span>
+                            <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
                           )}
-                          <span className="font-semibold text-[#1e1b19]">
+                          <span className="font-semibold text-xs text-[#0c0a09]">
                             {d.dateLabel}
                           </span>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums font-medium">
-                        {formatPriceWithSymbol(
-                          d.grossPaise,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums text-red-600">
-                        {d.refundPaise > 0
-                          ? `-${formatPriceWithSymbol(d.refundPaise, currencySymbol, countryCode, true)}`
-                          : "—"}
-                      </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums text-[#645d58]">
-                        {formatPriceWithSymbol(
-                          d.taxPaise,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(
-                          d.netPaise,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </td>
-                      <td className="py-3.5 px-4 text-center tabular-nums">
-                        <span className="px-2.5 py-1 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] font-medium text-[11px]">
-                          {d.ordersCount} orders
+                      <td className="py-3 px-3 text-center whitespace-nowrap tabular-nums">
+                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-[#f1edec] text-[#0c0a09] border border-[#e7e5e4] text-[11px] font-medium">
+                          {d.ordersCount} {d.ordersCount === 1 ? "order" : "orders"}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3 px-3.5 text-right whitespace-nowrap tabular-nums text-xs font-semibold text-[#0c0a09]">
+                        {formatPriceWithSymbol(d.grossPaise, currencySymbol, countryCode, true)}
+                      </td>
+                      <td className="py-3 px-3.5 text-right whitespace-nowrap tabular-nums text-xs font-medium text-[#5e5e5e]">
+                        {d.discountPaise > 0
+                          ? `-${formatPriceWithSymbol(d.discountPaise, currencySymbol, countryCode, true)}`
+                          : "—"}
+                      </td>
+                      <td className="py-3 px-3.5 text-right whitespace-nowrap tabular-nums text-xs font-medium text-[#5e5e5e]">
+                        {d.taxPaise > 0
+                          ? formatPriceWithSymbol(d.taxPaise, currencySymbol, countryCode, true)
+                          : "—"}
+                      </td>
+                      <td className="py-3 px-3.5 text-right whitespace-nowrap tabular-nums text-xs font-medium text-[#5e5e5e]">
+                        {d.deliveryPaise > 0
+                          ? formatPriceWithSymbol(d.deliveryPaise, currencySymbol, countryCode, true)
+                          : "—"}
+                      </td>
+                      <td className="py-3 px-3.5 text-right whitespace-nowrap tabular-nums text-xs font-semibold text-[#0c0a09]">
+                        {formatPriceWithSymbol(d.netPaise, currencySymbol, countryCode, true)}
+                      </td>
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => setSelectedDayForDrawer(d)}
-                          className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[11px] bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] font-medium group-hover:bg-[#1e1b19] group-hover:text-white transition-colors cursor-pointer"
+                          className="px-3 py-1 rounded-lg text-xs font-medium bg-[#0c0a09] text-white hover:bg-[#262626] transition-colors cursor-pointer inline-flex items-center gap-1 shadow-2xs"
                         >
                           <span>View Ledger</span>
-                          <svg
-                            className="w-3 h-3"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="2"
-                          >
-                            <polyline points="9 18 15 12 9 6" />
-                          </svg>
+                          <span className="material-symbols-outlined text-[13px]">arrow_forward</span>
                         </button>
                       </td>
                     </tr>
@@ -1528,17 +1327,17 @@ export function SalesReportView({
           </table>
         </div>
 
-        {/* Editorial Pagination Footer */}
+        {/* Editorial Pagination Footer (Matching Customer Report) */}
         {dailyLedger.length > 0 && (
-          <div className="mt-4 pt-4 border-t border-[#e9e1dd] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#645d58]">
+          <div className="px-5 py-3.5 border-t border-[#e7e5e4] bg-[#fdf8f7] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5e5e5e]">
             <span>
               Showing{" "}
-              <strong className="text-[#1e1b19] font-semibold">
+              <strong className="text-[#0c0a09] font-semibold">
                 {(currentPage - 1) * pageSize + 1}–
                 {Math.min(currentPage * pageSize, dailyLedger.length)}
               </strong>{" "}
               of{" "}
-              <strong className="text-[#1e1b19] font-semibold">
+              <strong className="text-[#0c0a09] font-semibold">
                 {dailyLedger.length}
               </strong>{" "}
               settlement days
@@ -1548,7 +1347,7 @@ export function SalesReportView({
                 type="button"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1 rounded-full border border-[#e9e1dd] bg-[#faf2ee] hover:bg-[#eee7e3] text-[#1e1b19] disabled:opacity-40 transition-colors cursor-pointer"
+                className="px-3 py-1 rounded-lg border border-[#e7e5e4] bg-white hover:bg-[#f1edec] text-[#0c0a09] disabled:opacity-40 transition-colors cursor-pointer text-xs font-medium"
               >
                 Previous
               </button>
@@ -1557,15 +1356,10 @@ export function SalesReportView({
                   key={i}
                   type="button"
                   onClick={() => setCurrentPage(i + 1)}
-                  style={
+                  className={`w-7 h-7 rounded-lg text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
                     currentPage === i + 1
-                      ? { backgroundColor: "#0c0a09", color: "#ffffff" }
-                      : undefined
-                  }
-                  className={`w-7 h-7 rounded-full text-xs font-semibold flex items-center justify-center transition-colors cursor-pointer ${
-                    currentPage === i + 1
-                      ? "bg-[#0c0a09] !text-white shadow-xs"
-                      : "bg-[#faf2ee] border border-[#e9e1dd] text-[#1e1b19] hover:bg-[#eee7e3]"
+                      ? "bg-[#0c0a09] text-white shadow-2xs"
+                      : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#f1edec]"
                   }`}
                 >
                   {i + 1}
@@ -1577,7 +1371,7 @@ export function SalesReportView({
                 onClick={() =>
                   setCurrentPage((p) => Math.min(totalPages, p + 1))
                 }
-                className="px-3 py-1 rounded-full border border-[#e9e1dd] bg-[#faf2ee] hover:bg-[#eee7e3] text-[#1e1b19] disabled:opacity-40 transition-colors cursor-pointer"
+                className="px-3 py-1 rounded-lg border border-[#e7e5e4] bg-white hover:bg-[#f1edec] text-[#0c0a09] disabled:opacity-40 transition-colors cursor-pointer text-xs font-medium"
               >
                 Next
               </button>
@@ -1586,7 +1380,7 @@ export function SalesReportView({
         )}
       </section>
 
-      {/* DAILY SALES LEDGER SLIDE-OVER DRAWER (100% Dynamic, Zero Hardcoded Values) */}
+      {/* DAILY SALES LEDGER SLIDE-OVER DRAWER */}
       {selectedDayForDrawer && drawerStats && (
         <div className="fixed inset-0 z-50 flex justify-end transition-opacity duration-300">
           {/* Backdrop */}
@@ -1596,13 +1390,13 @@ export function SalesReportView({
           />
 
           {/* Drawer Content */}
-          <aside className="relative z-10 w-full max-w-full sm:max-w-xl lg:max-w-2xl h-full bg-[#fff8f5] shadow-2xl flex flex-col justify-between overflow-hidden border-l border-[#e9e1dd]">
+          <aside className="relative z-10 w-full max-w-full sm:max-w-xl lg:max-w-2xl h-full bg-[#fdf8f7] shadow-2xl flex flex-col justify-between overflow-hidden border-l border-[#e7e5e4]">
             {/* Drawer Header */}
-            <div className="p-4 sm:p-6 border-b border-[#e9e1dd] bg-white flex items-center justify-between">
+            <div className="p-4 sm:p-5 border-b border-[#e7e5e4] bg-white flex items-center justify-between">
               <div className="flex flex-col gap-1">
                 <div className="flex items-center gap-2.5">
                   <h2
-                    className="text-2xl font-normal text-[#1e1b19] leading-tight"
+                    className="text-2xl font-normal text-[#0c0a09] leading-tight"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     Daily Sales Ledger
@@ -1612,20 +1406,11 @@ export function SalesReportView({
                     Settled
                   </span>
                 </div>
-                <div className="flex items-center gap-2 text-[#645d58] text-xs">
-                  <svg
-                    className="w-3.5 h-3.5 text-[#7f7570]"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                    <line x1="16" y1="2" x2="16" y2="6" />
-                    <line x1="8" y1="2" x2="8" y2="6" />
-                    <line x1="3" y1="10" x2="21" y2="10" />
-                  </svg>
-                  <span className="font-medium text-[#1e1b19]">
+                <div className="flex items-center gap-2 text-[#5e5e5e] text-xs">
+                  <span className="material-symbols-outlined text-[15px] text-[#78716c]">
+                    calendar_today
+                  </span>
+                  <span className="font-medium text-[#0c0a09]">
                     {drawerStats.dateLabel}
                   </span>
                   <span className="text-[#d0c4be]">•</span>
@@ -1638,32 +1423,23 @@ export function SalesReportView({
               <button
                 type="button"
                 onClick={() => setSelectedDayForDrawer(null)}
-                className="w-9 h-9 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] text-[#645d58] hover:text-[#1e1b19] flex items-center justify-center transition-colors cursor-pointer"
+                className="w-8 h-8 rounded-full bg-[#f1edec] hover:bg-[#e7e5e4] text-[#5e5e5e] hover:text-[#0c0a09] flex items-center justify-center transition-colors cursor-pointer"
                 title="Close Ledger"
               >
-                <svg
-                  className="w-4 h-4"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
             {/* Drawer Body */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            <div className="flex-1 overflow-y-auto p-5 space-y-5">
               {/* Section 1: Daily Summary */}
               <section className="space-y-3">
                 <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+                  <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
                     Daily Summary
                   </span>
                   <h3
-                    className="text-lg text-[#1e1b19] font-normal"
+                    className="text-lg text-[#0c0a09] font-normal"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     Ledger Performance Overview
@@ -1671,11 +1447,11 @@ export function SalesReportView({
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <div className="bg-white p-3 rounded-xl border border-[#e9e1dd] shadow-xs">
-                    <span className="text-[11px] text-[#645d58] block mb-1 uppercase tracking-wide">
+                  <div className="bg-white p-3.5 rounded-xl border border-[#e7e5e4] shadow-2xs">
+                    <span className="text-[11px] text-[#5e5e5e] block mb-1 uppercase tracking-wide font-medium">
                       Gross Revenue
                     </span>
-                    <span className="text-base font-semibold text-[#1e1b19] tabular-nums block">
+                    <span className="text-base font-semibold text-[#0c0a09] tabular-nums block">
                       {formatPriceWithSymbol(
                         drawerStats.grossPaise,
                         currencySymbol,
@@ -1683,13 +1459,13 @@ export function SalesReportView({
                         true,
                       )}
                     </span>
-                    <span className="text-xs text-[#7f7570] block mt-0.5">
+                    <span className="text-xs text-[#78716c] block mt-0.5">
                       {drawerStats.ordersCount} orders processed
                     </span>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-[#e9e1dd] shadow-xs">
-                    <span className="text-[11px] text-[#645d58] block mb-1 uppercase tracking-wide">
+                  <div className="bg-white p-3.5 rounded-xl border border-[#e7e5e4] shadow-2xs">
+                    <span className="text-[11px] text-[#5e5e5e] block mb-1 uppercase tracking-wide font-medium">
                       Total Refunds
                     </span>
                     <span className="text-base font-semibold text-red-600 tabular-nums block">
@@ -1697,32 +1473,32 @@ export function SalesReportView({
                         ? `-${formatPriceWithSymbol(drawerStats.refundPaise, currencySymbol, countryCode, true)}`
                         : "—"}
                     </span>
-                    <span className="text-xs text-[#7f7570] block mt-0.5">
+                    <span className="text-xs text-[#78716c] block mt-0.5">
                       Refunds &amp; returns
                     </span>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-[#e9e1dd] shadow-xs">
-                    <span className="text-[11px] text-[#645d58] block mb-1 uppercase tracking-wide">
+                  <div className="bg-white p-3.5 rounded-xl border border-[#e7e5e4] shadow-2xs">
+                    <span className="text-[11px] text-[#5e5e5e] block mb-1 uppercase tracking-wide font-medium">
                       Total Discounts
                     </span>
-                    <span className="text-base font-semibold text-[#645d58] tabular-nums block">
+                    <span className="text-base font-semibold text-[#5e5e5e] tabular-nums block">
                       {drawerStats.discountPaise > 0
                         ? `-${formatPriceWithSymbol(drawerStats.discountPaise, currencySymbol, countryCode, true)}`
                         : "—"}
                     </span>
-                    <span className="text-xs text-[#7f7570] block mt-0.5">
+                    <span className="text-xs text-[#78716c] block mt-0.5">
                       {drawerStats.grossPaise > 0
                         ? `${((drawerStats.discountPaise / drawerStats.grossPaise) * 100).toFixed(1)}% discount rate`
                         : "0.0% discount rate"}
                     </span>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-[#e9e1dd] shadow-xs">
-                    <span className="text-[11px] text-[#645d58] block mb-1 uppercase tracking-wide">
+                  <div className="bg-white p-3.5 rounded-xl border border-[#e7e5e4] shadow-2xs">
+                    <span className="text-[11px] text-[#5e5e5e] block mb-1 uppercase tracking-wide font-medium">
                       Taxes Collected
                     </span>
-                    <span className="text-base font-semibold text-[#1e1b19] tabular-nums block">
+                    <span className="text-base font-semibold text-[#0c0a09] tabular-nums block">
                       {formatPriceWithSymbol(
                         drawerStats.taxPaise,
                         currencySymbol,
@@ -1730,16 +1506,16 @@ export function SalesReportView({
                         true,
                       )}
                     </span>
-                    <span className="text-xs text-[#7f7570] block mt-0.5">
-                      Audited tax total
+                    <span className="text-xs text-[#78716c] block mt-0.5">
+                      {taxLabel}
                     </span>
                   </div>
 
-                  <div className="bg-white p-3 rounded-xl border border-[#e9e1dd] shadow-xs">
-                    <span className="text-[11px] text-[#645d58] block mb-1 uppercase tracking-wide">
+                  <div className="bg-white p-3.5 rounded-xl border border-[#e7e5e4] shadow-2xs">
+                    <span className="text-[11px] text-[#5e5e5e] block mb-1 uppercase tracking-wide font-medium">
                       Delivery Charges
                     </span>
-                    <span className="text-base font-semibold text-[#1e1b19] tabular-nums block">
+                    <span className="text-base font-semibold text-[#0c0a09] tabular-nums block">
                       {drawerStats.deliveryPaise > 0
                         ? formatPriceWithSymbol(
                             drawerStats.deliveryPaise,
@@ -1749,16 +1525,16 @@ export function SalesReportView({
                           )
                         : "—"}
                     </span>
-                    <span className="text-xs text-[#7f7570] block mt-0.5">
+                    <span className="text-xs text-[#78716c] block mt-0.5">
                       Dispatch &amp; packing
                     </span>
                   </div>
 
-                  <div className="bg-[#faf2ee] p-3 rounded-xl border border-[#e9e1dd] shadow-xs">
-                    <span className="text-[11px] text-[#1e1b19] block mb-1 uppercase tracking-wide font-semibold">
+                  <div className="bg-[#faf2ee] p-3.5 rounded-xl border border-[#e7e5e4] shadow-2xs">
+                    <span className="text-[11px] text-[#0c0a09] block mb-1 uppercase tracking-wide font-semibold">
                       Avg Order Value
                     </span>
-                    <span className="text-base font-bold text-[#1e1b19] tabular-nums block">
+                    <span className="text-base font-bold text-[#0c0a09] tabular-nums block">
                       {formatPriceWithSymbol(
                         drawerStats.aovPaise,
                         currencySymbol,
@@ -1766,7 +1542,7 @@ export function SalesReportView({
                         true,
                       )}
                     </span>
-                    <span className="text-xs text-[#645d58] block mt-0.5">
+                    <span className="text-xs text-[#5e5e5e] block mt-0.5">
                       {drawerStats.ordersCount} orders avg
                     </span>
                   </div>
@@ -1774,21 +1550,21 @@ export function SalesReportView({
               </section>
 
               {/* Section 2: Settlement Calculation */}
-              <section className="bg-white p-5 rounded-2xl border border-[#e9e1dd] shadow-xs space-y-3">
+              <section className="bg-white p-4 sm:p-5 rounded-xl border border-[#e7e5e4] shadow-2xs space-y-3">
                 <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+                  <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
                     Sales Breakdown
                   </span>
                   <h3
-                    className="text-lg text-[#1e1b19] font-normal"
+                    className="text-lg text-[#0c0a09] font-normal"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     Settlement Calculation
                   </h3>
                 </div>
 
-                <div className="divide-y divide-[#f4ece8] text-xs">
-                  <div className="py-2.5 flex items-center justify-between text-[#1e1b19]">
+                <div className="divide-y divide-[#f0e8e2] text-xs">
+                  <div className="py-2.5 flex items-center justify-between text-[#0c0a09]">
                     <span>Gross Sales Revenue</span>
                     <span className="font-semibold tabular-nums">
                       {formatPriceWithSymbol(
@@ -1799,34 +1575,34 @@ export function SalesReportView({
                       )}
                     </span>
                   </div>
-                  <div className="py-2.5 flex items-center justify-between text-[#645d58]">
+                  <div className="py-2.5 flex items-center justify-between text-[#5e5e5e]">
                     <span>Less: Total Refunds</span>
-                    <span className="tabular-nums text-red-600">
+                    <span className="tabular-nums text-red-600 font-medium">
                       {drawerStats.refundPaise > 0
                         ? `-${formatPriceWithSymbol(drawerStats.refundPaise, currencySymbol, countryCode, true)}`
                         : "—"}
                     </span>
                   </div>
-                  <div className="py-2.5 flex items-center justify-between text-[#645d58]">
+                  <div className="py-2.5 flex items-center justify-between text-[#5e5e5e]">
                     <span>Less: Discounts &amp; Comps</span>
-                    <span className="tabular-nums">
+                    <span className="tabular-nums font-medium">
                       {drawerStats.discountPaise > 0
                         ? `-${formatPriceWithSymbol(drawerStats.discountPaise, currencySymbol, countryCode, true)}`
                         : "—"}
                     </span>
                   </div>
-                  <div className="py-2.5 flex items-center justify-between text-[#645d58]">
+                  <div className="py-2.5 flex items-center justify-between text-[#5e5e5e]">
                     <span>Less: Taxes Collected</span>
-                    <span className="tabular-nums">
+                    <span className="tabular-nums font-medium">
                       {drawerStats.taxPaise > 0
                         ? `-${formatPriceWithSymbol(drawerStats.taxPaise, currencySymbol, countryCode, true)}`
                         : "—"}
                     </span>
                   </div>
                   {drawerStats.deliveryPaise > 0 && (
-                    <div className="py-2.5 flex items-center justify-between text-[#645d58]">
+                    <div className="py-2.5 flex items-center justify-between text-[#5e5e5e]">
                       <span>Add: Delivery &amp; Packaging</span>
-                      <span className="tabular-nums">
+                      <span className="tabular-nums font-medium">
                         +
                         {formatPriceWithSymbol(
                           drawerStats.deliveryPaise,
@@ -1837,7 +1613,7 @@ export function SalesReportView({
                       </span>
                     </div>
                   )}
-                  <div className="pt-3 pb-1 flex items-center justify-between bg-[#faf2ee] px-3.5 py-3 rounded-xl border border-[#e9e1dd] font-semibold text-[#1e1b19]">
+                  <div className="pt-3 pb-1 flex items-center justify-between bg-[#fdf8f7] px-3.5 py-3 rounded-lg border border-[#e7e5e4] font-semibold text-[#0c0a09]">
                     <span
                       className="text-base font-normal"
                       style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
@@ -1857,198 +1633,140 @@ export function SalesReportView({
               </section>
 
               {/* Section 3: Distribution (Order Channel Breakdown) */}
-              <section className="bg-white p-5 rounded-2xl border border-[#e9e1dd] shadow-xs space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
-                      Distribution
-                    </span>
-                    <h3
-                      className="text-lg text-[#1e1b19] font-normal"
-                      style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                    >
-                      Order Channel Breakdown
-                    </h3>
-                  </div>
-                  <span className="text-xs text-[#645d58] tabular-nums">
-                    {drawerStats.ordersCount} Orders (100%)
-                  </span>
-                </div>
+              <section className="bg-white p-4 sm:p-5 rounded-xl border border-[#e7e5e4] shadow-2xs space-y-3">
+                {(() => {
+                  const activeChannelOrdersCount =
+                    (isDineInActive ? (drawerStats.channelCounts.DineIn?.count || 0) : 0) +
+                    (isTakeAwayActive ? (drawerStats.channelCounts.TakeAway?.count || 0) : 0) +
+                    (isDeliveryActive ? (drawerStats.channelCounts.Delivery?.count || 0) : 0);
 
-                {/* Dynamic Multi-segment Bar */}
-                <div className="w-full h-2 rounded-full overflow-hidden flex bg-[#e9e1dd] mb-3">
-                  {drawerStats.ordersCount > 0 ? (
+                  const activeChannelsList = [
+                    isDineInActive && {
+                      key: "DineIn",
+                      label: "Dine-In",
+                      dotColor: "bg-[#0c0a09]",
+                      barColor: "bg-[#0c0a09]",
+                      count: drawerStats.channelCounts.DineIn?.count || 0,
+                      amount: drawerStats.channelCounts.DineIn?.amount || 0,
+                    },
+                    isTakeAwayActive && {
+                      key: "TakeAway",
+                      label: "Takeaway",
+                      dotColor: "bg-[#5e5e5e]",
+                      barColor: "bg-[#5e5e5e]",
+                      count: drawerStats.channelCounts.TakeAway?.count || 0,
+                      amount: drawerStats.channelCounts.TakeAway?.amount || 0,
+                    },
+                    isDeliveryActive && {
+                      key: "Delivery",
+                      label: "Delivery",
+                      dotColor: "bg-[#a8a29e]",
+                      barColor: "bg-[#a8a29e]",
+                      count: drawerStats.channelCounts.Delivery?.count || 0,
+                      amount: drawerStats.channelCounts.Delivery?.amount || 0,
+                    },
+                  ].filter(Boolean) as Array<{
+                    key: string;
+                    label: string;
+                    dotColor: string;
+                    barColor: string;
+                    count: number;
+                    amount: number;
+                  }>;
+
+                  return (
                     <>
-                      <div
-                        className="bg-[#1e1b19] h-full transition-all duration-300"
-                        style={{
-                          width: `${Math.round(((drawerStats.channelCounts.DineIn.count || 0) / drawerStats.ordersCount) * 100)}%`,
-                        }}
-                      ></div>
-                      <div
-                        className="bg-[#645d58] h-full transition-all duration-300"
-                        style={{
-                          width: `${Math.round(((drawerStats.channelCounts.TakeAway.count || 0) / drawerStats.ordersCount) * 100)}%`,
-                        }}
-                      ></div>
-                      <div
-                        className="bg-[#a8a29e] h-full transition-all duration-300"
-                        style={{
-                          width: `${Math.round(((drawerStats.channelCounts.Delivery.count || 0) / drawerStats.ordersCount) * 100)}%`,
-                        }}
-                      ></div>
-                      <div
-                        className="bg-[#d6d3d1] h-full transition-all duration-300"
-                        style={{
-                          width: `${Math.round(((drawerStats.channelCounts.OnlineStore.count || 0) / drawerStats.ordersCount) * 100)}%`,
-                        }}
-                      ></div>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+                            Distribution
+                          </span>
+                          <h3
+                            className="text-lg text-[#0c0a09] font-normal"
+                            style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                          >
+                            Order Channel Breakdown
+                          </h3>
+                        </div>
+                        <span className="text-xs text-[#5e5e5e] tabular-nums font-medium">
+                          {activeChannelOrdersCount} {activeChannelOrdersCount === 1 ? "Order" : "Orders"} (100%)
+                        </span>
+                      </div>
+
+                      {/* Multi-segment Bar */}
+                      <div className="w-full h-2 rounded-full overflow-hidden flex bg-[#e7e5e4] mb-3">
+                        {activeChannelOrdersCount > 0 ? (
+                          activeChannelsList.map((ch) => (
+                            <div
+                              key={ch.key}
+                              className={`${ch.barColor} h-full transition-all duration-300`}
+                              style={{
+                                width: `${Math.round((ch.count / activeChannelOrdersCount) * 100)}%`,
+                              }}
+                            ></div>
+                          ))
+                        ) : (
+                          <div className="bg-[#e7e5e4] h-full w-full"></div>
+                        )}
+                      </div>
+
+                      <div className="space-y-2 text-xs">
+                        {activeChannelsList.length > 0 ? (
+                          activeChannelsList.map((ch, idx) => {
+                            const isLast = idx === activeChannelsList.length - 1;
+                            const pct =
+                              activeChannelOrdersCount > 0
+                                ? Math.round((ch.count / activeChannelOrdersCount) * 100)
+                                : 0;
+                            return (
+                              <div
+                                key={ch.key}
+                                className={`flex items-center justify-between py-1.5 ${!isLast ? "border-b border-[#f0e8e2]" : ""}`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full ${ch.dotColor} inline-block`}></span>
+                                  <span className="font-medium text-[#0c0a09]">
+                                    {ch.label}
+                                  </span>
+                                  <span className="text-[#78716c]">
+                                    ({ch.count} {ch.count === 1 ? "order" : "orders"})
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-3 tabular-nums">
+                                  <span className="text-[#5e5e5e]">
+                                    {pct}%
+                                  </span>
+                                  <span className="font-semibold text-[#0c0a09]">
+                                    {formatPriceWithSymbol(
+                                      ch.amount,
+                                      currencySymbol,
+                                      countryCode,
+                                      true,
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="py-2 text-center text-[#78716c] text-xs">
+                            No active order channels enabled in Settings &rarr; Features
+                          </div>
+                        )}
+                      </div>
                     </>
-                  ) : (
-                    <div className="bg-[#e9e1dd] h-full w-full"></div>
-                  )}
-                </div>
-
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center justify-between py-1.5 border-b border-[#f4ece8]">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#1e1b19] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">
-                        Dine-In
-                      </span>
-                      <span className="text-[#7f7570]">
-                        ({drawerStats.channelCounts.DineIn.count} orders)
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 tabular-nums">
-                      <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0
-                          ? Math.round(
-                              ((drawerStats.channelCounts.DineIn.count || 0) /
-                                drawerStats.ordersCount) *
-                                100,
-                            )
-                          : 0}
-                        %
-                      </span>
-                      <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(
-                          drawerStats.channelCounts.DineIn.amount,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between py-1.5 border-b border-[#f4ece8]">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#645d58] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">
-                        Takeaway
-                      </span>
-                      <span className="text-[#7f7570]">
-                        ({drawerStats.channelCounts.TakeAway.count} orders)
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 tabular-nums">
-                      <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0
-                          ? Math.round(
-                              ((drawerStats.channelCounts.TakeAway.count || 0) /
-                                drawerStats.ordersCount) *
-                                100,
-                            )
-                          : 0}
-                        %
-                      </span>
-                      <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(
-                          drawerStats.channelCounts.TakeAway.amount,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between py-1.5 border-b border-[#f4ece8]">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#a8a29e] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">
-                        Delivery
-                      </span>
-                      <span className="text-[#7f7570]">
-                        ({drawerStats.channelCounts.Delivery.count} orders)
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 tabular-nums">
-                      <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0
-                          ? Math.round(
-                              ((drawerStats.channelCounts.Delivery.count || 0) /
-                                drawerStats.ordersCount) *
-                                100,
-                            )
-                          : 0}
-                        %
-                      </span>
-                      <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(
-                          drawerStats.channelCounts.Delivery.amount,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-[#d6d3d1] inline-block"></span>
-                      <span className="font-medium text-[#1e1b19]">
-                        Online Store
-                      </span>
-                      <span className="text-[#7f7570]">
-                        ({drawerStats.channelCounts.OnlineStore.count} orders)
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 tabular-nums">
-                      <span className="text-[#645d58]">
-                        {drawerStats.ordersCount > 0
-                          ? Math.round(
-                              ((drawerStats.channelCounts.OnlineStore.count ||
-                                0) /
-                                drawerStats.ordersCount) *
-                                100,
-                            )
-                          : 0}
-                        %
-                      </span>
-                      <span className="font-semibold text-[#1e1b19]">
-                        {formatPriceWithSymbol(
-                          drawerStats.channelCounts.OnlineStore.amount,
-                          currencySymbol,
-                          countryCode,
-                          true,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                  );
+                })()}
               </section>
 
-              {/* Section 4: Payment Mode Summary (100% Dynamic from live orders) */}
-              <section className="bg-white p-5 rounded-2xl border border-[#e9e1dd] shadow-xs space-y-3">
+              {/* Section 4: Payment Mode Summary */}
+              <section className="bg-white p-4 sm:p-5 rounded-xl border border-[#e7e5e4] shadow-2xs space-y-3">
                 <div>
-                  <span className="text-[11px] uppercase tracking-wider text-[#645d58] font-semibold">
+                  <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
                     Payment Reconciliation
                   </span>
                   <h3
-                    className="text-lg text-[#1e1b19] font-normal"
+                    className="text-lg text-[#0c0a09] font-normal"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
                     Payment Mode Summary
@@ -2058,33 +1776,26 @@ export function SalesReportView({
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="text-[#645d58] text-[11px] border-b border-[#e9e1dd] uppercase tracking-wider">
-                        <th className="pb-2 font-semibold">Mode</th>
-                        <th className="pb-2 text-center font-semibold">Txns</th>
-                        <th className="pb-2 text-right font-semibold">Gross</th>
-                        <th className="pb-2 text-right font-semibold">
-                          Refunds
-                        </th>
-                        <th className="pb-2 text-right font-semibold">
-                          Net Settled
-                        </th>
-                        <th className="pb-2 text-right font-semibold">
-                          Status
-                        </th>
+                      <tr className="text-[#5e5e5e] text-[11px] border-b border-[#e7e5e4] bg-[#fdf8f7] uppercase tracking-wider">
+                        <th className="py-2 px-3 font-semibold">Mode</th>
+                        <th className="py-2 px-3 text-center font-semibold">Txns</th>
+                        <th className="py-2 px-3 text-right font-semibold">Gross</th>
+                        <th className="py-2 px-3 text-right font-semibold">Refunds</th>
+                        <th className="py-2 px-3 text-right font-semibold">Net Settled</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#f4ece8] text-[#1e1b19]">
+                    <tbody className="divide-y divide-[#f0e8e2] text-[#0c0a09]">
                       {Object.entries(drawerStats.paymentModes).map(
                         ([mode, data]) => (
                           <tr
                             key={mode}
-                            className="hover:bg-[#faf2ee] transition-colors"
+                            className="hover:bg-[#fdf8f7] transition-colors"
                           >
-                            <td className="py-2.5 font-medium">{mode}</td>
-                            <td className="py-2.5 text-center tabular-nums text-[#645d58]">
+                            <td className="py-2.5 px-3 font-medium">{mode}</td>
+                            <td className="py-2.5 px-3 text-center tabular-nums text-[#5e5e5e]">
                               {data.txns}
                             </td>
-                            <td className="py-2.5 text-right tabular-nums">
+                            <td className="py-2.5 px-3 text-right tabular-nums">
                               {formatPriceWithSymbol(
                                 data.gross,
                                 currencySymbol,
@@ -2092,33 +1803,35 @@ export function SalesReportView({
                                 true,
                               )}
                             </td>
-                            <td className="py-2.5 text-right tabular-nums text-red-600">
+                            <td className="py-2.5 px-3 text-right tabular-nums text-red-600">
                               {data.refunds > 0
                                 ? `-${formatPriceWithSymbol(data.refunds, currencySymbol, countryCode, true)}`
                                 : "—"}
                             </td>
-                            <td className="py-2.5 text-right tabular-nums font-semibold">
-                              {formatPriceWithSymbol(
-                                data.net,
-                                currencySymbol,
-                                countryCode,
-                                true,
-                              )}
-                            </td>
-                            <td className="py-2.5 text-right">
-                              <span className="text-[#645d58] font-medium">
-                                —
-                              </span>
+                            <td className={`py-2.5 px-3 text-right tabular-nums font-semibold ${data.net < 0 ? "text-red-600" : ""}`}>
+                              {data.net < 0
+                                ? `-${formatPriceWithSymbol(
+                                    Math.abs(data.net),
+                                    currencySymbol,
+                                    countryCode,
+                                    true,
+                                  )}`
+                                : formatPriceWithSymbol(
+                                    data.net,
+                                    currencySymbol,
+                                    countryCode,
+                                    true,
+                                  )}
                             </td>
                           </tr>
                         ),
                       )}
-                      <tr className="bg-[#faf2ee] font-semibold text-[#1e1b19]">
-                        <td className="py-2.5 px-2">Total Settled</td>
-                        <td className="py-2.5 text-center tabular-nums">
+                      <tr className="bg-[#fdf8f7] font-semibold text-[#0c0a09]">
+                        <td className="py-2.5 px-3">Total Settled</td>
+                        <td className="py-2.5 px-3 text-center tabular-nums">
                           {drawerStats.totalPaymentTxns}
                         </td>
-                        <td className="py-2.5 text-right tabular-nums">
+                        <td className="py-2.5 px-3 text-right tabular-nums">
                           {formatPriceWithSymbol(
                             drawerStats.totalPaymentGross,
                             currencySymbol,
@@ -2126,21 +1839,18 @@ export function SalesReportView({
                             true,
                           )}
                         </td>
-                        <td className="py-2.5 text-right tabular-nums text-red-600">
+                        <td className="py-2.5 px-3 text-right tabular-nums text-red-600">
                           {drawerStats.totalPaymentRefunds > 0
                             ? `-${formatPriceWithSymbol(drawerStats.totalPaymentRefunds, currencySymbol, countryCode, true)}`
                             : "—"}
                         </td>
-                        <td className="py-2.5 text-right tabular-nums font-bold">
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold">
                           {formatPriceWithSymbol(
                             drawerStats.totalPaymentNet,
                             currencySymbol,
                             countryCode,
                             true,
                           )}
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <span className="text-[#645d58] font-medium">—</span>
                         </td>
                       </tr>
                     </tbody>
@@ -2150,43 +1860,27 @@ export function SalesReportView({
             </div>
 
             {/* Drawer Footer */}
-            <div className="p-4 border-t border-[#e9e1dd] bg-white flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1.5 text-[#645d58]">
-                <svg
-                  className="w-4 h-4 text-[#1b873f]"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
+            <div className="p-4 border-t border-[#e7e5e4] bg-white flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1.5 text-[#5e5e5e]">
+                <span className="material-symbols-outlined text-[16px] text-emerald-600">
+                  verified
+                </span>
                 <span>Verified Daily Sales Settlement Ledger</span>
               </div>
               <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setSelectedDayForDrawer(null)}
-                  className="px-4 py-1.5 rounded-full bg-[#faf2ee] hover:bg-[#eee7e3] text-[#1e1b19] font-medium transition-colors cursor-pointer"
+                  className="px-4 py-1.5 rounded-lg border border-[#e7e5e4] bg-white hover:bg-[#f1edec] text-[#0c0a09] font-medium transition-colors cursor-pointer"
                 >
                   Close
                 </button>
                 <button
                   type="button"
                   onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-[#1e1b19] hover:bg-neutral-800 text-white font-medium transition-colors shadow-xs cursor-pointer"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#0c0a09] hover:bg-[#262626] text-white font-medium transition-colors shadow-2xs cursor-pointer"
                 >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <polyline points="6 9 6 2 18 2 18 9" />
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                    <rect x="6" y="14" width="12" height="8" />
-                  </svg>
+                  <span className="material-symbols-outlined text-[14px]">print</span>
                   <span>Print Folio</span>
                 </button>
               </div>
@@ -2195,7 +1889,7 @@ export function SalesReportView({
         </div>
       )}
 
-      {/* Standard Menu Toaster Notification */}
+      {/* Standard Toaster Notification */}
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

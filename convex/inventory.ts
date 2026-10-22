@@ -561,6 +561,124 @@ export const getItemRecipe = query({
   },
 });
 
+export const getOrganizationMenuFoodCosts = query({
+  args: { organizationId: v.optional(v.id("organizations")) },
+  handler: async (ctx, args) => {
+    if (!args.organizationId) return {};
+
+    const orgId = args.organizationId;
+
+    // 1. Fetch all recipes for this organization
+    const allRecipes = await ctx.db
+      .query("recipes")
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+      .collect();
+
+    // 2. Fetch all recipe assignments for this organization
+    const allAssignments = await ctx.db
+      .query("recipeAssignments")
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+      .collect();
+
+    // 3. Fetch all inventory items
+    const allInvItems = await ctx.db
+      .query("inventoryItems")
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+      .collect();
+
+    const invItemMap = new Map(allInvItems.map((i) => [String(i._id), i]));
+
+    // Group recipes by source item
+    const recipesBySource = new Map<string, typeof allRecipes>();
+    for (const r of allRecipes) {
+      if (!r.itemId) continue;
+      const k = String(r.itemId);
+      if (!recipesBySource.has(k)) recipesBySource.set(k, []);
+      recipesBySource.get(k)!.push(r);
+    }
+
+    // Helper to calculate recipe details
+    const calculateRecipeDetails = (recs: typeof allRecipes, portionMultiplier = 1) => {
+      let totalCostPaise = 0;
+      const ingredients: Array<{
+        inventoryItemId: string;
+        name: string;
+        quantity: number;
+        unit: string;
+        unitCost: number;
+        buyingUnit: string;
+        lineCostPaise: number;
+      }> = [];
+
+      for (const r of recs) {
+        const inv = invItemMap.get(String(r.inventoryItemId));
+        if (!inv) continue;
+
+        const rawUnitCost = typeof inv.unitCost === "number" ? inv.unitCost : 0;
+        const targetUnit = inv.buyingUnit || inv.servingUnit || r.unit;
+        const convertedQty = convertUnits(r.quantity * portionMultiplier, r.unit, targetUnit);
+
+        let costAmount = convertedQty * rawUnitCost;
+
+        const lineCostPaise = Math.round(costAmount * 100);
+        totalCostPaise += lineCostPaise;
+
+        ingredients.push({
+          inventoryItemId: String(inv._id),
+          name: inv.name,
+          quantity: r.quantity * portionMultiplier,
+          unit: r.unit,
+          unitCost: rawUnitCost,
+          buyingUnit: targetUnit,
+          lineCostPaise,
+        });
+      }
+
+      return {
+        totalCostPaise,
+        hasRecipe: recs.length > 0,
+        ingredientsCount: ingredients.length,
+        ingredients,
+      };
+    };
+
+    const result: Record<
+      string,
+      {
+        totalCostPaise: number;
+        hasRecipe: boolean;
+        ingredientsCount: number;
+        ingredients: Array<{
+          inventoryItemId: string;
+          name: string;
+          quantity: number;
+          unit: string;
+          unitCost: number;
+          buyingUnit: string;
+          lineCostPaise: number;
+        }>;
+      }
+    > = {};
+
+    // 1. Direct recipes
+    for (const [sourceId, recs] of recipesBySource.entries()) {
+      result[sourceId] = calculateRecipeDetails(recs, 1);
+    }
+
+    // 2. Assigned recipes
+    for (const a of allAssignments) {
+      if (!a.targetItemId) continue;
+      const targetId = String(a.targetItemId);
+      const sourceRecs = recipesBySource.get(String(a.sourceRecipeItemId)) || [];
+      if (sourceRecs.length > 0) {
+        result[targetId] = calculateRecipeDetails(sourceRecs, a.portionMultiplier || 1);
+      }
+    }
+
+    return result;
+  },
+});
+
 export const removeItemRecipe = mutation({
   args: { id: v.id("recipes") },
   handler: async (ctx, args) => {

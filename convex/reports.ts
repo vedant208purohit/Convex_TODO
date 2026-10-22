@@ -151,6 +151,20 @@ function parseOperationalHourRange(operationTiming: any): {
   return { validHours, sortedHours, startHour: minH, endHour: maxH };
 }
 
+// Helper: Determine if order is an unpaid cancelled/rejected order (excluding refunded orders)
+function isRejectedUnpaidOrder(o: any): boolean {
+  if (!o.isRejected) return false;
+  if (
+    o.paymentStatus === "Refunded" ||
+    o.paymentStatus === "Partially Refunded" ||
+    (o.orderStatusName || "").toLowerCase().includes("refund") ||
+    o.paymentStatus === "Paid"
+  ) {
+    return false;
+  }
+  return true;
+}
+
 // =========================================================================
 // 1. SALES REPORT (api.reports.getSalesReport)
 // =========================================================================
@@ -198,9 +212,9 @@ export const getSalesReport = query({
       )
       .collect();
 
-    // Filter valid completed non-rejected orders
+    // Filter valid completed non-rejected orders (including refunded orders)
     const validOrders = orders.filter((o) => {
-      if (o.isRejected) return false;
+      if (isRejectedUnpaidOrder(o)) return false;
       if (args.orderType && o.orderType !== args.orderType) return false;
       if (args.paymentMode && o.paymentMode !== args.paymentMode) return false;
       return true;
@@ -234,10 +248,17 @@ export const getSalesReport = query({
         .withIndex("by_order", (q) => q.eq("orderId", order._id))
         .collect();
 
-      const orderRefund = payments.reduce(
-        (sum, p) => sum + (p.refundAmount || 0),
+      let orderRefund = payments.reduce(
+        (sum, p) => sum + (p.paymentType === "Debit" ? (p.amount || p.refundAmount || 0) : (p.refundAmount || 0)),
         0
       );
+      if (
+        orderRefund === 0 &&
+        (order.paymentStatus === "Refunded" ||
+          (order.orderStatusName || "").toLowerCase().includes("refund"))
+      ) {
+        orderRefund = gross;
+      }
 
       const net = gross - tax - orderRefund;
 
@@ -323,7 +344,7 @@ export const getOrdersReport = query({
       .collect();
 
     const validOrders = orders.filter((o) => {
-      if (o.isRejected) return false;
+      if (isRejectedUnpaidOrder(o)) return false;
       if (args.orderType && o.orderType !== args.orderType) return false;
       return true;
     });

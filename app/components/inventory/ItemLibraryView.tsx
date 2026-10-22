@@ -282,6 +282,21 @@ export function ItemLibraryView({
   // Active Dropdown menu state
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
+  // Close active dropdown menu when clicking outside
+  useEffect(() => {
+    if (!activeMenuId) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (!target?.closest("[data-inventory-action-menu]")) {
+        setActiveMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [activeMenuId]);
+
   // Form State (Edit / Add Item)
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Dairy items");
@@ -1659,7 +1674,7 @@ export function ItemLibraryView({
           </div>
         ) : (
           <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
-            <div className="overflow-x-auto flex-1">
+            <div className="overflow-x-auto flex-1 min-h-[340px]">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-20 select-none">
@@ -1802,7 +1817,10 @@ export function ItemLibraryView({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f5f5f4] text-xs">
-                  {paginatedItems.map((item) => {
+                  {paginatedItems.map((item, index) => {
+                    const opensUpward =
+                      paginatedItems.length > 2 &&
+                      index >= Math.max(1, paginatedItems.length - 3);
                     const available = item.availableStock || 0;
                     const minRefill = item.minimumStockRefillLevel || 0;
                     const baseline =
@@ -1911,53 +1929,59 @@ export function ItemLibraryView({
                         <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
                           {formattedDate}
                         </td>
-                        <td className="py-3.5 px-5 text-right relative">
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setActiveMenuId(activeMenuId === item._id ? null : item._id)
-                            }
-                            className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition cursor-pointer"
-                          >
-                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                              <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
-                            </svg>
-                          </button>
-                          {activeMenuId === item._id && (
-                            <div className="absolute right-5 top-11 w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-lg py-1 z-30 text-left font-sans text-xs">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedItemDetail(item);
-                                  setActiveMenuId(null);
-                                }}
-                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
+                        <td className="py-3.5 px-5 text-right">
+                          <div className="relative inline-block text-left" data-inventory-action-menu>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActiveMenuId(activeMenuId === item._id ? null : item._id)
+                              }
+                              className="p-1.5 text-stone-400 hover:text-stone-800 hover:bg-stone-100 rounded-lg transition cursor-pointer"
+                            >
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z" />
+                              </svg>
+                            </button>
+                            {activeMenuId === item._id && (
+                              <div
+                                className={`absolute right-0 ${
+                                  opensUpward ? "bottom-full mb-1" : "top-full mt-1"
+                                } w-44 bg-white border border-[#e7e5e4] rounded-lg shadow-xl py-1 z-50 text-left font-sans text-xs`}
                               >
-                                View item logs
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openAssignStockDrawer(item)}
-                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
-                              >
-                                Add item stock
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openEditDrawer(item)}
-                                className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
-                              >
-                                Edit item
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => openDeleteModal(item)}
-                                className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
-                              >
-                                Delete item
-                              </button>
-                            </div>
-                          )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedItemDetail(item);
+                                    setActiveMenuId(null);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                >
+                                  View item logs
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openAssignStockDrawer(item)}
+                                  className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                >
+                                  Add item stock
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openEditDrawer(item)}
+                                  className="w-full text-left px-3 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50 cursor-pointer"
+                                >
+                                  Edit item
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteModal(item)}
+                                  className="w-full text-left px-3 py-2 text-xs font-medium text-rose-600 hover:bg-rose-50 cursor-pointer"
+                                >
+                                  Delete item
+                                </button>
+                              </div>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );

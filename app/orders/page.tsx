@@ -34,10 +34,12 @@ function formatTableDisplay(tableNum?: string): string {
   return `Table ${clean}`;
 }
 
-function getOrderTableDisplay(order?: {
-  table?: { number?: string } | null;
-  orderType?: string;
-} | null): string {
+function getOrderTableDisplay(
+  order?: {
+    table?: { number?: string } | null;
+    orderType?: string;
+  } | null,
+): string {
   if (order?.table && order.table.number) {
     return formatTableDisplay(order.table.number);
   }
@@ -54,11 +56,13 @@ function getOrderTableDisplay(order?: {
   return "N/A";
 }
 
-function getOrderWaiterDisplay(order?: {
-  waiter?: { name?: string } | null;
-  waiterUserId?: string | null;
-  waiterName?: string | null;
-} | null): string {
+function getOrderWaiterDisplay(
+  order?: {
+    waiter?: { name?: string } | null;
+    waiterUserId?: string | null;
+    waiterName?: string | null;
+  } | null,
+): string {
   if (order?.waiter?.name && order.waiter.name.trim()) {
     return order.waiter.name.trim();
   }
@@ -453,7 +457,11 @@ function TimelineIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
   );
 }
 
-function formatDateDisplay(d: Date, country?: string, timezone?: string): string {
+function formatDateDisplay(
+  d: Date,
+  country?: string,
+  timezone?: string,
+): string {
   return formatStoreDate(d, country || "IN", timezone);
 }
 
@@ -545,10 +553,14 @@ export default function OrdersPage() {
 
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "$");
+    (activeOrg?.country
+      ? getCurrencyForCountry(activeOrg.country).symbol
+      : "$");
   const currencyCode =
     activeOrg?.defaultCurrency ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).code : "USD");
+    (activeOrg?.country
+      ? getCurrencyForCountry(activeOrg.country).code
+      : "USD");
 
   // Query Real Store Order Processes from DB
   const dbProcesses = useQuery(api.organizationOrderProcesses.list, {
@@ -588,7 +600,9 @@ export default function OrdersPage() {
           try {
             const devices = await (navigator as any).usb.getDevices();
             if (isMounted) {
-              setPrinterStatus(devices.length > 0 ? "connected" : "disconnected");
+              setPrinterStatus(
+                devices.length > 0 ? "connected" : "disconnected",
+              );
             }
             return;
           } catch {
@@ -862,7 +876,7 @@ export default function OrdersPage() {
       return `${currencySymbol}0.00`;
     return `${currencySymbol}${formatCurrencyAmount(
       ordersResponse.totalGrossAmount / 100,
-      activeOrg?.country
+      activeOrg?.country,
     )}`;
   }, [ordersResponse, currencySymbol, activeOrg?.country]);
 
@@ -1375,12 +1389,12 @@ export default function OrdersPage() {
     const formattedOrderDate = formatStoreDate(
       orderCreatedDate,
       activeOrg?.country,
-      activeOrg?.organizationTimeZone
+      activeOrg?.organizationTimeZone,
     );
     const formattedOrderTime = formatStoreTime(
       orderCreatedDate,
       activeOrg?.organizationTimeZone,
-      activeOrg?.country
+      activeOrg?.country,
     );
     const isPaid = order?.paymentStatus === "Paid";
 
@@ -1469,33 +1483,59 @@ export default function OrdersPage() {
                         {(dbProcesses && dbProcesses.length > 0
                           ? dbProcesses
                           : [
-                              { _id: "p1" as any, name: "Accepted", processColor: "#262626" },
-                              { _id: "p2" as any, name: "In progress", processColor: "#EA9C1B" },
-                              { _id: "p3" as any, name: "Ready to deliver", processColor: "#FC8019" },
-                              { _id: "p4" as any, name: "Delivered", processColor: "#219653" },
+                              {
+                                _id: "p1" as any,
+                                name: "Accepted",
+                                processColor: "#262626",
+                              },
+                              {
+                                _id: "p2" as any,
+                                name: "In progress",
+                                processColor: "#EA9C1B",
+                              },
+                              {
+                                _id: "p3" as any,
+                                name: "Ready to deliver",
+                                processColor: "#FC8019",
+                              },
+                              {
+                                _id: "p4" as any,
+                                name: "Delivered",
+                                processColor: "#219653",
+                              },
                             ]
                         ).map((proc) => {
                           const isCurrent =
-                            (order?.orderStatusName || "").trim().toLowerCase() ===
-                            proc.name.trim().toLowerCase();
+                            (order?.orderStatusName || "")
+                              .trim()
+                              .toLowerCase() === proc.name.trim().toLowerCase();
                           return (
                             <button
                               key={proc._id}
                               type="button"
-                              onClick={() => handleUpdateStatus(proc._id, proc.name)}
+                              onClick={() =>
+                                handleUpdateStatus(proc._id, proc.name)
+                              }
                               className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-left transition-colors cursor-pointer hover:bg-[#fdf8f7] ${
-                                isCurrent ? "bg-[#f1edec] font-semibold text-[#0c0a09]" : "text-[#44403c]"
+                                isCurrent
+                                  ? "bg-[#f1edec] font-semibold text-[#0c0a09]"
+                                  : "text-[#44403c]"
                               }`}
                             >
                               <div className="flex items-center gap-2">
                                 <span
                                   className="w-2 h-2 rounded-full shrink-0"
-                                  style={{ backgroundColor: proc.processColor || "#262626" }}
+                                  style={{
+                                    backgroundColor:
+                                      proc.processColor || "#262626",
+                                  }}
                                 />
                                 <span>{proc.name}</span>
                               </div>
                               {isCurrent && (
-                                <span className="text-[10px] text-[#219653] font-semibold">Current</span>
+                                <span className="text-[10px] text-[#219653] font-semibold">
+                                  Current
+                                </span>
                               )}
                             </button>
                           );
@@ -1763,14 +1803,28 @@ export default function OrdersPage() {
                                           .join(", ")}
                                       </span>
                                     )}
-                                  {((item.prepPreferences && item.prepPreferences.length > 0) || (item.chefPrepPreferences && item.chefPrepPreferences.length > 0)) && (
+                                  {((item.prepPreferences &&
+                                    item.prepPreferences.length > 0) ||
+                                    (item.chefPrepPreferences &&
+                                      item.chefPrepPreferences.length > 0)) && (
                                     <span className="text-xs text-[#0c0a09] font-medium block mt-0.5">
-                                      Chef Prep: {(item.prepPreferences || item.chefPrepPreferences).map((p: any) => p.name).join(", ")}
+                                      Chef Prep:{" "}
+                                      {(
+                                        item.prepPreferences ||
+                                        item.chefPrepPreferences
+                                      )
+                                        .map((p: any) => p.name)
+                                        .join(", ")}
                                     </span>
                                   )}
                                 </td>
                                 <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
-                                  {currencySymbol}{formatCurrencyAmount(item.display_item_price ?? ((item.itemPrice || 0) / 100), activeOrg?.country)}
+                                  {currencySymbol}
+                                  {formatCurrencyAmount(
+                                    item.display_item_price ??
+                                      (item.itemPrice || 0) / 100,
+                                    activeOrg?.country,
+                                  )}
                                 </td>
                                 <td className="py-3.5 px-4 text-center align-top">
                                   <span className="inline-block px-2 py-0.5 bg-gray-100 rounded text-xs font-semibold text-[#0c0a09]">
@@ -1778,7 +1832,12 @@ export default function OrdersPage() {
                                   </span>
                                 </td>
                                 <td className="py-3.5 px-6 text-right text-xs font-bold text-[#0c0a09] align-top">
-                                  {currencySymbol}{formatCurrencyAmount(item.display_total_price ?? ((item.totalPrice || 0) / 100), activeOrg?.country)}
+                                  {currencySymbol}
+                                  {formatCurrencyAmount(
+                                    item.display_total_price ??
+                                      (item.totalPrice || 0) / 100,
+                                    activeOrg?.country,
+                                  )}
                                 </td>
                               </tr>
                             ))
@@ -1803,39 +1862,79 @@ export default function OrdersPage() {
                           <div className="flex justify-between items-center text-[#7a716b]">
                             <span className="font-medium">Sub Total</span>
                             <span className="font-semibold text-[#0c0a09]">
-                              {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_sub_total ??
+                                  (order?.subTotal || 0) / 100,
+                                activeOrg?.country,
+                              )}
                             </span>
                           </div>
 
-                          {order?.taxInfoSnapshot?.components &&
-                          order.taxInfoSnapshot.components.length > 0 ? (
-                            order.taxInfoSnapshot.components.map(
-                              (c: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className="flex justify-between items-center text-[#7a716b]"
-                                >
-                                  <span>
-                                    {c.name} ({c.rate}%)
-                                  </span>
-                                  <span className="font-semibold text-[#0c0a09]">
-                                    +{currencySymbol}
-                                    {formatCurrencyAmount(
-                                      ((order.subTotal || 0) * c.rate) / 10000,
-                                      activeOrg?.country
-                                    )}
-                                  </span>
-                                </div>
-                              ),
-                            )
-                          ) : (
-                            <div className="flex justify-between items-center text-[#7a716b]">
-                              <span>GST (Tax Total)</span>
-                              <span className="font-semibold text-[#0c0a09]">
-                                {currencySymbol}{formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
-                              </span>
-                            </div>
-                          )}
+                          {(() => {
+                            const subTotal = order?.subTotal || 0;
+                            const totalAmount = order?.totalAmount || 0;
+                            const discount = order?.discountAmount || 0;
+                            const delivery = order?.deliveryCharge || 0;
+                            const derivedExclusivePaise = Math.max(
+                              0,
+                              totalAmount - subTotal + discount - delivery
+                            );
+
+                            // If no exclusive tax was charged on top, DO NOT show inclusive tax at all (it's inside subtotal)
+                            if (derivedExclusivePaise <= 0) {
+                              return null;
+                            }
+
+                            if (
+                              order?.taxInfoSnapshot?.components &&
+                              order.taxInfoSnapshot.components.length > 0
+                            ) {
+                              const totalRate = order.taxInfoSnapshot.components.reduce(
+                                (acc: number, c: any) => acc + (Number(c.rate) || 0),
+                                0
+                              );
+                              return order.taxInfoSnapshot.components.map(
+                                (c: any, i: number) => {
+                                  const compShare =
+                                    totalRate > 0
+                                      ? (Number(c.rate) || 0) / totalRate
+                                      : 1 / order.taxInfoSnapshot.components.length;
+                                  const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+                                  return (
+                                    <div
+                                      key={i}
+                                      className="flex justify-between items-center text-[#7a716b]"
+                                    >
+                                      <span>
+                                        {c.name} ({c.rate}%)
+                                      </span>
+                                      <span className="font-semibold text-[#0c0a09]">
+                                        +{currencySymbol}
+                                        {formatCurrencyAmount(
+                                          compTaxPaise / 100,
+                                          activeOrg?.country,
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                },
+                              );
+                            }
+
+                            return (
+                              <div className="flex justify-between items-center text-[#7a716b]">
+                                <span>GST (Tax Total)</span>
+                                <span className="font-semibold text-[#0c0a09]">
+                                  +{currencySymbol}
+                                  {formatCurrencyAmount(
+                                    derivedExclusivePaise / 100,
+                                    activeOrg?.country,
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })()}
 
                           {parseFloat(order?.display_discount_amount || "0") >
                             0 && (
@@ -1844,7 +1943,11 @@ export default function OrdersPage() {
                                 Discount Applied
                               </span>
                               <span className="font-semibold">
-                                -{currencySymbol}{formatCurrencyAmount(order?.display_discount_amount, activeOrg?.country)}
+                                -{currencySymbol}
+                                {formatCurrencyAmount(
+                                  order?.display_discount_amount,
+                                  activeOrg?.country,
+                                )}
                               </span>
                             </div>
                           )}
@@ -1859,7 +1962,12 @@ export default function OrdersPage() {
                               </span>
                             </div>
                             <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
-                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)}
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_total_amount ??
+                                  (order?.totalAmount || 0) / 100,
+                                activeOrg?.country,
+                              )}
                             </span>
                           </div>
                         </div>
@@ -1878,28 +1986,41 @@ export default function OrdersPage() {
                         Payment Information
                       </h2>
                       {(() => {
-                        const status = (order?.paymentStatus || "Pending").toLowerCase();
+                        const status = (
+                          order?.paymentStatus || "Pending"
+                        ).toLowerCase();
                         let label = "Payment Due";
-                        let classes = "text-amber-800 bg-amber-50 border border-amber-200";
+                        let classes =
+                          "text-amber-800 bg-amber-50 border border-amber-200";
                         let dotClass = "bg-amber-600";
 
                         if (status === "paid") {
                           label = "Fully Settled";
-                          classes = "text-emerald-700 bg-emerald-50 border border-emerald-200";
+                          classes =
+                            "text-emerald-700 bg-emerald-50 border border-emerald-200";
                           dotClass = "bg-emerald-600";
                         } else if (status === "refunded") {
                           label = "Refunded";
-                          classes = "text-rose-700 bg-rose-50 border border-rose-200";
+                          classes =
+                            "text-rose-700 bg-rose-50 border border-rose-200";
                           dotClass = "bg-rose-600";
-                        } else if (status === "partially refunded" || status === "partially_refunded") {
+                        } else if (
+                          status === "partially refunded" ||
+                          status === "partially_refunded"
+                        ) {
                           label = "Partially Refunded";
-                          classes = "text-purple-700 bg-purple-50 border border-purple-200";
+                          classes =
+                            "text-purple-700 bg-purple-50 border border-purple-200";
                           dotClass = "bg-purple-600";
                         }
 
                         return (
-                          <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${classes}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                          <span
+                            className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded ${classes}`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${dotClass}`}
+                            />
                             {label}
                           </span>
                         );
@@ -1923,7 +2044,7 @@ export default function OrdersPage() {
                               const pDateTimeStr = formatStoreDateTime(
                                 pDate,
                                 activeOrg?.country,
-                                activeOrg?.organizationTimeZone
+                                activeOrg?.organizationTimeZone,
                               );
                               const isDebit = p.paymentType === "Debit";
                               const isCredit = !isDebit;
@@ -1953,10 +2074,11 @@ export default function OrdersPage() {
                                     {typeDisplay}
                                   </td>
                                   <td className="py-2.5 text-right font-bold text-[#0c0a09]">
-                                    {isCredit ? "" : "-"}{currencySymbol}
+                                    {isCredit ? "" : "-"}
+                                    {currencySymbol}
                                     {formatCurrencyAmount(
                                       (p.amount || 0) / 100,
-                                      activeOrg?.country
+                                      activeOrg?.country,
                                     )}
                                   </td>
                                 </tr>
@@ -1964,7 +2086,10 @@ export default function OrdersPage() {
                             })
                           ) : (
                             <tr>
-                              <td colSpan={4} className="py-6 text-center text-stone-500 font-medium italic">
+                              <td
+                                colSpan={4}
+                                className="py-6 text-center text-stone-500 font-medium italic"
+                              >
                                 No payments recorded yet (Payment Pending)
                               </td>
                             </tr>
@@ -1993,45 +2118,88 @@ export default function OrdersPage() {
                       <div className="flex justify-between items-center text-[#7a716b]">
                         <span className="font-medium">Sub Total</span>
                         <span className="font-semibold text-[#0c0a09]">
-                          {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            order?.display_sub_total ??
+                              (order?.subTotal || 0) / 100,
+                            activeOrg?.country,
+                          )}
                         </span>
                       </div>
-                      {order?.taxInfoSnapshot?.components &&
-                      order.taxInfoSnapshot.components.length > 0 ? (
-                        order.taxInfoSnapshot.components.map(
-                          (c: any, i: number) => (
-                            <div
-                              key={i}
-                              className="flex justify-between items-center text-[#7a716b] text-xs"
-                            >
-                              <span>
-                                {c.name} ({c.rate}%)
-                              </span>
-                              <span className="font-semibold text-[#0c0a09]">
-                                +{currencySymbol}
-                                {formatCurrencyAmount(
-                                  ((order.subTotal || 0) * c.rate) / 10000,
-                                  activeOrg?.country
-                                )}
-                              </span>
-                            </div>
-                          ),
-                        )
-                      ) : (
-                        <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                          <span>GST (Tax Total)</span>
-                          <span className="font-semibold text-[#0c0a09]">
-                            {currencySymbol}
-                            {formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
-                          </span>
-                        </div>
-                      )}
+                      {(() => {
+                        const subTotal = order?.subTotal || 0;
+                        const totalAmount = order?.totalAmount || 0;
+                        const discount = order?.discountAmount || 0;
+                        const delivery = order?.deliveryCharge || 0;
+                        const derivedExclusivePaise = Math.max(
+                          0,
+                          totalAmount - subTotal + discount - delivery
+                        );
+
+                        // If no exclusive tax was charged on top, DO NOT show inclusive tax at all (it's inside subtotal)
+                        if (derivedExclusivePaise <= 0) {
+                          return null;
+                        }
+
+                        if (
+                          order?.taxInfoSnapshot?.components &&
+                          order.taxInfoSnapshot.components.length > 0
+                        ) {
+                          const totalRate = order.taxInfoSnapshot.components.reduce(
+                            (acc: number, c: any) => acc + (Number(c.rate) || 0),
+                            0
+                          );
+                          return order.taxInfoSnapshot.components.map(
+                            (c: any, i: number) => {
+                              const compShare =
+                                totalRate > 0
+                                  ? (Number(c.rate) || 0) / totalRate
+                                  : 1 / order.taxInfoSnapshot.components.length;
+                              const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+                              return (
+                                <div
+                                  key={i}
+                                  className="flex justify-between items-center text-[#7a716b] text-xs"
+                                >
+                                  <span>
+                                    {c.name} ({c.rate}%)
+                                  </span>
+                                  <span className="font-semibold text-[#0c0a09]">
+                                    +{currencySymbol}
+                                    {formatCurrencyAmount(
+                                      compTaxPaise / 100,
+                                      activeOrg?.country,
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            },
+                          );
+                        }
+
+                        return (
+                          <div className="flex justify-between items-center text-[#7a716b] text-xs">
+                            <span>GST (Tax Total)</span>
+                            <span className="font-semibold text-[#0c0a09]">
+                              +{currencySymbol}
+                              {formatCurrencyAmount(
+                                derivedExclusivePaise / 100,
+                                activeOrg?.country,
+                              )}
+                            </span>
+                          </div>
+                        );
+                      })()}
                       {parseFloat(order?.display_discount_amount || "0") >
                         0 && (
                         <div className="flex justify-between items-center text-emerald-700 text-xs">
                           <span className="font-medium">Discount</span>
                           <span className="font-semibold">
-                            -{currencySymbol}{formatCurrencyAmount(order?.display_discount_amount, activeOrg?.country)}
+                            -{currencySymbol}
+                            {formatCurrencyAmount(
+                              order?.display_discount_amount,
+                              activeOrg?.country,
+                            )}
                           </span>
                         </div>
                       )}
@@ -2045,14 +2213,19 @@ export default function OrdersPage() {
                           </span>
                         </div>
                         <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
-                          {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            order?.display_total_amount ??
+                              (order?.totalAmount || 0) / 100,
+                            activeOrg?.country,
+                          )}
                         </span>
                       </div>
                     </div>
                   </section>
 
                   {/* Card 2: Issue Refund Card (Visible only when eligible refund amount > 0, matching defx-pos-frontend) */}
-                  {((order?.totalCredit ?? 0) > (order?.totalDebit ?? 0)) && (
+                  {(order?.totalCredit ?? 0) > (order?.totalDebit ?? 0) && (
                     <section
                       className="bg-white rounded-xl border border-[#e7e5e4] p-6 shadow-xs"
                       data-purpose="refund-widget"
@@ -2067,7 +2240,17 @@ export default function OrdersPage() {
                           Debit Amount
                         </div>
                         <div className="bg-[#141010] text-white px-5 py-3 font-bold text-base font-mono flex items-center justify-center tracking-tight">
-                          {currencySymbol}{formatCurrencyAmount(order?.display_refundable_amount ?? Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100), activeOrg?.country)}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            order?.display_refundable_amount ??
+                              Math.max(
+                                0,
+                                ((order?.totalCredit || 0) -
+                                  (order?.totalDebit || 0)) /
+                                  100,
+                              ),
+                            activeOrg?.country,
+                          )}
                         </div>
                       </div>
 
@@ -2077,7 +2260,12 @@ export default function OrdersPage() {
                         onClick={() => {
                           const remainingRefundable =
                             order?.display_refundable_amount ||
-                            (Math.max(0, ((order?.totalCredit || 0) - (order?.totalDebit || 0)) / 100).toFixed(2));
+                            Math.max(
+                              0,
+                              ((order?.totalCredit || 0) -
+                                (order?.totalDebit || 0)) /
+                                100,
+                            ).toFixed(2);
                           setRefundAmountInput(remainingRefundable);
                           setDrawerTab("refund");
                         }}
@@ -2116,36 +2304,44 @@ export default function OrdersPage() {
                       </button>
 
                       {/* Cancel Order */}
-                    {(() => {
-                      const hasPayment = Boolean(
-                        order?.paymentStatus === "Paid" ||
-                        (order?.netPaid && order.netPaid > 0) ||
-                        (order?.totalCredit && order.totalCredit > 0) ||
-                        (order?.payments && order.payments.length > 0)
-                      );
-                      return (
-                        <button
-                          type="button"
-                          onClick={() => !hasPayment && setIsDeleteDialogOpen(true)}
-                          disabled={hasPayment}
-                          title={hasPayment ? "Cannot cancel an order with completed payments. Issue a refund first." : undefined}
-                          style={{
-                            backgroundColor: hasPayment ? "#292524" : "#1c1917",
-                            color: "#ffffff"
-                          }}
-                          className={`flex items-center justify-center gap-2 px-3 py-2.5 !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs ${
-                            hasPayment
-                              ? "opacity-40 cursor-not-allowed select-none bg-[#292524]"
-                              : "bg-[#1c1917] hover:bg-black cursor-pointer hover:opacity-95"
-                          }`}
-                        >
-                          <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
-                          <span className="!text-white text-white font-semibold text-xs">
-                            Cancel Order
-                          </span>
-                        </button>
-                      );
-                    })()}
+                      {(() => {
+                        const hasPayment = Boolean(
+                          order?.paymentStatus === "Paid" ||
+                          (order?.netPaid && order.netPaid > 0) ||
+                          (order?.totalCredit && order.totalCredit > 0) ||
+                          (order?.payments && order.payments.length > 0),
+                        );
+                        return (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              !hasPayment && setIsDeleteDialogOpen(true)
+                            }
+                            disabled={hasPayment}
+                            title={
+                              hasPayment
+                                ? "Cannot cancel an order with completed payments. Issue a refund first."
+                                : undefined
+                            }
+                            style={{
+                              backgroundColor: hasPayment
+                                ? "#292524"
+                                : "#1c1917",
+                              color: "#ffffff",
+                            }}
+                            className={`flex items-center justify-center gap-2 px-3 py-2.5 !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs ${
+                              hasPayment
+                                ? "opacity-40 cursor-not-allowed select-none bg-[#292524]"
+                                : "bg-[#1c1917] hover:bg-black cursor-pointer hover:opacity-95"
+                            }`}
+                          >
+                            <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
+                            <span className="!text-white text-white font-semibold text-xs">
+                              Cancel Order
+                            </span>
+                          </button>
+                        );
+                      })()}
 
                       {/* Print Receipt */}
                       <button
@@ -2210,7 +2406,9 @@ export default function OrdersPage() {
                     {/* Printer Status Widget */}
                     <div className="pt-3 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#7a716b]">
                       <span className="flex items-center gap-1.5 font-medium">
-                        <PrintIcon className={`w-3.5 h-3.5 ${printerStatus === "connected" ? "text-[#0c0a09]" : "text-[#a8a29e]"}`} />
+                        <PrintIcon
+                          className={`w-3.5 h-3.5 ${printerStatus === "connected" ? "text-[#0c0a09]" : "text-[#a8a29e]"}`}
+                        />
                         <span>Thermal Printer</span>
                       </span>
                       {printerStatus === "connected" ? (
@@ -2271,10 +2469,7 @@ export default function OrdersPage() {
                 background: #ffffff !important;
                 color: #000000 !important;
                 display: block !important;
-                font-family:
-                  "Courier New",
-                  Courier,
-                  monospace !important;
+                font-family: "Courier New", Courier, monospace !important;
                 font-size: 11px !important;
                 font-weight: 500 !important;
                 line-height: 1.25 !important;
@@ -2399,7 +2594,8 @@ export default function OrdersPage() {
                         </span>
                       </div>
                       <span className="font-sans text-2xl font-bold text-[#141010] tracking-tight">
-                        {currencySymbol}{order?.display_total_amount}
+                        {currencySymbol}
+                        {order?.display_total_amount}
                       </span>
                     </div>
 
@@ -2486,7 +2682,13 @@ export default function OrdersPage() {
                                 }
                                 className="py-2 text-xs font-medium font-sans bg-[#faf8f5] hover:bg-[#f4eee8] text-[#141010] border border-[#e7e5e4] rounded-md transition-colors text-center cursor-pointer"
                               >
-                                {currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
+                                {currencySymbol}
+                                {formatCurrencyAmount(
+                                  amt,
+                                  activeOrg?.country,
+                                  0,
+                                  0,
+                                )}
                               </button>
                             ));
                           })()}
@@ -2508,7 +2710,8 @@ export default function OrdersPage() {
                               Return amount
                             </span>
                             <span className="font-sans text-base font-bold text-emerald-700">
-                              {currencySymbol}{formatCurrencyAmount(change, activeOrg?.country)}
+                              {currencySymbol}
+                              {formatCurrencyAmount(change, activeOrg?.country)}
                             </span>
                           </div>
                         );
@@ -2662,7 +2865,8 @@ export default function OrdersPage() {
                         Total refund amount
                       </div>
                       <div className="bg-[#141010] text-white px-6 py-3 font-bold text-lg font-mono flex items-center justify-center tracking-tight">
-                        {currencySymbol}{order?.display_total_amount || "0"}
+                        {currencySymbol}
+                        {order?.display_total_amount || "0"}
                       </div>
                     </div>
 
@@ -2673,7 +2877,9 @@ export default function OrdersPage() {
                       </label>
                       <div className="flex flex-wrap gap-2">
                         {(paymentModesList && paymentModesList.length > 0
-                          ? paymentModesList.filter((m: any) => m.active !== false)
+                          ? paymentModesList.filter(
+                              (m: any) => m.active !== false,
+                            )
                           : []
                         ).map((pm: any) => {
                           const isSelected =
@@ -2716,35 +2922,37 @@ export default function OrdersPage() {
               </div>
 
               {/* Drawer Action Footers */}
-              {drawerTab === "pay" && (() => {
-                const givenNum = parseFloat(tenderCashGiven);
-                const isValidPay = !isNaN(givenNum) && givenNum > 0;
-                const settleAmt = isValidPay ? givenNum : 0;
+              {drawerTab === "pay" &&
+                (() => {
+                  const givenNum = parseFloat(tenderCashGiven);
+                  const isValidPay = !isNaN(givenNum) && givenNum > 0;
+                  const settleAmt = isValidPay ? givenNum : 0;
 
-                return (
-                  <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleSettlePayment}
-                      disabled={!isValidPay}
-                      className={`w-full py-3 bg-[#0c0a09] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
-                        !isValidPay
-                          ? "opacity-40 cursor-not-allowed pointer-events-none"
-                          : "hover:bg-black cursor-pointer"
-                      }`}
-                    >
-                      Record Payment ({currencySymbol}{formatCurrencyAmount(settleAmt, activeOrg?.country)})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDrawerTab(null)}
-                      className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                );
-              })()}
+                  return (
+                    <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleSettlePayment}
+                        disabled={!isValidPay}
+                        className={`w-full py-3 bg-[#0c0a09] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
+                          !isValidPay
+                            ? "opacity-40 cursor-not-allowed pointer-events-none"
+                            : "hover:bg-black cursor-pointer"
+                        }`}
+                      >
+                        Record Payment ({currencySymbol}
+                        {formatCurrencyAmount(settleAmt, activeOrg?.country)})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDrawerTab(null)}
+                        className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  );
+                })()}
 
               {drawerTab === "timeline" && (
                 <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] shrink-0">
@@ -2758,35 +2966,39 @@ export default function OrdersPage() {
                 </div>
               )}
 
-              {drawerTab === "refund" && (() => {
-                const refundVal = parseFloat(refundAmountInput);
-                const isRefundValid = !isNaN(refundVal) && refundVal > 0;
-                const displayAmt = isRefundValid ? formatCurrencyAmount(refundVal, activeOrg?.country) : "0.00";
+              {drawerTab === "refund" &&
+                (() => {
+                  const refundVal = parseFloat(refundAmountInput);
+                  const isRefundValid = !isNaN(refundVal) && refundVal > 0;
+                  const displayAmt = isRefundValid
+                    ? formatCurrencyAmount(refundVal, activeOrg?.country)
+                    : "0.00";
 
-                return (
-                  <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={handleIssueRefund}
-                      disabled={!isRefundValid}
-                      className={`w-full py-3 bg-[#1f7d43] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
-                        !isRefundValid
-                          ? "opacity-40 cursor-not-allowed pointer-events-none"
-                          : "hover:bg-[#186636] cursor-pointer"
-                      }`}
-                    >
-                      Confirm Refund ({currencySymbol}{displayAmt})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDrawerTab(null)}
-                      className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                );
-              })()}
+                  return (
+                    <div className="p-6 border-t border-[#e7e5e4] bg-[#faf8f5] flex flex-col gap-2.5 shrink-0">
+                      <button
+                        type="button"
+                        onClick={handleIssueRefund}
+                        disabled={!isRefundValid}
+                        className={`w-full py-3 bg-[#1f7d43] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
+                          !isRefundValid
+                            ? "opacity-40 cursor-not-allowed pointer-events-none"
+                            : "hover:bg-[#186636] cursor-pointer"
+                        }`}
+                      >
+                        Confirm Refund ({currencySymbol}
+                        {displayAmt})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDrawerTab(null)}
+                        className="w-full py-2.5 bg-transparent hover:bg-white text-[#7a716b] hover:text-[#141010] text-xs font-medium rounded-lg transition-colors text-center cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  );
+                })()}
             </div>
           </div>
         )}
@@ -2982,8 +3194,8 @@ export default function OrdersPage() {
                   {/* Bottom Footer Bar */}
                   <div className="border-t border-[#e5e7eb] px-4 py-2.5 bg-white flex items-center justify-between">
                     <div className="text-xs font-medium text-stone-700">
-                      {formatDateDisplay(draftStartDate, countryCode, storeTz)} -{" "}
-                      {formatDateDisplay(draftEndDate, countryCode, storeTz)}
+                      {formatDateDisplay(draftStartDate, countryCode, storeTz)}{" "}
+                      - {formatDateDisplay(draftEndDate, countryCode, storeTz)}
                     </div>
                     <div className="flex items-center gap-2.5">
                       <button
@@ -3232,7 +3444,9 @@ export default function OrdersPage() {
                     const isPartiallyRefunded =
                       order.paymentStatus === "Partially Refunded";
                     const isCod =
-                      (order.paymentMode || "").toLowerCase().includes("cash") &&
+                      (order.paymentMode || "")
+                        .toLowerCase()
+                        .includes("cash") &&
                       !isPaid &&
                       !isRefunded &&
                       !isPartiallyRefunded;
@@ -3277,7 +3491,9 @@ export default function OrdersPage() {
                               (p) =>
                                 p._id === order.orderStatusId ||
                                 p.name.trim().toLowerCase() ===
-                                  (order.orderStatusName || "").trim().toLowerCase(),
+                                  (order.orderStatusName || "")
+                                    .trim()
+                                    .toLowerCase(),
                             );
                             const matchedStage = pipelineStages.find(
                               (st) =>
@@ -3288,7 +3504,8 @@ export default function OrdersPage() {
                               matchedProcess?.processColor ||
                               matchedStage?.color ||
                               (order.orderStatusName === "Cancelled" ||
-                              order.orderStatusName === "Cancelled / Refunded" ||
+                              order.orderStatusName ===
+                                "Cancelled / Refunded" ||
                               order.isRejected
                                 ? "#e11d48"
                                 : order.orderStatusName === "Completed" ||
@@ -3355,7 +3572,13 @@ export default function OrdersPage() {
                           {isRefunded ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Refunded
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_total_amount ??
+                                  (order?.totalAmount || 0) / 100,
+                                activeOrg?.country,
+                              )}{" "}
+                              Refunded
                             </span>
                           ) : isPartiallyRefunded ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
@@ -3364,25 +3587,48 @@ export default function OrdersPage() {
                             </span>
                           ) : isPaid ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                              <CheckmarkIcon className="w-3 h-3" />{currencySymbol}
-                              {formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Paid
+                              <CheckmarkIcon className="w-3 h-3" />
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_total_amount ??
+                                  (order?.totalAmount || 0) / 100,
+                                activeOrg?.country,
+                              )}{" "}
+                              Paid
                             </span>
                           ) : isCod ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Unpaid (COD)
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_total_amount ??
+                                  (order?.totalAmount || 0) / 100,
+                                activeOrg?.country,
+                              )}{" "}
+                              Unpaid (COD)
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
                               <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                              {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)} Unpaid
+                              {currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_total_amount ??
+                                  (order?.totalAmount || 0) / 100,
+                                activeOrg?.country,
+                              )}{" "}
+                              Unpaid
                             </span>
                           )}
                         </td>
 
                         {/* 7. Order Price */}
                         <td className="py-4 px-5 text-right font-bold text-sm text-[#0c0a09]">
-                          {currencySymbol}{formatCurrencyAmount(order?.display_total_amount ?? ((order?.totalAmount || 0) / 100), activeOrg?.country)}
+                          {currencySymbol}
+                          {formatCurrencyAmount(
+                            order?.display_total_amount ??
+                              (order?.totalAmount || 0) / 100,
+                            activeOrg?.country,
+                          )}
                         </td>
                       </tr>
                     );

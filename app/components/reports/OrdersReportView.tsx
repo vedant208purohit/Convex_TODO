@@ -163,22 +163,49 @@ export function OrdersReportView({
   const getOrderExclusiveTax = (order: any): number => {
     if (!order) return 0;
 
-    // 1. If taxInfoSnapshot exists:
-    if (order.taxInfoSnapshot) {
-      if (order.taxInfoSnapshot.tax_mode === "inclusive") {
-        return 0;
-      }
-      if (order.taxInfoSnapshot.tax_mode === "exclusive") {
-        const snapTax = parseFloat(order.taxInfoSnapshot.tax_amount || "0");
-        if (!isNaN(snapTax) && snapTax > 0) {
-          return Math.round(snapTax * 100);
+    // 1. If line items have explicit item-level taxMode (e.g. mixed order with Dabeli & Biryani)
+    if (order.items && Array.isArray(order.items) && order.items.length > 0) {
+      const components = order.taxInfoSnapshot?.components || [];
+      const totalTaxRatePct = components.reduce((sum: number, c: any) => sum + (Number(c.rate) || 0), 0);
+      const taxRate = totalTaxRatePct > 0 ? totalTaxRatePct / 100 : 0.05;
+
+      let exclusiveTaxPaise = 0;
+      let hasExplicitModes = false;
+
+      order.items.forEach((item: any) => {
+        const qty = Number(item.quantity) || 1;
+        const lineTotal = Number(item.totalPrice) || (Number(item.itemPrice || item.price) || 0) * qty;
+
+        const itemMode = item.taxMode || item.tax_mode;
+        if (itemMode !== undefined) hasExplicitModes = true;
+
+        let custsTotal = 0;
+        if (Array.isArray(item.customizations)) {
+          item.customizations.forEach((c: any) => {
+            const cPrice = (Number(c.price) || 0) * qty;
+            custsTotal += cPrice;
+            const cMode = c.taxMode || c.tax_mode || itemMode;
+            if (c.isGst !== false && cMode === "exclusive") {
+              exclusiveTaxPaise += Math.round(cPrice * taxRate);
+              hasExplicitModes = true;
+            }
+          });
         }
-        return order.taxTotal || 0;
+
+        const baseTotal = Math.max(0, lineTotal - custsTotal);
+        if (itemMode === "exclusive") {
+          exclusiveTaxPaise += Math.round(baseTotal * taxRate);
+        }
+      });
+
+      if (hasExplicitModes && exclusiveTaxPaise > 0) {
+        return exclusiveTaxPaise;
       }
     }
 
     // 2. Mathematical breakdown from order:
-    // In checkout, totalAmount = subTotal + exclusiveTax - discount + delivery
+    // In checkout: totalAmount = subTotal + exclusiveTax - discount + delivery
+    // Therefore, any tax added ON TOP of subTotal to reach totalAmount is:
     const subTotal = order.subTotal || 0;
     const totalAmount = order.totalAmount || 0;
     const discount = order.discountAmount || 0;
@@ -189,26 +216,11 @@ export function OrdersReportView({
       if (derivedExclusive > 0) {
         return Math.round(derivedExclusive);
       }
-      // If totalAmount <= subTotal, tax was inclusive or zero
-      if (derivedExclusive <= 0 && (order.taxTotal || 0) > 0) {
-        return 0;
-      }
+      return 0; // If totalAmount <= subTotal, tax was inclusive or zero
     }
 
-    // 3. Fallback based on store taxation settings:
-    if (
-      defaultTaxGroup?.taxMode === "inclusive" ||
-      (storeTaxSettings as any)?.defaultTaxMode === "inclusive" ||
-      activeOrg?.inclusiveGst === true
-    ) {
+    if (order.taxInfoSnapshot?.tax_mode === "inclusive") {
       return 0;
-    }
-
-    if (
-      defaultTaxGroup?.taxMode === "exclusive" ||
-      (storeTaxSettings as any)?.defaultTaxMode === "exclusive"
-    ) {
-      return order.taxTotal || 0;
     }
 
     return 0;
@@ -674,9 +686,14 @@ export function OrdersReportView({
 
       // ONLY count realized revenue from paid, non-cancelled orders!
       if (isPaid) {
-        const gross = o.subTotal || o.totalGrossSales || o.grossAmount || 0;
+        const orderTotal = o.totalAmount || 0;
         const exclusiveTax = getOrderExclusiveTax(o);
-        const net = o.totalAmount || o.netAmount || gross + exclusiveTax;
+        const deliveryFee = o.deliveryFee || o.deliveryCharge || 0;
+
+        // Gross = Total customer invoice amount (including taxes, delivery & after discount)
+        const gross = orderTotal > 0 ? orderTotal : (o.subTotal || 0) + exclusiveTax + deliveryFee;
+        // Net = Base food sales without taxes & delivery charges
+        const net = Math.max(0, (o.subTotal || 0) > 0 ? (o.subTotal || 0) : (gross - exclusiveTax - deliveryFee));
 
         totalGrossPaise += gross;
         totalExclusiveTaxPaise += exclusiveTax;
@@ -741,15 +758,15 @@ export function OrdersReportView({
       "Captain",
       "Payment Mode",
       "Status",
-      "Gross",
+      "Net",
       `Tax (${taxLabel} Exclusive)`,
-      "Net Amount",
+      "Gross",
     ];
 
     const rows = filteredOrders.map((o) => {
-      const gross = ((o.subTotal || 0) / 100).toFixed(2);
+      const net = ((o.subTotal || 0) / 100).toFixed(2);
       const exclusiveTax = (getOrderExclusiveTax(o) / 100).toFixed(2);
-      const net = ((o.totalAmount || 0) / 100).toFixed(2);
+      const gross = ((o.totalAmount || 0) / 100).toFixed(2);
       const dateStr = formatStoreDateTime(o.createdAt, timezone) || "";
 
       return [
@@ -761,9 +778,9 @@ export function OrdersReportView({
         `"${getOrderStaff(o)}"`,
         `"${getOrderPaymentMode(o)}"`,
         `"${getOrderStatus(o)}"`,
-        gross,
-        exclusiveTax,
         net,
+        exclusiveTax,
+        gross,
       ].join(",");
     });
 
@@ -929,7 +946,7 @@ export function OrdersReportView({
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
-                  Sum of item pre-tax totals
+                  Total order bill value with taxes
                 </p>
               </>
             )}
@@ -1029,14 +1046,14 @@ export function OrdersReportView({
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
-                  Final settled transaction volume
+                  Food sales without taxes &amp; delivery
                 </p>
               </>
             )}
           </div>
           <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#5e5e5e] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#0c0a09] shrink-0"></span>
-            <span className="truncate">Gross + Exclusive Tax</span>
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-600 shrink-0"></span>
+            <span className="truncate">Pure Food Sales (Gross - Tax)</span>
           </div>
         </div>
       </section>
@@ -1231,9 +1248,9 @@ export function OrdersReportView({
                 <th className="py-3 px-3.5 font-semibold min-w-[190px]">Items Summary</th>
                 <th className="py-3 px-3.5 font-semibold whitespace-nowrap min-w-[125px]">Payment Mode</th>
                 <th className="py-3 px-3.5 font-semibold whitespace-nowrap min-w-[115px]">Status</th>
-                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[85px]">Gross</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[85px]">Net</th>
                 <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[85px]">{taxLabel.toUpperCase()}</th>
-                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[95px]">Net</th>
+                <th className="py-3 px-3.5 font-semibold text-right whitespace-nowrap min-w-[95px]">Gross</th>
                 <th className="py-3 px-4 font-semibold text-center whitespace-nowrap min-w-[100px]">Action</th>
               </tr>
             </thead>
@@ -1267,9 +1284,9 @@ export function OrdersReportView({
                 </tr>
               ) : (
                 paginatedOrders.map((order: any) => {
-                  const gross = order.subTotal || order.grossAmount || 0;
+                  const net = order.subTotal || 0;
                   const exclusiveTax = getOrderExclusiveTax(order);
-                  const net = order.totalAmount || order.netAmount || gross + exclusiveTax;
+                  const gross = order.totalAmount || (net + exclusiveTax + (order.deliveryCharge || 0));
 
                   const channel = getOrderChannel(order);
                   const paymentMode = getOrderPaymentMode(order);
@@ -1382,7 +1399,7 @@ export function OrdersReportView({
                         })()}
                       </td>
 
-                      {/* Gross */}
+                      {/* Net (Subtotal without tax) */}
                       <td className="py-3 px-3.5 whitespace-nowrap text-right tabular-nums text-xs">
                         {(() => {
                           const { isPaid, isPending, isCancelled } = getOrderPaymentStatus(order);
@@ -1397,7 +1414,7 @@ export function OrdersReportView({
                             return (
                               <div>
                                 <span className="text-[#78716c] font-medium">
-                                  {formatPriceWithSymbol(gross, currencySymbol, effectiveCountry, true)}
+                                  {formatPriceWithSymbol(net, currencySymbol, effectiveCountry, true)}
                                 </span>
                                 <span className="block text-[10px] text-amber-600 font-medium">
                                   Unpaid
@@ -1407,7 +1424,7 @@ export function OrdersReportView({
                           }
                           return (
                             <span className="text-[#0c0a09] font-medium">
-                              {formatPriceWithSymbol(gross, currencySymbol, effectiveCountry, true)}
+                              {formatPriceWithSymbol(net, currencySymbol, effectiveCountry, true)}
                             </span>
                           );
                         })()}
@@ -1432,7 +1449,7 @@ export function OrdersReportView({
                         })()}
                       </td>
 
-                      {/* Net */}
+                      {/* Gross (Total invoice with taxes & charges) */}
                       <td className="py-3 px-3.5 whitespace-nowrap text-right tabular-nums text-xs font-semibold">
                         {(() => {
                           const { isPaid, isPending, isCancelled } = getOrderPaymentStatus(order);
@@ -1447,7 +1464,7 @@ export function OrdersReportView({
                             return (
                               <div>
                                 <span className="text-amber-700">
-                                  {formatPriceWithSymbol(net, currencySymbol, effectiveCountry, true)}
+                                  {formatPriceWithSymbol(gross, currencySymbol, effectiveCountry, true)}
                                 </span>
                                 <span className="block text-[10px] text-amber-600 font-medium">
                                   Pending
@@ -1457,7 +1474,7 @@ export function OrdersReportView({
                           }
                           return (
                             <span className="text-[#0c0a09]">
-                              {formatPriceWithSymbol(net, currencySymbol, effectiveCountry, true)}
+                              {formatPriceWithSymbol(gross, currencySymbol, effectiveCountry, true)}
                             </span>
                           );
                         })()}
@@ -1688,7 +1705,7 @@ export function OrdersReportView({
                   </span>
                   <div className="space-y-1.5 text-[#0c0a09]">
                     <div className="flex items-center justify-between">
-                      <span className="text-[#5e5e5e]">Item Subtotal (Gross)</span>
+                      <span className="text-[#5e5e5e]">Net Amount</span>
                       <span className="tabular-nums font-medium">
                         {formatPriceWithSymbol(
                           selectedOrderForDrawer.subTotal || 0,
@@ -1771,7 +1788,7 @@ export function OrdersReportView({
                           <div className="flex items-center justify-between text-[#5e5e5e]">
                             <span>{taxLabel}</span>
                             <span className="tabular-nums text-xs text-[#78716c] font-medium">
-                              Inclusive (included in gross)
+                              Inclusive (included in items)
                             </span>
                           </div>
                         );
@@ -1857,7 +1874,7 @@ export function OrdersReportView({
                         <div className="pt-2 border-t border-[#e7e5e4] flex items-center justify-between">
                           <div>
                             <span className="font-semibold text-xs text-[#0c0a09]">
-                              Final Paid Amount
+                              Gross Total
                             </span>
                             <span className="block text-[11px] text-[#5e5e5e]">
                               Total Tender Collected

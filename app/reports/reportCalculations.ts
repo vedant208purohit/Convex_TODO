@@ -2,6 +2,8 @@ import {
   formatCurrencyAmount,
   formatPriceWithSymbol,
   formatStoreDate,
+  formatStoreTime,
+  getLocaleForCountry,
   getTimezoneForCountry,
 } from "../../lib/constants/countries";
 
@@ -41,15 +43,90 @@ export const isDataZero = (val: any): string => {
     return "-";
   }
   const str = String(val).trim();
-  if (str === "$ 0.00" || str === "₹ 0.00" || str === "AED 0.00" || str.endsWith(" 0.00")) {
-    return "-";
-  }
   return str;
 };
 
-// ==========================================
-// 1. SALES REPORT CALCULATION
-// ==========================================
+export const isOrderRefunded = (o: any): boolean => {
+  if (!o) return false;
+  if (o.paymentStatus === "Refunded" || o.paymentStatus === "Partially Refunded") {
+    return true;
+  }
+  const statusName = (o.orderStatusName || o.status || o.orderStatus || "").toLowerCase();
+  if (statusName.includes("refund")) {
+    return true;
+  }
+  if (typeof o.refundAmount === "number" && o.refundAmount > 0) {
+    return true;
+  }
+  if (
+    Array.isArray(o.payments) &&
+    o.payments.some(
+      (p: any) =>
+        p.paymentType === "Debit" ||
+        p.status === "Refunded" ||
+        (typeof p.refundAmount === "number" && p.refundAmount > 0)
+    )
+  ) {
+    return true;
+  }
+  return false;
+};
+
+export const isOrderUnpaidCancelled = (o: any): boolean => {
+  if (!o) return false;
+  // If order was refunded (fully or partially), it had money exchanged and must NOT be skipped as an unpaid cancellation
+  if (isOrderRefunded(o)) return false;
+
+  const isCancelledOrRejected =
+    Boolean(o.isRejected) ||
+    o.orderStatus === "Cancelled" ||
+    o.status === "Cancelled" ||
+    (o.orderStatusName || "").toLowerCase().includes("cancel") ||
+    (o.orderStatusName || "").toLowerCase().includes("reject");
+
+  if (!isCancelledOrRejected) return false;
+
+  const isPaid =
+    o.paymentStatus === "Paid" ||
+    o.isPaid === true ||
+    (Array.isArray(o.payments) &&
+      o.payments.length > 0 &&
+      o.payments.some(
+        (p: any) =>
+          (p.paymentType === "Credit" || !p.paymentType) &&
+          (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+      ));
+
+  return !isPaid;
+};
+
+export const getOrderRefundAmount = (o: any): number => {
+  if (!o) return 0;
+  let refund = 0;
+  if (Array.isArray(o.payments) && o.payments.length > 0) {
+    for (const p of o.payments) {
+      if (p.paymentType === "Debit") {
+        refund += p.amount || p.refundAmount || 0;
+      } else if (typeof p.refundAmount === "number" && p.refundAmount > 0) {
+        refund += p.refundAmount;
+      }
+    }
+  }
+  if (refund === 0) {
+    if (
+      o.paymentStatus === "Refunded" ||
+      (o.orderStatusName || "").toLowerCase().includes("refund")
+    ) {
+      refund = o.totalAmount || 0;
+    } else if (o.paymentStatus === "Partially Refunded" && o.discountAmount) {
+      refund = o.discountAmount;
+    } else if (typeof o.refundAmount === "number" && o.refundAmount > 0) {
+      refund = o.refundAmount;
+    }
+  }
+  return refund;
+};
+
 
 export interface SalesReportOutput {
   total_gross_sales: string;
@@ -94,12 +171,7 @@ export function computeSalesReportData(
   >();
 
   for (const order of orders) {
-    const isCancelled =
-      Boolean(order.isRejected) ||
-      order.orderStatus === "Cancelled" ||
-      order.status === "Cancelled" ||
-      (order.orderStatusName || "").toLowerCase().includes("cancel");
-    if (isCancelled) continue; // Exclude rejected/cancelled from revenue
+    if (isOrderUnpaidCancelled(order)) continue;
 
     const isPaid =
       order.paymentStatus === "Paid" ||
@@ -111,27 +183,22 @@ export function computeSalesReportData(
         ));
 
     // Exclude pending/unpaid orders from realized sales revenue
-    if (!isPaid && order.paymentStatus !== "Refunded" && order.paymentStatus !== "Partially Refunded") {
+    if (!isPaid && !isOrderRefunded(order)) {
       continue;
     }
 
     const orderTotal = order.totalAmount || 0;
-    const orderTax = order.taxTotal || 0;
-    let orderRefund = 0;
+    const subTotal = order.subTotal || 0;
+    const discount = order.discountAmount || 0;
+    const delivery = order.deliveryCharge || 0;
 
-    if (order.paymentStatus === "Refunded") {
-      orderRefund = orderTotal;
-    } else if (order.paymentStatus === "Partially Refunded") {
-      // Sum refund amounts from payments
-      if (order.payments && Array.isArray(order.payments)) {
-        for (const p of order.payments) {
-          orderRefund += p.refundAmount || 0;
-        }
-      }
-      if (orderRefund === 0 && order.discountAmount) {
-        orderRefund = order.discountAmount;
-      }
-    }
+    // Isolate exclusive tax only (tax charged on top of subtotal)
+    const orderExclusiveTax =
+      orderTotal > 0 && subTotal > 0
+        ? Math.max(0, orderTotal - subTotal + discount - delivery)
+        : (order.taxInfoSnapshot?.tax_mode === "exclusive" ? (order.taxTotal || 0) : 0);
+    const orderTax = orderExclusiveTax;
+    const orderRefund = getOrderRefundAmount(order);
 
     const orderGross = orderTotal;
     const orderNet = Math.max(0, orderGross - orderTax - orderRefund);
@@ -249,95 +316,377 @@ function formatOrderTypeDisplayName(type?: string): string {
   return type;
 }
 
-// Helper: Parse store operational timing into valid operating hours
-export function parseOperationalHourRange(operationTiming: any): {
+// Helper: Parse hours from various timing string formats
+export function parseHourFromTimeStr(str?: string): number | null {
+  if (!str || typeof str !== "string") return null;
+  const clean = str.trim();
+  if (clean.includes("T")) {
+    const timePart = clean.split("T")[1];
+    const h = parseInt(timePart.split(":")[0], 10);
+    return isNaN(h) ? null : h;
+  }
+  const ampmMatch = clean.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM)$/i);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const isPm = ampmMatch[3].toUpperCase() === "PM";
+    if (isPm && h < 12) h += 12;
+    if (!isPm && h === 12) h = 0;
+    return h;
+  }
+  if (clean.includes(":")) {
+    const h = parseInt(clean.split(":")[0], 10);
+    return isNaN(h) ? null : h;
+  }
+  const h = parseInt(clean, 10);
+  return isNaN(h) ? null : h;
+}
+
+// Helper: Format raw operational time string into localized display format using countries.ts
+export function formatOperationalTimeString(
+  timeStr?: string,
+  countryCode?: string,
+  timezone?: string,
+): string {
+  if (!timeStr || typeof timeStr !== "string" || !timeStr.trim()) return "";
+  const clean = timeStr.trim();
+
+  // If already standard AM/PM formatted string (e.g., "11:30 AM")
+  if (/^\d{1,2}:\d{2}\s*(AM|PM)$/i.test(clean)) return clean;
+
+  // If ISO date/time string
+  if (clean.includes("T")) {
+    return formatStoreTime(clean, timezone, countryCode);
+  }
+
+  // If HH:MM or HH:MM:SS format
+  if (clean.includes(":")) {
+    const parts = clean.split(":");
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || "0", 10);
+    if (!isNaN(h)) {
+      const refDate = new Date(Date.UTC(2026, 0, 1, Math.min(23, Math.max(0, h)), isNaN(m) ? 0 : Math.min(59, Math.max(0, m))));
+      return formatStoreTime(refDate, "UTC", countryCode);
+    }
+  }
+
+  // Plain number representation
+  const h = parseInt(clean, 10);
+  if (!isNaN(h)) {
+    const refDate = new Date(Date.UTC(2026, 0, 1, Math.min(23, Math.max(0, h)), 0));
+    return formatStoreTime(refDate, "UTC", countryCode);
+  }
+
+  return clean;
+}
+
+// Helper: Format chart/cadence hour into clean localized axis label (e.g. 11 AM, 12 PM)
+export function formatAxisHour(h: number, countryCode?: string): string {
+  const safeH = Math.min(23, Math.max(0, h));
+  const refDate = new Date(Date.UTC(2026, 0, 1, safeH, 0));
+  const locale = getLocaleForCountry(countryCode);
+  try {
+    const formatted = new Intl.DateTimeFormat(locale, {
+      timeZone: "UTC",
+      hour: "numeric",
+      hour12: true,
+    }).format(refDate);
+    return formatted.replace(/[:.]00\s*/, " ").toUpperCase().trim();
+  } catch {
+    const period = safeH >= 12 && safeH < 24 ? "PM" : "AM";
+    const displayH = safeH % 12 === 0 ? 12 : safeH % 12;
+    return `${displayH} ${period}`;
+  }
+}
+
+// Helper: Parse any time string or ISO format into minutes of the day (0 to 1439)
+export function parseTimeToMinutes(timeStr?: string | null): number | null {
+  if (!timeStr || typeof timeStr !== "string") return null;
+  const clean = timeStr.trim();
+  if (!clean) return null;
+
+  // 1. 12-hour format e.g. "11:30 AM", "11:11 PM", "11:30am", "8:00pm", "11 PM"
+  const ampmMatch = clean.match(/^(\d{1,2})(?::(\d{2}))?\s*(AM|PM|am|pm)$/i);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const m = ampmMatch[2] ? parseInt(ampmMatch[2], 10) : 0;
+    const isPm = ampmMatch[3].toUpperCase() === "PM";
+    if (isPm && h < 12) h += 12;
+    if (!isPm && h === 12) h = 0;
+    return Math.min(1439, Math.max(0, h * 60 + m));
+  }
+
+  // 2. ISO format with "T" (e.g. "2023-05-08T11:30:00.000+05:30")
+  if (clean.includes("T")) {
+    const timePart = clean.split("T")[1];
+    const match = timePart.match(/^(\d{1,2}):(\d{2})/);
+    if (match) {
+      const h = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      if (!isNaN(h)) {
+        return Math.min(1439, Math.max(0, h * 60 + (isNaN(m) ? 0 : m)));
+      }
+    }
+    const parsed = Date.parse(clean);
+    if (!isNaN(parsed)) {
+      const d = new Date(parsed);
+      return d.getHours() * 60 + d.getMinutes();
+    }
+  }
+
+  // 3. GMT or Date string (e.g. "Mon May 08 2023 11:30:00 GMT+0530")
+  if (clean.includes("GMT") || clean.includes("Z")) {
+    const timeMatch = clean.match(/(\d{1,2}):(\d{2}):(\d{2})/);
+    if (timeMatch) {
+      const h = parseInt(timeMatch[1], 10);
+      const m = parseInt(timeMatch[2], 10);
+      if (!isNaN(h)) {
+        return Math.min(1439, Math.max(0, h * 60 + (isNaN(m) ? 0 : m)));
+      }
+    }
+    const parsed = Date.parse(clean);
+    if (!isNaN(parsed)) {
+      const d = new Date(parsed);
+      return d.getHours() * 60 + d.getMinutes();
+    }
+  }
+
+  // 4. 24-hour format e.g. "11:30", "23:11", "08:00"
+  if (clean.includes(":")) {
+    const parts = clean.split(":");
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || "0", 10);
+    if (!isNaN(h)) {
+      return Math.min(1439, Math.max(0, h * 60 + (isNaN(m) ? 0 : m)));
+    }
+  }
+
+  // 5. Plain integer hour e.g. "11", "20"
+  const plainH = parseInt(clean, 10);
+  if (!isNaN(plainH) && plainH >= 0 && plainH <= 24) {
+    return Math.min(1439, Math.max(0, plainH === 24 ? 1439 : plainH * 60));
+  }
+
+  return null;
+}
+
+// Helper: Format minutes from day start into clean localized 12-hour string (e.g. "11:30 AM", "11:11 PM")
+export function formatMinutesTo12h(totalMinutes: number): string {
+  const clamped = Math.min(1439, Math.max(0, totalMinutes));
+  let h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  const ampm = h >= 12 && h < 24 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  const mStr = m < 10 ? `0${m}` : `${m}`;
+  return `${h}:${mStr} ${ampm}`;
+}
+
+export interface DayOperationalTiming {
+  active?: boolean;
+  is_open?: boolean;
+  is_open_all_day?: boolean;
+  open?: string;
+  close?: string;
+  hours?: Array<{
+    start_time?: string;
+    end_time?: string;
+    start?: string;
+    end?: string;
+    open?: string;
+    close?: string;
+  }>;
+}
+
+export interface OperationalScheduleResult {
   validHours: Set<number>;
   sortedHours: number[];
   startHour: number;
   endHour: number;
-} {
+  serviceTimingLabel: string;
+  isOpenAllDay: boolean;
+}
+
+// Helper: Resolve exact operational schedule from store operationTiming
+export function getOperationalScheduleInfo(
+  operationTiming: any,
+  countryCode?: string,
+  timezone?: string,
+  selectedDateTimestamp?: number,
+): OperationalScheduleResult {
   const validHours = new Set<number>();
+
   if (!operationTiming || typeof operationTiming !== "object") {
-    for (let h = 10; h <= 23; h++) validHours.add(h);
+    for (let h = 11; h <= 23; h++) validHours.add(h);
+    const sortedHours = Array.from(validHours).sort((a, b) => a - b);
+    const startFormatted = formatOperationalTimeString("11:00", countryCode, timezone);
+    const endFormatted = formatOperationalTimeString("23:00", countryCode, timezone);
     return {
       validHours,
-      sortedHours: Array.from(validHours).sort((a, b) => a - b),
-      startHour: 10,
+      sortedHours,
+      startHour: 11,
       endHour: 23,
+      serviceTimingLabel: startFormatted && endFormatted ? `${startFormatted} – ${endFormatted}` : "11:00 AM – 11:00 PM",
+      isOpenAllDay: false,
     };
   }
 
-  const parseH = (str?: string): number | null => {
-    if (!str || typeof str !== "string") return null;
-    const clean = str.trim();
-    if (clean.includes("T")) {
-      const timePart = clean.split("T")[1];
-      const h = parseInt(timePart.split(":")[0], 10);
-      return isNaN(h) ? null : h;
-    }
-    if (clean.includes(":")) {
-      const h = parseInt(clean.split(":")[0], 10);
-      return isNaN(h) ? null : h;
-    }
-    const h = parseInt(clean, 10);
-    return isNaN(h) ? null : h;
-  };
+  // Check if operationTiming has flat openTime / closeTime properties
+  if (typeof operationTiming.openTime === "string" && typeof operationTiming.closeTime === "string") {
+    const startMin = parseTimeToMinutes(operationTiming.openTime) ?? 660; // 11:00 AM
+    const endMin = parseTimeToMinutes(operationTiming.closeTime) ?? 1380; // 11:00 PM
+    const startH = Math.floor(startMin / 60);
+    const endH = Math.min(23, Math.floor(endMin / 60));
+    for (let h = startH; h <= endH; h++) validHours.add(h);
+    const sortedHours = Array.from(validHours).sort((a, b) => a - b);
+    return {
+      validHours,
+      sortedHours,
+      startHour: startH,
+      endHour: endH,
+      serviceTimingLabel: `${formatMinutesTo12h(startMin)} – ${formatMinutesTo12h(endMin)}`,
+      isOpenAllDay: false,
+    };
+  }
 
-  let minH = 24;
-  let maxH = -1;
-  let foundAny = false;
+  const dayKeys = Object.keys(operationTiming);
 
-  for (const dayKey of Object.keys(operationTiming)) {
-    const day = operationTiming[dayKey];
+  let targetDayConfig: DayOperationalTiming | null = null;
+  if (selectedDateTimestamp) {
+    const targetDate = new Date(selectedDateTimestamp);
+    const targetTz = timezone || (countryCode ? getTimezoneForCountry(countryCode) : undefined);
+    let dayName = "Friday";
+    try {
+      dayName = new Intl.DateTimeFormat("en-US", {
+        timeZone: targetTz,
+        weekday: "long",
+      }).format(targetDate);
+    } catch {
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      dayName = days[targetDate.getDay()];
+    }
+
+    const matchedKey = dayKeys.find(
+      (k) => k.toLowerCase() === dayName.toLowerCase() || k.toLowerCase().startsWith(dayName.slice(0, 3).toLowerCase()),
+    );
+    if (matchedKey) {
+      targetDayConfig = operationTiming[matchedKey];
+    }
+  }
+
+  // Determine list of days to evaluate:
+  // If targetDayConfig is provided and explicitly configured open/active, evaluate that day.
+  // Otherwise, inspect ALL active open days across the weekly schedule to get the full service span!
+  const daysToInspect: DayOperationalTiming[] = [];
+  if (targetDayConfig && (targetDayConfig.active ?? targetDayConfig.is_open ?? true)) {
+    daysToInspect.push(targetDayConfig);
+  } else {
+    for (const key of dayKeys) {
+      const day = operationTiming[key];
+      if (day && typeof day === "object" && (day.active ?? day.is_open ?? true)) {
+        daysToInspect.push(day);
+      }
+    }
+  }
+
+  if (daysToInspect.length === 0) {
+    for (const key of dayKeys) {
+      const day = operationTiming[key];
+      if (day && typeof day === "object") daysToInspect.push(day);
+    }
+  }
+
+  let minMinutes = Infinity;
+  let maxMinutes = -1;
+  let isOpenAllDay = false;
+
+  for (const day of daysToInspect) {
     if (!day || typeof day !== "object") continue;
 
-    const isActive = day.active ?? day.is_open ?? true;
-    if (!isActive) continue;
-
-    foundAny = true;
-
     if (day.is_open_all_day) {
+      isOpenAllDay = true;
+      minMinutes = Math.min(minMinutes, 0);
+      maxMinutes = Math.max(maxMinutes, 1439);
       for (let h = 0; h <= 23; h++) validHours.add(h);
-      minH = 0;
-      maxH = 23;
       continue;
     }
 
-    if (day.open) {
-      const oh = parseH(day.open);
-      const ch = day.close ? parseH(day.close) : 23;
-      if (oh !== null) {
-        const end = ch !== null ? ch : 23;
-        for (let h = oh; h <= end && h <= 23; h++) validHours.add(h);
-        minH = Math.min(minH, oh);
-        maxH = Math.max(maxH, end);
+    if (day.open || day.close) {
+      const sMin = parseTimeToMinutes(day.open);
+      const eMin = parseTimeToMinutes(day.close);
+      if (sMin !== null) {
+        const end = eMin !== null ? eMin : 1380;
+        minMinutes = Math.min(minMinutes, sMin);
+        maxMinutes = Math.max(maxMinutes, end);
+        const sH = Math.floor(sMin / 60);
+        const eH = Math.min(23, Math.floor(end / 60));
+        for (let h = sH; h <= eH; h++) validHours.add(h);
       }
     }
 
     if (Array.isArray(day.hours)) {
       for (const slot of day.hours) {
         if (!slot) continue;
-        const sh = parseH(slot.start_time || slot.open || slot.start);
-        const eh = parseH(slot.end_time || slot.close || slot.end);
-        if (sh !== null) {
-          const end = eh !== null ? eh : 23;
-          for (let h = sh; h <= end && h <= 23; h++) validHours.add(h);
-          minH = Math.min(minH, sh);
-          maxH = Math.max(maxH, end);
+        const rawStart = slot.start_time || slot.open || slot.start;
+        const rawEnd = slot.end_time || slot.close || slot.end;
+        const sMin = parseTimeToMinutes(rawStart);
+        const eMin = parseTimeToMinutes(rawEnd);
+        if (sMin !== null) {
+          const end = eMin !== null ? eMin : 1380;
+          minMinutes = Math.min(minMinutes, sMin);
+          maxMinutes = Math.max(maxMinutes, end);
+          const sH = Math.floor(sMin / 60);
+          const eH = Math.min(23, Math.floor(end / 60));
+          for (let h = sH; h <= eH; h++) validHours.add(h);
         }
       }
     }
   }
 
-  if (!foundAny || validHours.size === 0) {
-    for (let h = 10; h <= 23; h++) validHours.add(h);
+  // Ultimate fallback if nothing valid was extracted
+  if (validHours.size === 0 || minMinutes === Infinity || maxMinutes === -1) {
+    for (let h = 11; h <= 23; h++) validHours.add(h);
+    minMinutes = 660; // 11:00 AM
+    maxMinutes = 1380; // 11:00 PM
   }
 
-  minH = Math.max(0, Math.min(23, minH === 24 ? 10 : minH));
-  maxH = Math.max(minH, Math.min(23, maxH === -1 ? 23 : maxH));
   const sortedHours = Array.from(validHours).sort((a, b) => a - b);
+  const startHour = sortedHours[0] ?? 11;
+  const endHour = sortedHours[sortedHours.length - 1] ?? 23;
 
-  return { validHours, sortedHours, startHour: minH, endHour: maxH };
+  let serviceTimingLabel = "11:00 AM – 11:00 PM";
+  if (isOpenAllDay) {
+    serviceTimingLabel = "Open 24 Hours";
+  } else {
+    const startFormatted = formatMinutesTo12h(minMinutes);
+    const endFormatted = formatMinutesTo12h(maxMinutes);
+    serviceTimingLabel = `${startFormatted} – ${endFormatted}`;
+  }
+
+  return {
+    validHours,
+    sortedHours,
+    startHour,
+    endHour,
+    serviceTimingLabel,
+    isOpenAllDay,
+  };
+}
+
+// Backward compatible helper for existing callers
+export function parseOperationalHourRange(
+  operationTiming: any,
+  countryCode?: string,
+  timezone?: string,
+  selectedDateTimestamp?: number,
+): {
+  validHours: Set<number>;
+  sortedHours: number[];
+  startHour: number;
+  endHour: number;
+  serviceTimingLabel: string;
+  isOpenAllDay: boolean;
+} {
+  return getOperationalScheduleInfo(operationTiming, countryCode, timezone, selectedDateTimestamp);
 }
 
 export function computeOrdersReportData(
@@ -380,12 +729,7 @@ export function computeOrdersReportData(
   >();
 
   for (const order of orders) {
-    const isCancelled =
-      Boolean(order.isRejected) ||
-      order.orderStatus === "Cancelled" ||
-      order.status === "Cancelled" ||
-      (order.orderStatusName || "").toLowerCase().includes("cancel");
-    if (isCancelled) continue; // Exclude cancelled orders
+    if (isOrderUnpaidCancelled(order)) continue; // Exclude unpaid cancelled orders
 
     validOrdersCount += 1;
     const gross = order.totalAmount || 0;
@@ -417,7 +761,7 @@ export function computeOrdersReportData(
     };
     existingType.totalOrders += 1;
     existingType.grossPaise += gross;
-    if (order.paymentStatus === "Refunded") {
+    if (order.paymentStatus === "Refunded" || isOrderRefunded(order)) {
       existingType.refundedOrders += 1;
     }
     if (orderDeliverySecs > 0) {
@@ -457,7 +801,7 @@ export function computeOrdersReportData(
   }
 
   // Peak Hour restricted strictly to store's operational timing
-  const { validHours } = parseOperationalHourRange(operationTiming);
+  const { validHours } = parseOperationalHourRange(operationTiming, countryCode, timezone);
   let peakHour = -1;
   let maxHourlyCount = 0;
   for (let h = 0; h < 24; h++) {
@@ -592,12 +936,7 @@ export function computeCustomerReportData(
 
   // Process all historical orders to determine each customer's first order timestamp
   for (const o of orders) {
-    const isCancelled =
-      Boolean(o.isRejected) ||
-      o.orderStatus === "Cancelled" ||
-      o.status === "Cancelled" ||
-      (o.orderStatusName || "").toLowerCase().includes("cancel");
-    if (isCancelled) continue; // Exclude cancelled orders from customer spend and order history
+    if (isOrderUnpaidCancelled(o)) continue; // Exclude unpaid cancelled orders from customer spend and order history
 
     const custKey =
       o.customerId ||
@@ -1119,8 +1458,14 @@ export function computeOperationalReportData(
   let totalPaymentsValuePaise = 0;
 
   for (const o of orders) {
-    if (o.isRejected) continue;
-    if (o.paymentStatus !== "Paid" && o.paymentStatus !== "Partially Refunded" && !o.isCompleted) {
+    if (isOrderUnpaidCancelled(o)) continue;
+    if (
+      o.paymentStatus !== "Paid" &&
+      o.paymentStatus !== "Partially Refunded" &&
+      o.paymentStatus !== "Refunded" &&
+      !isOrderRefunded(o) &&
+      !o.isCompleted
+    ) {
       continue;
     }
 
@@ -1129,9 +1474,15 @@ export function computeOperationalReportData(
 
     if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
       for (const p of o.payments) {
-        const pVal = p.amount || 0;
-        const pMode = p.mode || p.paymentMode || o.paymentMode || o.paymentMethod || "Cash";
-        totalPaymentsCount += 1;
+        const isDebit = p.paymentType === "Debit";
+        const pMode = p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || o.paymentMethod || "Cash";
+        const pVal = isDebit
+          ? -(p.refundAmount || p.amount || 0)
+          : (p.payAmount !== undefined ? p.payAmount : (p.amount || 0));
+
+        if (!isDebit) {
+          totalPaymentsCount += 1;
+        }
         totalPaymentsValuePaise += pVal;
 
         const existingMode = modeStatsMap.get(pMode) || {
@@ -1139,7 +1490,9 @@ export function computeOperationalReportData(
           txCount: 0,
           totalValuePaise: 0,
         };
-        existingMode.txCount += 1;
+        if (!isDebit) {
+          existingMode.txCount += 1;
+        }
         existingMode.totalValuePaise += pVal;
         modeStatsMap.set(pMode, existingMode);
 
@@ -1150,15 +1503,20 @@ export function computeOperationalReportData(
           totalValuePaise: 0,
           modeCounts: {} as Record<string, number>,
         };
-        existingDay.totalCount += 1;
+        if (!isDebit) {
+          existingDay.totalCount += 1;
+          existingDay.modeCounts[pMode] = (existingDay.modeCounts[pMode] || 0) + 1;
+        }
         existingDay.totalValuePaise += pVal;
-        existingDay.modeCounts[pMode] = (existingDay.modeCounts[pMode] || 0) + 1;
         dailyPaymentMap.set(dateKey, existingDay);
       }
     } else {
       const mode = o.paymentMode || o.paymentMethod || o.tenderType || "Cash";
+      const orderRef = getOrderRefundAmount(o);
+      const netVal = val - orderRef;
+
       totalPaymentsCount += 1;
-      totalPaymentsValuePaise += val;
+      totalPaymentsValuePaise += netVal;
 
       const existingMode = modeStatsMap.get(mode) || {
         modeName: mode,
@@ -1166,7 +1524,7 @@ export function computeOperationalReportData(
         totalValuePaise: 0,
       };
       existingMode.txCount += 1;
-      existingMode.totalValuePaise += val;
+      existingMode.totalValuePaise += netVal;
       modeStatsMap.set(mode, existingMode);
 
       const existingDay = dailyPaymentMap.get(dateKey) || {
@@ -1177,7 +1535,7 @@ export function computeOperationalReportData(
         modeCounts: {} as Record<string, number>,
       };
       existingDay.totalCount += 1;
-      existingDay.totalValuePaise += val;
+      existingDay.totalValuePaise += netVal;
       existingDay.modeCounts[mode] = (existingDay.modeCounts[mode] || 0) + 1;
       dailyPaymentMap.set(dateKey, existingDay);
     }

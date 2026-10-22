@@ -138,6 +138,11 @@ export default function SubReportPage({ params }: SubReportPageProps) {
       : "skip"
   );
 
+  const menuFoodCosts = useQuery(
+    api.inventory.getOrganizationMenuFoodCosts,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
+
 
   const ordersResponse = useQuery(
     api.orders.listOrders,
@@ -151,10 +156,14 @@ export default function SubReportPage({ params }: SubReportPageProps) {
       : "skip",
   );
 
-  // 2. Query Menu Data
+  // 2. Query Menu Data & Menus List
   const menuData = useQuery(
     api.menu.getOrganizationMenu,
     activeOrg ? { organizationId: activeOrg._id, allMenus: true } : "skip",
+  );
+  const menusList = useQuery(
+    api.menu.listMenus,
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
 
   // 3. Query Tables, Layouts, and Order Processes
@@ -195,7 +204,15 @@ export default function SubReportPage({ params }: SubReportPageProps) {
         if (cat && cat.items && Array.isArray(cat.items)) {
           for (const ci of cat.items) {
             const it = ci.item || ci;
-            if (it) itemsList.push({ ...it, categoryName: cat.name });
+            if (it) {
+              itemsList.push({
+                ...it,
+                categoryName: cat.name,
+                categoryId: cat._id || cat.id,
+                menuName: cat.menuName || cat.menu_name || "Main Menu",
+                menuId: cat.menuId || cat.menu_id,
+              });
+            }
           }
         }
       }
@@ -255,6 +272,7 @@ export default function SubReportPage({ params }: SubReportPageProps) {
               operationTiming={activeOrg?.operationTiming}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
+              activeOrg={activeOrg}
             />
           ) : normalizedType === "menu" ? (
             <MenuReportView
@@ -262,6 +280,8 @@ export default function SubReportPage({ params }: SubReportPageProps) {
               backendData={menuReportBackend}
               allItems={allItems}
               allCategories={allCategories}
+              menus={menusList || []}
+              foodCostMap={menuFoodCosts || {}}
               loading={isReportsLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
@@ -283,6 +303,7 @@ export default function SubReportPage({ params }: SubReportPageProps) {
               operationTiming={activeOrg?.operationTiming}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
+              activeOrg={activeOrg}
             />
           ) : normalizedType === "customer" ? (
             <CustomerReportView
