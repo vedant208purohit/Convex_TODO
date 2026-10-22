@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "convex/react";
 import { PosShell } from "../components/PosShell";
@@ -14,10 +14,126 @@ import {
   formatPhoneNumberWithCountryCode,
   formatCurrencyAmount,
   formatStoreDateTime,
+  formatStoreDate,
   getCurrencyForCountry,
   getPhoneCodeForCountry,
   getTimezoneForCountry,
 } from "../../lib/constants/countries";
+
+function CalendarIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.8"
+      />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({
+  className = "w-3.5 h-3.5",
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        d="M19 9l-7 7-7-7"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+function isSameDay(d1: Date, d2: Date): boolean {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+}
+
+function getStartOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
+}
+
+function getEndOfDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
+}
+
+function getPresetDateRange(preset: string): { start: Date; end: Date } {
+  const now = new Date();
+  const today = getStartOfDay(now);
+  if (preset === "Today") {
+    return { start: today, end: today };
+  }
+  if (preset === "Yesterday") {
+    const y = new Date(today);
+    y.setDate(today.getDate() - 1);
+    return { start: y, end: y };
+  }
+  if (preset === "Last 7 Days") {
+    const past = new Date(today);
+    past.setDate(today.getDate() - 6);
+    return { start: past, end: today };
+  }
+  if (preset === "Last 30 Days") {
+    const past = new Date(today);
+    past.setDate(today.getDate() - 29);
+    return { start: past, end: today };
+  }
+  if (preset === "This Month") {
+    const start = new Date(today.getFullYear(), today.getMonth(), 1);
+    return { start, end: today };
+  }
+  if (preset === "Last Month") {
+    const start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const end = new Date(today.getFullYear(), today.getMonth(), 0);
+    return { start, end };
+  }
+  return { start: today, end: today };
+}
+
+const DATE_RANGE_OPTIONS = [
+  "All Time",
+  "Today",
+  "Yesterday",
+  "Last 7 Days",
+  "Last 30 Days",
+  "This Month",
+  "Last Month",
+  "Custom Range",
+] as const;
 
 export interface CustomerRowData {
   id: string; // Stable unique lookup key
@@ -39,10 +155,249 @@ export interface CustomerRowData {
 export default function CustomersPage() {
   const router = useRouter();
 
+  // Query Active Organization for currency symbol and timezone
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+
+  const currencySymbol =
+    activeOrg?.defaultCurrencySymbol ||
+    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+  const storeTimezone =
+    activeOrg?.organizationTimeZone ||
+    (activeOrg?.country ? getTimezoneForCountry(activeOrg.country) : "Asia/Kolkata");
+  const storePhoneCode = activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+91";
+
   // Search & Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [filterLastOrder, setFilterLastOrder] = useState("all");
+  // Applied Date Filter
+  const [appliedPreset, setAppliedPreset] = useState<string>("All Time");
+  const [appliedStartDate, setAppliedStartDate] = useState<Date>(() => getPresetDateRange("Today").start);
+  const [appliedEndDate, setAppliedEndDate] = useState<Date>(() => getPresetDateRange("Today").end);
+
+  // Draft Date Filter (while popover is open)
+  const [draftPreset, setDraftPreset] = useState<string>("All Time");
+  const [draftStartDate, setDraftStartDate] = useState<Date>(() => getPresetDateRange("Today").start);
+  const [draftEndDate, setDraftEndDate] = useState<Date>(() => getPresetDateRange("Today").end);
+  const [viewMonth, setViewMonth] = useState<Date>(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
+
+  const [isDateDropdownOpen, setIsDateDropdownOpen] = useState(false);
+  const dateDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dateDropdownRef.current &&
+        !dateDropdownRef.current.contains(e.target as Node)
+      ) {
+        setIsDateDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const formattedDateRangeText = useMemo(() => {
+    if (appliedPreset === "All Time") return "All Time";
+    return `${formatStoreDate(appliedStartDate, activeOrg?.country, storeTimezone)} - ${formatStoreDate(appliedEndDate, activeOrg?.country, storeTimezone)}`;
+  }, [appliedPreset, appliedStartDate, appliedEndDate, activeOrg, storeTimezone]);
+
+  const handleOpenDateDropdown = () => {
+    setDraftPreset(appliedPreset);
+    setDraftStartDate(new Date(appliedStartDate));
+    setDraftEndDate(new Date(appliedEndDate));
+    setViewMonth(
+      new Date(appliedStartDate.getFullYear(), appliedStartDate.getMonth(), 1)
+    );
+    setIsDateDropdownOpen(true);
+  };
+
+  const handlePresetClick = (preset: string) => {
+    setDraftPreset(preset);
+    if (preset === "All Time") {
+      const now = new Date();
+      const today = getStartOfDay(now);
+      setDraftStartDate(new Date(2020, 0, 1));
+      setDraftEndDate(today);
+      setViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    } else if (preset !== "Custom Range") {
+      const { start, end } = getPresetDateRange(preset);
+      setDraftStartDate(start);
+      setDraftEndDate(end);
+      setViewMonth(new Date(start.getFullYear(), start.getMonth(), 1));
+    }
+  };
+
+  const handleNavigateMonth = (direction: -1 | 1) => {
+    setViewMonth(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1)
+    );
+  };
+
+  const handleDateCellClick = (clickedDate: Date) => {
+    const normClicked = getStartOfDay(clickedDate);
+    const normStart = getStartOfDay(draftStartDate);
+    const normEnd = getStartOfDay(draftEndDate);
+
+    if (draftPreset === "All Time" || normStart.getTime() === normEnd.getTime()) {
+      if (normClicked.getTime() < normStart.getTime()) {
+        setDraftStartDate(normClicked);
+        setDraftEndDate(normStart);
+      } else {
+        setDraftEndDate(normClicked);
+      }
+    } else {
+      setDraftStartDate(normClicked);
+      setDraftEndDate(normClicked);
+    }
+    setDraftPreset("Custom Range");
+  };
+
+  const handleApplyDate = () => {
+    setAppliedPreset(draftPreset);
+    setAppliedStartDate(draftStartDate);
+    setAppliedEndDate(draftEndDate);
+    setCurrentPage(1);
+    setIsDateDropdownOpen(false);
+  };
+
+  const handleCancelDate = () => {
+    setIsDateDropdownOpen(false);
+  };
+
+  const renderMonthCalendar = (
+    year: number,
+    month: number,
+    isFirstMonth: boolean,
+    isLastMonth: boolean
+  ) => {
+    const monthName = MONTH_NAMES[month];
+    const firstDayOfWeek = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const daysInPrevMonth = new Date(year, month, 0).getDate();
+
+    const cells: Array<{
+      date: Date;
+      isCurrentMonth: boolean;
+      dayNum: number;
+    }> = [];
+
+    // Prev month trailing days
+    for (let i = 0; i < firstDayOfWeek; i++) {
+      const dayNum = daysInPrevMonth - firstDayOfWeek + 1 + i;
+      cells.push({
+        date: new Date(year, month - 1, dayNum),
+        isCurrentMonth: false,
+        dayNum,
+      });
+    }
+
+    // Current month days
+    for (let i = 1; i <= daysInMonth; i++) {
+      cells.push({
+        date: new Date(year, month, i),
+        isCurrentMonth: true,
+        dayNum: i,
+      });
+    }
+
+    // Next month leading days to complete grid (up to 42 cells)
+    const remaining = (7 - (cells.length % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      cells.push({
+        date: new Date(year, month + 1, i),
+        isCurrentMonth: false,
+        dayNum: i,
+      });
+    }
+
+    const startNorm = draftPreset === "All Time" ? 0 : getStartOfDay(draftStartDate).getTime();
+    const endNorm = draftPreset === "All Time" ? 0 : getStartOfDay(draftEndDate).getTime();
+
+    return (
+      <div className="w-56 font-sans">
+        {/* Calendar Header */}
+        <div className="flex items-center justify-between mb-2">
+          {isFirstMonth ? (
+            <button
+              type="button"
+              onClick={() => handleNavigateMonth(-1)}
+              className="p-1 hover:bg-[#f1edec] rounded text-[#5e5e5e] hover:text-[#141010] cursor-pointer"
+            >
+              &lt;
+            </button>
+          ) : (
+            <div className="w-6" />
+          )}
+
+          <div className="text-xs font-semibold text-[#0c0a09]">
+            {monthName} {year}
+          </div>
+
+          {isLastMonth ? (
+            <button
+              type="button"
+              onClick={() => handleNavigateMonth(1)}
+              className="p-1 hover:bg-[#f1edec] rounded text-[#5e5e5e] hover:text-[#141010] cursor-pointer"
+            >
+              &gt;
+            </button>
+          ) : (
+            <div className="w-6" />
+          )}
+        </div>
+
+        {/* Day Labels */}
+        <div className="grid grid-cols-7 text-center text-[10px] font-medium text-[#7a716b] mb-1">
+          {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
+            <div key={d}>{d}</div>
+          ))}
+        </div>
+
+        {/* Day Cells */}
+        <div className="grid grid-cols-7 gap-y-0.5 text-center text-xs">
+          {cells.map((cell, idx) => {
+            const time = getStartOfDay(cell.date).getTime();
+            const isSelectedStart = draftPreset !== "All Time" && time === startNorm;
+            const isSelectedEnd = draftPreset !== "All Time" && time === endNorm;
+            const isInRange = draftPreset !== "All Time" && time >= startNorm && time <= endNorm;
+            const isToday = isSameDay(cell.date, new Date());
+
+            let bgClass = "hover:bg-[#f1edec]";
+            let textClass = cell.isCurrentMonth
+              ? "text-[#0c0a09]"
+              : "text-[#b0a8a0]";
+
+            if (isSelectedStart || isSelectedEnd) {
+              bgClass = "bg-[#0c0a09] text-white font-semibold rounded-full";
+              textClass = "text-white";
+            } else if (isInRange) {
+              bgClass = "bg-[#e5e7eb] rounded-none";
+              textClass = "text-[#0c0a09]";
+            }
+
+            return (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => handleDateCellClick(cell.date)}
+                className={`w-7 h-7 flex items-center justify-center mx-auto text-xs cursor-pointer transition-colors ${bgClass} ${textClass} ${
+                  isToday && !isSelectedStart && !isSelectedEnd
+                    ? "border border-[#0c0a09] font-bold"
+                    : ""
+                }`}
+              >
+                {cell.dayNum}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
 
   // Sorting States
   const [sortField, setSortField] = useState<
@@ -57,18 +412,6 @@ export default function CustomersPage() {
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
-
-  // Query Active Organization for currency symbol
-  const organizations = useQuery(api.organizations.list);
-  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
-
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
-  const storeTimezone =
-    activeOrg?.organizationTimeZone ||
-    (activeOrg?.country ? getTimezoneForCountry(activeOrg.country) : "Asia/Kolkata");
-  const storePhoneCode = activeOrg?.country ? getPhoneCodeForCountry(activeOrg.country) : "+91";
 
   // 1. Query Customers Table
   const activeSearchTerm = debouncedSearch || "a";
@@ -434,18 +777,12 @@ export default function CustomersPage() {
       });
     }
 
-    if (filterLastOrder !== "all") {
-      const now = Date.now();
-      let limitMs = 0;
-      if (filterLastOrder === "7d") limitMs = 7 * 24 * 60 * 60 * 1000;
-      else if (filterLastOrder === "30d") limitMs = 30 * 24 * 60 * 60 * 1000;
-      else if (filterLastOrder === "90d") limitMs = 90 * 24 * 60 * 60 * 1000;
-
-      if (limitMs > 0) {
-        list = list.filter(
-          (c) => c.lastOrderDate && now - c.lastOrderDate <= limitMs
-        );
-      }
+    if (appliedPreset !== "All Time") {
+      const startMs = getStartOfDay(appliedStartDate).getTime();
+      const endMs = getEndOfDay(appliedEndDate).getTime();
+      list = list.filter(
+        (c) => c.lastOrderDate && c.lastOrderDate >= startMs && c.lastOrderDate <= endMs
+      );
     }
 
     // Sorting Logic
@@ -467,7 +804,7 @@ export default function CustomersPage() {
     });
 
     return list;
-  }, [aggregatedCustomers, debouncedSearch, filterLastOrder, sortField, sortOrder]);
+  }, [aggregatedCustomers, debouncedSearch, appliedPreset, appliedStartDate, appliedEndDate, sortField, sortOrder]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / pageSize));
@@ -504,11 +841,11 @@ export default function CustomersPage() {
   return (
     <PosShell title="Customers" subtitle="Customer Relationship Management">
       <div className="flex-1 overflow-y-auto bg-[#fff8f5] p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto flex flex-col gap-6">
+        <div className="w-full flex flex-col gap-6">
           {/* Editorial Header */}
           <div className="flex flex-col gap-6">
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-              <div className="flex flex-col gap-1 max-w-2xl">
+            <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-4">
+              <div className="flex flex-col gap-1 w-full xl:max-w-2xl">
 
                 <h1 className="font-serif text-3xl lg:text-4xl text-stone-900 leading-tight">
                   Customers
@@ -546,25 +883,169 @@ export default function CustomersPage() {
                   )}
                 </div>
 
-                {/* Filter Dropdown */}
-                <div className="inline-flex items-center bg-white px-3.5 py-2 rounded-full border border-stone-200 shadow-xs text-stone-800 text-xs">
-                  <span className="text-stone-400 mr-2">📅</span>
-                  <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mr-1">
-                    Filter:
-                  </span>
-                  <select
-                    value={filterLastOrder}
-                    onChange={(e) => {
-                      setFilterLastOrder(e.target.value);
-                      setCurrentPage(1);
+                {/* Date Range Selector Dropdown */}
+                <div className="relative" ref={dateDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isDateDropdownOpen) {
+                        setIsDateDropdownOpen(false);
+                      } else {
+                        handleOpenDateDropdown();
+                      }
                     }}
-                    className="bg-transparent text-stone-900 font-medium focus:outline-none cursor-pointer pr-1 text-xs"
+                    className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-white border border-stone-200 rounded-full text-xs font-medium text-stone-900 hover:bg-[#fdf8f7] transition-colors focus:ring-1 focus:ring-stone-900 cursor-pointer shadow-2xs"
                   >
-                    <option value="all">All Time</option>
-                    <option value="7d">Within Past 7 Days</option>
-                    <option value="30d">This Month (30 Days)</option>
-                    <option value="90d">Past 90 Days</option>
-                  </select>
+                    <CalendarIcon className="w-4 h-4 text-stone-500" />
+                    <span className="text-[11px] font-semibold text-stone-500 uppercase tracking-wider mr-0.5">
+                      Filter:
+                    </span>
+                    <span className="font-medium text-xs text-stone-900">
+                      {formattedDateRangeText}
+                    </span>
+                    <ChevronDownIcon
+                      className={`w-3.5 h-3.5 text-stone-500 ml-1 transition-transform duration-150 ${
+                        isDateDropdownOpen ? "rotate-180" : ""
+                      }`}
+                    />
+                  </button>
+
+                  {isDateDropdownOpen && (
+                    <div
+                      className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-0 sm:bg-transparent sm:backdrop-blur-none sm:static"
+                      onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                          setIsDateDropdownOpen(false);
+                        }
+                      }}
+                    >
+                      <div
+                        className="relative bg-white border border-[#d1d5db] rounded-2xl sm:rounded-lg shadow-2xl z-50 font-sans w-full max-w-[340px] sm:max-w-none sm:w-auto sm:absolute sm:right-0 sm:top-full sm:mt-2.5 overflow-hidden sm:overflow-visible"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {/* Top pointer notch arrow on desktop only */}
+                        <div className="hidden sm:block absolute right-8 -top-1.5 w-3 h-3 bg-white border-t border-l border-[#d1d5db] rotate-45 z-10" />
+
+                        {/* Mobile Modal Title Bar */}
+                        <div className="sm:hidden flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-stone-50">
+                          <span className="text-xs font-semibold uppercase tracking-wider text-stone-700">
+                            Select Date Range
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setIsDateDropdownOpen(false)}
+                            className="w-6 h-6 flex items-center justify-center rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200 text-xs cursor-pointer"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        {/* Main section: Presets list + Dual calendar */}
+                        <div className="flex flex-col sm:flex-row">
+                          {/* Mobile Presets: horizontal scrollable pills */}
+                          <div className="sm:hidden flex items-center gap-1.5 p-2.5 overflow-x-auto border-b border-[#e5e7eb] bg-[#faf8f5]">
+                            {DATE_RANGE_OPTIONS.map((preset) => {
+                              const isSelected = draftPreset === preset;
+                              return (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => handlePresetClick(preset)}
+                                  className={`px-3 py-1.5 rounded-full text-xs shrink-0 whitespace-nowrap transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? "bg-[#0085d4] text-white font-medium"
+                                      : "bg-white text-stone-700 border border-stone-200 hover:bg-stone-50 font-normal"
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Desktop Presets: Left Sidebar */}
+                          <div className="hidden sm:flex w-36 border-r border-[#e5e7eb] py-2 flex-col bg-white shrink-0">
+                            {DATE_RANGE_OPTIONS.map((preset) => {
+                              const isSelected = draftPreset === preset;
+                              return (
+                                <button
+                                  key={preset}
+                                  type="button"
+                                  onClick={() => handlePresetClick(preset)}
+                                  className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${
+                                    isSelected
+                                      ? "bg-[#0085d4] text-white font-medium"
+                                      : "text-stone-800 hover:bg-stone-100 font-normal"
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Mobile: 1 centered month calendar with both < and > navigation */}
+                          <div className="p-3 sm:hidden flex justify-center bg-white">
+                            {renderMonthCalendar(
+                              viewMonth.getFullYear(),
+                              viewMonth.getMonth(),
+                              true,
+                              true,
+                            )}
+                          </div>
+
+                          {/* Desktop (sm and up): Dual side-by-side months */}
+                          <div className="hidden sm:flex p-4 flex-row gap-6 bg-white">
+                            {renderMonthCalendar(
+                              viewMonth.getFullYear(),
+                              viewMonth.getMonth(),
+                              true,
+                              false,
+                            )}
+                            {renderMonthCalendar(
+                              new Date(
+                                viewMonth.getFullYear(),
+                                viewMonth.getMonth() + 1,
+                                1,
+                              ).getFullYear(),
+                              new Date(
+                                viewMonth.getFullYear(),
+                                viewMonth.getMonth() + 1,
+                                1,
+                              ).getMonth(),
+                              false,
+                              true,
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Bottom Footer Bar */}
+                        <div className="border-t border-[#e5e7eb] px-4 py-2.5 bg-white flex items-center justify-between gap-2">
+                          <div className="text-xs font-medium text-stone-700 truncate">
+                            {draftPreset === "All Time"
+                              ? "All Time"
+                              : `${formatStoreDate(draftStartDate, activeOrg?.country, storeTimezone)} - ${formatStoreDate(draftEndDate, activeOrg?.country, storeTimezone)}`}
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={handleCancelDate}
+                              className="px-3 sm:px-4 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md transition-colors cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleApplyDate}
+                              className="px-4 sm:px-5 py-1.5 text-xs font-semibold text-white bg-[#0c0a09] hover:bg-[#262626] rounded-md transition-colors cursor-pointer"
+                            >
+                              Apply
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
