@@ -444,7 +444,7 @@ export function OrganizationDigitalStore() {
   const storeWebUrl = `https://${org?.slug || "skyzrestaurant"}.prest.store`;
 
   return (
-    <ComingSoonOverlay title="Digital Store">
+    <ComingSoonOverlay title="Digital Store" locked={false}>
       <div className="flex-1 flex flex-col min-w-0 bg-[#fdf8f7] overflow-hidden select-none">
         {/* Hidden File Inputs */}
         <input

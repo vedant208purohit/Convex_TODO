@@ -14,6 +14,7 @@ import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
+import { OrganizationOnlineStore } from "../components/OrganizationOnlineStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrganizationLiveScreens } from "../components/OrganizationLiveScreens";
@@ -262,8 +263,30 @@ function BrandingIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function OnlineStoreIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
+      <path d="M2 7h20" />
+      <path d="M22 7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2" />
+    </svg>
+  );
+}
+
 type SettingsTab =
   | "organization"
+  | "onlineStore"
+  | "digitalStore"
   | "printers"
   | "features"
   | "staff"
@@ -273,7 +296,6 @@ type SettingsTab =
   | "tables"
   | "liveScreens"
   | "queue"
-  | "digitalStore"
   | "branding";
 
 interface SettingsNavOption {
@@ -324,6 +346,11 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     id: "liveScreens",
     label: "Live Screens",
     icon: <LiveScreensIcon className="w-4 h-4" />,
+  },
+  {
+    id: "onlineStore",
+    label: "Online Store",
+    icon: <OnlineStoreIcon className="w-4 h-4" />,
   },
   {
     id: "digitalStore",
@@ -480,9 +507,7 @@ function SettingsContent() {
                   );
                 }
 
-                const isComingSoon =
-                  tab.id === "printers" ||
-                  tab.id === "digitalStore";
+                const isComingSoon = tab.id === "printers";
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
@@ -553,9 +578,11 @@ function SettingsContent() {
               )
             )}
             {activeTab === "liveScreens" && <OrganizationLiveScreens />}
+            {activeTab === "onlineStore" && <OrganizationOnlineStore />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
+              activeTab !== "onlineStore" &&
               activeTab !== "queue" &&
               activeTab !== "printers" &&
               activeTab !== "features" &&
