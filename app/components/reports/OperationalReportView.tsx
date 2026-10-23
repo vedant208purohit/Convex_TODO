@@ -664,6 +664,61 @@ export function OperationalReportView({
     return "Unassigned Staff";
   };
 
+  // Helper to accurately calculate completed dine-in table dwell duration in minutes
+  const computeOrderDwellMinutes = (o: any): number | null => {
+    // 1. Takeaway and delivery orders do not occupy restaurant tables
+    const isDineIn =
+      o.orderType === "DineIn" ||
+      Boolean(o.tableId || o.table || o.tableName || o.tableNumber);
+    if (!isDineIn) return null;
+
+    // 2. Only completed or settled orders have a final dwell time
+    const isCompleted =
+      o.isCompleted === true ||
+      o.paymentStatus === "Paid" ||
+      o.orderStatusName === "Completed" ||
+      o.orderStatusName === "Delivered" ||
+      o.orderStatusName === "Served" ||
+      o.orderStatus === "Completed" ||
+      o.orderStatus === "Delivered" ||
+      o.orderStatus === "Served" ||
+      Boolean(o.completedAt) ||
+      Boolean(o.deliveredAt) ||
+      Boolean(o.settledAt);
+
+    if (!isCompleted) return null;
+
+    const startTime = o.createdAt || o._creationTime;
+    if (!startTime) return null;
+
+    // Determine the exact settlement/completion timestamp
+    let endTime: number | null =
+      o.settledAt || o.completedAt || o.deliveredAt || o.closedAt || null;
+
+    // Check payment timestamps for the moment the customer settled
+    if (!endTime && Array.isArray(o.payments) && o.payments.length > 0) {
+      for (const p of o.payments) {
+        if (p.createdAt && (p.status === "Success" || p.status === "Paid" || !p.status)) {
+          if (!endTime || p.createdAt > endTime) {
+            endTime = p.createdAt;
+          }
+        }
+      }
+    }
+
+    if (!endTime && o.updatedAt && o.updatedAt > startTime) {
+      endTime = o.updatedAt;
+    }
+
+    if (!endTime || endTime <= startTime) {
+      return 1; // Minimum 1 min dwell
+    }
+
+    const diffMinutes = Math.max(1, Math.round((endTime - startTime) / 60000));
+    // Sanity limit: cap at 240 mins (4 hours) so abandoned test orders left open overnight do not distort dwell averages
+    return Math.min(diffMinutes, 240);
+  };
+
   // Staff / Floor Captain Performance (Fully Dynamic)
   const staffPerformanceList = useMemo(() => {
     const staffMap = new Map<
@@ -708,37 +763,11 @@ export function OperationalReportView({
         existing.unauthVoids += 1;
       }
 
-      // Table dwell time: ONLY for Dine-In table orders that are completed/settled
-      // Takeaway orders do NOT occupy tables and are excluded from dwell calculations
-      const isDineIn =
-        o.orderType === "DineIn" ||
-        Boolean(o.tableId || o.table || o.tableName || o.tableNumber);
-      const isCompleted =
-        o.isCompleted === true ||
-        o.orderStatusName === "Completed" ||
-        o.orderStatusName === "Delivered" ||
-        o.orderStatusName === "Served" ||
-        o.orderStatus === "Completed" ||
-        o.orderStatus === "Delivered" ||
-        o.orderStatus === "Served" ||
-        Boolean(o.completedAt) ||
-        Boolean(o.deliveredAt);
-
-      if (isDineIn && isCompleted) {
-        const startTime = o.createdAt || o._creationTime;
-        const endTime =
-          o.completedAt ||
-          o.deliveredAt ||
-          o.closedAt ||
-          o.settledAt ||
-          o.updatedAt;
-
-        if (startTime && endTime && endTime > startTime) {
-          const diffMs = endTime - startTime;
-          const mins = Math.max(1, Math.round(diffMs / 60000));
-          existing.totalDwellMinutes += mins;
-          existing.dwellOrderCount += 1;
-        }
+      // Table dwell time: ONLY for completed Dine-In table orders
+      const dwellMins = computeOrderDwellMinutes(o);
+      if (dwellMins !== null) {
+        existing.totalDwellMinutes += dwellMins;
+        existing.dwellOrderCount += 1;
       }
 
       staffMap.set(server, existing);
@@ -779,33 +808,9 @@ export function OperationalReportView({
     let totalMins = 0;
     let count = 0;
     for (const o of orders) {
-      const isDineIn =
-        o.orderType === "DineIn" ||
-        Boolean(o.tableId || o.table || o.tableName || o.tableNumber);
-      const isCompleted =
-        o.isCompleted === true ||
-        o.orderStatusName === "Completed" ||
-        o.orderStatusName === "Delivered" ||
-        o.orderStatusName === "Served" ||
-        o.orderStatus === "Completed" ||
-        o.orderStatus === "Delivered" ||
-        o.orderStatus === "Served" ||
-        Boolean(o.completedAt) ||
-        Boolean(o.deliveredAt);
-
-      if (!isDineIn || !isCompleted) continue;
-
-      const startTime = o.createdAt || o._creationTime;
-      const endTime =
-        o.completedAt ||
-        o.deliveredAt ||
-        o.closedAt ||
-        o.settledAt ||
-        o.updatedAt;
-
-      if (startTime && endTime && endTime > startTime) {
-        const mins = Math.max(1, Math.round((endTime - startTime) / 60000));
-        totalMins += mins;
+      const dwell = computeOrderDwellMinutes(o);
+      if (dwell !== null) {
+        totalMins += dwell;
         count++;
       }
     }
@@ -1559,14 +1564,13 @@ export function OperationalReportView({
                         <th className="py-2.5 px-3 text-right">Orders</th>
                         <th className="py-2.5 px-3 text-right">Revenue</th>
                         <th className="py-2.5 px-3 text-right">Avg Ticket</th>
-                        <th className="py-2.5 px-3 text-right">Table Dwell</th>
-                        <th className="py-2.5 px-3 text-center">Voids</th>
+                        <th className="py-2.5 px-3 text-right">Table Dwell (Dine-In)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
                       {staffPerformanceList.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-8 text-center text-[#5e5e5e]">
+                          <td colSpan={5} className="py-8 text-center text-[#5e5e5e]">
                             No service staff activity recorded for this period.
                           </td>
                         </tr>
@@ -1603,17 +1607,6 @@ export function OperationalReportView({
                                     : "< 1 min"
                                   : "—"}
                               </td>
-                              <td className="py-3 px-3 text-center">
-                                {st.unauthVoids > 0 ? (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] border border-[#ffdad6] font-medium">
-                                    {st.unauthVoids} void{st.unauthVoids > 1 ? "s" : ""}
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f1edec] text-[#5e5e5e] border border-[#e7e5e4]">
-                                    0 voids
-                                  </span>
-                                )}
-                              </td>
                             </tr>
                           );
                         })
@@ -1624,10 +1617,13 @@ export function OperationalReportView({
               </div>
               <div className="pt-3 mt-4 border-t border-[#e7e5e4] flex items-center justify-between text-[#5e5e5e] text-xs">
                 <span>
-                  Overall Shift Dwell Average:{" "}
+                  Overall Dine-In Dwell Average:{" "}
                   <strong className="text-[#141010] font-medium">
                     {overallShiftDwellAvg !== null && overallShiftDwellAvg > 0 ? `${overallShiftDwellAvg} minutes` : "—"}
                   </strong>
+                  <span className="text-[11px] text-[#5e5e5e] ml-1.5">
+                    (Takeaway excluded)
+                  </span>
                 </span>
                 <span className="text-[#141010] font-semibold">
                   {floorAdherencePct}% Floor Adherence
