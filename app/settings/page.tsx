@@ -14,10 +14,12 @@ import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
+import { OrganizationOnlineStore } from "../components/OrganizationOnlineStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
 import { OrganizationLiveScreens } from "../components/OrganizationLiveScreens";
 import { OrganizationQrManagement } from "../components/OrganizationQrManagement";
+import { OrganizationFrontDisplaySettings } from "../components/OrganizationFrontDisplaySettings";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -262,8 +264,48 @@ function BrandingIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function OnlineStoreIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
+      <path d="M2 7h20" />
+      <path d="M22 7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2" />
+    </svg>
+  );
+}
+
+function FrontDisplayIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+      <line x1="12" x2="12" y1="17" y2="21" />
+    </svg>
+  );
+}
+
 type SettingsTab =
   | "organization"
+  | "onlineStore"
+  | "digitalStore"
   | "printers"
   | "features"
   | "staff"
@@ -273,7 +315,7 @@ type SettingsTab =
   | "tables"
   | "liveScreens"
   | "queue"
-  | "digitalStore"
+  | "frontDisplay"
   | "branding";
 
 interface SettingsNavOption {
@@ -326,9 +368,19 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <LiveScreensIcon className="w-4 h-4" />,
   },
   {
+    id: "onlineStore",
+    label: "Online Store",
+    icon: <OnlineStoreIcon className="w-4 h-4" />,
+  },
+  {
     id: "digitalStore",
     label: "Digital Store",
     icon: <DigitalStoreIcon className="w-4 h-4" />,
+  },
+  {
+    id: "frontDisplay",
+    label: "Front display",
+    icon: <FrontDisplayIcon className="w-4 h-4" />,
   },
   {
     id: "branding",
@@ -480,9 +532,7 @@ function SettingsContent() {
                   );
                 }
 
-                const isComingSoon =
-                  tab.id === "printers" ||
-                  tab.id === "digitalStore";
+                const isComingSoon = tab.id === "printers";
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
@@ -553,9 +603,12 @@ function SettingsContent() {
               )
             )}
             {activeTab === "liveScreens" && <OrganizationLiveScreens />}
+            {activeTab === "onlineStore" && <OrganizationOnlineStore />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
+            {activeTab === "frontDisplay" && <OrganizationFrontDisplaySettings />}
             {activeTab === "branding" && <OrganizationBranding />}
             {activeTab !== "organization" &&
+              activeTab !== "onlineStore" &&
               activeTab !== "queue" &&
               activeTab !== "printers" &&
               activeTab !== "features" &&
@@ -566,6 +619,7 @@ function SettingsContent() {
               activeTab !== "tables" &&
               activeTab !== "liveScreens" &&
               activeTab !== "digitalStore" &&
+              activeTab !== "frontDisplay" &&
               activeTab !== "branding" && (
                 <div className="py-12 text-center">
                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">

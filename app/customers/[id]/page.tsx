@@ -24,54 +24,51 @@ import {
   getTimezoneForCountry,
 } from "../../../lib/constants/countries";
 
-function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="2"
-        d="M9 5l7 7-7 7"
-      />
-    </svg>
-  );
-}
-
 export default function CustomerProfilePage() {
   const params = useParams();
   const router = useRouter();
   const idParam = (params.id as string) || "";
   const decodedIdParam = decodeURIComponent(idParam);
 
-  // Extract raw digits from idParam if present
-  const rawDigits = decodedIdParam.replace(/\D/g, "");
-  const normalizedPhoneDigits =
-    rawDigits.length > 10 && rawDigits.startsWith("91")
-      ? rawDigits.slice(2)
-      : rawDigits;
-
   const isOrdCust = decodedIdParam.startsWith("ordcust_");
   const isNameCust = decodedIdParam.startsWith("name_");
-  const isExplicitPhone =
-    decodedIdParam.startsWith("phone_") ||
-    (normalizedPhoneDigits.length >= 7 &&
-      normalizedPhoneDigits.length <= 15 &&
-      !isOrdCust &&
-      !isNameCust);
+  const isEmailCust = decodedIdParam.startsWith("email_");
+  const isPhonePrefix = decodedIdParam.startsWith("phone_");
 
-  const isConvexId =
-    !isExplicitPhone &&
+  // Pure phone format: ONLY digits, spaces, hyphens, parentheses, and optional leading +
+  const isPurePhoneFormat =
     !isOrdCust &&
     !isNameCust &&
-    decodedIdParam.length >= 20;
+    !isEmailCust &&
+    !isPhonePrefix &&
+    /^\+?[\d\s\-()]{7,20}$/.test(decodedIdParam.trim()) &&
+    !/[a-zA-Z]/.test(decodedIdParam);
+
+  const isExplicitPhone = isPhonePrefix || isPurePhoneFormat;
+
+  const rawPhoneString = isPhonePrefix
+    ? decodedIdParam.slice(6)
+    : isPurePhoneFormat
+      ? decodedIdParam
+      : "";
+
+  const phoneDigitsOnly = rawPhoneString.replace(/\D/g, "");
+  const normalizedPhoneDigits =
+    phoneDigitsOnly.length > 10 && phoneDigitsOnly.startsWith("91")
+      ? phoneDigitsOnly.slice(2)
+      : phoneDigitsOnly;
+
+  const phoneParam = isExplicitPhone ? normalizedPhoneDigits : "";
+
+  // Convex ID: table ID from Convex (alphanumeric, length >= 10, not any prefix or pure phone)
+  const isConvexId =
+    !isOrdCust &&
+    !isNameCust &&
+    !isEmailCust &&
+    !isExplicitPhone &&
+    decodedIdParam.length >= 10;
 
   const customerId = isConvexId ? (decodedIdParam as Id<"customers">) : null;
-  const phoneParam = isExplicitPhone ? normalizedPhoneDigits : "";
 
   // 1. Query Active Organization
   const organizations = useQuery(api.organizations.list);
@@ -118,6 +115,11 @@ export default function CustomerProfilePage() {
     activeOrg ? { organizationId: activeOrg._id, pageSize: 500 } : "skip",
   );
 
+  // 4b. Query Store Order Processes from DB for live Status name & colors
+  const dbProcesses = useQuery(api.organizationOrderProcesses.list, {
+    published: true,
+  });
+
   // Filter orders belonging to this customer
   const customerOrdersList = useMemo(() => {
     const allOrders = storeOrdersResponse?.orders || [];
@@ -163,9 +165,8 @@ export default function CustomerProfilePage() {
 
     // Add identifiers from customer document & route params
     addPhone(customerDoc?.phone);
-    addPhone(phoneParam);
+    if (isExplicitPhone && phoneParam) addPhone(phoneParam);
     addPhone(targetOrder?.customerPhone);
-    if (!isOrdCust && rawDigits.length >= 7) addPhone(rawDigits);
 
     addEmail(customerDoc?.email);
     addEmail(targetOrder?.customerEmail);
@@ -247,7 +248,7 @@ export default function CustomerProfilePage() {
     customerDoc,
     resolvedCustomerId,
     phoneParam,
-    rawDigits,
+    isExplicitPhone,
     decodedIdParam,
     isOrdCust,
   ]);
@@ -260,8 +261,7 @@ export default function CustomerProfilePage() {
 
     const targetPhone = (
       customerDoc?.phone ||
-      phoneParam ||
-      rawDigits ||
+      (isExplicitPhone ? phoneParam : "") ||
       ""
     ).replace(/\D/g, "");
     const targetUserId = resolvedCustomerId ? String(resolvedCustomerId) : "";
@@ -269,8 +269,8 @@ export default function CustomerProfilePage() {
     return allQueuesResponse.filter((q) => {
       // Direct userId match
       if (targetUserId && q.userId === targetUserId) return true;
-      if (phoneParam && q.userId === phoneParam) return true;
-      if (rawDigits && q.userId === rawDigits) return true;
+      if (isExplicitPhone && phoneParam && q.userId === phoneParam) return true;
+      if (targetPhone && q.userId === targetPhone) return true;
 
       // Phone match inside userId or notes
       if (targetPhone && targetPhone.length >= 7) {
@@ -298,7 +298,7 @@ export default function CustomerProfilePage() {
     customerDoc,
     resolvedCustomerId,
     phoneParam,
-    rawDigits,
+    isExplicitPhone,
   ]);
 
   // UI Tab & Filter States
@@ -307,6 +307,9 @@ export default function CustomerProfilePage() {
   );
   const [orderSearch, setOrderSearch] = useState("");
   const [isAddressDrawerOpen, setIsAddressDrawerOpen] = useState(false);
+  // Pagination state for Orders tab
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10; // rows per page
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
@@ -385,6 +388,15 @@ export default function CustomerProfilePage() {
       );
     });
   }, [customerOrdersList, orderSearch]);
+
+  // Paginated slice of filtered orders
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, currentPage]);
+
+  // Total pages for pagination UI
+  const totalPages = Math.max(1, Math.ceil(filteredOrders.length / pageSize));
 
   // Real Calculated Metrics
   const totalSpend = useMemo(() => {
@@ -518,77 +530,73 @@ export default function CustomerProfilePage() {
 
   return (
     <PosShell title={`Customer - ${displayName}`}>
-      <div className="flex-1 overflow-y-auto bg-[#fff8f5] p-6 lg:p-8">
-        <div className="max-w-7xl mx-auto flex flex-col gap-6">
+      <div className="flex-1 overflow-y-auto bg-[#fff8f5] p-3.5 sm:p-6 lg:p-8">
+        <div className="w-full flex flex-col gap-4 sm:gap-6">
           {/* Breadcrumb & Back Action */}
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
             <button
               type="button"
               onClick={() => router.push("/customers")}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-stone-200 text-stone-700 text-xs font-semibold hover:bg-stone-50 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 sm:px-4 sm:py-2 rounded-full bg-white border border-stone-200 text-stone-700 text-xs font-semibold hover:bg-stone-50 transition-colors cursor-pointer shrink-0"
             >
               <span>←</span>
               <span>Back to Customers</span>
             </button>
-            <nav
-              aria-label="Breadcrumb"
-              className="flex items-center text-[13px] text-[#5e5e5e] gap-2 font-sans font-medium"
-            >
-              <button
-                type="button"
+            <div className="flex items-center gap-1.5 text-xs text-stone-500 min-w-0">
+              <span
                 onClick={() => router.push("/customers")}
-                className="hover:text-[#141010] transition-colors cursor-pointer"
+                className="cursor-pointer hover:underline shrink-0"
               >
                 Customers
-              </button>
-              <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
-              <span className="text-[#141010] font-semibold">
+              </span>
+              <span>›</span>
+              <span className="text-stone-900 font-semibold truncate max-w-[170px] xs:max-w-[220px] sm:max-w-xs md:max-w-none">
                 {displayName}
                 {formattedPhone !== "—" ? ` (${formattedPhone})` : ""}
               </span>
-            </nav>
+            </div>
           </div>
 
-          {/* Guest Profile Header Badge (New Order button removed per user request) */}
-          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-stone-900 flex items-center justify-center font-serif text-2xl shrink-0">
+          {/* Guest Profile Header Badge */}
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-stone-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6">
+            <div className="flex items-start sm:items-center gap-3.5 sm:gap-4 min-w-0">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-stone-900 flex items-center justify-center font-serif text-lg sm:text-2xl shrink-0">
                 {initials}
               </div>
-              <div className="flex flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="font-serif text-2xl lg:text-3xl text-stone-900 leading-none">
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                  <h1 className="font-serif text-xl sm:text-2xl lg:text-3xl text-stone-900 leading-tight">
                     {displayName}
                   </h1>
-                  <span className="px-3 py-1 rounded-full bg-stone-900 text-white text-[10px] uppercase font-semibold tracking-wider">
+                  <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-stone-900 text-white text-[9px] sm:text-[10px] uppercase font-semibold tracking-wider shrink-0">
                     {totalOrdersCount >= 5 ? "VIP REGULAR" : "STANDARD GUEST"}
                   </span>
                 </div>
-                <div className="flex items-center gap-3 text-stone-500 text-xs font-medium mt-1">
+                <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-stone-500 text-xs font-medium mt-0.5">
                   {formattedPhone !== "—" && (
-                    <span className="inline-flex items-center gap-1 text-stone-900">
+                    <span className="inline-flex items-center gap-1 text-stone-900 shrink-0">
                       <span className="text-emerald-600 text-sm">✓</span>
                       <span>{formattedPhone}</span>
                     </span>
                   )}
                   {emailDisplay && (
                     <>
-                      {formattedPhone !== "—" && <span>•</span>}
-                      <span className="text-stone-600 truncate max-w-xs">{emailDisplay}</span>
+                      {formattedPhone !== "—" && <span className="text-stone-300">•</span>}
+                      <span className="text-stone-600 truncate max-w-[180px] sm:max-w-xs">{emailDisplay}</span>
                     </>
                   )}
-                  {formattedPhone !== "—" && <span>•</span>}
-                  <span className="text-stone-600">Prefers {topOrderType}</span>
+                  {formattedPhone !== "—" && <span className="text-stone-300">•</span>}
+                  <span className="text-stone-600 shrink-0">Prefers {topOrderType}</span>
                 </div>
               </div>
             </div>
 
-            {/* Header Right Action: View Addresses Drawer (New Order button removed as requested) */}
-            <div className="flex items-center gap-3 shrink-0">
+            {/* Header Right Action: View Addresses Drawer */}
+            <div className="flex items-center gap-3 shrink-0 w-full md:w-auto">
               <button
                 type="button"
                 onClick={() => setIsAddressDrawerOpen(true)}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-stone-800 text-xs font-semibold hover:bg-stone-200 transition-colors cursor-pointer"
+                className="w-full md:w-auto justify-center inline-flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-full bg-[#faf2ee] border border-[#e9e1dd] text-stone-800 text-xs font-semibold hover:bg-stone-200 transition-colors cursor-pointer"
               >
                 <span>📍</span>
                 <span>View addresses ({addressCount} saved)</span>
@@ -596,74 +604,74 @@ export default function CustomerProfilePage() {
             </div>
           </div>
 
-          {/* Profile Summary Metrics Grid (6 clean horizontal modules) */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+          {/* Profile Summary Metrics Grid (Responsive 2 cols on mobile/fold, 3 on tablet, 6 on desktop) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Total Spend
               </span>
-              <span className="font-serif text-xl font-medium text-stone-900 mt-1">
+              <span className="font-serif text-lg sm:text-xl font-medium text-stone-900 mt-1">
                 {currencySymbol}
                 {formatCurrencyAmount(totalSpend, activeOrg?.country)}
               </span>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Total Orders
               </span>
-              <span className="font-serif text-xl font-medium text-stone-900 mt-1">
+              <span className="font-serif text-lg sm:text-xl font-medium text-stone-900 mt-1">
                 {totalOrdersCount}
               </span>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Average Value
               </span>
-              <span className="font-serif text-xl font-medium text-stone-900 mt-1">
+              <span className="font-serif text-lg sm:text-xl font-medium text-stone-900 mt-1">
                 {currencySymbol}
                 {formatCurrencyAmount(averageOrderValue, activeOrg?.country)}
               </span>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Surveys Done
               </span>
               <div className="flex items-center justify-between mt-1">
-                <span className="font-serif text-xl font-medium text-stone-400">
+                <span className="font-serif text-lg sm:text-xl font-medium text-stone-400">
                   0
                 </span>
-                <span className="px-2 py-0.5 rounded bg-stone-100 text-stone-500 text-[9px] uppercase font-semibold tracking-wider">
+                <span className="px-1.5 sm:px-2 py-0.5 rounded bg-stone-100 text-stone-500 text-[8px] sm:text-[9px] uppercase font-semibold tracking-wider">
                   Pending
                 </span>
               </div>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Order Type
               </span>
-              <span className="font-serif text-xl font-medium text-stone-900 mt-1">
+              <span className="font-serif text-lg sm:text-xl font-medium text-stone-900 mt-1 truncate">
                 {topOrderType}
               </span>
             </div>
 
-            <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+            <div className="bg-white p-3.5 sm:p-4 rounded-xl sm:rounded-2xl border border-stone-200 shadow-xs flex flex-col justify-between">
+              <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                 Retention
               </span>
-              <span className="font-serif text-xl font-medium text-stone-900 mt-1">
+              <span className="font-serif text-lg sm:text-xl font-medium text-stone-900 mt-1">
                 {retentionVal > 0 ? `${retentionVal}%` : "—"}
               </span>
             </div>
           </div>
 
           {/* Customer Information Card */}
-          <div className="bg-white p-6 rounded-2xl border border-stone-200 shadow-xs flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
-              <h2 className="font-serif text-lg text-stone-900">
+          <div className="bg-white p-4 sm:p-6 rounded-2xl border border-stone-200 shadow-xs flex flex-col gap-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-stone-100">
+              <h2 className="font-serif text-base sm:text-lg text-stone-900">
                 Customer Information
               </h2>
               {customerDoc && (
@@ -686,39 +694,39 @@ export default function CustomerProfilePage() {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-5 pt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-5 pt-1">
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Full Name
                 </span>
-                <span className="text-sm text-stone-900 font-medium mt-1">
+                <span className="text-xs sm:text-sm text-stone-900 font-medium mt-1 truncate">
                   {displayName}
                 </span>
               </div>
 
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Email Address
                 </span>
-                <span className="text-sm text-stone-900 font-medium mt-1 break-words truncate">
+                <span className="text-xs sm:text-sm text-stone-900 font-medium mt-1 break-words truncate">
                   {emailDisplay || "—"}
                 </span>
               </div>
 
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Phone
                 </span>
-                <span className="text-sm text-stone-900 font-medium mt-1 break-words truncate">
+                <span className="text-xs sm:text-sm text-stone-900 font-medium mt-1 break-words truncate">
                   {formattedPhone}
                 </span>
               </div>
 
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   First Visited
                 </span>
-                <span className="text-sm text-stone-900 mt-1">
+                <span className="text-xs sm:text-sm text-stone-900 mt-1">
                   {formatStoreDate(
                     earliestVisitDate,
                     activeOrg?.country,
@@ -728,10 +736,10 @@ export default function CustomerProfilePage() {
               </div>
 
               <div className="flex flex-col min-w-0">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-stone-500">
+                <span className="text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider text-stone-500">
                   Customer Since
                 </span>
-                <span className="text-sm text-stone-900 mt-1">
+                <span className="text-xs sm:text-sm text-stone-900 mt-1">
                   {formatStoreDate(
                     earliestVisitDate,
                     activeOrg?.country,
@@ -745,11 +753,11 @@ export default function CustomerProfilePage() {
           {/* Activity Section with Tabs */}
           <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
             {/* Tabs Header */}
-            <div className="flex items-center gap-6 px-6 pt-4 bg-[#faf2ee]/50 border-b border-stone-200">
+            <div className="flex items-center gap-3 sm:gap-6 px-4 sm:px-6 pt-3 sm:pt-4 bg-[#faf2ee]/50 border-b border-stone-200 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActiveTab("orders")}
-                className={`pb-3.5 font-medium text-sm transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+                className={`pb-3 sm:pb-3.5 font-medium text-xs sm:text-sm transition-all flex items-center gap-2 border-b-2 cursor-pointer shrink-0 whitespace-nowrap ${
                   activeTab === "orders"
                     ? "border-stone-900 text-stone-900 font-bold"
                     : "border-transparent text-stone-500 hover:text-stone-800"
@@ -770,7 +778,7 @@ export default function CustomerProfilePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("surveys")}
-                className={`pb-3.5 font-medium text-sm transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+                className={`pb-3 sm:pb-3.5 font-medium text-xs sm:text-sm transition-all flex items-center gap-2 border-b-2 cursor-pointer shrink-0 whitespace-nowrap ${
                   activeTab === "surveys"
                     ? "border-stone-900 text-stone-900 font-bold"
                     : "border-transparent text-stone-500 hover:text-stone-800"
@@ -786,7 +794,7 @@ export default function CustomerProfilePage() {
               <button
                 type="button"
                 onClick={() => setActiveTab("queue")}
-                className={`pb-3.5 font-medium text-sm transition-all flex items-center gap-2 border-b-2 cursor-pointer ${
+                className={`pb-3 sm:pb-3.5 font-medium text-xs sm:text-sm transition-all flex items-center gap-2 border-b-2 cursor-pointer shrink-0 whitespace-nowrap ${
                   activeTab === "queue"
                     ? "border-stone-900 text-stone-900 font-bold"
                     : "border-transparent text-stone-500 hover:text-stone-800"
@@ -802,8 +810,8 @@ export default function CustomerProfilePage() {
 
             {/* Tab 1: Orders */}
             {activeTab === "orders" && (
-              <div className="p-6 flex flex-col gap-4">
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="p-3.5 sm:p-6 flex flex-col gap-4">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 sm:gap-3">
                   <div className="relative w-full sm:w-72">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-400 text-sm">
                       🔍
@@ -816,13 +824,13 @@ export default function CustomerProfilePage() {
                       className="w-full bg-[#faf2ee] text-stone-900 text-xs pl-10 pr-4 py-2 rounded-full border border-stone-200 focus:outline-none focus:border-stone-900"
                     />
                   </div>
-                  <div className="text-xs text-stone-500 ">
+                  <div className="text-xs text-stone-500">
                     Showing {filteredOrders.length} orders
                   </div>
                 </div>
 
                 <div className="overflow-x-auto border border-stone-200 rounded-xl">
-                  <table className="w-full text-left border-collapse text-xs">
+                  <table className="w-full min-w-[620px] text-left border-collapse text-xs">
                     <thead>
                       <tr className="bg-[#faf2ee] text-stone-600 text-[11px] font-semibold uppercase tracking-wider border-b border-stone-200">
                         <th className="py-3 px-4 font-semibold">Order ID</th>
@@ -848,7 +856,7 @@ export default function CustomerProfilePage() {
                           </td>
                         </tr>
                       ) : (
-                        filteredOrders.map((ord) => (
+                        paginatedOrders.map((ord) => (
                           <tr
                             key={ord._id}
                             className="hover:bg-[#faf2ee]/40 transition-colors"
@@ -903,12 +911,59 @@ export default function CustomerProfilePage() {
                               )}
                             </td>
                             <td className="py-3.5 px-4 text-right">
-                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
-                                {ord.paymentStatus === "Paid"
-                                  ? "Completed"
-                                  : ord.paymentStatus || "Completed"}
-                              </span>
+                              {(() => {
+                                const statusName =
+                                  ord.orderStatusName ||
+                                  (ord.isCompleted
+                                    ? "Completed"
+                                    : ord.isRejected
+                                      ? "Cancelled"
+                                      : "Accepted");
+
+                                const matchedProcess = dbProcesses?.find(
+                                  (p) =>
+                                    p._id === ord.orderStatusId ||
+                                    (p.name || "").trim().toLowerCase() ===
+                                      (statusName || "").trim().toLowerCase(),
+                                );
+
+                                const dotColor =
+                                  matchedProcess?.processColor ||
+                                  (statusName === "Cancelled" ||
+                                  statusName === "Cancelled / Refunded" ||
+                                  ord.isRejected
+                                    ? "#e11d48"
+                                    : statusName === "Completed" ||
+                                      statusName === "Delivered" ||
+                                      ord.isCompleted
+                                      ? "#219653"
+                                      : statusName === "Ready to deliver" ||
+                                        statusName === "Ready to Serve"
+                                        ? "#FC8019"
+                                        : statusName === "In progress" ||
+                                          statusName === "Cooking & Plating"
+                                          ? "#EA9C1B"
+                                          : "#262626");
+
+                                return (
+                                  <span
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold border"
+                                    style={{
+                                      backgroundColor: `${dotColor}12`,
+                                      borderColor: `${dotColor}35`,
+                                      color: dotColor,
+                                    }}
+                                  >
+                                    <span
+                                      className={`w-1.5 h-1.5 rounded-full ${
+                                        statusName === "In progress" ? "animate-pulse" : ""
+                                      }`}
+                                      style={{ backgroundColor: dotColor }}
+                                    />
+                                    <span>{statusName}</span>
+                                  </span>
+                                );
+                              })()}
                             </td>
                           </tr>
                         ))
@@ -916,6 +971,52 @@ export default function CustomerProfilePage() {
                     </tbody>
                   </table>
                 </div>
+                {/* Pagination Footer */}
+                {filteredOrders.length > pageSize && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-4 sm:px-5 py-3 sm:py-3.5 bg-[#faf2ee]/40 border-t border-stone-200 text-xs text-stone-600">
+                    <span className="text-center sm:text-left">
+                      Showing{' '}
+                      <span className="font-semibold text-stone-900">
+                        {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredOrders.length)}
+                      </span>{' '}
+                      of{' '}
+                      <span className="font-semibold text-stone-900">{filteredOrders.length}</span>{' '}
+                      orders
+                    </span>
+                    <div className="flex items-center flex-wrap justify-center gap-1 text-xs font-medium">
+                      <button
+                        type="button"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                        className="px-2.5 sm:px-3 py-1 rounded-full bg-white text-stone-600 hover:text-stone-900 border border-stone-200 disabled:opacity-40 cursor-pointer"
+                      >
+                        Previous
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setCurrentPage(p)}
+                          className={`w-7 h-7 rounded-full font-semibold flex items-center justify-center cursor-pointer ${
+                            currentPage === p
+                              ? 'bg-stone-900 text-white'
+                              : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-50'
+                          }`}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        disabled={currentPage === totalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                        className="px-2.5 sm:px-3 py-1 rounded-full bg-white text-stone-600 hover:text-stone-900 border border-stone-200 disabled:opacity-40 cursor-pointer"
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

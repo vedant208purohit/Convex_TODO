@@ -14,6 +14,7 @@ import type * as customers from "../customers.js";
 import type * as deliveryProvider from "../deliveryProvider.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
 import type * as features from "../features.js";
+import type * as frontDisplay from "../frontDisplay.js";
 import type * as http from "../http.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
@@ -75,6 +76,7 @@ declare const fullApi: ApiFromModules<{
   deliveryProvider: typeof deliveryProvider;
   digitalStoreImages: typeof digitalStoreImages;
   features: typeof features;
+  frontDisplay: typeof frontDisplay;
   http: typeof http;
   inventory: typeof inventory;
   menu: typeof menu;
