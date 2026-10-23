@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef } from "react";
+import React, { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -127,77 +127,107 @@ export function OperationalReportView({
     operationalData;
 
   // 1. Audit-grade Dynamic Payment Breakdown from Orders & Settings -> Payment Modes
-  const paymentBreakdownData = useMemo(() => {
-    const activeSettingModes: string[] = [];
+  // Active payment mode names configured in Settings
+  const activeSettingModes = useMemo(() => {
+    const list: string[] = [];
     if (paymentModesFromSettings && Array.isArray(paymentModesFromSettings)) {
       for (const m of paymentModesFromSettings) {
         if (m.active !== false && m.deletedAt === undefined && m.name) {
-          activeSettingModes.push(m.name.trim());
+          list.push(m.name.trim());
         }
       }
     }
+    return list;
+  }, [paymentModesFromSettings]);
 
-    const modeMap: Record<
-      string,
-      { txns: number; grossPaise: number; refundPaise: number; netPaise: number }
-    > = {};
-
-    // Initialize only active modes from Settings (or Cash fallback)
-    if (activeSettingModes.length > 0) {
-      for (const name of activeSettingModes) {
-        modeMap[name] = { txns: 0, grossPaise: 0, refundPaise: 0, netPaise: 0 };
-      }
-    } else {
-      modeMap["Cash"] = { txns: 0, grossPaise: 0, refundPaise: 0, netPaise: 0 };
-    }
-
-    // Disambiguated matching helper (never conflates Credit and Debit!)
-    const findModeKey = (rawMode: string): string => {
+  // Standardized, disambiguated payment mode resolver (strictly separates Credit Card vs Debit Card)
+  const findModeKey = useCallback(
+    (rawMode: string): string => {
       const trimmed = (rawMode || "Cash").trim();
       const lower = trimmed.toLowerCase();
 
+      // Available target mode keys (from Settings or standard fallbacks)
+      const targetModes =
+        activeSettingModes.length > 0 ? activeSettingModes : ["Cash"];
+
       // 1. Exact case-insensitive match
-      const exact = Object.keys(modeMap).find((k) => k.toLowerCase() === lower);
+      const exact = targetModes.find((k) => k.toLowerCase() === lower);
       if (exact) return exact;
 
-      // 2. Disambiguated keyword matching
+      // 2. Disambiguated keyword matching - strictly distinguish Credit vs Debit
       if (lower.includes("credit")) {
-        const creditKey = Object.keys(modeMap).find((k) => k.toLowerCase().includes("credit"));
+        const creditKey = targetModes.find((k) => k.toLowerCase().includes("credit"));
         if (creditKey) return creditKey;
       }
       if (lower.includes("debit")) {
-        const debitKey = Object.keys(modeMap).find((k) => k.toLowerCase().includes("debit"));
+        const debitKey = targetModes.find((k) => k.toLowerCase().includes("debit"));
         if (debitKey) return debitKey;
       }
+      // Generic card (e.g. "card", "visa", "mastercard", "pos", "amex")
+      if (
+        lower.includes("card") ||
+        lower.includes("pos") ||
+        lower.includes("visa") ||
+        lower.includes("mastercard")
+      ) {
+        const cardKey = targetModes.find((k) => {
+          const kl = k.toLowerCase();
+          return kl.includes("card") || kl.includes("pos");
+        });
+        if (cardKey) return cardKey;
+      }
+
       if (
         lower.includes("upi") ||
         lower.includes("qr") ||
         lower.includes("scan") ||
         lower.includes("gpay") ||
         lower.includes("phonepe") ||
-        lower.includes("paytm")
+        lower.includes("paytm") ||
+        lower.includes("bhim")
       ) {
-        const upiKey = Object.keys(modeMap).find((k) => {
+        const upiKey = targetModes.find((k) => {
           const kl = k.toLowerCase();
-          return kl.includes("upi") || kl.includes("qr");
+          return kl.includes("upi") || kl.includes("qr") || kl.includes("scan");
         });
         if (upiKey) return upiKey;
       }
+
       if (lower.includes("cash")) {
-        const cashKey = Object.keys(modeMap).find((k) => k.toLowerCase().includes("cash"));
+        const cashKey = targetModes.find((k) => k.toLowerCase().includes("cash"));
         if (cashKey) return cashKey;
       }
+
       if (lower.includes("swiggy")) {
-        const swiggyKey = Object.keys(modeMap).find((k) => k.toLowerCase().includes("swiggy"));
+        const swiggyKey = targetModes.find((k) => k.toLowerCase().includes("swiggy"));
         if (swiggyKey) return swiggyKey;
       }
+
       if (lower.includes("zomato")) {
-        const zomatoKey = Object.keys(modeMap).find((k) => k.toLowerCase().includes("zomato"));
+        const zomatoKey = targetModes.find((k) => k.toLowerCase().includes("zomato"));
         if (zomatoKey) return zomatoKey;
       }
 
-      return Object.keys(modeMap)[0] || "Cash";
-    };
+      // 3. Fallback: return "Cash" if available in targetModes, else first mode or "Cash"
+      const cashFallback = targetModes.find((k) => k.toLowerCase() === "cash");
+      return cashFallback || targetModes[0] || "Cash";
+    },
+    [activeSettingModes]
+  );
+
+  // 1. Audit-grade Dynamic Payment Breakdown from Orders & Settings -> Payment Modes
+  const paymentBreakdownData = useMemo(() => {
+    const modeMap: Record<
+      string,
+      { txns: number; grossPaise: number; refundPaise: number; netPaise: number }
+    > = {};
+
+    // Initialize only active modes from Settings (or Cash fallback)
+    const targetModes =
+      activeSettingModes.length > 0 ? activeSettingModes : ["Cash"];
+    for (const name of targetModes) {
+      modeMap[name] = { txns: 0, grossPaise: 0, refundPaise: 0, netPaise: 0 };
+    }
 
     for (const o of orders) {
       if (isOrderUnpaidCancelled(o)) continue;
@@ -286,7 +316,7 @@ export function OperationalReportView({
       totalRefundPaise,
       totalNetPaise,
     };
-  }, [orders, paymentModesFromSettings]);
+  }, [orders, activeSettingModes, findModeKey]);
 
   // Tender channels calculation for Settlement Ledger (Dynamic from Settings -> Payment Modes)
   const tenderChannels = useMemo(() => {
@@ -484,47 +514,41 @@ export function OperationalReportView({
     );
   }, [tenderChannels, selectedChannelName]);
 
-  // Selected channel order transactions for the Action audit modal
+  // Selected channel order transactions for the Action audit drawer
   const selectedChannelOrders = useMemo(() => {
     if (!selectedChannelName) return [];
-    const target = selectedChannelName.toLowerCase().trim();
 
     return orders.filter((o) => {
       if (isOrderUnpaidCancelled(o)) return false;
 
+      const isPaid =
+        o.paymentStatus === "Paid" ||
+        o.isPaid === true ||
+        (Array.isArray(o.payments) &&
+          o.payments.length > 0 &&
+          o.payments.some(
+            (p: any) =>
+              (p.paymentType === "Credit" || !p.paymentType) &&
+              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+          ));
+
+      if (!isPaid && !isOrderRefunded(o)) {
+        return false;
+      }
+
       if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
         return o.payments.some((p: any) => {
-          const m = (p.paymentModeName || p.mode || p.paymentMode || "").toLowerCase().trim();
-          if (target === "cash" && m.includes("cash")) return true;
-          if (
-            target.includes("upi") &&
-            (m.includes("upi") || m.includes("qr") || m.includes("gpay") || m.includes("phonepe") || m.includes("paytm"))
-          )
-            return true;
-          if (
-            target.includes("card") &&
-            (m.includes("card") || m.includes("credit") || m.includes("debit") || m.includes("pos") || m.includes("visa") || m.includes("mastercard"))
-          )
-            return true;
-          return m.includes(target) || target.includes(m);
+          if (p.paymentType === "Debit") return false;
+          const rawM =
+            p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || "Cash";
+          return findModeKey(rawM) === selectedChannelName;
         });
       }
 
-      const orderMode = (o.paymentMode || o.paymentMethod || "Cash").toLowerCase().trim();
-      if (target === "cash" && orderMode.includes("cash")) return true;
-      if (
-        target.includes("upi") &&
-        (orderMode.includes("upi") || orderMode.includes("qr") || orderMode.includes("soundbox"))
-      )
-        return true;
-      if (
-        target.includes("card") &&
-        (orderMode.includes("card") || orderMode.includes("credit") || orderMode.includes("debit"))
-      )
-        return true;
-      return orderMode.includes(target) || target.includes(orderMode);
+      const rawM = o.paymentMode || o.paymentMethod || "Cash";
+      return findModeKey(rawM) === selectedChannelName;
     });
-  }, [orders, selectedChannelName]);
+  }, [orders, selectedChannelName, findModeKey]);
 
 
 
@@ -2344,163 +2368,169 @@ export function OperationalReportView({
       )}
 
       {/* ======================================================== */}
-      {/* INTERACTIVE MODALS & DRAWERS                             */}
+      {/* TENDER CHANNEL TRANSACTIONS SLIDE-OVER DRAWER             */}
       {/* ======================================================== */}
-
-      {/* 1. Tender Reconcile & Batch Details Modal */}
       {(activeModal === "reconcile" ||
         activeModal === "batches" ||
         activeModal === "slips" ||
         activeModal === "orders") && (
-        <div className="fixed inset-0 z-50 bg-[#0c0a09]/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-[#e7e5e4] max-w-2xl w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-9 h-9 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
-                  <span className="material-symbols-outlined text-[20px]">
-                    {selectedChannelData?.icon || "payments"}
+        <div className="fixed inset-0 z-50 overflow-hidden">
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 bg-[#0c0a09]/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
+            onClick={() => setActiveModal(null)}
+          />
+
+          {/* Slide-over Drawer Container */}
+          <div className="fixed inset-y-0 right-0 max-w-full flex pl-10 z-50">
+            <div className="w-screen max-w-lg bg-white shadow-2xl border-l border-[#e7e5e4] flex flex-col animate-in slide-in-from-right duration-250 ease-out">
+              {/* Drawer Header */}
+              <div className="p-4 sm:p-5 border-b border-[#e7e5e4] flex items-center justify-between bg-white shrink-0">
+                <div className="flex items-center gap-3">
+                  <span className="w-9 h-9 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010] shrink-0">
+                    <span className="material-symbols-outlined text-[20px]">
+                      {selectedChannelData?.icon || "payments"}
+                    </span>
                   </span>
-                </span>
-                <div>
-                  <h3
-                    className="font-garamond text-xl sm:text-2xl font-normal text-[#141010]"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {selectedChannelName} Tender Audit &amp; Settlement
-                  </h3>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    Batch ID #BAT-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}-{selectedChannelName.slice(0, 3).toUpperCase()} • {storeTz}
-                  </span>
+                  <div>
+                    <h3
+                      className="font-garamond text-xl sm:text-2xl font-normal text-[#141010] leading-tight"
+                      style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
+                    >
+                      {selectedChannelName}
+                    </h3>
+                    <div className="flex items-center gap-2 mt-0.5 text-xs text-[#5e5e5e]">
+                      <span>
+                        {selectedChannelOrders.length} transaction
+                        {selectedChannelOrders.length === 1 ? "" : "s"}
+                      </span>
+                      <span>•</span>
+                      <span className="font-semibold text-[#141010]">
+                        {selectedChannelData?.netSettled ||
+                          formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true)}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
 
-            {/* Top KPI Cards for the Channel */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col">
-                <span className="text-[11px] text-[#5e5e5e] uppercase tracking-wider font-medium">Transactions</span>
-                <span className="text-sm sm:text-base font-semibold text-[#141010] mt-0.5">
-                  {selectedChannelData?.txns || selectedChannelOrders.length} txns
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] hover:text-[#141010] transition-colors cursor-pointer"
+                  aria-label="Close drawer"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
               </div>
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col">
-                <span className="text-[11px] text-[#5e5e5e] uppercase tracking-wider font-medium">Gross Collections</span>
-                <span className="text-sm sm:text-base font-semibold text-[#141010] mt-0.5">
-                  {selectedChannelData?.grossAmount || formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true)}
-                </span>
-              </div>
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col">
-                <span className="text-[11px] text-[#5e5e5e] uppercase tracking-wider font-medium">Net Settled</span>
-                <span className="text-sm sm:text-base font-semibold text-[#2e7d32] mt-0.5">
-                  {selectedChannelData?.netSettled || formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true)}
-                </span>
-              </div>
-            </div>
 
-            {/* Individual Orders Settled under this Tender Channel */}
-            <div className="w-full overflow-x-auto max-h-64 border border-[#e7e5e4] rounded-lg">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-[#f8f5f4] text-[#5e5e5e] text-[11px] uppercase tracking-wider font-semibold border-b border-[#e7e5e4] sticky top-0">
-                    <th className="py-2.5 px-3">Order</th>
-                    <th className="py-2.5 px-3">Time</th>
-                    <th className="py-2.5 px-3">Table / Floor</th>
-                    <th className="py-2.5 px-3">Staff</th>
-                    <th className="py-2.5 px-3 text-right">Amount</th>
-                    <th className="py-2.5 px-3 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
-                  {selectedChannelOrders.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="py-8 text-center text-[#5e5e5e]">
-                        No individual orders recorded for {selectedChannelName} in this period.
-                      </td>
-                    </tr>
-                  ) : (
-                    selectedChannelOrders.map((o, oIdx) => {
-                      const rawNum = o.orderNumber || String(o._id || "").slice(-4);
-                      const ordNum = rawNum.startsWith("#") ? rawNum : `#${rawNum}`;
-                      const orderTime = o.createdAt
-                        ? new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                        : "—";
-                      const floor = resolveOrderFloorSection(o);
-                      const staff = resolveOrderStaffName(o);
+              {/* Drawer Body - Scrollable Transaction Details */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 bg-[#faf9f8]">
+                {selectedChannelOrders.length === 0 ? (
+                  <div className="py-16 px-4 text-center flex flex-col items-center justify-center">
+                    <span className="w-12 h-12 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-3">
+                      <span className="material-symbols-outlined text-[24px]">receipt_long</span>
+                    </span>
+                    <p className="font-medium text-sm text-[#141010]">
+                      No transactions recorded
+                    </p>
+                    <p className="text-xs text-[#5e5e5e] mt-1 max-w-xs">
+                      No orders were settled using {selectedChannelName} in this period.
+                    </p>
+                  </div>
+                ) : (
+                  selectedChannelOrders.map((o, oIdx) => {
+                    const rawNum = o.orderNumber || String(o._id || "").slice(-4);
+                    const ordNum = rawNum.startsWith("#") ? rawNum : `#${rawNum}`;
+                    const orderTime = o.createdAt
+                      ? new Date(o.createdAt).toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "—";
+                    const floor = resolveOrderFloorSection(o);
+                    const staff = resolveOrderStaffName(o);
 
-                      let paidVal = o.totalAmount || 0;
-                      if (o.payments && Array.isArray(o.payments)) {
-                        const pMatch = o.payments.find((p: any) => {
-                          const m = (p.paymentModeName || p.mode || p.paymentMode || "").toLowerCase();
-                          return m.includes(selectedChannelName.toLowerCase());
-                        });
-                        if (pMatch) {
-                          paidVal = pMatch.payAmount !== undefined ? pMatch.payAmount : (pMatch.amount || paidVal);
-                        }
+                    let paidVal = o.totalAmount || 0;
+                    if (o.payments && Array.isArray(o.payments)) {
+                      const matchingPayments = o.payments.filter((p: any) => {
+                        const rawM =
+                          p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || "Cash";
+                        return findModeKey(rawM) === selectedChannelName;
+                      });
+                      if (matchingPayments.length > 0) {
+                        paidVal = matchingPayments.reduce((sum: number, p: any) => {
+                          const amt =
+                            p.payAmount !== undefined ? p.payAmount : p.amount || 0;
+                          return sum + amt;
+                        }, 0);
                       }
+                    }
 
-                      return (
-                        <tr key={oIdx} className="hover:bg-[#faf6f5] transition-colors">
-                          <td className="py-2.5 px-3 font-semibold text-[#0c0a09]">{ordNum}</td>
-                          <td className="py-2.5 px-3 text-[#5e5e5e]">{orderTime}</td>
-                          <td className="py-2.5 px-3">{floor}</td>
-                          <td className="py-2.5 px-3">{staff}</td>
-                          <td className="py-2.5 px-3 text-right font-medium tabular-nums">
-                            {formatPriceWithSymbol(paidVal, resolvedCurrencySymbol, countryCode, true)}
-                          </td>
-                          <td className="py-2.5 px-3 text-center">
-                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f1edec] text-[#2e7d32] border border-[#e7e5e4] font-medium">
-                              {o.paymentStatus || "Paid"}
+                    return (
+                      <div
+                        key={oIdx}
+                        className="p-3.5 rounded-xl bg-white border border-[#e7e5e4] shadow-2xs hover:border-[#d6d3d1] transition-all flex flex-col gap-2"
+                      >
+                        {/* Top: Order # and Amount */}
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-sm text-[#0c0a09]">
+                            {ordNum}
+                          </span>
+                          <span className="font-semibold text-sm text-[#141010] tabular-nums">
+                            {formatPriceWithSymbol(
+                              paidVal,
+                              resolvedCurrencySymbol,
+                              countryCode,
+                              true
+                            )}
+                          </span>
+                        </div>
+
+                        {/* Mid: Time, Table / Floor & Payment Status */}
+                        <div className="flex items-center justify-between text-xs text-[#5e5e5e]">
+                          <div className="flex items-center gap-1.5 truncate">
+                            <span className="material-symbols-outlined text-[15px] shrink-0 text-[#78716c]">
+                              schedule
                             </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
+                            <span>{orderTime}</span>
+                            <span>•</span>
+                            <span className="truncate">{floor}</span>
+                          </div>
+                          <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#e8f5e9] text-[#2e7d32] border border-[#c8e6c9] shrink-0">
+                            {o.paymentStatus || "Paid"}
+                          </span>
+                        </div>
 
-            {/* Destination & Verification Status */}
-            <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex items-center justify-between text-xs">
-              <span className="text-[#5e5e5e]">
-                Settlement Destination:{" "}
-                <strong className="text-[#141010] font-medium">
-                  {selectedChannelName.toLowerCase() === "cash"
-                    ? "In-Drawer Register Till"
-                    : "Direct Merchant Bank Ledger"}
-                </strong>
-              </span>
-              <span className="font-semibold text-[#2e7d32] flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2e7d32]"></span>
-                Synchronized &amp; Settled
-              </span>
-            </div>
+                        {/* Bottom: Staff name & Order Type */}
+                        <div className="pt-2 border-t border-[#f1edec] flex items-center justify-between text-[11px] text-[#78716c]">
+                          <span className="truncate">
+                            Staff:{" "}
+                            <strong className="text-[#141010] font-medium">
+                              {staff}
+                            </strong>
+                          </span>
+                          {o.orderType && (
+                            <span className="px-1.5 py-0.5 rounded bg-[#f1edec] text-[#5e5e5e] font-medium text-[10px] uppercase tracking-wide shrink-0">
+                              {o.orderType}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#e7e5e4]">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] text-xs font-medium rounded-full cursor-pointer"
-              >
-                Close
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveModal(null);
-                  showToast(`${selectedChannelName} batch verified and signed.`, "success");
-                }}
-                className="px-4 py-2 bg-[#0c0a09] hover:bg-[#262626] text-white text-xs font-semibold rounded-full cursor-pointer shadow-2xs"
-              >
-                Confirm Verification
-              </button>
+              {/* Drawer Footer - Clean Close button, nothing extra */}
+              <div className="p-4 border-t border-[#e7e5e4] bg-white flex items-center justify-end shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-5 py-2 bg-[#0c0a09] hover:bg-[#262626] text-white text-xs font-semibold rounded-full cursor-pointer transition-all shadow-2xs"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
