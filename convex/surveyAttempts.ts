@@ -276,6 +276,12 @@ export const getForRespondent = query({
       }
     }
 
+    let storeSlug: string | undefined = undefined;
+    let storeLogoUrl: string | undefined = undefined;
+    let currencySymbol: string | undefined = undefined;
+    let country: string | undefined = undefined;
+    let timezone: string | undefined = undefined;
+
     if (attempt.orderId) {
       const order = await ctx.db.get(attempt.orderId);
       if (order) {
@@ -286,7 +292,14 @@ export const getForRespondent = query({
 
         if (order.organizationId) {
           const org = await ctx.db.get(order.organizationId);
-          if (org) storeName = org.name;
+          if (org) {
+            storeName = org.name;
+            storeSlug = org.slug;
+            storeLogoUrl = org.logoUrl;
+            currencySymbol = org.defaultCurrencySymbol;
+            country = org.country;
+            timezone = org.organizationTimeZone;
+          }
         }
 
         if (order.tableId) {
@@ -368,6 +381,12 @@ export const getForRespondent = query({
       serviceMode: serviceMode || "Dine-In",
       orderTotal,
       orderDate,
+      submittedAt: attempt.submittedAt || attempt.updatedAt,
+      storeSlug,
+      storeLogoUrl,
+      currencySymbol,
+      country,
+      timezone,
       itemCount,
       orderItems,
       questions: questions
