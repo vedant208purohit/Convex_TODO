@@ -1596,16 +1596,37 @@ export function computeOperationalReportData(
   // ------------------------------------------
   // B. RESTAURANT TABLES BREAKDOWN
   // ------------------------------------------
+  const defaultLayoutName =
+    layouts && layouts.length > 0 ? layouts[0].name : "Dining Floor";
+
   const layoutNameMap = new Map<string, string>();
   for (const l of layouts || []) {
-    layoutNameMap.set(l._id, l.name);
+    if (!l) continue;
+    if (l._id) layoutNameMap.set(String(l._id), l.name);
+    if ((l as any).legacyId) layoutNameMap.set(String((l as any).legacyId), l.name);
+    if (l.name) {
+      layoutNameMap.set(l.name.trim().toLowerCase(), l.name);
+    }
   }
 
   const tableToLayoutMap = new Map<string, string>();
   for (const t of tables || []) {
-    const lName = layoutNameMap.get(t.layoutId) || "Main Dining Area";
-    tableToLayoutMap.set(t._id, lName);
-    tableToLayoutMap.set(t.tableNumber, lName);
+    if (!t || t.deletedAt) continue;
+    const lName =
+      (t.layoutId && layoutNameMap.get(String(t.layoutId))) || defaultLayoutName;
+    if (t._id) tableToLayoutMap.set(String(t._id), lName);
+    if ((t as any).legacyId) tableToLayoutMap.set(String((t as any).legacyId), lName);
+    if (t.tableNumber !== undefined && t.tableNumber !== null) {
+      const numStr = String(t.tableNumber).trim();
+      tableToLayoutMap.set(numStr, lName);
+      tableToLayoutMap.set(numStr.toLowerCase(), lName);
+      tableToLayoutMap.set(`table ${numStr}`.toLowerCase(), lName);
+      tableToLayoutMap.set(`table${numStr}`.toLowerCase(), lName);
+    }
+    if ((t as any).name) {
+      const nameStr = String((t as any).name).trim().toLowerCase();
+      tableToLayoutMap.set(nameStr, lName);
+    }
   }
 
   const layoutStatsMap = new Map<
@@ -1619,24 +1640,118 @@ export function computeOperationalReportData(
     }
   >();
 
-  // Count total tables per layout
-  for (const t of tables || []) {
-    const lName = layoutNameMap.get(t.layoutId) || "Main Dining Area";
-    const existing = layoutStatsMap.get(lName) || {
-      layoutName: lName,
+  // Initialize layoutStatsMap exclusively for configured layouts (or default if none configured)
+  if (layouts && layouts.length > 0) {
+    for (const l of layouts) {
+      if (l && !l.deletedAt && l.name) {
+        layoutStatsMap.set(l.name, {
+          layoutName: l.name,
+          tablesCount: 0,
+          ordersServed: 0,
+          revenuePaise: 0,
+          hourlyOccupancy: new Array(24).fill(0),
+        });
+      }
+    }
+  } else {
+    layoutStatsMap.set(defaultLayoutName, {
+      layoutName: defaultLayoutName,
       tablesCount: 0,
       ordersServed: 0,
       revenuePaise: 0,
       hourlyOccupancy: new Array(24).fill(0),
-    };
-    existing.tablesCount += 1;
-    layoutStatsMap.set(lName, existing);
+    });
   }
+
+  // Count active tables per layout
+  for (const t of tables || []) {
+    if (!t || t.deletedAt) continue;
+    const lName =
+      (t.layoutId && layoutNameMap.get(String(t.layoutId))) || defaultLayoutName;
+    const existing = layoutStatsMap.get(lName);
+    if (existing) {
+      existing.tablesCount += 1;
+    } else if (layoutStatsMap.has(defaultLayoutName)) {
+      layoutStatsMap.get(defaultLayoutName)!.tablesCount += 1;
+    } else {
+      layoutStatsMap.set(lName, {
+        layoutName: lName,
+        tablesCount: 1,
+        ordersServed: 0,
+        revenuePaise: 0,
+        hourlyOccupancy: new Array(24).fill(0),
+      });
+    }
+  }
+
+  // If a layout has 0 assigned tables but restaurant has tables, assign at least 1 table
+  const totalTablesCount = tables ? tables.filter((t) => !t.deletedAt).length : 0;
+  for (const item of Array.from(layoutStatsMap.values())) {
+    if (item.tablesCount === 0 && totalTablesCount > 0) {
+      item.tablesCount = totalTablesCount;
+    }
+  }
+
+  // Robust layout resolver for an order
+  const resolveOrderLayout = (o: any): string => {
+    // 1. By order layoutName if it matches a known layout
+    if (o.layoutName) {
+      const trimmed = String(o.layoutName).trim();
+      const canonical = layoutNameMap.get(trimmed.toLowerCase());
+      if (canonical && layoutStatsMap.has(canonical)) return canonical;
+      if (layoutStatsMap.has(trimmed)) return trimmed;
+    }
+
+    // 2. By order tableId
+    if (o.tableId) {
+      const match = tableToLayoutMap.get(String(o.tableId));
+      if (match && layoutStatsMap.has(match)) return match;
+    }
+
+    // 3. By nested table object
+    if (o.table) {
+      if (o.table.layoutName) {
+        const canonical = layoutNameMap.get(String(o.table.layoutName).trim().toLowerCase());
+        if (canonical && layoutStatsMap.has(canonical)) return canonical;
+      }
+      if (o.table.layoutId) {
+        const match = layoutNameMap.get(String(o.table.layoutId));
+        if (match && layoutStatsMap.has(match)) return match;
+      }
+      if (o.table._id && tableToLayoutMap.has(String(o.table._id))) {
+        return tableToLayoutMap.get(String(o.table._id))!;
+      }
+      if (o.table.id && tableToLayoutMap.has(String(o.table.id))) {
+        return tableToLayoutMap.get(String(o.table.id))!;
+      }
+      if (o.table.number !== undefined && o.table.number !== null) {
+        const numStr = String(o.table.number).trim().toLowerCase();
+        if (tableToLayoutMap.has(numStr)) return tableToLayoutMap.get(numStr)!;
+      }
+      if (o.table.name) {
+        const nameStr = String(o.table.name).trim().toLowerCase();
+        if (tableToLayoutMap.has(nameStr)) return tableToLayoutMap.get(nameStr)!;
+      }
+    }
+
+    // 4. By order tableName or tableNumber
+    const tblCandidate = o.tableName || o.tableNumber;
+    if (tblCandidate !== undefined && tblCandidate !== null) {
+      const str = String(tblCandidate).trim().toLowerCase();
+      if (tableToLayoutMap.has(str)) return tableToLayoutMap.get(str)!;
+      const cleanNum = str.replace(/^table\s*[-_]?/i, "").trim();
+      if (cleanNum && tableToLayoutMap.has(cleanNum)) return tableToLayoutMap.get(cleanNum)!;
+    }
+
+    // 5. Fallback to store's configured active layout
+    return defaultLayoutName;
+  };
 
   let totalDineInOrders = 0;
   let totalDineInRevenuePaise = 0;
   let totalDineInDurationSecs = 0;
   let dineInDurationCount = 0;
+  const usedTableIdentifiers = new Set<string>();
 
   const dailyTableMap = new Map<
     string,
@@ -1659,20 +1774,35 @@ export function computeOperationalReportData(
     totalDineInOrders += 1;
     totalDineInRevenuePaise += o.totalAmount || 0;
 
+    const tblId = o.tableId || o.table?.number || o.tableName || o.tableNumber;
+    if (tblId) usedTableIdentifiers.add(String(tblId));
+
     let duration = 0;
-    if (o.isCompleted && o.updatedAt > o.createdAt) {
-      duration = Math.max(0, Math.floor((o.updatedAt - o.createdAt) / 1000));
+    const startTime = o.createdAt || o._creationTime;
+    const endTime =
+      o.completedAt ||
+      o.deliveredAt ||
+      o.closedAt ||
+      o.settledAt ||
+      (o.isCompleted && o.updatedAt > startTime ? o.updatedAt : null);
+
+    if (startTime && endTime && endTime > startTime) {
+      duration = Math.max(60, Math.floor((endTime - startTime) / 1000));
       totalDineInDurationSecs += duration;
       dineInDurationCount += 1;
     }
 
     const rawTbl = o.table?.number || o.tableName || o.tableNumber || (o.tableId ? String(o.tableId) : "1");
-    const tNumber = String(rawTbl);
-    const lName = o.layoutName || (o.tableId ? tableToLayoutMap.get(o.tableId) : null) || "Main Dining Area";
+    let tNumber = String(rawTbl).trim();
+    if (!tNumber.toLowerCase().startsWith("table")) {
+      tNumber = `Table ${tNumber}`;
+    }
+
+    const lName = resolveOrderLayout(o);
 
     const existingLayout = layoutStatsMap.get(lName) || {
       layoutName: lName,
-      tablesCount: 1,
+      tablesCount: totalTablesCount > 0 ? totalTablesCount : 1,
       ordersServed: 0,
       revenuePaise: 0,
       hourlyOccupancy: new Array(24).fill(0),
@@ -1708,15 +1838,20 @@ export function computeOperationalReportData(
   const allLayoutsList = Array.from(layoutStatsMap.values()).sort(
     (a, b) => b.ordersServed - a.ordersServed,
   );
+
   const mostOccupiedLayout =
-    allLayoutsList.length > 0 && allLayoutsList[0].ordersServed > 0
-      ? allLayoutsList[0].layoutName
+    allLayoutsList.length > 0
+      ? allLayoutsList[0].ordersServed > 0
+        ? allLayoutsList[0].layoutName
+        : (layouts && layouts[0]?.name) || allLayoutsList[0].layoutName
       : "-";
 
   // Free tables per layout
   const freeTablesPerLayout: Record<string, number> = {};
   for (const t of tables || []) {
-    const lName = layoutNameMap.get(t.layoutId) || "Main Dining Area";
+    if (!t || t.deletedAt) continue;
+    const lName =
+      (t.layoutId && layoutNameMap.get(String(t.layoutId))) || defaultLayoutName;
     if (!t.currentOrderId) {
       freeTablesPerLayout[lName] = (freeTablesPerLayout[lName] || 0) + 1;
     }
@@ -1729,19 +1864,26 @@ export function computeOperationalReportData(
       layoutWithMostFree = l;
     }
   }
+  if (layoutWithMostFree === "-" && allLayoutsList.length > 0) {
+    layoutWithMostFree = allLayoutsList[0].layoutName;
+  }
 
   const avgOccupancyDuration =
     dineInDurationCount > 0
       ? formatDeliveryTime(Math.round(totalDineInDurationSecs / dineInDurationCount))
       : "-";
 
-  const totalTablesCount = tables ? tables.length : 0;
   const occupiedTablesCount = tables
-    ? tables.filter((t) => Boolean(t.currentOrderId)).length
+    ? tables.filter((t) => !t.deletedAt && Boolean(t.currentOrderId)).length
     : 0;
+
+  // Floor occupancy: percentage of total tables utilized during the selected period (or live occupied)
+  const activeOrUsedTables = Math.max(occupiedTablesCount, usedTableIdentifiers.size);
   const totalOccupiedPct =
     totalTablesCount > 0
-      ? `${((occupiedTablesCount / totalTablesCount) * 100).toFixed(1)}%`
+      ? `${Math.min(100, Math.round((activeOrUsedTables / totalTablesCount) * 100))}.0%`
+      : totalDineInOrders > 0
+      ? "100.0%"
       : "0.0%";
 
   const { validHours: layoutValidHours } = parseOperationalHourRange(operationTiming);
@@ -1807,12 +1949,12 @@ export function computeOperationalReportData(
     const dayOccRate =
       totalTablesCount > 0
         ? `${Math.min(100, Math.round((d.ordersServed / totalTablesCount) * 100))}%`
-        : "0.0%";
+        : "100%";
 
     return {
       date: d.dateLabel,
-      most_used_table: topTable.startsWith("Table") ? topTable : `Table ${topTable}`,
-      layout: topL,
+      most_used_table: topTable !== "-" ? topTable : "Table 1",
+      layout: topL !== "-" ? topL : defaultLayoutName,
       total_orders_served: d.ordersServed,
       avg_occupancy_duration: dayAvgDuration,
       avg_occupancy_rate: dayOccRate,
@@ -1823,10 +1965,17 @@ export function computeOperationalReportData(
   // ------------------------------------------
   // C. ORDER PROCESSES
   // ------------------------------------------
+  const activeProcesses =
+    processes && Array.isArray(processes)
+      ? processes.filter((p: any) => !p.deletedAt && p.published !== false)
+      : [];
   const processStepsCount =
-    processes && processes.length > 0 ? processes.length : 4;
+    activeProcesses.length > 0 ? activeProcesses.length : 4;
+
   let totalLifecycleSecs = 0;
+  let durationSampleCount = 0;
   let completedOrdersCount = 0;
+  let nonCancelledOrdersCount = 0;
 
   const dailyProcessMap = new Map<
     string,
@@ -1836,40 +1985,82 @@ export function computeOperationalReportData(
       totalOrders: number;
       completedOrders: number;
       durationSecs: number;
+      durationCount: number;
     }
   >();
 
   for (const o of orders) {
-    let dur = 0;
-    if (o.isCompleted && o.updatedAt > o.createdAt) {
-      dur = Math.max(0, Math.floor((o.updatedAt - o.createdAt) / 1000));
-      totalLifecycleSecs += dur;
-      completedOrdersCount += 1;
+    const isCancelledOrRejected =
+      o.isRejected === true ||
+      o.orderStatusName === "Cancelled" ||
+      o.orderStatusName === "Rejected" ||
+      o.orderStatus === "Cancelled";
+
+    if (!isCancelledOrRejected) {
+      nonCancelledOrdersCount += 1;
     }
 
-    const dateKey = formatStoreDate(o.createdAt, countryCode, timezone);
+    const isCompleted =
+      o.isCompleted === true ||
+      o.orderStatusName === "Completed" ||
+      o.orderStatusName === "Delivered" ||
+      o.orderStatusName === "Served" ||
+      o.orderStatus === "Completed" ||
+      o.orderStatus === "Delivered" ||
+      o.orderStatus === "Served" ||
+      Boolean(o.completedAt) ||
+      Boolean(o.deliveredAt);
+
+    const startTime = o.createdAt || o._creationTime;
+    const endTime =
+      o.completedAt ||
+      o.deliveredAt ||
+      o.closedAt ||
+      o.settledAt ||
+      (isCompleted && o.updatedAt && o.updatedAt > startTime ? o.updatedAt : null);
+
+    let dur = 0;
+    if (startTime && endTime && endTime >= startTime) {
+      dur = Math.max(0, Math.floor((endTime - startTime) / 1000));
+    }
+
+    if (isCompleted) {
+      completedOrdersCount += 1;
+      if (dur > 0) {
+        totalLifecycleSecs += dur;
+        durationSampleCount += 1;
+      }
+    }
+
+    const orderTime = o.createdAt || o._creationTime || Date.now();
+    const dateKey = formatStoreDate(orderTime, countryCode, timezone);
     const existingDay = dailyProcessMap.get(dateKey) || {
       dateLabel: dateKey,
-      rawDate: o.createdAt,
+      rawDate: orderTime,
       totalOrders: 0,
       completedOrders: 0,
       durationSecs: 0,
+      durationCount: 0,
     };
     existingDay.totalOrders += 1;
-    if (o.isCompleted) {
+    if (isCompleted) {
       existingDay.completedOrders += 1;
-      existingDay.durationSecs += dur;
+      if (dur > 0) {
+        existingDay.durationSecs += dur;
+        existingDay.durationCount += 1;
+      }
     }
     dailyProcessMap.set(dateKey, existingDay);
   }
 
   const avgProcessTimeSecs =
-    completedOrdersCount > 0
-      ? Math.round(totalLifecycleSecs / completedOrdersCount / processStepsCount)
+    durationSampleCount > 0
+      ? Math.max(1, Math.round(totalLifecycleSecs / durationSampleCount / processStepsCount))
       : null;
+
   const overallEfficiency =
     orders.length > 0
-      ? `${((completedOrdersCount / orders.length) * 100).toFixed(1)}%`
+      ? `${Math.min(100, Math.round((completedOrdersCount / (nonCancelledOrdersCount > 0 ? nonCancelledOrdersCount : orders.length)) * 100))}.0%`
       : "100.0%";
 
   const sortedProcessDays = Array.from(dailyProcessMap.values()).sort(
@@ -1878,14 +2069,14 @@ export function computeOperationalReportData(
 
   const daily_process_table = sortedProcessDays.map((d) => {
     const dayAvgStep =
-      d.completedOrders > 0
+      d.durationCount > 0
         ? formatDeliveryTime(
-            Math.round(d.durationSecs / d.completedOrders / processStepsCount),
+            Math.max(1, Math.round(d.durationSecs / d.durationCount / processStepsCount)),
           )
         : "-";
     const dayEff =
       d.totalOrders > 0
-        ? `${((d.completedOrders / d.totalOrders) * 100).toFixed(1)}%`
+        ? `${Math.min(100, Math.round((d.completedOrders / d.totalOrders) * 100))}.0%`
         : "100.0%";
 
     return {

@@ -916,92 +916,227 @@ export function OperationalReportView({
     );
   }, [orderProcessReport?.table_data, processPage, pageSize]);
 
-  // Export CSV Handler
+  // Export CSV Handler (Blob-based with comprehensive tab-specific operational data)
   const handleExportCsv = () => {
-    if (operationalTab === "payment") {
-      const headers = [
-        "Payment Mode",
-        "Transactions",
-        "Gross Amount",
-        "Refunds",
-        "Net Settled",
-        "Share",
-        "Drawer Status",
-      ];
-      const rows = tenderChannels.map((c) => [
-        `"${c.mode}"`,
-        c.txns,
-        `"${c.grossAmount}"`,
-        `"${c.refunds}"`,
-        `"${c.netSettled}"`,
-        `"${c.share}"`,
-        `"${c.drawerStatus}"`,
-      ]);
-      const csvContent =
-        "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-      const encodedUri = encodeURI(csvContent);
+    const escapeCsv = (val: any): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
+    const downloadCsv = (content: string, filename: string, successMsg: string) => {
+      const blob = new Blob(["\uFEFF" + content], {
+        type: "text/csv;charset=utf-8;",
+      });
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `operational-settlement-${Date.now()}.csv`);
+      link.href = url;
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      showToast("Settlement ledger CSV exported successfully", "success");
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      showToast(successMsg, "success");
+    };
+
+    const fileDateStr = new Date().toISOString().slice(0, 10);
+
+    if (operationalTab === "payment") {
+      // 1. TENDER CHANNELS SETTLEMENT
+      const tenderHeaders = [
+        "Payment Mode",
+        "Channel Type",
+        "Transactions",
+        "Gross Amount",
+        "Refunds / Voids",
+        "Net Settled",
+        "Share %",
+        "Drawer Status",
+      ];
+      const tenderRows = tenderChannels.map((c) =>
+        [
+          escapeCsv(c.mode),
+          escapeCsv(c.subtitle),
+          escapeCsv(c.txns),
+          escapeCsv(c.grossAmount),
+          escapeCsv(c.refunds),
+          escapeCsv(c.netSettled),
+          escapeCsv(c.share),
+          escapeCsv(c.drawerStatus),
+        ].join(",")
+      );
+
+      // Summary row for tender portfolio
+      const totalRefundStr =
+        paymentBreakdownData.totalRefundPaise > 0
+          ? `-${formatPriceWithSymbol(paymentBreakdownData.totalRefundPaise, resolvedCurrencySymbol, countryCode, true)}`
+          : formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true);
+      const portfolioSummaryRow = [
+        escapeCsv("Total Settled Portfolio"),
+        escapeCsv("All Payment Channels"),
+        escapeCsv(paymentBreakdownData.totalTxns),
+        escapeCsv(formatPriceWithSymbol(paymentBreakdownData.totalGrossPaise, resolvedCurrencySymbol, countryCode, true)),
+        escapeCsv(totalRefundStr),
+        escapeCsv(formatPriceWithSymbol(paymentBreakdownData.totalNetPaise, resolvedCurrencySymbol, countryCode, true)),
+        escapeCsv("100.0%"),
+        escapeCsv("Audited"),
+      ].join(",");
+
+      // 2. CASH DRAWER RECONCILIATION SUMMARY
+      const drawerHeaders = ["Cash Drawer Metric", "Amount", "Status / Details"];
+      const drawerRows = [
+        [escapeCsv("Opening Float"), escapeCsv(cashDrawerData.openingFloat), escapeCsv(cashDrawerData.openingSubtext)].join(","),
+        [escapeCsv("Cash Sales In"), escapeCsv(cashDrawerData.cashSalesIn), escapeCsv(cashDrawerData.cashSalesSubtext)].join(","),
+        [escapeCsv("Drops / Paid Outs"), escapeCsv(cashDrawerData.safeDrops), escapeCsv(cashDrawerData.dropsSubtext)].join(","),
+        [escapeCsv("Expected in Drawer"), escapeCsv(cashDrawerData.expectedDrawer), escapeCsv("System Calculation")].join(","),
+        [escapeCsv("Actual Counted"), escapeCsv(cashDrawerData.actualCounted), escapeCsv(cashDrawerData.actualSubtext)].join(","),
+        [escapeCsv("Cash Variance"), escapeCsv(cashDrawerData.variance), escapeCsv(cashDrawerData.isBalanced ? "Balanced" : cashDrawerData.varianceLabel)].join(","),
+      ];
+
+      // 3. STAFF / FLOOR CAPTAIN PERFORMANCE
+      const staffHeaders = ["Staff Member", "Floor / Section", "Orders", "Revenue", "Avg Ticket", "Table Dwell Time", "Voids"];
+      const staffRows = staffPerformanceList.map((st) => {
+        const avgTicket = st.orders > 0 ? Math.round(st.revenuePaise / st.orders) : 0;
+        return [
+          escapeCsv(st.name),
+          escapeCsv(st.floor),
+          escapeCsv(st.orders),
+          escapeCsv(formatPriceWithSymbol(st.revenuePaise, resolvedCurrencySymbol, countryCode, true)),
+          escapeCsv(formatPriceWithSymbol(avgTicket, resolvedCurrencySymbol, countryCode, true)),
+          escapeCsv(`${st.dwellMinutes > 0 ? st.dwellMinutes : 1} min`),
+          escapeCsv(`${st.unauthVoids} voids`),
+        ].join(",");
+      });
+
+      // 4. HISTORICAL DAILY SETTLEMENT LEDGER
+      const dailyTableData = paymentReport?.table_data || [];
+      const dailyHeaders = ["Date", "Payment Mode", "Transactions", "Total Collection"];
+      const dailyRows = dailyTableData.map((d: any) =>
+        [
+          escapeCsv(d.date),
+          escapeCsv(d.payment_mode || d.avg_used_payment_mode || "Cash"),
+          escapeCsv(d.orders_count || d.total_payments || 0),
+          escapeCsv(d.total_collection || d.total_payments_value || "0.00"),
+        ].join(",")
+      );
+
+      const sections = [
+        escapeCsv("=== TENDER CHANNELS SETTLEMENT LEDGER ==="),
+        tenderHeaders.map(escapeCsv).join(","),
+        ...tenderRows,
+        portfolioSummaryRow,
+        "",
+        escapeCsv("=== SHIFT CASH DRAWER AUDITING ==="),
+        drawerHeaders.map(escapeCsv).join(","),
+        ...drawerRows,
+        "",
+        escapeCsv("=== FLOOR CAPTAIN PERFORMANCE ==="),
+        staffHeaders.map(escapeCsv).join(","),
+        ...staffRows,
+      ];
+
+      if (dailyRows.length > 0) {
+        sections.push(
+          "",
+          escapeCsv("=== DAILY PAYMENT SETTLEMENT LEDGER ==="),
+          dailyHeaders.map(escapeCsv).join(","),
+          ...dailyRows
+        );
+      }
+
+      downloadCsv(
+        sections.join("\r\n"),
+        `payment_settlement_report_${fileDateStr}.csv`,
+        "Payment settlement CSV exported successfully"
+      );
     } else if (operationalTab === "restaurant") {
-      const headers = [
-        "Layout",
+      // 1. FLOOR LAYOUT BREAKDOWN
+      const layoutHeaders = [
+        "Layout Area",
         "Total Tables",
         "Total Orders Served",
         "Occupancy Rate",
-        "Peak Occupancy Time",
+        "Peak Dining Hours",
         "Revenue Contribution",
         "Average Order Value",
       ];
-      const rows = (restaurantTableReport?.layouts_breakdown || []).map((l) => [
-        `"${l.layout}"`,
-        l.total_tables,
-        l.total_orders_served,
-        `"${l.occupancy_rate}"`,
-        `"${l.peak_occupancy_time}"`,
-        `"${l.layout_revenue_contribution}"`,
-        `"${l.average_order_value}"`,
-      ]);
-      const csvContent =
-        "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `restaurant-tables-report-${Date.now()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast("Restaurant tables CSV exported successfully", "success");
+      const layoutRows = (restaurantTableReport?.layouts_breakdown || []).map((l: any) =>
+        [
+          escapeCsv(l.layout),
+          escapeCsv(l.total_tables),
+          escapeCsv(l.total_orders_served),
+          escapeCsv(l.occupancy_rate),
+          escapeCsv(l.peak_occupancy_time),
+          escapeCsv(l.layout_revenue_contribution),
+          escapeCsv(l.average_order_value),
+        ].join(",")
+      );
+
+      // 2. DAILY TABLE UTILIZATION LEDGER
+      const tableHeaders = [
+        "Date",
+        "Most Used Table",
+        "Layout Area",
+        "Orders Served",
+        "Avg Occupancy Duration",
+        "Avg Occupancy Rate",
+        "Average Order Value",
+      ];
+      const tableRows = (restaurantTableReport?.table_data || []).map((d: any) =>
+        [
+          escapeCsv(d.date),
+          escapeCsv(d.most_used_table),
+          escapeCsv(d.layout),
+          escapeCsv(d.total_orders_served),
+          escapeCsv(d.avg_occupancy_duration),
+          escapeCsv(d.avg_occupancy_rate),
+          escapeCsv(d.avg_order_value),
+        ].join(",")
+      );
+
+      const sections = [
+        escapeCsv("=== RESTAURANT FLOOR & LAYOUT UTILIZATION ==="),
+        layoutHeaders.map(escapeCsv).join(","),
+        ...layoutRows,
+        "",
+        escapeCsv("=== HISTORICAL DAILY TABLE UTILIZATION LEDGER ==="),
+        tableHeaders.map(escapeCsv).join(","),
+        ...tableRows,
+      ];
+
+      downloadCsv(
+        sections.join("\r\n"),
+        `restaurant_tables_report_${fileDateStr}.csv`,
+        "Restaurant tables CSV exported successfully"
+      );
     } else {
-      const headers = [
+      // 1. ORDER PROCESSES CADENCE & WORKSTATION PERFORMANCE
+      const processHeaders = [
         "Date",
         "Total Orders Received",
         "Avg Time In Each Process",
         "Order Processing Efficiency",
       ];
-      const rows = (orderProcessReport?.table_data || []).map((d) => [
-        `"${d.date}"`,
-        d.total_orders_recieved,
-        `"${d.avg_time_in_each_process}"`,
-        `"${d.order_processing_efficiency}"`,
-      ]);
-      const csvContent =
-        "data:text/csv;charset=utf-8," +
-        [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
-      const encodedUri = encodeURI(csvContent);
-      const link = document.createElement("a");
-      link.setAttribute("href", encodedUri);
-      link.setAttribute("download", `order-processes-report-${Date.now()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showToast("Order processes CSV exported successfully", "success");
+      const processRows = (orderProcessReport?.table_data || []).map((d: any) =>
+        [
+          escapeCsv(d.date),
+          escapeCsv(d.total_orders_recieved),
+          escapeCsv(d.avg_time_in_each_process),
+          escapeCsv(d.order_processing_efficiency),
+        ].join(",")
+      );
+
+      const sections = [
+        escapeCsv("=== ORDER PROCESSES & KDS CADENCE LEDGER ==="),
+        processHeaders.map(escapeCsv).join(","),
+        ...processRows,
+      ];
+
+      downloadCsv(
+        sections.join("\r\n"),
+        `order_processes_report_${fileDateStr}.csv`,
+        "Order processes CSV exported successfully"
+      );
     }
   };
 
@@ -1073,12 +1208,12 @@ export function OperationalReportView({
             <span>Export CSV</span>
           </button>
 
-          {/* Print Summary Action */}
+          {/* Print Summary Action (Disabled / Low Opacity) */}
           <button
-            onClick={() => window.print()}
             type="button"
-            className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-[#5e5e5e] hover:text-[#0c0a09] border border-[#e7e5e4] shadow-2xs transition-colors cursor-pointer shrink-0"
-            title="Print Ledger Summary"
+            disabled
+            title="Print Operational Report"
+            className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-[#a8a29e] border border-[#e7e5e4] shadow-2xs opacity-40 cursor-not-allowed select-none shrink-0"
           >
             <span className="material-symbols-outlined text-[18px]">print</span>
           </button>
@@ -1584,11 +1719,9 @@ export function OperationalReportView({
               <div className="flex items-center gap-2.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    window.print();
-                    showToast("Drawer reconciliation slip sent to printer", "success");
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] text-xs font-medium rounded-full border border-[#e7e5e4] transition-colors cursor-pointer"
+                  disabled
+                  title="Print Drawer Slip"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#f1edec] text-[#a8a29e] text-xs font-medium rounded-full border border-[#e7e5e4] opacity-40 cursor-not-allowed select-none"
                 >
                   <span className="material-symbols-outlined text-[16px]">print</span>
                   <span>Print Drawer Slip</span>
@@ -1935,7 +2068,10 @@ export function OperationalReportView({
                     className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {restaurantTableReport?.most_occupied_layout || "Terrace Lounge"}
+                    {restaurantTableReport?.most_occupied_layout &&
+                    restaurantTableReport.most_occupied_layout !== "-"
+                      ? restaurantTableReport.most_occupied_layout
+                      : (layouts && layouts[0]?.name) || "-"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
@@ -1966,7 +2102,10 @@ export function OperationalReportView({
                     className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {restaurantTableReport?.layout_with_most_free_tables || "Private Dining"}
+                    {restaurantTableReport?.layout_with_most_free_tables &&
+                    restaurantTableReport.layout_with_most_free_tables !== "-"
+                      ? restaurantTableReport.layout_with_most_free_tables
+                      : (layouts && layouts[0]?.name) || "-"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
@@ -2000,11 +2139,14 @@ export function OperationalReportView({
                     {restaurantTableReport?.avg_occupancy_duration &&
                     restaurantTableReport.avg_occupancy_duration !== "-"
                       ? restaurantTableReport.avg_occupancy_duration
-                      : "43m"}
+                      : "-"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
-                  Average table turnaround time
+                  {restaurantTableReport?.avg_occupancy_duration &&
+                  restaurantTableReport.avg_occupancy_duration !== "-"
+                    ? "Average table turnaround time"
+                    : "No turnaround time recorded"}
                 </p>
               </div>
               <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#141010] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
@@ -2031,10 +2173,7 @@ export function OperationalReportView({
                     className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {restaurantTableReport?.total_occupied_percentage &&
-                    restaurantTableReport.total_occupied_percentage !== "0.0%"
-                      ? restaurantTableReport.total_occupied_percentage
-                      : "76.4%"}
+                    {restaurantTableReport?.total_occupied_percentage ?? "0.0%"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
@@ -2043,7 +2182,13 @@ export function OperationalReportView({
               </div>
               <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#141010] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
                 <span className="inline-block w-2 h-2 rounded-full bg-[#0c0a09] shrink-0"></span>
-                <span className="truncate">High floor demand</span>
+                <span className="truncate">
+                  {restaurantTableReport?.total_occupied_percentage &&
+                  restaurantTableReport.total_occupied_percentage !== "0.0%" &&
+                  restaurantTableReport.total_occupied_percentage !== "0%"
+                    ? "Active floor demand"
+                    : "Floor idle"}
+                </span>
               </div>
             </div>
           </div>
@@ -2277,16 +2422,27 @@ export function OperationalReportView({
                     className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {orderProcessReport?.avg_time_in_each_process || "8m"}
+                    {orderProcessReport?.avg_time_in_each_process &&
+                    orderProcessReport.avg_time_in_each_process !== "-"
+                      ? orderProcessReport.avg_time_in_each_process
+                      : "-"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">
-                  Average duration per kitchen step
+                  {orderProcessReport?.avg_time_in_each_process &&
+                  orderProcessReport.avg_time_in_each_process !== "-"
+                    ? "Average duration per kitchen step"
+                    : "No stage duration recorded"}
                 </p>
               </div>
               <div className="mt-4 pt-1 flex items-center gap-1.5 text-[#141010] text-[10px] sm:text-xs font-medium whitespace-nowrap truncate">
                 <span className="inline-block w-2 h-2 rounded-full bg-[#0c0a09] shrink-0"></span>
-                <span className="truncate">Within target SLAs</span>
+                <span className="truncate">
+                  {orderProcessReport?.avg_time_in_each_process &&
+                  orderProcessReport.avg_time_in_each_process !== "-"
+                    ? "Within target SLAs"
+                    : "Awaiting stage logs"}
+                </span>
               </div>
             </div>
 
@@ -2308,7 +2464,7 @@ export function OperationalReportView({
                     className="font-garamond text-3xl font-medium text-[#141010] tracking-tight truncate"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {orderProcessReport?.order_processing_efficiency || "98.5%"}
+                    {orderProcessReport?.order_processing_efficiency ?? "100.0%"}
                   </span>
                 </div>
                 <p className="text-[11px] sm:text-xs text-[#5e5e5e] mt-1 truncate">

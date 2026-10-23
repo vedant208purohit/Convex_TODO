@@ -795,6 +795,17 @@ export function SalesReportView({
             <span className="material-symbols-outlined text-[16px]">download</span>
             <span>Export CSV</span>
           </button>
+
+          {/* Print Summary Action (Disabled / Low Opacity) */}
+          <button
+            type="button"
+            disabled
+            className="inline-flex items-center gap-1.5 bg-white border border-[#e7e5e4] text-[#a8a29e] text-xs font-semibold px-4 py-2 rounded-full shadow-2xs opacity-40 cursor-not-allowed select-none shrink-0"
+            title="Print Sales Report"
+          >
+            <span className="material-symbols-outlined text-[16px] text-[#a8a29e]">print</span>
+            <span>Print</span>
+          </button>
         </div>
       </header>
 
@@ -1211,10 +1222,11 @@ export function SalesReportView({
           <div className="flex items-center gap-2 self-start sm:self-auto">
             <button
               type="button"
-              onClick={() => window.print()}
-              className="inline-flex items-center gap-1.5 bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#f1edec] px-3.5 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+              disabled
+              title="Print Journal"
+              className="inline-flex items-center gap-1.5 bg-white border border-[#e7e5e4] text-[#a8a29e] px-3.5 py-1.5 rounded-full text-xs font-medium opacity-40 cursor-not-allowed select-none shadow-2xs"
             >
-              <span className="material-symbols-outlined text-[15px] text-[#5e5e5e]">
+              <span className="material-symbols-outlined text-[15px] text-[#a8a29e]">
                 print
               </span>
               <span>Print Journal</span>
@@ -1877,8 +1889,9 @@ export function SalesReportView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#0c0a09] hover:bg-[#262626] text-white font-medium transition-colors shadow-2xs cursor-pointer"
+                  disabled
+                  title="Print Folio"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-[#0c0a09] text-white opacity-40 cursor-not-allowed select-none font-medium text-xs shadow-2xs"
                 >
                   <span className="material-symbols-outlined text-[14px]">print</span>
                   <span>Print Folio</span>

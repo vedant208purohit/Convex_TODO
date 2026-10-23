@@ -752,43 +752,99 @@ export function OrdersReportView({
     const headers = [
       "Order Number",
       "Token Number",
-      "Date Time",
+      "Date",
+      "Time",
       "Channel",
-      "Table / Station",
-      "Captain",
+      "Table",
+      "Items Summary",
+      "Items Count",
       "Payment Mode",
       "Status",
       "Net",
       `Tax (${taxLabel} Exclusive)`,
       "Gross",
+      "Staff / Captain",
+      "Customer Name",
+      "Customer Phone",
     ];
 
+    const escapeCsv = (val: any): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val);
+      return `"${str.replace(/"/g, '""')}"`;
+    };
+
     const rows = filteredOrders.map((o) => {
-      const net = ((o.subTotal || 0) / 100).toFixed(2);
-      const exclusiveTax = (getOrderExclusiveTax(o) / 100).toFixed(2);
-      const gross = ((o.totalAmount || 0) / 100).toFixed(2);
-      const dateStr = formatStoreDateTime(o.createdAt, timezone) || "";
+      const paymentStatusObj = getOrderPaymentStatus(o);
+      const isCancelled = paymentStatusObj.isCancelled;
+
+      const netPaise = isCancelled ? 0 : (o.subTotal || 0);
+      const taxPaise = isCancelled ? 0 : getOrderExclusiveTax(o);
+      const grossPaise = isCancelled ? 0 : (o.totalAmount || (netPaise + taxPaise));
+
+      const net = (netPaise / 100).toFixed(2);
+      const exclusiveTax = (taxPaise / 100).toFixed(2);
+      const gross = (grossPaise / 100).toFixed(2);
+
+      const dateStr = formatStoreDate(o.createdAt, effectiveCountry, effectiveTimezone) || "";
+      const timeStr = formatStoreTime(o.createdAt, effectiveTimezone, effectiveCountry) || "";
+
+      const rawNum = o.orderNumber || o.tokenNumber || "ORD";
+      const orderNumberDisplay = rawNum.startsWith("#") ? rawNum : `#${rawNum}`;
+
+      const itemsList = Array.isArray(o.items) ? o.items : [];
+      const itemsSummary =
+        itemsList.length > 0
+          ? itemsList
+              .map((it: any) => `${it.quantity || 1}x ${it.itemName || it.name || "Item"}`)
+              .join("; ")
+          : "-";
+      const itemsCount = itemsList.reduce(
+        (sum: number, it: any) => sum + (it.quantity || 1),
+        0
+      );
+
+      const paymentMode = paymentStatusObj.isCancelled
+        ? "Cancelled"
+        : paymentStatusObj.isPending
+        ? "Pending"
+        : getOrderPaymentMode(o);
+
+      const status = getOrderStatusInfo(o).name;
+      const table = getOrderTable(o);
+      const staff = getOrderStaff(o);
+      const customerName = o.customerName || "Walk-in";
+      const customerPhone = o.customerPhone || "-";
 
       return [
-        `"${o.orderNumber || ""}"`,
-        `"${o.tokenNumber || ""}"`,
-        `"${dateStr}"`,
-        `"${getOrderChannel(o)}"`,
-        `"${getOrderTable(o)}"`,
-        `"${getOrderStaff(o)}"`,
-        `"${getOrderPaymentMode(o)}"`,
-        `"${getOrderStatus(o)}"`,
-        net,
-        exclusiveTax,
-        gross,
+        escapeCsv(orderNumberDisplay),
+        escapeCsv(o.tokenNumber || ""),
+        escapeCsv(dateStr),
+        escapeCsv(timeStr),
+        escapeCsv(getOrderChannel(o)),
+        escapeCsv(table),
+        escapeCsv(itemsSummary),
+        escapeCsv(itemsCount),
+        escapeCsv(paymentMode),
+        escapeCsv(status),
+        escapeCsv(net),
+        escapeCsv(exclusiveTax),
+        escapeCsv(gross),
+        escapeCsv(staff),
+        escapeCsv(customerName),
+        escapeCsv(customerPhone),
       ].join(",");
     });
 
     const csvContent =
-      "data:text/csv;charset=utf-8," + [headers.join(","), ...rows].join("\n");
-    const encodedUri = encodeURI(csvContent);
+      headers.map(escapeCsv).join(",") + "\r\n" + rows.join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.href = url;
     link.setAttribute(
       "download",
       `orders_report_${new Date().toISOString().slice(0, 10)}.csv`,
@@ -796,6 +852,8 @@ export function OrdersReportView({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
     showToast("Orders report CSV exported successfully", "success");
   };
 
@@ -839,11 +897,11 @@ export function OrdersReportView({
         <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 self-start lg:self-end shrink-0 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => window.print()}
-            className="h-10 px-3.5 sm:px-4 bg-white text-[#0c0a09] rounded-lg shadow-2xs border border-[#e7e5e4] flex items-center gap-1.5 hover:bg-[#f1edec] transition-all text-xs font-medium cursor-pointer"
+            disabled
+            className="h-10 px-3.5 sm:px-4 bg-white text-[#a8a29e] rounded-lg shadow-2xs border border-[#e7e5e4] flex items-center gap-1.5 opacity-40 cursor-not-allowed select-none"
             title="Print Order Statement"
           >
-            <span className="material-symbols-outlined text-[17px] text-[#0c0a09]">
+            <span className="material-symbols-outlined text-[17px] text-[#a8a29e]">
               print
             </span>
             <span>Print</span>
@@ -1971,14 +2029,9 @@ export function OrdersReportView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    openReceiptPdfInNewTab({
-                      order: selectedOrderForDrawer,
-                      org: activeOrg,
-                    });
-                    showToast("Order slip opened in print tab", "success");
-                  }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0c0a09] text-white hover:bg-[#262626] text-xs font-semibold transition-colors cursor-pointer shadow-xs"
+                  disabled
+                  title="Print Order Slip"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#0c0a09] text-white opacity-40 cursor-not-allowed select-none text-xs font-semibold shadow-xs"
                 >
                   <span className="material-symbols-outlined text-[16px]">
                     print

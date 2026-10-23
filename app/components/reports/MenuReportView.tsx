@@ -730,6 +730,16 @@ export function MenuReportView({
             <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">file_download</span>
             <span>Export CSV</span>
           </button>
+
+          {/* Print Summary Action (Disabled / Low Opacity) */}
+          <button
+            type="button"
+            disabled
+            title="Print Menu Report"
+            className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-white text-[#a8a29e] border border-[#e7e5e4] shadow-2xs opacity-40 cursor-not-allowed select-none shrink-0"
+          >
+            <span className="material-symbols-outlined text-[18px]">print</span>
+          </button>
         </div>
       </div>
 
