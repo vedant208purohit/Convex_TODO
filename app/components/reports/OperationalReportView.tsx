@@ -84,17 +84,11 @@ export function OperationalReportView({
   const [processPage, setProcessPage] = useState(1);
   const pageSize = 10;
 
-  // Modals & Interactive Drawer State
+  // Modals
   const [activeModal, setActiveModal] = useState<
-    "reconcile" | "batches" | "slips" | "orders" | "closeDrawer" | "securityLog" | null
+    "reconcile" | "batches" | "slips" | "orders" | null
   >(null);
   const [selectedChannelName, setSelectedChannelName] = useState<string>("Cash");
-  const [drawerPin, setDrawerPin] = useState("");
-  const [isDrawerClosed, setIsDrawerClosed] = useState(false);
-  const [customOpeningFloatPaise, setCustomOpeningFloatPaise] = useState<number | null>(null);
-  const [customCountedPaise, setCustomCountedPaise] = useState<number | null>(null);
-  const [customDropsPaise, setCustomDropsPaise] = useState<number | null>(null);
-  const [tempCountedInput, setTempCountedInput] = useState<string>("");
 
   // Standard Toaster Notification State
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -481,122 +475,7 @@ export function OperationalReportView({
     return top;
   }, [tenderChannels]);
 
-  // Cash Drawer Balances calculation (100% Real Audited Data)
-  const cashDrawerData = useMemo(() => {
-    let cashSalesPaise = 0;
-    let cashOrdersCount = 0;
-    let cashRefundPaise = 0;
-    let earliestCashOrderTime: number | null = null;
 
-    for (const o of orders) {
-      if (isOrderUnpaidCancelled(o)) continue;
-
-      let isCashOrder = false;
-
-      if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
-        for (const p of o.payments) {
-          const rawM = (p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || "").toLowerCase();
-          if (rawM.includes("cash")) {
-            isCashOrder = true;
-            if (p.paymentType === "Debit") {
-              cashRefundPaise += p.refundAmount || p.amount || 0;
-            } else {
-              cashSalesPaise += p.payAmount !== undefined ? p.payAmount : (p.amount || 0);
-              cashOrdersCount += 1;
-            }
-          }
-        }
-      } else {
-        const m = (o.paymentMode || o.paymentMethod || "").toLowerCase();
-        if (m.includes("cash") || (!m && o.orderType === "DineIn")) {
-          isCashOrder = true;
-          cashSalesPaise += o.totalAmount || 0;
-          cashOrdersCount += 1;
-          if (isOrderRefunded(o)) {
-            cashRefundPaise += getOrderRefundAmount(o);
-          }
-        }
-      }
-
-      if (isCashOrder) {
-        const t = o.createdAt || o._creationTime;
-        if (t && (earliestCashOrderTime === null || t < earliestCashOrderTime)) {
-          earliestCashOrderTime = t;
-        }
-      }
-    }
-
-    // Default opening float is 0 unless customized
-    const openingFloatPaise = customOpeningFloatPaise ?? 0;
-    const safeDropsPaise = customDropsPaise ?? 0;
-    const netCashSalesPaise = Math.max(0, cashSalesPaise - cashRefundPaise);
-    const expectedDrawerPaise = openingFloatPaise + netCashSalesPaise - safeDropsPaise;
-    const actualCountedPaise = customCountedPaise ?? expectedDrawerPaise;
-    const variancePaise = actualCountedPaise - expectedDrawerPaise;
-
-    const openingSubtext =
-      openingFloatPaise > 0
-        ? earliestCashOrderTime
-          ? `${formatStoreTime(earliestCashOrderTime, storeTz)} Float Logged`
-          : "Logged Opening Float"
-        : earliestCashOrderTime
-        ? `${formatStoreTime(earliestCashOrderTime, storeTz)} Shift Start`
-        : "Base Starting Float";
-
-    const cashSalesSubtext = `${cashOrdersCount} ${cashOrdersCount === 1 ? "Order" : "Orders"} Settled`;
-
-    const dropsSubtext =
-      safeDropsPaise > 0
-        ? "Safe Drop / Paid Out"
-        : "No Drops Recorded";
-
-    const actualSubtext =
-      customCountedPaise !== null
-        ? "Manual Count Entered"
-        : "Auto-Audited (Matching Cash)";
-
-    const varianceLabel =
-      variancePaise === 0
-        ? "Balanced"
-        : variancePaise > 0
-        ? `+${formatPriceWithSymbol(variancePaise, resolvedCurrencySymbol, countryCode, true)} Over`
-        : `-${formatPriceWithSymbol(Math.abs(variancePaise), resolvedCurrencySymbol, countryCode, true)} Short`;
-
-    return {
-      openingFloatPaise,
-      cashSalesPaise,
-      safeDropsPaise,
-      expectedDrawerPaise,
-      actualCountedPaise,
-      variancePaise,
-      openingFloat: formatPriceWithSymbol(openingFloatPaise, resolvedCurrencySymbol, countryCode, true),
-      openingSubtext,
-      cashSalesIn: `+${formatPriceWithSymbol(cashSalesPaise, resolvedCurrencySymbol, countryCode, true)}`,
-      cashSalesSubtext,
-      cashOrdersCount,
-      safeDrops:
-        safeDropsPaise > 0
-          ? `-${formatPriceWithSymbol(safeDropsPaise, resolvedCurrencySymbol, countryCode, true)}`
-          : formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true),
-      dropsSubtext,
-      expectedDrawer: formatPriceWithSymbol(expectedDrawerPaise, resolvedCurrencySymbol, countryCode, true),
-      actualCounted: formatPriceWithSymbol(actualCountedPaise, resolvedCurrencySymbol, countryCode, true),
-      actualSubtext,
-      variance: formatPriceWithSymbol(variancePaise, resolvedCurrencySymbol, countryCode, true),
-      varianceLabel,
-      isBalanced: variancePaise === 0,
-      isShort: variancePaise < 0,
-      isOver: variancePaise > 0,
-    };
-  }, [
-    orders,
-    resolvedCurrencySymbol,
-    countryCode,
-    storeTz,
-    customOpeningFloatPaise,
-    customDropsPaise,
-    customCountedPaise,
-  ]);
 
   // Staff name resolution lookup map from organization users
   const staffNameMap = useMemo(() => {
@@ -681,8 +560,9 @@ export function OperationalReportView({
 
     if (o.orderType === "Takeaway") return "Takeaway Counter";
     if (o.orderType === "Delivery") return "Delivery Dispatch";
+    if (o.terminalName?.toLowerCase().includes("cashier")) return "Cashier Counter";
 
-    return "Service Counter";
+    return "Unassigned Staff";
   };
 
   // Staff / Floor Captain Performance (Fully Dynamic)
@@ -696,7 +576,6 @@ export function OperationalReportView({
         revenuePaise: number;
         totalDwellMinutes: number;
         dwellOrderCount: number;
-        unauthVoids: number;
       }
     >();
 
@@ -711,7 +590,6 @@ export function OperationalReportView({
         revenuePaise: 0,
         totalDwellMinutes: 0,
         dwellOrderCount: 0,
-        unauthVoids: 0,
       };
 
       existing.floors.add(floor);
@@ -727,30 +605,37 @@ export function OperationalReportView({
         existing.revenuePaise += o.totalAmount || 0;
       }
 
-      // Check for voids / cancellations handled
-      if (
-        o.isRejected ||
-        o.orderStatusName === "Cancelled" ||
-        o.paymentStatus === "Refunded" ||
-        o.paymentStatus === "Partially Refunded"
-      ) {
-        existing.unauthVoids += 1;
-      }
+      // Table dwell time: ONLY for Dine-In table orders that are completed/settled
+      // Takeaway orders do NOT occupy tables and are excluded from dwell calculations
+      const isDineIn =
+        o.orderType === "DineIn" ||
+        Boolean(o.tableId || o.table || o.tableName || o.tableNumber);
+      const isCompleted =
+        o.isCompleted === true ||
+        o.orderStatusName === "Completed" ||
+        o.orderStatusName === "Delivered" ||
+        o.orderStatusName === "Served" ||
+        o.orderStatus === "Completed" ||
+        o.orderStatus === "Delivered" ||
+        o.orderStatus === "Served" ||
+        Boolean(o.completedAt) ||
+        Boolean(o.deliveredAt);
 
-      // Compute actual dwell minutes for this order
-      const startTime = o.createdAt || o._creationTime;
-      if (startTime) {
+      if (isDineIn && isCompleted) {
+        const startTime = o.createdAt || o._creationTime;
         const endTime =
           o.completedAt ||
           o.deliveredAt ||
           o.closedAt ||
           o.settledAt ||
-          o.updatedAt ||
-          (o.isCompleted ? startTime : Date.now());
-        const diffMs = Math.max(0, endTime - startTime);
-        const mins = Math.max(1, Math.round(diffMs / 60000));
-        existing.totalDwellMinutes += mins;
-        existing.dwellOrderCount += 1;
+          o.updatedAt;
+
+        if (startTime && endTime && endTime > startTime) {
+          const diffMs = endTime - startTime;
+          const mins = Math.max(1, Math.round(diffMs / 60000));
+          existing.totalDwellMinutes += mins;
+          existing.dwellOrderCount += 1;
+        }
       }
 
       staffMap.set(server, existing);
@@ -769,10 +654,11 @@ export function OperationalReportView({
           ? `${floorList[0]} (+${floorList.length - 1} more)`
           : "Main Dining";
 
+      // If staff only handled takeaway/non-table orders, dwellMinutes will be null
       const dwellMinutes =
         st.dwellOrderCount > 0
           ? Math.round(st.totalDwellMinutes / st.dwellOrderCount)
-          : 0;
+          : null;
 
       return {
         name: st.name,
@@ -780,108 +666,66 @@ export function OperationalReportView({
         orders: st.orders,
         revenuePaise: st.revenuePaise,
         dwellMinutes,
-        unauthVoids: st.unauthVoids,
       };
     });
   }, [orders, staffNameMap]);
 
-  // Overall Shift Dwell Average across all orders in current operational view
+  // Overall Shift Dwell Average across completed Dine-In orders ONLY
   const overallShiftDwellAvg = useMemo(() => {
     let totalMins = 0;
     let count = 0;
     for (const o of orders) {
+      const isDineIn =
+        o.orderType === "DineIn" ||
+        Boolean(o.tableId || o.table || o.tableName || o.tableNumber);
+      const isCompleted =
+        o.isCompleted === true ||
+        o.orderStatusName === "Completed" ||
+        o.orderStatusName === "Delivered" ||
+        o.orderStatusName === "Served" ||
+        o.orderStatus === "Completed" ||
+        o.orderStatus === "Delivered" ||
+        o.orderStatus === "Served" ||
+        Boolean(o.completedAt) ||
+        Boolean(o.deliveredAt);
+
+      if (!isDineIn || !isCompleted) continue;
+
       const startTime = o.createdAt || o._creationTime;
-      if (!startTime) continue;
       const endTime =
         o.completedAt ||
         o.deliveredAt ||
         o.closedAt ||
         o.settledAt ||
-        o.updatedAt ||
-        Date.now();
-      const mins = Math.max(1, Math.round((endTime - startTime) / 60000));
-      totalMins += mins;
-      count++;
+        o.updatedAt;
+
+      if (startTime && endTime && endTime > startTime) {
+        const mins = Math.max(1, Math.round((endTime - startTime) / 60000));
+        totalMins += mins;
+        count++;
+      }
     }
     return count > 0 ? Math.round(totalMins / count) : 0;
   }, [orders]);
 
-  // Floor Adherence % (fulfilled non-void orders / total orders)
+  // Floor staff assignment adherence percentage
   const floorAdherencePct = useMemo(() => {
-    if (orders.length === 0) return 100;
-    const voidCount = orders.filter(
-      (o) =>
-        o.isRejected ||
-        o.orderStatusName === "Cancelled" ||
-        o.paymentStatus === "Refunded"
+    if (!orders || orders.length === 0) return 100;
+    const assignedCount = orders.filter(
+      (o) => resolveOrderStaffName(o) !== "Unassigned Staff"
     ).length;
-    return Math.max(
-      0,
-      Math.round(((orders.length - voidCount) / orders.length) * 100)
-    );
-  }, [orders]);
-
-  // Dynamic Audit Key from current shift date
-  const auditKeyStr = useMemo(() => {
-    const d = selectedRange?.startDate || new Date();
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `SHIFT-${yyyy}${mm}${dd}`;
-  }, [selectedRange?.startDate]);
-
-  // Dynamic Loss Prevention Log from live order voids & refunds
-  const lossPreventionLogs = useMemo(() => {
-    const voids: Array<{
-      orderId: string;
-      amountPaise: number;
-      description: string;
-      table: string;
-      reason: string;
-      authorizedBy: string;
-    }> = [];
-
-    for (const o of orders) {
-      if (
-        o.isRejected ||
-        o.orderStatusName === "Cancelled" ||
-        o.paymentStatus === "Refunded" ||
-        o.paymentStatus === "Partially Refunded"
-      ) {
-        const rawNum = o.orderNumber || String(o._id || "").slice(-4);
-        const orderId = rawNum.startsWith("#") ? rawNum : `#${rawNum}`;
-        const table = resolveOrderFloorSection(o);
-        const staffName = resolveOrderStaffName(o);
-
-        const reason =
-          o.rejectReason ||
-          o.specialNotes?.replace(/^Cancellation Reason:\s*/i, "") ||
-          (o.paymentStatus === "Refunded"
-            ? "Full customer refund issued"
-            : o.paymentStatus === "Partially Refunded"
-            ? "Partial customer refund issued"
-            : "Ticket cancellation");
-
-        const itemsDesc =
-          Array.isArray(o.items) && o.items.length > 0
-            ? o.items
-                .map((it: any) => `${it.quantity || 1}x ${it.itemName || "Item"}`)
-                .join(", ")
-            : `Order ${orderId}`;
-
-        voids.push({
-          orderId,
-          amountPaise: o.totalAmount || 0,
-          description: itemsDesc,
-          table,
-          reason,
-          authorizedBy: staffName,
-        });
-      }
-    }
-
-    return voids;
+    return Math.round((assignedCount / orders.length) * 100);
   }, [orders, staffNameMap]);
+
+
+
+
+
+
+
+
+
+
 
   // Paginated Payment Daily Table Data
   const totalPaymentDailyPages = Math.ceil(
@@ -982,33 +826,22 @@ export function OperationalReportView({
         escapeCsv("Audited"),
       ].join(",");
 
-      // 2. CASH DRAWER RECONCILIATION SUMMARY
-      const drawerHeaders = ["Cash Drawer Metric", "Amount", "Status / Details"];
-      const drawerRows = [
-        [escapeCsv("Opening Float"), escapeCsv(cashDrawerData.openingFloat), escapeCsv(cashDrawerData.openingSubtext)].join(","),
-        [escapeCsv("Cash Sales In"), escapeCsv(cashDrawerData.cashSalesIn), escapeCsv(cashDrawerData.cashSalesSubtext)].join(","),
-        [escapeCsv("Drops / Paid Outs"), escapeCsv(cashDrawerData.safeDrops), escapeCsv(cashDrawerData.dropsSubtext)].join(","),
-        [escapeCsv("Expected in Drawer"), escapeCsv(cashDrawerData.expectedDrawer), escapeCsv("System Calculation")].join(","),
-        [escapeCsv("Actual Counted"), escapeCsv(cashDrawerData.actualCounted), escapeCsv(cashDrawerData.actualSubtext)].join(","),
-        [escapeCsv("Cash Variance"), escapeCsv(cashDrawerData.variance), escapeCsv(cashDrawerData.isBalanced ? "Balanced" : cashDrawerData.varianceLabel)].join(","),
-      ];
-
-      // 3. STAFF / FLOOR CAPTAIN PERFORMANCE
-      const staffHeaders = ["Staff Member", "Floor / Section", "Orders", "Revenue", "Avg Ticket", "Table Dwell Time", "Voids"];
+      // 2. STAFF / FLOOR CAPTAIN PERFORMANCE
+      const staffHeaders = ["Staff Member", "Floor / Section", "Orders", "Revenue", "Avg Ticket", "Table Dwell Time"];
       const staffRows = staffPerformanceList.map((st) => {
         const avgTicket = st.orders > 0 ? Math.round(st.revenuePaise / st.orders) : 0;
+        const dwellStr = st.dwellMinutes !== null ? `${st.dwellMinutes} min` : "N/A (Takeaway)";
         return [
           escapeCsv(st.name),
           escapeCsv(st.floor),
           escapeCsv(st.orders),
           escapeCsv(formatPriceWithSymbol(st.revenuePaise, resolvedCurrencySymbol, countryCode, true)),
           escapeCsv(formatPriceWithSymbol(avgTicket, resolvedCurrencySymbol, countryCode, true)),
-          escapeCsv(`${st.dwellMinutes > 0 ? st.dwellMinutes : 1} min`),
-          escapeCsv(`${st.unauthVoids} voids`),
+          escapeCsv(dwellStr),
         ].join(",");
       });
 
-      // 4. HISTORICAL DAILY SETTLEMENT LEDGER
+      // 3. HISTORICAL DAILY SETTLEMENT LEDGER
       const dailyTableData = paymentReport?.table_data || [];
       const dailyHeaders = ["Date", "Payment Mode", "Transactions", "Total Collection"];
       const dailyRows = dailyTableData.map((d: any) =>
@@ -1025,10 +858,6 @@ export function OperationalReportView({
         tenderHeaders.map(escapeCsv).join(","),
         ...tenderRows,
         portfolioSummaryRow,
-        "",
-        escapeCsv("=== SHIFT CASH DRAWER AUDITING ==="),
-        drawerHeaders.map(escapeCsv).join(","),
-        ...drawerRows,
         "",
         escapeCsv("=== FLOOR CAPTAIN PERFORMANCE ==="),
         staffHeaders.map(escapeCsv).join(","),
@@ -1540,375 +1369,101 @@ export function OperationalReportView({
             </div>
           </div>
 
-          {/* CASH DRAWER RECONCILIATION SECTION (Shift Cash Drawer Auditing) */}
-          <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col gap-6 opacity-40 select-none pointer-events-none">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e7e5e4]">
-              <div>
-                <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-[#5e5e5e] mb-1 font-semibold">
-                  <span>Audit &amp; Verification</span>
-                  <span>•</span>
-                  <span className="text-[#141010] font-semibold">
-                    {activeOrg?.name || "Main Counter"} ({isDrawerClosed ? "Shift Sealed" : "Active Service Session"})
-                  </span>
-                </div>
-                <h2
-                  className="font-garamond text-xl sm:text-2xl font-normal text-[#141010]"
-                  style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                >
-                  Shift Cash Drawer Auditing
-                </h2>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80 shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                  Coming Soon
-                </span>
-              </div>
-            </div>
 
-            {/* 6-Cell Balanced Reconciliation Bento Grid */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              {/* Cell 1: Opening Float */}
-              <div className="p-3.5 sm:p-4 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col justify-between">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                  Opening Float
-                </span>
-                <div className="mt-2.5">
-                  <div
-                    className="font-garamond text-lg sm:text-xl font-normal text-[#141010] tabular-nums"
+
+          {/* FLOOR CAPTAIN & SERVICE STAFF PERFORMANCE */}
+          <div className="bg-white p-4 sm:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3
+                    className="font-garamond text-xl sm:text-2xl font-normal text-[#141010]"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {cashDrawerData.openingFloat}
-                  </div>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    {cashDrawerData.openingSubtext}
+                    Floor Captain &amp; Staff Performance
+                  </h3>
+                  <p className="text-[#5e5e5e] text-xs mt-0.5">
+                    Order processing cadence, revenue generation, and table dwell time by service staff.
+                  </p>
+                </div>
+                <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
+                  <span className="material-symbols-outlined text-[18px]">
+                    badge
                   </span>
-                </div>
-              </div>
-
-              {/* Cell 2: Cash Sales In */}
-              <div className="p-3.5 sm:p-4 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col justify-between">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                  Cash Sales In
-                </span>
-                <div className="mt-2.5">
-                  <div
-                    className="font-garamond text-lg sm:text-xl font-normal text-[#141010] tabular-nums"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {cashDrawerData.cashSalesIn}
-                  </div>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    {cashDrawerData.cashSalesSubtext}
-                  </span>
-                </div>
-              </div>
-
-              {/* Cell 3: Drops / Paid Outs */}
-              <div className="p-3.5 sm:p-4 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col justify-between">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                  Drops / Paid Outs
-                </span>
-                <div className="mt-2.5">
-                  <div
-                    className="font-garamond text-lg sm:text-xl font-normal text-[#ba1a1a] tabular-nums"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {cashDrawerData.safeDrops}
-                  </div>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    {cashDrawerData.dropsSubtext}
-                  </span>
-                </div>
-              </div>
-
-              {/* Cell 4: Expected Drawer Balance */}
-              <div className="p-3.5 sm:p-4 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col justify-between">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                  Expected In Drawer
-                </span>
-                <div className="mt-2.5">
-                  <div
-                    className="font-garamond text-lg sm:text-xl font-normal text-[#141010] tabular-nums"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {cashDrawerData.expectedDrawer}
-                  </div>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    System Calculation
-                  </span>
-                </div>
-              </div>
-
-              {/* Cell 5: Actual Cash Counted */}
-              <div className="p-3.5 sm:p-4 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col justify-between">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                  Actual Counted
-                </span>
-                <div className="mt-2.5">
-                  <div
-                    className="font-garamond text-lg sm:text-xl font-normal text-[#141010] tabular-nums"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {cashDrawerData.actualCounted}
-                  </div>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    {cashDrawerData.actualSubtext}
-                  </span>
-                </div>
-              </div>
-
-              {/* Cell 6: Cash Variance */}
-              <div className="p-3.5 sm:p-4 rounded-lg bg-[#f1edec] border border-[#e7e5e4] flex flex-col justify-between">
-                <span className="text-[10px] sm:text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                  Cash Variance
-                </span>
-                <div className="mt-2.5 flex flex-col">
-                  <div
-                    className="font-garamond text-lg sm:text-xl font-normal text-[#141010] tabular-nums"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    {cashDrawerData.variance}
-                  </div>
-                  <div className="inline-flex items-center gap-1 text-[11px] font-medium mt-1">
-                    {cashDrawerData.isBalanced ? (
-                      <>
-                        <span className="material-symbols-outlined text-[14px] text-[#2e7d32]">
-                          check_circle
-                        </span>
-                        <span className="text-[#2e7d32]">Balanced</span>
-                      </>
-                    ) : cashDrawerData.isOver ? (
-                      <>
-                        <span className="material-symbols-outlined text-[14px] text-[#b25e00]">
-                          arrow_upward
-                        </span>
-                        <span className="text-[#b25e00]">{cashDrawerData.varianceLabel}</span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-symbols-outlined text-[14px] text-[#ba1a1a]">
-                          arrow_downward
-                        </span>
-                        <span className="text-[#ba1a1a]">{cashDrawerData.varianceLabel}</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Row for Cash Drawer */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2 border-t border-[#e7e5e4]">
-              <div className="flex items-center gap-2 text-[#5e5e5e] text-xs">
-                <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">
-                  verified_user
-                </span>
-                <span>
-                  Dual authorization recorded for session {auditKeyStr}.
                 </span>
               </div>
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  disabled
-                  title="Print Drawer Slip"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#f1edec] text-[#a8a29e] text-xs font-medium rounded-full border border-[#e7e5e4] cursor-not-allowed select-none"
-                >
-                  <span className="material-symbols-outlined text-[16px]">print</span>
-                  <span>Print Drawer Slip</span>
-                </button>
-                <button
-                  type="button"
-                  disabled
-                  title="Close Shift Drawer (Coming Soon)"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0c0a09] text-white text-xs font-semibold rounded-full cursor-not-allowed select-none"
-                >
-                  <span className="material-symbols-outlined text-[16px] text-white">
-                    lock
-                  </span>
-                  <span>Close Shift Drawer</span>
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* STAFF PERFORMANCE & LOSS PREVENTION RECAP (Bottom Grid) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Staff Performance Table (7 cols) */}
-            <div className="lg:col-span-7 bg-white p-4 sm:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3
-                      className="font-garamond text-xl sm:text-2xl font-normal text-[#141010]"
-                      style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                    >
-                      Floor Captain Performance
-                    </h3>
-                    <p className="text-[#5e5e5e] text-xs mt-0.5">
-                      Order processing cadence and ticket generation by service staff.
-                    </p>
-                  </div>
-                  <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
-                    <span className="material-symbols-outlined text-[18px]">
-                      badge
-                    </span>
-                  </span>
-                </div>
-                <div className="w-full overflow-x-auto mt-4">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="text-[#5e5e5e] text-[11px] uppercase tracking-wider bg-[#f8f5f4] border-b border-[#e7e5e4]">
-                        <th className="py-2.5 px-3">Staff Member</th>
-                        <th className="py-2.5 px-3 text-right">Orders</th>
-                        <th className="py-2.5 px-3 text-right">Revenue</th>
-                        <th className="py-2.5 px-3 text-right">Avg Ticket</th>
-                        <th className="py-2.5 px-3 text-right">Table Dwell</th>
-                        <th className="py-2.5 px-3 text-center">Voids</th>
+              <div className="w-full overflow-x-auto mt-4">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-[#5e5e5e] text-[11px] uppercase tracking-wider bg-[#f8f5f4] border-b border-[#e7e5e4]">
+                      <th className="py-2.5 px-3">Staff Member</th>
+                      <th className="py-2.5 px-3 text-right">Orders</th>
+                      <th className="py-2.5 px-3 text-right">Revenue</th>
+                      <th className="py-2.5 px-3 text-right">Avg Ticket</th>
+                      <th className="py-2.5 px-3 text-right">Table Dwell (Dine-In)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
+                    {staffPerformanceList.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-8 text-center text-[#5e5e5e]">
+                          No service staff activity recorded for this period.
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
-                      {staffPerformanceList.length === 0 ? (
-                        <tr>
-                          <td colSpan={6} className="py-8 text-center text-[#5e5e5e]">
-                            No service staff activity recorded for this period.
-                          </td>
-                        </tr>
-                      ) : (
-                        staffPerformanceList.map((st, sIdx) => {
-                          const avgTicket =
-                            st.orders > 0 ? Math.round(st.revenuePaise / st.orders) : 0;
-                          return (
-                            <tr
-                              key={sIdx}
-                              className="hover:bg-[#faf6f5] transition-colors"
-                            >
-                              <td className="py-3 px-3">
-                                <div className="font-medium text-[#141010]">
-                                  {st.name}
-                                </div>
-                                <div className="text-[11px] text-[#5e5e5e]">
-                                  {st.floor}
-                                </div>
-                              </td>
-                              <td className="py-3 px-3 text-right tabular-nums">
-                                {st.orders}
-                              </td>
-                              <td className="py-3 px-3 text-right font-medium tabular-nums">
-                                {formatPriceWithSymbol(st.revenuePaise, resolvedCurrencySymbol, countryCode, true)}
-                              </td>
-                              <td className="py-3 px-3 text-right tabular-nums text-[#5e5e5e]">
-                                {formatPriceWithSymbol(avgTicket, resolvedCurrencySymbol, countryCode, true)}
-                              </td>
-                              <td className="py-3 px-3 text-right tabular-nums">
-                                {st.dwellMinutes > 0 ? `${st.dwellMinutes} min` : "< 1 min"}
-                              </td>
-                              <td className="py-3 px-3 text-center">
-                                {st.unauthVoids > 0 ? (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#ffdad6] text-[#ba1a1a] border border-[#ffdad6] font-medium">
-                                    {st.unauthVoids} void{st.unauthVoids > 1 ? "s" : ""}
-                                  </span>
-                                ) : (
-                                  <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f1edec] text-[#5e5e5e] border border-[#e7e5e4]">
-                                    0 voids
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-              <div className="pt-3 mt-4 border-t border-[#e7e5e4] flex items-center justify-between text-[#5e5e5e] text-xs">
-                <span>
-                  Overall Shift Dwell Average:{" "}
-                  <strong className="text-[#141010] font-medium">
-                    {overallShiftDwellAvg > 0 ? `${overallShiftDwellAvg} minutes` : "0 min"}
-                  </strong>
-                </span>
-                <span className="text-[#141010] font-semibold">
-                  {floorAdherencePct}% Floor Adherence
-                </span>
+                    ) : (
+                      staffPerformanceList.map((st, sIdx) => {
+                        const avgTicket =
+                          st.orders > 0 ? Math.round(st.revenuePaise / st.orders) : 0;
+                        return (
+                          <tr
+                            key={sIdx}
+                            className="hover:bg-[#faf6f5] transition-colors"
+                          >
+                            <td className="py-3 px-3">
+                              <div className="font-medium text-[#141010]">
+                                {st.name}
+                              </div>
+                              <div className="text-[11px] text-[#5e5e5e]">
+                                {st.floor}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 text-right tabular-nums">
+                              {st.orders}
+                            </td>
+                            <td className="py-3 px-3 text-right font-medium tabular-nums">
+                              {formatPriceWithSymbol(st.revenuePaise, resolvedCurrencySymbol, countryCode, true)}
+                            </td>
+                            <td className="py-3 px-3 text-right tabular-nums text-[#5e5e5e]">
+                              {formatPriceWithSymbol(avgTicket, resolvedCurrencySymbol, countryCode, true)}
+                            </td>
+                            <td className="py-3 px-3 text-right tabular-nums">
+                              {st.dwellMinutes !== null
+                                ? st.dwellMinutes > 0
+                                  ? `${st.dwellMinutes} min`
+                                  : "< 1 min"
+                                : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-
-            {/* Loss Prevention & Void Audit Log (5 cols) */}
-            <div className="lg:col-span-5 bg-white p-4 sm:p-6 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <h3
-                      className="font-garamond text-xl sm:text-2xl font-normal text-[#141010]"
-                      style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                    >
-                      Loss Prevention Log
-                    </h3>
-                    <p className="text-[#5e5e5e] text-xs mt-0.5">
-                      Authorized ticket modifications and void tracing.
-                    </p>
-                  </div>
-                  <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
-                    <span className="material-symbols-outlined text-[18px]">
-                      security
-                    </span>
-                  </span>
-                </div>
-                <div className="mt-4 space-y-3">
-                  {/* Dynamic Void Log Items */}
-                  {lossPreventionLogs.length > 0 ? (
-                    lossPreventionLogs.slice(0, 3).map((l, lIdx) => (
-                      <div
-                        key={lIdx}
-                        className="p-3.5 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col gap-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs font-semibold text-[#0c0a09]">
-                            {l.orderId}
-                          </span>
-                          <span className="text-xs font-semibold text-[#ba1a1a] tabular-nums">
-                            -{formatPriceWithSymbol(l.amountPaise, resolvedCurrencySymbol, countryCode, true)}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between text-[#141010] text-xs">
-                          <span>{l.description}</span>
-                          <span className="text-[11px] text-[#5e5e5e]">
-                            {l.table}
-                          </span>
-                        </div>
-                        <div className="pt-1.5 border-t border-[#e7e5e4]/60 flex items-center justify-between text-[11px] text-[#5e5e5e]">
-                          <span>Reason: &quot;{l.reason}&quot;</span>
-                          <span className="text-[#141010] font-medium">
-                            Auth: {l.authorizedBy}
-                          </span>
-                        </div>
-                      </div>
-                    ))
-                  ) : null}
-
-                  {/* Zero Unauthorized Notice Card */}
-                  <div className="p-3.5 rounded-lg bg-[#f1edec] border border-[#e7e5e4] flex items-center gap-3">
-                    <span className="material-symbols-outlined text-[20px] text-[#141010] shrink-0">
-                      verified
-                    </span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-[#141010]">
-                        {lossPreventionLogs.length === 0
-                          ? "Zero Discrepancies Recorded"
-                          : "Audit Authorizations Verified"}
-                      </span>
-                      <span className="text-[11px] text-[#5e5e5e]">
-                        {lossPreventionLogs.length === 0
-                          ? "All processed orders were settled with zero unauthorized voids or ticket cancellations."
-                          : "All ticket cancellations held managerial authorization PIN."}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="pt-3 mt-4 border-t border-[#e7e5e4] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[#5e5e5e] text-xs">
+              <span>
+                Overall Dine-In Dwell Average:{" "}
+                <strong className="text-[#141010] font-medium">
+                  {overallShiftDwellAvg !== null && overallShiftDwellAvg > 0 ? `${overallShiftDwellAvg} minutes` : "—"}
+                </strong>
+                <span className="text-[11px] text-[#5e5e5e] ml-1.5">
+                  (Takeaway orders excluded)
+                </span>
+              </span>
+              <span className="text-[#141010] font-semibold">
+                {floorAdherencePct}% Floor Adherence
+              </span>
             </div>
           </div>
 
@@ -2574,7 +2129,7 @@ export function OperationalReportView({
                     {selectedChannelName} Tender Audit
                   </h3>
                   <span className="text-[11px] text-[#5e5e5e]">
-                    Batch ID #BAT-{auditKeyStr.replace("SHIFT-", "")}-{selectedChannelName.slice(0, 3).toUpperCase()}
+                    Batch ID #BAT-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}-{selectedChannelName.slice(0, 3).toUpperCase()}
                   </span>
                 </div>
               </div>
@@ -2623,191 +2178,6 @@ export function OperationalReportView({
         </div>
       )}
 
-      {/* 2. Close Shift Drawer Modal */}
-      {activeModal === "closeDrawer" && (
-        <div className="fixed inset-0 z-50 bg-[#0c0a09]/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-[#e7e5e4] max-w-md w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#ba1a1a]">
-                  <span className="material-symbols-outlined text-[18px]">
-                    lock
-                  </span>
-                </span>
-                <div>
-                  <h3
-                    className="font-garamond text-xl font-normal text-[#141010]"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    Close Shift Drawer
-                  </h3>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    {activeOrg?.name || "Main Counter"} • Session {auditKeyStr}
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs text-[#141010]">
-              <p className="text-[#5e5e5e]">
-                Closing the drawer archives all shift cash sales ({cashDrawerData.cashSalesIn}) and reconciles expected cash in till ({cashDrawerData.expectedDrawer}).
-              </p>
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex justify-between items-center">
-                <span className="text-[#5e5e5e]">Expected Balance:</span>
-                <span className="font-semibold text-[#141010]">
-                  {cashDrawerData.expectedDrawer}
-                </span>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-[#141010] uppercase tracking-wider">
-                  Counted Cash in Drawer (Rupees)
-                </label>
-                <input
-                  type="number"
-                  step="0.01"
-                  placeholder="Enter counted cash amount"
-                  value={tempCountedInput}
-                  onChange={(e) => setTempCountedInput(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#e7e5e4] bg-white text-[#141010] focus:outline-none focus:ring-1 focus:ring-[#0c0a09]"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[11px] font-semibold text-[#141010] uppercase tracking-wider">
-                  Manager Authorization PIN
-                </label>
-                <input
-                  type="password"
-                  maxLength={6}
-                  placeholder="Enter 4-6 digit PIN"
-                  value={drawerPin}
-                  onChange={(e) => setDrawerPin(e.target.value)}
-                  className="w-full px-3 py-2 text-sm rounded-lg border border-[#e7e5e4] bg-white text-[#141010] focus:outline-none focus:ring-1 focus:ring-[#0c0a09]"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#e7e5e4]">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] text-xs font-medium rounded-full cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const numVal = parseFloat(tempCountedInput);
-                  if (!isNaN(numVal) && numVal >= 0) {
-                    setCustomCountedPaise(Math.round(numVal * 100));
-                  }
-                  setIsDrawerClosed(true);
-                  setActiveModal(null);
-                  setDrawerPin("");
-                  showToast(
-                    `Shift drawer successfully closed and reconciled for ${auditKeyStr}.`,
-                    "success"
-                  );
-                }}
-                className="px-4 py-2 bg-[#0c0a09] hover:bg-[#262626] text-white text-xs font-semibold rounded-full cursor-pointer shadow-2xs"
-              >
-                Confirm &amp; Seal Drawer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 3. Complete Security & Void Audit Log Modal */}
-      {activeModal === "securityLog" && (
-        <div className="fixed inset-0 z-50 bg-[#0c0a09]/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-[#e7e5e4] max-w-xl w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
-                  <span className="material-symbols-outlined text-[18px]">
-                    security
-                  </span>
-                </span>
-                <div>
-                  <h3
-                    className="font-garamond text-xl font-normal text-[#141010]"
-                    style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
-                  >
-                    Loss Prevention Security Audit
-                  </h3>
-                  <span className="text-[11px] text-[#5e5e5e]">
-                    Dual-Key Managerial Authorization Log
-                  </span>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="w-8 h-8 rounded-full hover:bg-[#f1edec] flex items-center justify-center text-[#5e5e5e] cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-
-            <div className="space-y-3 max-h-80 overflow-y-auto pr-1 text-xs text-[#141010]">
-              {lossPreventionLogs.length === 0 ? (
-                <div className="p-4 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] text-center text-[#5e5e5e]">
-                  No unauthorized voids or cancellations recorded for this shift.
-                </div>
-              ) : (
-                lossPreventionLogs.map((l, i) => (
-                  <div
-                    key={i}
-                    className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col gap-1"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold text-[#0c0a09]">
-                        {l.orderId} • {l.table}
-                      </span>
-                      <span className="font-semibold text-[#ba1a1a]">
-                        -{formatPriceWithSymbol(l.amountPaise, resolvedCurrencySymbol, countryCode, true)}
-                      </span>
-                    </div>
-                    <div className="text-[#5e5e5e]">{l.description}</div>
-                    <div className="pt-1 border-t border-[#e7e5e4]/60 flex items-center justify-between text-[11px] text-[#5e5e5e]">
-                      <span>Reason: {l.reason}</span>
-                      <span className="text-[#141010] font-medium">
-                        Auth: {l.authorizedBy}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-              <div className="p-3 rounded-lg bg-[#f1edec] border border-[#e7e5e4] flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px] text-[#2e7d32]">
-                  verified
-                </span>
-                <span className="text-[11px] text-[#5e5e5e]">
-                  All modifications logged in cryptographic event stream and synced to headquarters ledger.
-                </span>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#e7e5e4]">
-              <button
-                type="button"
-                onClick={() => setActiveModal(null)}
-                className="px-4 py-2 bg-[#0c0a09] hover:bg-[#262626] text-white text-xs font-semibold rounded-full cursor-pointer shadow-2xs"
-              >
-                Close Audit Log
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
