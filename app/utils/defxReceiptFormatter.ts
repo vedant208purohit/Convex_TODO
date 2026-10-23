@@ -43,7 +43,20 @@ export interface ReceiptOrder {
   discountAmount?: number;
   taxTotal?: number;
   totalAmount?: number;
+  taxInfoSnapshot?: {
+    tax_mode?: string;
+    tax_name?: string;
+    tax_amount?: string;
+    components?: Array<{
+      name?: string;
+      code?: string;
+      rate?: number;
+      amount?: string | number;
+    }>;
+  };
 }
+
+import { getCurrencyForCountry } from "../../lib/constants/countries";
 
 export interface ReceiptOrganization {
   name?: string;
@@ -58,7 +71,9 @@ export interface ReceiptOrganization {
   gstNumber?: string;
   fssaiRegistrationNumber?: string;
   currencySymbol?: string;
+  country?: string;
   defaultCurrency?: string;
+  defaultCurrencySymbol?: string;
 }
 
 const DEFAULT_LINE_WIDTH = 48; // Standard 80mm (3-inch) thermal printer grid
@@ -133,32 +148,34 @@ function twoColRow(left: string, right: string, width = DEFAULT_LINE_WIDTH): str
 }
 
 function getCurrencyPrefix(org?: ReceiptOrganization | null): string {
-  const currency = org?.defaultCurrency?.toUpperCase();
-  const sym = org?.currencySymbol || org?.defaultCurrency;
+  const country = org?.country || "IN";
+  const currencyInfo = getCurrencyForCountry(country);
 
-  if (!sym || sym === "₹" || currency === "INR" || sym.toLowerCase() === "rs" || sym.toLowerCase() === "rs.") {
-    // POS thermal printers (ESC/POS) use single-byte ASCII/CP437 code pages.
-    // The Unicode Rupee symbol '₹' (U+20B9) renders as '?' on physical printers.
-    // 'Rs.' is the universally compatible POS standard across all thermal hardware in India.
+  // POS thermal receipt hardware uses standard single-byte ASCII code pages.
+  // The Unicode '₹' character renders as '?' or blank on physical thermal paper.
+  // 'Rs.' is the universally compatible standard for India across all thermal POS printers.
+  if (
+    country.toUpperCase() === "IN" ||
+    country.toLowerCase() === "india" ||
+    currencyInfo.code === "INR" ||
+    currencyInfo.symbol === "₹"
+  ) {
     return "Rs.";
   }
 
-  // International currencies (e.g. AED, $, SAR, QAR, EUR, GBP)
-  if (currency === "AED" || sym === "AED") return "AED";
-  if (currency === "USD" || sym === "$") return "$";
-  if (currency === "SAR" || sym === "SAR") return "SAR";
-  if (currency === "QAR" || sym === "QAR") return "QAR";
-  if (currency === "KWD" || sym === "KWD") return "KWD";
-  if (currency === "OMR" || sym === "OMR") return "OMR";
-  if (currency === "BHD" || sym === "BHD") return "BHD";
+  // For international countries, retrieve dynamic currency from countries.ts
+  if (org?.defaultCurrencySymbol && org.defaultCurrencySymbol !== "₹") {
+    return org.defaultCurrencySymbol;
+  }
 
-  return sym;
+  return currencyInfo.symbol || currencyInfo.code || "$";
 }
 
 export function generateDefxReceiptPlainString(
   order: ReceiptOrder | null | undefined,
   org: ReceiptOrganization | null | undefined,
   width = DEFAULT_LINE_WIDTH,
+  invoiceTitle = "ORDER INVOICE",
 ): string {
   if (!order) return "";
 
@@ -172,7 +189,7 @@ export function generateDefxReceiptPlainString(
   const nameWidth = width - qtyWidth - priceWidth - totalWidth;
 
   // ==========================================
-  // 1. STORE HEADER & TAX INVOICE
+  // 1. STORE HEADER & ORDER INVOICE
   // ==========================================
   const storeName = org?.name?.trim() || "PREST RESTAURANT";
   const wrappedStoreName = wrapText(storeName, width);
@@ -180,7 +197,7 @@ export function generateDefxReceiptPlainString(
     lines.push(center(line, width));
   }
 
-  lines.push(center("TAX INVOICE", width));
+  lines.push(center(invoiceTitle, width));
 
   // Address
   const fullAddress = [
@@ -352,12 +369,33 @@ export function generateDefxReceiptPlainString(
     lines.push(twoColRow("Discount", `-${curr} ${discountStr}`, width));
   }
 
-  const taxTotal =
-    order.display_tax_total ||
-    (order.taxTotal !== undefined
-      ? (order.taxTotal / 100).toFixed(2)
-      : "0.00");
-  lines.push(twoColRow("GST (Tax)", `${curr} ${taxTotal}`, width));
+  // Tax breakdown from organization taxation settings
+  const subTotalPaise =
+    order.subTotal ?? Math.round(parseFloat(order.display_sub_total || "0") * 100);
+  const discountPaise =
+    order.discountAmount ?? Math.round(parseFloat(order.display_discount_amount || "0") * 100);
+  const totalAmountPaise =
+    order.totalAmount ?? Math.round(parseFloat(order.display_total_amount || "0") * 100);
+  const derivedExclusivePaise = Math.max(0, totalAmountPaise - subTotalPaise + discountPaise);
+
+  const taxComponents = order.taxInfoSnapshot?.components;
+  if (Array.isArray(taxComponents) && taxComponents.length > 0 && derivedExclusivePaise > 0) {
+    const totalRate = taxComponents.reduce((acc: number, c: any) => acc + (Number(c.rate) || 0), 0);
+    for (const comp of taxComponents) {
+      const compShare = totalRate > 0 ? (Number(comp.rate) || 0) / totalRate : 1 / taxComponents.length;
+      const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+      const compTaxStr = (compTaxPaise / 100).toFixed(2);
+      const taxLabel = comp.name
+        ? `${comp.name}${comp.rate !== undefined ? ` (${comp.rate}%)` : ""}`
+        : "Tax";
+      lines.push(twoColRow(taxLabel, `+${curr} ${compTaxStr}`, width));
+    }
+  } else if (derivedExclusivePaise > 0 || (order.taxTotal && order.taxTotal > 0)) {
+    const taxTotalPaise = derivedExclusivePaise > 0 ? derivedExclusivePaise : (order.taxTotal || 0);
+    const taxTotalStr = (taxTotalPaise / 100).toFixed(2);
+    const taxName = order.taxInfoSnapshot?.tax_name || "Tax";
+    lines.push(twoColRow(taxName, `+${curr} ${taxTotalStr}`, width));
+  }
 
   lines.push(divider("-", width));
   const grandTotal =
@@ -391,3 +429,206 @@ export function generateDefxReceiptPlainString(
 
   return lines.join("\n");
 }
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Converts a plain receipt string into raw ESC/POS binary data with
+ * hardware-level center justification (\x1B\x61\x01) for headers and sections.
+ */
+function convertPlainStringToEscPos(receiptStr: string): Uint8Array {
+  const lines = receiptStr.split("\n");
+  const ESC = "\x1B";
+  const GS = "\x1D";
+  let output = ESC + "@"; // Initialize printer
+  output += "\n"; // Safe buffer clearance after init
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      output += "\n";
+      continue;
+    }
+
+    // Determine if the line is a centered header/section
+    const isCentered =
+      (line.startsWith("    ") && line.endsWith("    ")) ||
+      trimmed === "ORDER INVOICE" ||
+      trimmed === "TAX INVOICE" ||
+      trimmed === "CUSTOMER DETAILS" ||
+      trimmed === "ORDER DETAILS" ||
+      trimmed === "ORDER SUMMARY" ||
+      trimmed === "BILL DETAILS" ||
+      trimmed === "PAYMENT DETAILS" ||
+      trimmed.startsWith("Thank you");
+
+    if (isCentered) {
+      output += ESC + "a\x01"; // ESC a 1: Center Justification
+      output += trimmed + "\n";
+      output += ESC + "a\x00"; // ESC a 0: Left Justification
+    } else {
+      output += line + "\n";
+    }
+  }
+
+  output += "\n\n\n\n\n" + GS + "V\x00"; // Full paper cut
+  const encoder = new TextEncoder();
+  return encoder.encode(output);
+}
+
+/**
+ * Triggers thermal receipt printing safely using an invisible iframe.
+ * Avoids popup blockers and locks centered lines directly above each other.
+ */
+export async function printThermalReceiptDocument(
+  receiptStr: string,
+  documentTitle = "Receipt"
+): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  // 1. Direct WebUSB byte transfer if device is opened and connected
+  if (typeof navigator !== "undefined" && "usb" in navigator) {
+    try {
+      const devices = await (navigator as any).usb.getDevices();
+      if (devices && devices.length > 0) {
+        const dev = devices[0];
+        if (dev) {
+          if (!dev.opened) {
+            await dev.open();
+            if (dev.configuration === null) {
+              await dev.selectConfiguration(1);
+            }
+            await dev.claimInterface(0);
+          }
+          if (dev.opened) {
+            const data = convertPlainStringToEscPos(receiptStr);
+            await dev.transferOut(1, data);
+            return true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Direct WebUSB print transfer bypassed, using browser print dialog:", e);
+    }
+  }
+
+  // 2. Stable Browser Print Dialog via hidden iframe (does NOT vanish or close prematurely)
+  try {
+    const existingIframe = document.getElementById("pos-thermal-print-frame");
+    if (existingIframe) {
+      existingIframe.remove();
+    }
+
+    const iframe = document.createElement("iframe");
+    iframe.id = "pos-thermal-print-frame";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.visibility = "hidden";
+    iframe.style.zIndex = "-1";
+    document.body.appendChild(iframe);
+
+    const doc = iframe.contentWindow?.document;
+    if (!doc) return false;
+
+    // Convert centered lines into explicit text-align: center divs so they are 100% aligned
+    const rawLines = receiptStr.split("\n");
+    const htmlBodyContent = rawLines
+      .map((line, idx) => {
+        const trimmed = line.trim();
+        if (!trimmed) {
+          return "<div style='height: 1.1em;'>&nbsp;</div>";
+        }
+
+        const isCentered =
+          (line.startsWith("    ") && line.endsWith("    ")) ||
+          trimmed === "ORDER INVOICE" ||
+          trimmed === "TAX INVOICE" ||
+          trimmed === "CUSTOMER DETAILS" ||
+          trimmed === "ORDER DETAILS" ||
+          trimmed === "ORDER SUMMARY" ||
+          trimmed === "BILL DETAILS" ||
+          trimmed === "PAYMENT DETAILS" ||
+          trimmed.startsWith("Thank you");
+
+        if (isCentered) {
+          const isStoreName = idx === 0;
+          const extraStyle = isStoreName
+            ? "font-size: 14px; font-weight: bold; margin-bottom: 2px;"
+            : trimmed === "ORDER INVOICE"
+            ? "font-size: 12px; font-weight: bold; margin-bottom: 2px;"
+            : "font-weight: bold;";
+
+          return `<div style="text-align: center; width: 100%; ${extraStyle}">${escapeHtml(trimmed)}</div>`;
+        }
+
+        return `<div style="white-space: pre;">${escapeHtml(line)}</div>`;
+      })
+      .join("");
+
+    doc.open();
+    doc.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>${documentTitle}</title>
+          <style>
+            @page {
+              size: 80mm auto;
+              margin: 0;
+            }
+            @media print {
+              html, body {
+                width: 80mm;
+                margin: 0;
+                padding: 0;
+              }
+            }
+            body {
+              font-family: "Courier New", Courier, monospace;
+              font-size: 12px;
+              line-height: 1.25;
+              padding: 4mm 2mm 16mm 2mm;
+              margin: 0 auto;
+              max-width: 76mm;
+              color: #000;
+              background: #fff;
+              word-break: normal;
+            }
+          </style>
+        </head>
+        <body>${htmlBodyContent}</body>
+      </html>
+    `);
+    doc.close();
+
+    const frameWindow = iframe.contentWindow;
+    if (frameWindow) {
+      frameWindow.focus();
+      setTimeout(() => {
+        try {
+          frameWindow.print();
+        } catch (printErr) {
+          console.error("Iframe print error:", printErr);
+        }
+      }, 250);
+      return true;
+    }
+  } catch (err) {
+    console.error("Thermal print failed:", err);
+  }
+
+  return false;
+}
+

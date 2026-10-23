@@ -9,7 +9,10 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import EditOrderDrawer from "../../components/orders/EditOrderDrawer";
 import { openReceiptPdfInNewTab } from "../../utils/generateReceiptPdf";
-import { generateDefxReceiptPlainString } from "../../utils/defxReceiptFormatter";
+import {
+  generateDefxReceiptPlainString,
+  printThermalReceiptDocument,
+} from "../../utils/defxReceiptFormatter";
 import {
   getCurrencyForCountry,
   formatCurrencyAmount,
@@ -381,8 +384,12 @@ export default function OrderDetailsDynamicPage() {
     organizations && organizations.length > 0 ? organizations[0] : null;
 
   const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "$");
+    activeOrg?.defaultCurrencySymbol &&
+    activeOrg.defaultCurrencySymbol !== "Rs." &&
+    activeOrg.defaultCurrencySymbol !== "RS." &&
+    activeOrg.defaultCurrencySymbol !== "Rs"
+      ? activeOrg.defaultCurrencySymbol
+      : getCurrencyForCountry(activeOrg?.country || "IN").symbol || "₹";
   const currencyCode =
     activeOrg?.defaultCurrency ||
     (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).code : "USD");
@@ -676,16 +683,28 @@ export default function OrderDetailsDynamicPage() {
   };
 
   // Print Thermal Receipt
-  const handlePrintReceipt = () => {
-    showToast("Opening print dialogue for thermal receipt...");
-    if (typeof window !== "undefined") {
-      const origTitle = document.title;
-      document.title = "";
-      window.print();
-      setTimeout(() => {
-        document.title = origTitle;
-      }, 1000);
+  const handlePrintReceipt = async () => {
+    if (!order) return;
+
+    if (!printers || printers.length === 0) {
+      showToast("No printer configured. Please connect a printer first in Settings > Printers.");
+      return;
     }
+
+    if (printerStatus === "checking") {
+      showToast("Checking printer connection... Please try again in a moment.");
+      return;
+    }
+
+    if (printerStatus !== "connected") {
+      showToast("Printer not connected. Please connect a printer first in Settings > Printers.");
+      return;
+    }
+
+    showToast("Printing thermal receipt...");
+
+    const receiptStr = generateDefxReceiptPlainString(order, activeOrg, 48);
+    await printThermalReceiptDocument(receiptStr, `Receipt ${order.orderNumber || ""}`);
   };
 
   // Download PDF Receipt (Opens real PDF in native Chrome/Edge PDF viewer)
@@ -1602,17 +1621,14 @@ export default function OrderDetailsDynamicPage() {
                     {/* Print Receipt */}
                     <button
                       type="button"
-                      disabled
-                      title="Print Thermal Receipt (Coming Soon)"
+                      onClick={handlePrintReceipt}
+                      title="Print Thermal Receipt"
                       style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                      className="relative flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] !text-white text-white text-xs font-semibold rounded-lg opacity-40 cursor-not-allowed select-none shadow-xs"
+                      className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                     >
                       <PrintIcon className="w-3.5 h-3.5 !text-white text-white shrink-0" />
                       <span className="!text-white text-white font-semibold text-xs whitespace-nowrap">
                         Print Receipt
-                      </span>
-                      <span className="absolute -top-2 -right-1 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider bg-amber-400 text-stone-900 border border-amber-300 rounded-full shadow-xs whitespace-nowrap leading-none pointer-events-none">
-                        Coming Soon
                       </span>
                     </button>
 
@@ -1676,10 +1692,14 @@ export default function OrderDetailsDynamicPage() {
                         Checking...
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] px-2 py-0.5 rounded-full border border-[#e7e5e4]">
+                      <Link
+                        href="/settings?tab=printers"
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] hover:bg-[#e7e5e4] px-2 py-0.5 rounded-full border border-[#e7e5e4] transition-colors cursor-pointer"
+                        title="Click to connect printer in Settings"
+                      >
                         <span className="w-1.5 h-1.5 rounded-full bg-[#a8a29e]" />
-                        Disconnected
-                      </span>
+                        Disconnected • Connect
+                      </Link>
                     )}
                   </div>
                 </section>

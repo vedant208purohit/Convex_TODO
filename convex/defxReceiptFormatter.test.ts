@@ -49,7 +49,7 @@ describe("defxReceiptFormatter", () => {
 
     // Verify sections exist
     expect(receipt).toContain("TEST RESTAURANT 1");
-    expect(receipt).toContain("TAX INVOICE");
+    expect(receipt).toContain("ORDER INVOICE");
     expect(receipt).toContain("CUSTOMER DETAILS");
     expect(receipt).toContain("ORDER DETAILS");
     expect(receipt).toContain("ORDER SUMMARY");

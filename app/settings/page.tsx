@@ -532,7 +532,7 @@ function SettingsContent() {
                   );
                 }
 
-                const isComingSoon = tab.id === "printers";
+                const isComingSoon = false;
                 const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
