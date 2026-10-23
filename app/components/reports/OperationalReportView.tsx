@@ -271,6 +271,7 @@ export function OperationalReportView({
           if (isDebit) {
             const pRef = p.refundAmount || p.amount || 0;
             modeMap[finalKey].refundPaise += pRef;
+            modeMap[finalKey].txns += 1;
           } else {
             const pGross = p.payAmount !== undefined ? p.payAmount : (p.amount || 0);
             let pRef = p.refundAmount || 0;
@@ -528,8 +529,7 @@ export function OperationalReportView({
           o.payments.length > 0 &&
           o.payments.some(
             (p: any) =>
-              (p.paymentType === "Credit" || !p.paymentType) &&
-              (p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName))
+              p.status === "Success" || p.status === "Paid" || Boolean(p.paymentModeName)
           ));
 
       if (!isPaid && !isOrderRefunded(o)) {
@@ -538,7 +538,6 @@ export function OperationalReportView({
 
       if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
         return o.payments.some((p: any) => {
-          if (p.paymentType === "Debit") return false;
           const rawM =
             p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || "Cash";
           return findModeKey(rawM) === selectedChannelName;
@@ -981,7 +980,6 @@ export function OperationalReportView({
         "Refunds / Voids",
         "Net Settled",
         "Share %",
-        "Drawer Status",
       ];
       const tenderRows = tenderChannels.map((c) =>
         [
@@ -992,7 +990,6 @@ export function OperationalReportView({
           escapeCsv(c.refunds),
           escapeCsv(c.netSettled),
           escapeCsv(c.share),
-          escapeCsv(c.drawerStatus),
         ].join(",")
       );
 
@@ -1009,7 +1006,6 @@ export function OperationalReportView({
         escapeCsv(totalRefundStr),
         escapeCsv(formatPriceWithSymbol(paymentBreakdownData.totalNetPaise, resolvedCurrencySymbol, countryCode, true)),
         escapeCsv("100.0%"),
-        escapeCsv("Audited"),
       ].join(",");
 
       // 2. STAFF / FLOOR CAPTAIN PERFORMANCE
@@ -1430,17 +1426,16 @@ export function OperationalReportView({
 
             {/* Ledger Table */}
             <div className="w-full overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left border-collapse">
+              <table className="w-full min-w-[860px] text-left border-collapse">
                 <thead>
                   <tr className="bg-[#f8f5f4] text-[#5e5e5e] text-[11px] uppercase tracking-wider font-semibold border-b border-[#e7e5e4]">
-                    <th className="py-3 px-4 sm:px-6">Payment Mode</th>
-                    <th className="py-3 px-4 text-right">Transactions</th>
-                    <th className="py-3 px-4 text-right">Gross Amount</th>
-                    <th className="py-3 px-4 text-right">Refunds / Voids</th>
-                    <th className="py-3 px-4 text-right">Net Settled</th>
-                    <th className="py-3 px-4 text-center">Share</th>
-                    <th className="py-3 px-4">Drawer Status</th>
-                    <th className="py-3 px-4 sm:px-6 text-right">Action</th>
+                    <th className="py-3 px-4 sm:px-6 whitespace-nowrap min-w-[180px]">Payment Mode</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap min-w-[100px]">Transactions</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap min-w-[110px]">Gross Amount</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap min-w-[120px]">Refunds / Voids</th>
+                    <th className="py-3 px-4 text-right whitespace-nowrap min-w-[110px]">Net Settled</th>
+                    <th className="py-3 px-4 text-center whitespace-nowrap min-w-[80px]">Share</th>
+                    <th className="py-3 px-4 sm:px-6 text-right whitespace-nowrap min-w-[130px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
@@ -1449,7 +1444,7 @@ export function OperationalReportView({
                       key={idx}
                       className="hover:bg-[#faf6f5] transition-colors"
                     >
-                      <td className="py-3.5 px-4 sm:px-6">
+                      <td className="py-3.5 px-4 sm:px-6 whitespace-nowrap">
                         <div className="flex items-center gap-3">
                           <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010] shrink-0">
                             <span className="material-symbols-outlined text-[18px]">
@@ -1466,37 +1461,29 @@ export function OperationalReportView({
                           </div>
                         </div>
                       </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-normal text-[#141010]">
+                      <td className="py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-normal text-[#141010] whitespace-nowrap">
                         {c.txns} txns
                       </td>
-                      <td className="py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-normal text-[#141010]">
+                      <td className="py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-normal text-[#141010] whitespace-nowrap">
                         {c.grossAmount}
                       </td>
                       <td
-                        className={`py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-medium ${
+                        className={`py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-medium whitespace-nowrap ${
                           c.hasRefund ? "text-[#ba1a1a]" : "text-[#5e5e5e]"
                         }`}
                       >
                         {c.refunds}
                       </td>
                       <td
-                        className={`py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-semibold ${
+                        className={`py-3.5 px-4 text-right tabular-nums text-xs sm:text-sm font-semibold whitespace-nowrap ${
                           c.isNegativeNet ? "text-[#ba1a1a]" : "text-[#141010]"
                         }`}
                       >
                         {c.netSettled}
                       </td>
-                      <td className="py-3.5 px-4 text-center">
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <span className="text-xs font-medium tabular-nums text-[#141010]">
                           {c.share}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium border border-[#e7e5e4] ${c.drawerStatusColor}`}
-                        >
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-current"></span>
-                          {c.drawerStatus}
                         </span>
                       </td>
                       <td className="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">
@@ -1517,7 +1504,7 @@ export function OperationalReportView({
                 {/* Total Settled Row (tfoot) */}
                 <tfoot>
                   <tr className="bg-[#f8f5f4] font-medium text-[#141010] border-t border-[#e7e5e4]">
-                    <td className="py-3.5 px-4 sm:px-6">
+                    <td className="py-3.5 px-4 sm:px-6 whitespace-nowrap">
                       <div
                         className="font-garamond text-base sm:text-lg font-normal text-[#141010]"
                         style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
@@ -1525,29 +1512,24 @@ export function OperationalReportView({
                         Total Settled Portfolio
                       </div>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-medium tabular-nums text-xs sm:text-sm">
+                    <td className="py-3.5 px-4 text-right font-medium tabular-nums text-xs sm:text-sm whitespace-nowrap">
                       {paymentBreakdownData.totalTxns} {paymentBreakdownData.totalTxns === 1 ? "txn" : "txns"}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-medium tabular-nums text-xs sm:text-sm">
+                    <td className="py-3.5 px-4 text-right font-medium tabular-nums text-xs sm:text-sm whitespace-nowrap">
                       {formatPriceWithSymbol(paymentBreakdownData.totalGrossPaise, resolvedCurrencySymbol, countryCode, true)}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-medium text-[#ba1a1a] tabular-nums text-xs sm:text-sm">
+                    <td className="py-3.5 px-4 text-right font-medium text-[#ba1a1a] tabular-nums text-xs sm:text-sm whitespace-nowrap">
                       {paymentBreakdownData.totalRefundPaise > 0
                         ? `-${formatPriceWithSymbol(paymentBreakdownData.totalRefundPaise, resolvedCurrencySymbol, countryCode, true)}`
                         : formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true)}
                     </td>
-                    <td className="py-3.5 px-4 text-right font-semibold text-[#0c0a09] tabular-nums text-xs sm:text-sm">
+                    <td className="py-3.5 px-4 text-right font-semibold text-[#0c0a09] tabular-nums text-xs sm:text-sm whitespace-nowrap">
                       {formatPriceWithSymbol(paymentBreakdownData.totalNetPaise, resolvedCurrencySymbol, countryCode, true)}
                     </td>
-                    <td className="py-3.5 px-4 text-center font-medium tabular-nums text-xs">
+                    <td className="py-3.5 px-4 text-center font-medium tabular-nums text-xs whitespace-nowrap">
                       100.0%
                     </td>
-                    <td className="py-3.5 px-4">
-                      <span className="text-[11px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                        Audited
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 sm:px-6 text-right">
+                    <td className="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">
                       <span className="material-symbols-outlined text-[#5e5e5e] text-[20px]">
                         verified
                       </span>
@@ -1584,14 +1566,14 @@ export function OperationalReportView({
                   </span>
                 </div>
                 <div className="w-full overflow-x-auto mt-4">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full min-w-[580px] text-left border-collapse">
                     <thead>
                       <tr className="text-[#5e5e5e] text-[11px] uppercase tracking-wider bg-[#f8f5f4] border-b border-[#e7e5e4]">
-                        <th className="py-2.5 px-3">Staff Member</th>
-                        <th className="py-2.5 px-3 text-right">Orders</th>
-                        <th className="py-2.5 px-3 text-right">Revenue</th>
-                        <th className="py-2.5 px-3 text-right">Avg Ticket</th>
-                        <th className="py-2.5 px-3 text-right">Table Dwell (Dine-In)</th>
+                        <th className="py-2.5 px-3 whitespace-nowrap min-w-[160px]">Staff Member</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[80px]">Orders</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[100px]">Revenue</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[100px]">Avg Ticket</th>
+                        <th className="py-2.5 px-3 text-right whitespace-nowrap min-w-[140px]">Table Dwell (Dine-In)</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
@@ -1610,7 +1592,7 @@ export function OperationalReportView({
                               key={sIdx}
                               className="hover:bg-[#faf6f5] transition-colors"
                             >
-                              <td className="py-3 px-3">
+                              <td className="py-3 px-3 whitespace-nowrap">
                                 <div className="font-medium text-[#141010]">
                                   {st.name}
                                 </div>
@@ -1618,16 +1600,16 @@ export function OperationalReportView({
                                   {st.floor}
                                 </div>
                               </td>
-                              <td className="py-3 px-3 text-right tabular-nums">
+                              <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">
                                 {st.orders}
                               </td>
-                              <td className="py-3 px-3 text-right font-medium tabular-nums">
+                              <td className="py-3 px-3 text-right font-medium tabular-nums whitespace-nowrap">
                                 {formatPriceWithSymbol(st.revenuePaise, resolvedCurrencySymbol, countryCode, true)}
                               </td>
-                              <td className="py-3 px-3 text-right tabular-nums text-[#5e5e5e]">
+                              <td className="py-3 px-3 text-right tabular-nums text-[#5e5e5e] whitespace-nowrap">
                                 {formatPriceWithSymbol(avgTicket, resolvedCurrencySymbol, countryCode, true)}
                               </td>
-                              <td className="py-3 px-3 text-right tabular-nums">
+                              <td className="py-3 px-3 text-right tabular-nums whitespace-nowrap">
                                 {st.dwellMinutes !== null
                                   ? st.dwellMinutes > 0
                                     ? `${st.dwellMinutes} min`
@@ -2453,21 +2435,51 @@ export function OperationalReportView({
                     const floor = resolveOrderFloorSection(o);
                     const staff = resolveOrderStaffName(o);
 
-                    let paidVal = o.totalAmount || 0;
-                    if (o.payments && Array.isArray(o.payments)) {
+                    let netPaidPaise = 0;
+                    let grossPaise = 0;
+                    let refundPaise = 0;
+                    let hasMatchingPayments = false;
+
+                    if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
                       const matchingPayments = o.payments.filter((p: any) => {
                         const rawM =
                           p.paymentModeName || p.mode || p.paymentMode || o.paymentMode || "Cash";
                         return findModeKey(rawM) === selectedChannelName;
                       });
+
                       if (matchingPayments.length > 0) {
-                        paidVal = matchingPayments.reduce((sum: number, p: any) => {
-                          const amt =
-                            p.payAmount !== undefined ? p.payAmount : p.amount || 0;
-                          return sum + amt;
-                        }, 0);
+                        hasMatchingPayments = true;
+                        for (const p of matchingPayments) {
+                          if (p.paymentType === "Debit") {
+                            const pRef = p.refundAmount || p.amount || 0;
+                            refundPaise += pRef;
+                          } else {
+                            const pGross =
+                              p.payAmount !== undefined ? p.payAmount : p.amount || 0;
+                            grossPaise += pGross;
+                            if (p.refundAmount) {
+                              refundPaise += p.refundAmount;
+                            }
+                          }
+                        }
+                        netPaidPaise = grossPaise - refundPaise;
                       }
                     }
+
+                    if (!hasMatchingPayments) {
+                      grossPaise = o.totalAmount || 0;
+                      refundPaise = getOrderRefundAmount(o);
+                      netPaidPaise = grossPaise - refundPaise;
+                    }
+
+                    const isNegative = netPaidPaise < 0;
+                    const isRefund =
+                      isNegative ||
+                      (grossPaise === 0 && refundPaise > 0) ||
+                      o.paymentStatus === "Refunded";
+                    const isPartial =
+                      !isRefund &&
+                      (refundPaise > 0 || o.paymentStatus === "Partially Refunded");
 
                     return (
                       <div
@@ -2479,13 +2491,31 @@ export function OperationalReportView({
                           <span className="font-semibold text-sm text-[#0c0a09]">
                             {ordNum}
                           </span>
-                          <span className="font-semibold text-sm text-[#141010] tabular-nums">
-                            {formatPriceWithSymbol(
-                              paidVal,
-                              resolvedCurrencySymbol,
-                              countryCode,
-                              true
-                            )}
+                          <span
+                            className={`font-semibold text-sm tabular-nums ${
+                              isNegative || isRefund ? "text-[#ba1a1a]" : "text-[#141010]"
+                            }`}
+                          >
+                            {isNegative
+                              ? `-${formatPriceWithSymbol(
+                                  Math.abs(netPaidPaise),
+                                  resolvedCurrencySymbol,
+                                  countryCode,
+                                  true
+                                )}`
+                              : isRefund && netPaidPaise === 0 && refundPaise > 0
+                              ? `-${formatPriceWithSymbol(
+                                  refundPaise,
+                                  resolvedCurrencySymbol,
+                                  countryCode,
+                                  true
+                                )}`
+                              : formatPriceWithSymbol(
+                                  netPaidPaise,
+                                  resolvedCurrencySymbol,
+                                  countryCode,
+                                  true
+                                )}
                           </span>
                         </div>
 
@@ -2499,10 +2529,37 @@ export function OperationalReportView({
                             <span>•</span>
                             <span className="truncate">{floor}</span>
                           </div>
-                          <span className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-[#e8f5e9] text-[#2e7d32] border border-[#c8e6c9] shrink-0">
-                            {o.paymentStatus || "Paid"}
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[11px] font-medium border shrink-0 ${
+                              isRefund
+                                ? "bg-[#fde8e8] text-[#ba1a1a] border-[#f8b4b4]"
+                                : isPartial
+                                ? "bg-[#fff8e1] text-[#b45309] border-[#fde68a]"
+                                : "bg-[#e8f5e9] text-[#2e7d32] border-[#c8e6c9]"
+                            }`}
+                          >
+                            {isRefund
+                              ? "Refunded"
+                              : isPartial
+                              ? "Partially Refunded"
+                              : o.paymentStatus || "Paid"}
                           </span>
                         </div>
+
+                        {/* Optional Refund Notice Badge */}
+                        {refundPaise > 0 && (
+                          <div className="text-[11px] text-[#ba1a1a] flex items-center justify-between bg-[#fff5f5] px-2.5 py-1 rounded-md border border-[#fed7d7]">
+                            <span className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[13px]">
+                                currency_exchange
+                              </span>
+                              <span>Refund Processed</span>
+                            </span>
+                            <span className="font-medium tabular-nums">
+                              -{formatPriceWithSymbol(refundPaise, resolvedCurrencySymbol, countryCode, true)}
+                            </span>
+                          </div>
+                        )}
 
                         {/* Bottom: Staff name & Order Type */}
                         <div className="pt-2 border-t border-[#f1edec] flex items-center justify-between text-[11px] text-[#78716c]">
