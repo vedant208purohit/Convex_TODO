@@ -80,6 +80,8 @@ export default defineSchema({
     receiptPrintCount: v.number(),
     menuBasedPrintToken: v.boolean(),
     showQrCode: v.boolean(),
+    autoCutPaper: v.optional(v.boolean()),
+    popCashDrawer: v.optional(v.boolean()),
 
     // Branding Configuration
     primaryColor: v.optional(v.string()),
@@ -1594,6 +1596,7 @@ postpaidOrderRequests: defineTable({
     customerId: v.optional(v.string()),
     published: v.boolean(),
     submittedAt: v.optional(v.number()),
+    flaggedForMeeting: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
