@@ -16,20 +16,12 @@ import { OrdersReportView } from "../../components/reports/OrdersReportView";
 import { CustomerReportView } from "../../components/reports/CustomerReportView";
 import { MenuReportView } from "../../components/reports/MenuReportView";
 import { OperationalReportView } from "../../components/reports/OperationalReportView";
-import { ZReportView } from "../../components/reports/ZReportView";
 
 import {
   getCurrencyForCountry,
   getTimezoneForCountry,
 } from "../../../lib/constants/countries";
-import {
-  generateDemoOrders,
-  DEMO_CATEGORIES,
-  DEMO_ITEMS,
-  DEMO_TABLES,
-  DEMO_LAYOUTS,
-  DEMO_PROCESSES,
-} from "../demoReportData";
+
 
 interface SubReportPageProps {
   params: Promise<{ reportType: string }>;
@@ -38,13 +30,12 @@ interface SubReportPageProps {
 const VALID_REPORT_TYPES = [
   "sales",
   "orders",
+  "order",
   "customer",
   "customers",
   "menu",
   "operational",
   "operations",
-  "z-report",
-  "zreport",
 ] as const;
 
 export default function SubReportPage({ params }: SubReportPageProps) {
@@ -57,15 +48,13 @@ export default function SubReportPage({ params }: SubReportPageProps) {
 
   // Normalize aliases
   let normalizedType = rawReportType;
+  if (normalizedType === "order") normalizedType = "orders";
   if (normalizedType === "customers") normalizedType = "customer";
   if (normalizedType === "operations") normalizedType = "operational";
-  if (normalizedType === "zreport") normalizedType = "z-report";
 
-  // Capitalize for titles (e.g. 'sales' -> 'Sales', 'z-report' -> 'Z-Report')
+  // Capitalize for titles (e.g. 'sales' -> 'Sales')
   const capitalizedTitle =
-    normalizedType === "z-report"
-      ? "Z-Report / Shift Close"
-      : normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1);
+    normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1);
 
   // Default Date Range: Today (matching legacy default behavior)
   const initialPreset = calculateDatePreset("Today");
@@ -80,13 +69,11 @@ export default function SubReportPage({ params }: SubReportPageProps) {
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
 
+  const countryCode = activeOrg?.country || "IN";
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : "₹");
+    getCurrencyForCountry(countryCode).symbol;
 
-  const countryCode = activeOrg?.country || "IN";
   const timezone =
     activeOrg?.organizationTimeZone ||
     getTimezoneForCountry(countryCode);
@@ -94,6 +81,68 @@ export default function SubReportPage({ params }: SubReportPageProps) {
   // 1. Query Orders matching selected date range
   const startMs = selectedRange.startDate.getTime();
   const endMs = selectedRange.endDate.getTime();
+
+  // 1. High-Performance Convex Backend Report Queries
+  const salesReportBackend = useQuery(
+    api.reports.getSalesReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const ordersReportBackend = useQuery(
+    api.reports.getOrdersReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const menuReportBackend = useQuery(
+    api.reports.getMenuReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const customerReportBackend = useQuery(
+    api.reports.getCustomerReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const operationalReportBackend = useQuery(
+    api.reports.getOperationalReport,
+    activeOrg
+      ? {
+          organizationId: activeOrg._id,
+          fromTimestamp: startMs,
+          toTimestamp: endMs,
+        }
+      : "skip"
+  );
+
+  const menuFoodCosts = useQuery(
+    api.inventory.getOrganizationMenuFoodCosts,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
+
 
   const ordersResponse = useQuery(
     api.orders.listOrders,
@@ -107,10 +156,14 @@ export default function SubReportPage({ params }: SubReportPageProps) {
       : "skip",
   );
 
-  // 2. Query Menu Data
+  // 2. Query Menu Data & Menus List
   const menuData = useQuery(
     api.menu.getOrganizationMenu,
     activeOrg ? { organizationId: activeOrg._id, allMenus: true } : "skip",
+  );
+  const menusList = useQuery(
+    api.menu.listMenus,
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
   );
 
   // 3. Query Tables, Layouts, and Order Processes
@@ -131,34 +184,16 @@ export default function SubReportPage({ params }: SubReportPageProps) {
   );
 
   // Real orders from database
-  const realOrders = useMemo(() => {
+  const effectiveOrders = useMemo(() => {
     return ordersResponse?.orders || [];
   }, [ordersResponse]);
-
-  // Demo orders generated specifically for the selected date range
-  const demoOrders = useMemo(() => {
-    return generateDemoOrders(selectedRange.startDate, selectedRange.endDate);
-  }, [selectedRange.startDate, selectedRange.endDate]);
-
-  // Testing mode toggle: if real orders are 0 (or testing enabled), use demo data so tables are never empty
-  const [forceDemoMode, setForceDemoMode] = useState<boolean>(true);
-
-  const effectiveOrders = useMemo(() => {
-    if (!forceDemoMode && realOrders.length > 0) {
-      return realOrders;
-    }
-    // If real orders are 0 or demo mode is active for testing, return demo orders
-    return demoOrders;
-  }, [forceDemoMode, realOrders, demoOrders]);
-
-  const isUsingDemo = forceDemoMode || realOrders.length === 0;
 
   // Resolved Menu Categories & Items
   const allCategories = useMemo(() => {
     if (menuData && Array.isArray(menuData) && menuData.length > 0) {
       return menuData.map((m: any) => m.category || m);
     }
-    return DEMO_CATEGORIES;
+    return [];
   }, [menuData]);
 
   const allItems = useMemo(() => {
@@ -169,29 +204,37 @@ export default function SubReportPage({ params }: SubReportPageProps) {
         if (cat && cat.items && Array.isArray(cat.items)) {
           for (const ci of cat.items) {
             const it = ci.item || ci;
-            if (it) itemsList.push({ ...it, categoryName: cat.name });
+            if (it) {
+              itemsList.push({
+                ...it,
+                categoryName: cat.name,
+                categoryId: cat._id || cat.id,
+                menuName: cat.menuName || cat.menu_name || "Main Menu",
+                menuId: cat.menuId || cat.menu_id,
+              });
+            }
           }
         }
       }
       if (itemsList.length > 0) return itemsList;
     }
-    return DEMO_ITEMS;
+    return [];
   }, [menuData]);
 
   // Resolved Tables, Layouts, Processes
   const tables = useMemo(() => {
     if (tablesData && tablesData.length > 0) return tablesData;
-    return DEMO_TABLES;
+    return [];
   }, [tablesData]);
 
   const layouts = useMemo(() => {
     if (layoutsData && layoutsData.length > 0) return layoutsData;
-    return DEMO_LAYOUTS;
+    return [];
   }, [layoutsData]);
 
   const processes = useMemo(() => {
     if (processesData && processesData.length > 0) return processesData;
-    return DEMO_PROCESSES;
+    return [];
   }, [processesData]);
 
   // Resolved Prior Customer Keys for Repeat Patron Classification
@@ -206,66 +249,44 @@ export default function SubReportPage({ params }: SubReportPageProps) {
         if (k) keys.add(k);
       });
     }
-    // Seed sample customer keys for demo data retention calculations
-    keys.add("cust_1");
-    keys.add("cust_2");
-    keys.add("cust_3");
-    keys.add("+91 98765 43210");
-    keys.add("+91 98234 56789");
     return keys;
   }, [priorOrdersResponse]);
 
-  const isOrdersLoading = ordersResponse === undefined && realOrders.length === 0;
+  const isOrdersLoading = ordersResponse === undefined && effectiveOrders.length === 0;
   const isReportsLoading = isOrdersLoading;
 
   return (
     <PosShell title="Reports" subtitle={`${capitalizedTitle} Report`}>
-      <div className="flex-1 min-h-0 overflow-y-auto bg-[#fff8f5] px-3.5 sm:px-6 lg:px-10 py-4 sm:py-8">
-        <div className="max-w-6xl mx-auto space-y-4 sm:space-y-6">
-
-          {/* Testing Mode Banner & Toggle */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 sm:gap-3 bg-white px-3.5 sm:px-4 py-2.5 rounded-xl border border-[#e9e1dd] shadow-xs text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="inline-block w-2.5 h-2.5 rounded-full bg-[#1b873f] shrink-0"></span>
-              <span className="font-semibold text-[#1e1b19]">
-                {isUsingDemo ? "Testing Demo Data Active" : "Live Store Data Active"}
-              </span>
-              <span className="text-[#d0c4be]">•</span>
-              <span className="text-[#645d58]">
-                {effectiveOrders.length} orders loaded for {selectedRange.preset || "Range"}
-              </span>
-            </div>
-
-            {realOrders.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setForceDemoMode(!forceDemoMode)}
-                className="px-3 py-1 rounded-full text-[11px] font-semibold border border-[#e9e1dd] bg-[#faf2ee] text-[#1e1b19] hover:bg-[#e9e1dd] transition-colors self-end sm:self-auto cursor-pointer"
-              >
-                {forceDemoMode ? "Switch to Live DB Orders" : "Switch to Testing Demo Data"}
-              </button>
-            )}
-          </div>
+      <div className="flex-1 min-h-0 overflow-y-auto bg-[#f5f5f5] px-6 lg:px-8 py-6">
+        <div className="w-full space-y-4 sm:space-y-6">
 
           {/* Sub-Report Views */}
           {normalizedType === "sales" ? (
             <SalesReportView
               orders={effectiveOrders}
+              backendData={salesReportBackend}
               loading={isOrdersLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
               timezone={timezone}
+              operationTiming={activeOrg?.operationTiming}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
+              activeOrg={activeOrg}
             />
           ) : normalizedType === "menu" ? (
             <MenuReportView
               orders={effectiveOrders}
+              backendData={menuReportBackend}
               allItems={allItems}
               allCategories={allCategories}
+              menus={menusList || []}
+              foodCostMap={menuFoodCosts || {}}
               loading={isReportsLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
+              timezone={timezone}
+              operationTiming={activeOrg?.operationTiming}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
             />
@@ -279,17 +300,21 @@ export default function SubReportPage({ params }: SubReportPageProps) {
               currencySymbol={currencySymbol}
               countryCode={countryCode}
               timezone={timezone}
+              operationTiming={activeOrg?.operationTiming}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
+              activeOrg={activeOrg}
             />
           ) : normalizedType === "customer" ? (
             <CustomerReportView
               orders={effectiveOrders}
+              backendData={customerReportBackend}
               priorCustomerKeys={priorCustomerKeys}
               loading={isOrdersLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
               timezone={timezone}
+              operationTiming={activeOrg?.operationTiming}
               startDateMs={startMs}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
@@ -297,24 +322,15 @@ export default function SubReportPage({ params }: SubReportPageProps) {
           ) : normalizedType === "orders" ? (
             <OrdersReportView
               orders={effectiveOrders}
+              backendData={ordersReportBackend}
               loading={isOrdersLoading}
               currencySymbol={currencySymbol}
               countryCode={countryCode}
               timezone={timezone}
+              operationTiming={activeOrg?.operationTiming}
               selectedRange={selectedRange}
               onRangeChange={setSelectedRange}
-            />
-          ) : normalizedType === "z-report" ? (
-            <ZReportView
-              orders={effectiveOrders}
-              loading={isOrdersLoading}
-              currencySymbol={currencySymbol}
-              countryCode={countryCode}
-              timezone={timezone}
-              selectedRange={selectedRange}
-              onRangeChange={setSelectedRange}
-              orgName={activeOrg?.name || "Skyz Restaurant & Banquet"}
-              branchName={activeOrg?.city || "Main Floor"}
+              activeOrg={activeOrg}
             />
           ) : (
             <ReportHeader

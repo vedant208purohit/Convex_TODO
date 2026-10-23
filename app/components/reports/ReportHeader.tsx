@@ -74,6 +74,24 @@ export function formatShortDate(d: Date): string {
   return `${day}/${month}/${year}`;
 }
 
+export function ChevronRightIcon({ className = "w-3.5 h-3.5" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M9 5l7 7-7 7"
+      />
+    </svg>
+  );
+}
+
 export function ReportHeader({
   title,
   selectedRange,
@@ -139,14 +157,17 @@ export function ReportHeader({
   return (
     <div className="flex flex-col gap-4 pb-6 border-b border-[#eadfd6]">
       {/* Breadcrumb Navigation */}
-      <nav className="flex items-center gap-2 text-xs text-[#78716c]">
+      <nav
+        aria-label="Breadcrumb"
+        className="flex items-center text-[13px] text-[#5e5e5e] mb-2 gap-2 font-sans font-medium"
+      >
         <Link
           href="/reports"
-          className="hover:text-[#141010] font-medium transition cursor-pointer"
+          className="hover:text-[#141010] transition-colors cursor-pointer"
         >
           Reports
         </Link>
-        <span>/</span>
+        <ChevronRightIcon className="w-3.5 h-3.5 text-[#928c8a]" />
         <span className="text-[#141010] font-semibold">{title}</span>
       </nav>
 

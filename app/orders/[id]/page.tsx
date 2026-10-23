@@ -1191,35 +1191,70 @@ export default function OrderDetailsDynamicPage() {
                           </span>
                         </div>
 
-                        {order.taxInfoSnapshot?.components &&
-                        order.taxInfoSnapshot.components.length > 0 ? (
-                          order.taxInfoSnapshot.components.map(
-                            (c: any, i: number) => (
-                              <div
-                                key={i}
-                                className="flex justify-between items-center text-[#7a716b]"
-                              >
-                                <span>
-                                  {c.name} ({c.rate}%)
-                                </span>
-                                <span className="font-semibold text-[#0c0a09]">
-                                  +{currencySymbol}
-                                  {formatCurrencyAmount(
-                                    ((order.subTotal || 0) * c.rate) / 10000,
-                                    activeOrg?.country
-                                  )}
-                                </span>
-                              </div>
-                            ),
-                          )
-                        ) : (
-                          <div className="flex justify-between items-center text-[#7a716b]">
-                            <span>GST (Tax Total)</span>
-                            <span className="font-semibold text-[#0c0a09]">
-                              {currencySymbol}{formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          const subTotal = order?.subTotal || 0;
+                          const totalAmount = order?.totalAmount || 0;
+                          const discount = order?.discountAmount || 0;
+                          const delivery = order?.deliveryCharge || 0;
+                          const derivedExclusivePaise = Math.max(
+                            0,
+                            totalAmount - subTotal + discount - delivery
+                          );
+
+                          // If no exclusive tax was charged on top, DO NOT show inclusive tax at all (it's inside subtotal)
+                          if (derivedExclusivePaise <= 0) {
+                            return null;
+                          }
+
+                          if (
+                            order.taxInfoSnapshot?.components &&
+                            order.taxInfoSnapshot.components.length > 0
+                          ) {
+                            const totalRate = order.taxInfoSnapshot.components.reduce(
+                              (acc: number, c: any) => acc + (Number(c.rate) || 0),
+                              0
+                            );
+                            return order.taxInfoSnapshot.components.map(
+                              (c: any, i: number) => {
+                                const compShare =
+                                  totalRate > 0
+                                    ? (Number(c.rate) || 0) / totalRate
+                                    : 1 / order.taxInfoSnapshot.components.length;
+                                const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+                                return (
+                                  <div
+                                    key={i}
+                                    className="flex justify-between items-center text-[#7a716b]"
+                                  >
+                                    <span>
+                                      {c.name} ({c.rate}%)
+                                    </span>
+                                    <span className="font-semibold text-[#0c0a09]">
+                                      +{currencySymbol}
+                                      {formatCurrencyAmount(
+                                        compTaxPaise / 100,
+                                        activeOrg?.country
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                            );
+                          }
+
+                          return (
+                            <div className="flex justify-between items-center text-[#7a716b]">
+                              <span>GST (Tax Total)</span>
+                              <span className="font-semibold text-[#0c0a09]">
+                                +{currencySymbol}
+                                {formatCurrencyAmount(
+                                  derivedExclusivePaise / 100,
+                                  activeOrg?.country
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         {parseFloat(order.display_discount_amount || "0") >
                           0 && (
@@ -1380,36 +1415,70 @@ export default function OrderDetailsDynamicPage() {
                         {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
                       </span>
                     </div>
-                    {order.taxInfoSnapshot?.components &&
-                    order.taxInfoSnapshot.components.length > 0 ? (
-                      order.taxInfoSnapshot.components.map(
-                        (c: any, i: number) => (
-                          <div
-                            key={i}
-                            className="flex justify-between items-center text-[#7a716b] text-xs"
-                          >
-                            <span>
-                              {c.name} ({c.rate}%)
-                            </span>
-                            <span className="font-semibold text-[#0c0a09]">
-                              +{currencySymbol}
-                              {formatCurrencyAmount(
-                                ((order.subTotal || 0) * c.rate) / 10000,
-                                activeOrg?.country
-                              )}
-                            </span>
-                          </div>
-                        ),
-                      )
-                    ) : (
-                      <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                        <span>GST (Tax Total)</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          {currencySymbol}
-                          {formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
-                        </span>
-                      </div>
-                    )}
+                    {(() => {
+                      const subTotal = order?.subTotal || 0;
+                      const totalAmount = order?.totalAmount || 0;
+                      const discount = order?.discountAmount || 0;
+                      const delivery = order?.deliveryCharge || 0;
+                      const derivedExclusivePaise = Math.max(
+                        0,
+                        totalAmount - subTotal + discount - delivery
+                      );
+
+                      // If no exclusive tax was charged on top, DO NOT show inclusive tax at all (it's inside subtotal)
+                      if (derivedExclusivePaise <= 0) {
+                        return null;
+                      }
+
+                      if (
+                        order.taxInfoSnapshot?.components &&
+                        order.taxInfoSnapshot.components.length > 0
+                      ) {
+                        const totalRate = order.taxInfoSnapshot.components.reduce(
+                          (acc: number, c: any) => acc + (Number(c.rate) || 0),
+                          0
+                        );
+                        return order.taxInfoSnapshot.components.map(
+                          (c: any, i: number) => {
+                            const compShare =
+                              totalRate > 0
+                                ? (Number(c.rate) || 0) / totalRate
+                                : 1 / order.taxInfoSnapshot.components.length;
+                            const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+                            return (
+                              <div
+                                key={i}
+                                className="flex justify-between items-center text-[#7a716b] text-xs"
+                              >
+                                <span>
+                                  {c.name} ({c.rate}%)
+                                </span>
+                                <span className="font-semibold text-[#0c0a09]">
+                                  +{currencySymbol}
+                                  {formatCurrencyAmount(
+                                    compTaxPaise / 100,
+                                    activeOrg?.country
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          }
+                        );
+                      }
+
+                      return (
+                        <div className="flex justify-between items-center text-[#7a716b] text-xs">
+                          <span>GST (Tax Total)</span>
+                          <span className="font-semibold text-[#0c0a09]">
+                            +{currencySymbol}
+                            {formatCurrencyAmount(
+                              derivedExclusivePaise / 100,
+                              activeOrg?.country
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {parseFloat(order.display_discount_amount || "0") > 0 && (
                       <div className="flex justify-between items-center text-emerald-700 text-xs">
                         <span className="font-medium">Discount</span>

@@ -1161,11 +1161,18 @@ export const createOrder = mutation({
 // ==========================================
 
 export const listLiveOrders = query({
-  args: { organizationId: v.id("organizations") },
+  args: { organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, args) => {
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg) return [];
+      orgId = firstOrg._id;
+    }
+
     const activeOrders = await ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
       .filter((q) => q.eq(q.field("isCompleted"), false))
       .collect();
 
@@ -1567,7 +1574,7 @@ export const listCustomerOrders = query({
 
 export const getCustomerStats = query({
   args: {
-    organizationId: v.id("organizations"),
+    organizationId: v.optional(v.id("organizations")),
     phone: v.optional(v.string()),
     name: v.optional(v.string()),
   },
@@ -1581,10 +1588,24 @@ export const getCustomerStats = query({
       };
     }
 
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg) {
+        return {
+          dineInCount: 0,
+          takeawayCount: 0,
+          totalSpends: 0,
+          recentOrders: [],
+        };
+      }
+      orgId = firstOrg._id;
+    }
+
     const cleanP = args.phone.trim().replace(/\D/g, "");
     const allOrders = await ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
       .collect();
 
     const customerOrders = allOrders.filter((o) => {
@@ -1881,7 +1902,7 @@ export const completeOrder = mutation({
 
 export const listOrders = query({
   args: {
-    organizationId: v.id("organizations"),
+    organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     search: v.optional(v.string()),
@@ -1911,9 +1932,26 @@ export const listOrders = query({
     pageSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg) {
+        return {
+          orders: [],
+          totalCount: 0,
+          totalGrossAmount: 0,
+          statusCounts: { All: 0 },
+          page: args.page ?? 1,
+          pageSize: args.pageSize ?? 15,
+          totalPages: 0,
+        };
+      }
+      orgId = firstOrg._id;
+    }
+
     let ordersQuery = ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId));
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId));
 
     const allOrders = await ordersQuery.collect();
 
