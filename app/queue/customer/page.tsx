@@ -104,10 +104,14 @@ export default function CustomerQueuePage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Queries & Mutations
-  const queueConfig = useQuery(api.organizationQueueConfigurations.get, {});
   const todayQueues = useQuery(api.organizationQueues.list, {
     reservationDate: getTodayDateString(),
   });
+  const isWaitlistIntakeOpen =
+    (queueConfig?.onlineWaitlist ?? true) &&
+    !todayQueues?.some(
+      (q) => q.queueType === "waitlist_off" && q.deletedAt === undefined
+    );
   const currentTicket = useQuery(
     api.organizationQueues.get,
     createdTicketId ? { id: createdTicketId } : "skip"
@@ -173,6 +177,11 @@ export default function CustomerQueuePage() {
   // Handle Join Waitlist Submission
   async function handleJoinWaitlist(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!isWaitlistIntakeOpen) {
+      showToast("Online waitlist intake is currently closed by the restaurant.");
+      return;
+    }
 
     if (isOutsideGeoFence) {
       showToast(
@@ -315,13 +324,25 @@ export default function CustomerQueuePage() {
         </div>
 
         {/* Geo-fence Distance Alert */}
-        {isOutsideGeoFence && (
+        {isOutsideGeoFence && isWaitlistIntakeOpen && (
           <div className="p-4 bg-amber-50 text-amber-900 text-xs font-medium flex items-start gap-2 border-b border-amber-200">
             <span className="material-symbols-outlined text-[18px] text-amber-800 shrink-0">
               location_off
             </span>
             <div>
               <strong>Outside Geo-Fence Area:</strong> You are currently {geoDistance}m away. You must be within {queueConfig?.geoFenceRadius || "500"}m of the store to join the live waitlist.
+            </div>
+          </div>
+        )}
+
+        {/* Waitlist Closed Alert */}
+        {!isWaitlistIntakeOpen && activeTab === "join" && (
+          <div className="p-4 bg-amber-50 text-amber-950 text-xs font-medium flex items-start gap-2.5 border-b border-amber-200">
+            <span className="material-symbols-outlined text-[18px] text-amber-800 shrink-0">
+              pause_circle
+            </span>
+            <div>
+              <strong>Waitlist Currently Closed:</strong> The restaurant has temporarily paused accepting new walk-in waitlist entries. Please speak with the host at the entrance or check back later.
             </div>
           </div>
         )}
@@ -463,10 +484,14 @@ export default function CustomerQueuePage() {
 
             <button
               type="submit"
-              disabled={isOutsideGeoFence}
-              className="w-full py-3 rounded-full bg-[#000000] text-white text-sm font-semibold shadow-lg hover:bg-neutral-800 disabled:opacity-50 transition-all"
+              disabled={isOutsideGeoFence || !isWaitlistIntakeOpen}
+              className="w-full py-3 rounded-full bg-[#000000] text-white text-sm font-semibold shadow-lg hover:bg-neutral-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
-              Get Live Queue Ticket
+              {!isWaitlistIntakeOpen
+                ? "Waitlist Currently Closed"
+                : isOutsideGeoFence
+                ? "Outside Geo-Fence Area"
+                : "Get Live Queue Ticket"}
             </button>
           </form>
         )}
