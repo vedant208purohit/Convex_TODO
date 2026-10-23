@@ -1499,13 +1499,16 @@ export function OperationalReportView({
                           {c.drawerStatus}
                         </span>
                       </td>
-                      <td className="py-3.5 px-4 sm:px-6 text-right">
+                      <td className="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">
                         <button
                           type="button"
                           onClick={() => handleChannelAction(c)}
-                          className="px-3 py-1.5 rounded-full bg-[#f1edec] hover:bg-[#0c0a09] hover:text-white text-[#141010] text-xs font-medium transition-all shadow-2xs border border-[#e7e5e4] cursor-pointer"
+                          className="h-8 px-3.5 bg-[#f1edec] hover:bg-[#0c0a09] hover:text-white text-[#0c0a09] text-xs font-semibold rounded-lg border border-[#e7e5e4] transition-all inline-flex items-center gap-1 cursor-pointer shadow-xs whitespace-nowrap"
                         >
-                          {c.actionLabel}
+                          <span>View Details</span>
+                          <span className="material-symbols-outlined text-[14px]">
+                            arrow_forward
+                          </span>
                         </button>
                       </td>
                     </tr>
