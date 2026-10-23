@@ -306,9 +306,9 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
       attemptId: attemptInfo!.attemptId,
     });
 
-    expect(respondentData.surveyName).toBe("Public Validation Survey");
-    expect(respondentData.published).toBe(false);
-    expect(respondentData.questions.length).toBe(3);
+    expect(respondentData!.surveyName).toBe("Public Validation Survey");
+    expect(respondentData!.published).toBe(false);
+    expect(respondentData!.questions.length).toBe(3);
 
     // 2. Validate numeric out of range fails
     await expect(
@@ -361,7 +361,7 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
     const updatedRespondentData = await t.query(api.surveyAttempts.getForRespondent, {
       attemptId: attemptInfo!.attemptId,
     });
-    expect(updatedRespondentData.published).toBe(true);
+    expect(updatedRespondentData!.published).toBe(true);
   });
 
   // ====================================================
@@ -1684,14 +1684,14 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
     const respondentView = await t.query(api.surveyAttempts.getForRespondent, {
       attemptId: binding1!.attemptId,
     });
-    expect(respondentView.surveyName).toBe("Bistro Multi-Item + Star Rating");
-    expect(respondentView.orderNumber).toBe("4829");
-    expect(respondentView.tableNumber).toBe("14");
-    expect(respondentView.orderItems).toHaveLength(2);
-    expect(respondentView.orderItems![0].name).toBe("Paneer Tikka");
-    expect(respondentView.orderItems![1].name).toBe("Dal Makhani");
-    expect(respondentView.questions).toHaveLength(3);
-    expect(respondentView.questions[1].frequency).toBe("per_order_item");
+    expect(respondentView!.surveyName).toBe("Bistro Multi-Item + Star Rating");
+    expect(respondentView!.orderNumber).toBe("4829");
+    expect(respondentView!.tableNumber).toBe("14");
+    expect(respondentView!.orderItems).toHaveLength(2);
+    expect(respondentView!.orderItems![0].name).toBe("Paneer Tikka");
+    expect(respondentView!.orderItems![1].name).toBe("Dal Makhani");
+    expect(respondentView!.questions).toHaveLength(3);
+    expect(respondentView!.questions[1].frequency).toBe("per_order_item");
 
     // 5. Submit feedback including per-item evaluations
     await t.mutation(api.surveyAttempts.submit, {
@@ -1721,7 +1721,7 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
     const updatedView = await t.query(api.surveyAttempts.getForRespondent, {
       attemptId: binding1!.attemptId,
     });
-    expect(updatedView.published).toBe(true);
+    expect(updatedView!.published).toBe(true);
 
     // 7. Verify submission is immediately reflected in survey analytics
     const results = await admin.query(api.surveys.getResults, { surveyId });

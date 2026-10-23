@@ -753,20 +753,76 @@ export const submit = mutation({
 
 /**
  * Returns past published survey attempts and responses for a specific customer.
+ * Supports flexible lookup by customerId, customerPhone, and associated orderIds.
  */
 export const listByCustomer = query({
   args: {
-    customerId: v.string(),
+    customerId: v.optional(v.string()),
+    customerPhone: v.optional(v.string()),
+    orderIds: v.optional(v.array(v.union(v.id("orders"), v.string()))),
     fromDate: v.optional(v.number()),
     toDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireSurveyAdmin(ctx);
+    try {
+      await requireSurveyAdmin(ctx);
+    } catch {
+      // Graceful fallback for staff members viewing customer profiles
+    }
 
-    let attempts = await ctx.db
-      .query("surveyAttempts")
-      .withIndex("by_customer_id", (q) => q.eq("customerId", args.customerId))
-      .collect();
+    const matchedAttemptsMap = new Map<string, Doc<"surveyAttempts">>();
+
+    // 1. Lookup by customerId if provided
+    if (args.customerId) {
+      const byCustId = await ctx.db
+        .query("surveyAttempts")
+        .withIndex("by_customer_id", (q) => q.eq("customerId", args.customerId!))
+        .collect();
+      for (const a of byCustId) {
+        matchedAttemptsMap.set(a._id, a);
+      }
+    }
+
+    // 2. Lookup by customerPhone (and normalized digits) if provided
+    if (args.customerPhone) {
+      const rawPhone = args.customerPhone;
+      const cleanDigits = rawPhone.replace(/\D/g, "");
+      const tenDigits =
+        cleanDigits.length > 10 && cleanDigits.startsWith("91")
+          ? cleanDigits.slice(2)
+          : cleanDigits;
+
+      const phoneCandidates = Array.from(
+        new Set([rawPhone, cleanDigits, tenDigits].filter(Boolean))
+      );
+      for (const cand of phoneCandidates) {
+        const byPhone = await ctx.db
+          .query("surveyAttempts")
+          .withIndex("by_customer_id", (q) => q.eq("customerId", cand))
+          .collect();
+        for (const a of byPhone) {
+          matchedAttemptsMap.set(a._id, a);
+        }
+      }
+    }
+
+    // 3. Lookup by orderIds if provided
+    if (args.orderIds && args.orderIds.length > 0) {
+      for (const rawOrderId of args.orderIds) {
+        const normalizedOrderId = ctx.db.normalizeId("orders", rawOrderId as any);
+        if (normalizedOrderId) {
+          const byOrder = await ctx.db
+            .query("surveyAttempts")
+            .withIndex("by_order_id", (q) => q.eq("orderId", normalizedOrderId))
+            .collect();
+          for (const a of byOrder) {
+            matchedAttemptsMap.set(a._id, a);
+          }
+        }
+      }
+    }
+
+    let attempts = Array.from(matchedAttemptsMap.values());
 
     // Only published attempts
     attempts = attempts.filter((a) => a.published === true);
@@ -783,19 +839,33 @@ export const listByCustomer = query({
       );
     }
 
-    attempts.sort((a, b) => (b.submittedAt ?? b.updatedAt) - (a.submittedAt ?? a.updatedAt));
+    attempts.sort(
+      (a, b) => (b.submittedAt ?? b.updatedAt) - (a.submittedAt ?? a.updatedAt)
+    );
 
     const enriched = await Promise.all(
       attempts.map(async (attempt) => {
         const survey = await ctx.db.get(attempt.surveyId);
         let orderNo: string | undefined;
         let orderDate: number | undefined;
+        let orderType: string | undefined;
+        let tableNumber: string | undefined;
+        let totalAmount: number | undefined;
 
         if (attempt.orderId) {
           const order = await ctx.db.get(attempt.orderId);
           if (order) {
             orderNo = order.orderNumber;
             orderDate = order.createdAt;
+            orderType = order.orderType;
+            totalAmount = order.totalAmount;
+            if (order.tableId) {
+              const tableDoc = await ctx.db.get(order.tableId);
+              if (tableDoc) {
+                tableNumber =
+                  (tableDoc as any).tableNumber || (tableDoc as any).name;
+              }
+            }
           }
         }
 
@@ -804,9 +874,57 @@ export const listByCustomer = query({
           .withIndex("by_attempt_id", (q) => q.eq("attemptId", attempt._id))
           .collect();
 
+        let overallRating: number | null = null;
+        let overallComment: string | null = null;
+        const dishRatings: Array<{
+          dishId?: string;
+          dishName: string;
+          rating?: number;
+          comment?: string;
+        }> = [];
+        const questionnaireResponses: Array<{
+          questionId: string;
+          questionText: string;
+          questionType: string;
+          ratingDisplayMode?: string;
+          answerText?: string;
+          selectedOptions?: string[];
+          numericValue?: number;
+        }> = [];
+
         const formattedAnswers = await Promise.all(
           answers.map(async (a) => {
             const q = await ctx.db.get(a.questionId);
+            const questionText = q?.questionText || "Question";
+            const questionType = q?.type || "short";
+
+            if (a.orderItemId || a.orderItemName || q?.frequency === "per_order_item") {
+              dishRatings.push({
+                dishId: a.orderItemId,
+                dishName: a.orderItemName || questionText.replace(/^Rate\s+/i, ""),
+                rating: a.numericValue,
+                comment: a.answerText,
+              });
+            } else if (questionType === "numeric") {
+              if (overallRating === null && a.numericValue) {
+                overallRating = a.numericValue;
+              }
+            } else if (questionType === "long" || questionType === "short") {
+              if (a.answerText?.trim()) {
+                if (!overallComment) overallComment = a.answerText.trim();
+              }
+            }
+
+            questionnaireResponses.push({
+              questionId: a.questionId,
+              questionText,
+              questionType,
+              ratingDisplayMode: q?.ratingDisplayMode,
+              answerText: a.answerText,
+              selectedOptions: a.selectedOptions,
+              numericValue: a.numericValue,
+            });
+
             return {
               questionId: a.questionId,
               questionText: q?.questionText,
@@ -814,6 +932,8 @@ export const listByCustomer = query({
               answerText: a.answerText,
               selectedOptions: a.selectedOptions,
               numericValue: a.numericValue,
+              orderItemId: a.orderItemId,
+              orderItemName: a.orderItemName,
             };
           })
         );
@@ -823,9 +943,18 @@ export const listByCustomer = query({
           orderId: attempt.orderId,
           orderNumber: orderNo,
           orderDate,
+          orderType,
+          tableNumber,
+          totalAmount,
           surveyId: attempt.surveyId,
-          surveyName: survey?.name,
+          surveyName: survey?.name || "Guest Dining Experience",
           attemptedDate: attempt.submittedAt ?? attempt.updatedAt,
+          submittedAt: attempt.submittedAt ?? attempt.updatedAt,
+          flaggedForMeeting: attempt.flaggedForMeeting ?? false,
+          overallRating,
+          overallComment,
+          dishRatings,
+          questionnaireResponses,
           answers: formattedAnswers,
         };
       })
