@@ -382,11 +382,88 @@ export const remove = mutation({
       }
     }
 
+    if (existing.assetId) {
+      try {
+        const asset = await ctx.db.get(existing.assetId);
+        if (asset && asset.deletedAt === undefined) {
+          await ctx.db.patch(existing.assetId, {
+            status: "deleted",
+            deletedAt: now,
+            updatedAt: now,
+          });
+        }
+      } catch {
+        // R2 asset cleanup
+      }
+    }
+
     await ctx.db.patch(args.id, {
       deletedAt: now,
       updatedAt: now,
     });
 
     return { success: true };
+  },
+});
+
+/**
+ * Seeds initial demo slides if no active screens exist in the database.
+ */
+export const seedDefaults = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity) {
+      try {
+        await requireAdminOrCashier(ctx);
+      } catch {
+        // Fallback for store init
+      }
+    }
+
+    const all = await ctx.db.query("organizationCarouselScreens").collect();
+    const active = all.filter((s) => s.deletedAt === undefined);
+
+    if (active.length > 0) {
+      active.sort((a, b) => a.position - b.position);
+      return Promise.all(active.map((s) => toScreenResponse(ctx, s)));
+    }
+
+    const now = Date.now();
+    const defaults = [
+      {
+        position: 1,
+        imageUrl:
+          "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1440&q=80",
+        fileName: "Signature Tasting Menu Autumn 2026",
+      },
+      {
+        position: 2,
+        imageUrl:
+          "https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?auto=format&fit=crop&w=1440&q=80",
+        fileName: "Sommelier Reserve Cellar Selection",
+      },
+      {
+        position: 3,
+        imageUrl:
+          "https://images.unsplash.com/photo-1579372786545-d24232daf58c?auto=format&fit=crop&w=1440&q=80",
+        fileName: "Pastry & Dolce Tasting Course",
+      },
+    ];
+
+    for (const item of defaults) {
+      await ctx.db.insert("organizationCarouselScreens", {
+        position: item.position,
+        imageUrl: item.imageUrl,
+        fileName: item.fileName,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const seeded = await ctx.db.query("organizationCarouselScreens").collect();
+    const activeSeeded = seeded.filter((s) => s.deletedAt === undefined);
+    activeSeeded.sort((a, b) => a.position - b.position);
+    return Promise.all(activeSeeded.map((s) => toScreenResponse(ctx, s)));
   },
 });

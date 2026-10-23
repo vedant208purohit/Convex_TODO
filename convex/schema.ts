@@ -1610,4 +1610,78 @@ postpaidOrderRequests: defineTable({
     .index("by_attempt_question", ["attemptId", "questionId"])
     .index("by_question_id", ["questionId"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // ==========================================
+  // Customer Front Display (CFD) Domain Entities
+  // ==========================================
+
+  organizationFrontDisplaySettings: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    cfdEnabled: v.boolean(),
+    displayLayout: v.union(
+      v.literal("split"),
+      v.literal("cart"),
+      v.literal("media")
+    ),
+    theme: v.union(
+      v.literal("light"),
+      v.literal("dark"),
+      v.literal("warm")
+    ),
+    showPaymentQr: v.boolean(),
+    storeUpiAddress: v.optional(v.string()),
+    showCashTenderedChangeDue: v.boolean(),
+    merchantDisplayName: v.optional(v.string()),
+    showStarRatingSurvey: v.boolean(),
+    showWhatsappReceipt: v.boolean(),
+    returnToWelcomeTimeout: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  customerFrontDisplays: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    terminalId: v.optional(v.string()),
+    name: v.string(),
+    workstationName: v.optional(v.string()),
+    connectionType: v.union(v.literal("hdmi"), v.literal("network")),
+    ipAddress: v.optional(v.string()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("offline"),
+      v.literal("pending_pair")
+    ),
+    latencyMs: v.optional(v.number()),
+    lastSeenAt: v.number(),
+    pairingCode: v.optional(v.string()),
+    pairingCodeExpiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_terminal", ["terminalId"])
+    .index("by_pairing_code", ["pairingCode"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  frontDisplaySessions: defineTable({
+    organizationId: v.id("organizations"),
+    terminalId: v.string(),
+    state: v.union(
+      v.literal("idle"),
+      v.literal("ringing"),
+      v.literal("payment_qr"),
+      v.literal("cash_tender"),
+      v.literal("completed")
+    ),
+    payload: v.any(),
+    updatedAt: v.number(),
+  })
+    .index("by_org_terminal", ["organizationId", "terminalId"]),
 }, { schemaValidation: false });
+
