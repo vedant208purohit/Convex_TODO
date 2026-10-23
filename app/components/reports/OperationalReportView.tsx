@@ -1541,7 +1541,7 @@ export function OperationalReportView({
           </div>
 
           {/* CASH DRAWER RECONCILIATION SECTION (Shift Cash Drawer Auditing) */}
-          <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col gap-6">
+          <div className="bg-white p-4 sm:p-6 lg:p-8 rounded-xl shadow-xs border border-[#e7e5e4] flex flex-col gap-6 opacity-40 select-none pointer-events-none">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#e7e5e4]">
               <div>
                 <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-[#5e5e5e] mb-1 font-semibold">
@@ -1713,7 +1713,7 @@ export function OperationalReportView({
                   type="button"
                   disabled
                   title="Print Drawer Slip"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#f1edec] text-[#a8a29e] text-xs font-medium rounded-full border border-[#e7e5e4] opacity-40 cursor-not-allowed select-none"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#f1edec] text-[#a8a29e] text-xs font-medium rounded-full border border-[#e7e5e4] cursor-not-allowed select-none"
                 >
                   <span className="material-symbols-outlined text-[16px]">print</span>
                   <span>Print Drawer Slip</span>
@@ -1722,7 +1722,7 @@ export function OperationalReportView({
                   type="button"
                   disabled
                   title="Close Shift Drawer (Coming Soon)"
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0c0a09] text-white text-xs font-semibold rounded-full opacity-40 cursor-not-allowed select-none"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0c0a09] text-white text-xs font-semibold rounded-full cursor-not-allowed select-none"
                 >
                   <span className="material-symbols-outlined text-[16px] text-white">
                     lock
