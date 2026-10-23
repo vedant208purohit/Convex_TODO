@@ -339,7 +339,7 @@ export function OperationalReportView({
         subtitle: "Front desk register #01",
         status: "In Drawer",
         statusColor: "bg-[#f1edec] text-[#141010]",
-        actionLabel: "Reconcile",
+        actionLabel: "View Details",
         actionType: "reconcile",
       },
       "upi / qr scan": {
@@ -347,7 +347,7 @@ export function OperationalReportView({
         subtitle: "Dynamic soundbox integrated",
         status: "Direct Bank",
         statusColor: "bg-[#e8f5e9] text-[#2e7d32]",
-        actionLabel: "View Batches",
+        actionLabel: "View Details",
         actionType: "batches",
       },
       upi: {
@@ -355,7 +355,7 @@ export function OperationalReportView({
         subtitle: "Dynamic soundbox integrated",
         status: "Direct Bank",
         statusColor: "bg-[#e8f5e9] text-[#2e7d32]",
-        actionLabel: "View Batches",
+        actionLabel: "View Details",
         actionType: "batches",
       },
       "credit card": {
@@ -379,7 +379,7 @@ export function OperationalReportView({
         subtitle: "Pine Labs EDC Terminal #04",
         status: "Terminal Batch",
         statusColor: "bg-[#f1edec] text-[#5e5e5e]",
-        actionLabel: "View Slips",
+        actionLabel: "View Details",
         actionType: "slips",
       },
       card: {
@@ -387,7 +387,7 @@ export function OperationalReportView({
         subtitle: "Pine Labs EDC Terminal #04",
         status: "Terminal Batch",
         statusColor: "bg-[#f1edec] text-[#5e5e5e]",
-        actionLabel: "View Slips",
+        actionLabel: "View Details",
         actionType: "slips",
       },
       "swiggy online": {
@@ -395,7 +395,7 @@ export function OperationalReportView({
         subtitle: "Cloud Kitchen API Integration",
         status: "Aggregator Payout",
         statusColor: "bg-[#f1edec] text-[#5e5e5e]",
-        actionLabel: "View Order IDs",
+        actionLabel: "View Details",
         actionType: "orders",
       },
       swiggy: {
@@ -403,7 +403,7 @@ export function OperationalReportView({
         subtitle: "Cloud Kitchen API Integration",
         status: "Aggregator Payout",
         statusColor: "bg-[#f1edec] text-[#5e5e5e]",
-        actionLabel: "View Order IDs",
+        actionLabel: "View Details",
         actionType: "orders",
       },
       "zomato online": {
@@ -411,7 +411,7 @@ export function OperationalReportView({
         subtitle: "Merchant Direct Settlement",
         status: "Aggregator Payout",
         statusColor: "bg-[#f1edec] text-[#5e5e5e]",
-        actionLabel: "View Order IDs",
+        actionLabel: "View Details",
         actionType: "orders",
       },
       zomato: {
@@ -419,7 +419,7 @@ export function OperationalReportView({
         subtitle: "Merchant Direct Settlement",
         status: "Aggregator Payout",
         statusColor: "bg-[#f1edec] text-[#5e5e5e]",
-        actionLabel: "View Order IDs",
+        actionLabel: "View Details",
         actionType: "orders",
       },
     };
