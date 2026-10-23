@@ -1559,17 +1559,9 @@ export function OperationalReportView({
                 </h2>
               </div>
               <div className="flex items-center gap-2">
-                <span
-                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium border border-[#e7e5e4] ${
-                    isDrawerClosed
-                      ? "bg-[#f1edec] text-[#5e5e5e]"
-                      : "bg-[#e8f5e9] text-[#2e7d32]"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {isDrawerClosed ? "lock" : "lock_open"}
-                  </span>
-                  <span>{isDrawerClosed ? "Drawer Closed & Archived" : "Drawer Active"}</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700 border border-amber-200/80 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Coming Soon
                 </span>
               </div>
             </div>
@@ -1728,25 +1720,14 @@ export function OperationalReportView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (isDrawerClosed) {
-                      setIsDrawerClosed(false);
-                      showToast("Shift drawer re-opened for service.", "info");
-                    } else {
-                      setTempCountedInput(
-                        cashDrawerData.actualCountedPaise > 0
-                          ? (cashDrawerData.actualCountedPaise / 100).toFixed(2)
-                          : "0.00"
-                      );
-                      setActiveModal("closeDrawer");
-                    }
-                  }}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0c0a09] hover:bg-[#262626] text-white text-xs font-semibold rounded-full shadow-2xs transition-colors cursor-pointer"
+                  disabled
+                  title="Close Shift Drawer (Coming Soon)"
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-[#0c0a09] text-white text-xs font-semibold rounded-full opacity-40 cursor-not-allowed select-none"
                 >
                   <span className="material-symbols-outlined text-[16px] text-white">
-                    {isDrawerClosed ? "lock_open" : "lock"}
+                    lock
                   </span>
-                  <span>{isDrawerClosed ? "Re-open Drawer" : "Close Shift Drawer"}</span>
+                  <span>Close Shift Drawer</span>
                 </button>
               </div>
             </div>
