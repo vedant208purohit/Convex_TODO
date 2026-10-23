@@ -2343,20 +2343,41 @@ export default function OrdersPage() {
                         );
                       })()}
 
-                      {/* Print Receipt */}
+                      {/* Bill & Receipt Preview */}
                       <button
                         type="button"
-                        disabled
-                        title="Print Thermal Receipt (Coming Soon)"
+                        onClick={() => {
+                          if (order) {
+                            router.push(`/orders/${order._id}/receipt`);
+                          }
+                        }}
+                        disabled={!order}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="relative flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] !text-white text-white text-xs font-semibold rounded-lg opacity-40 cursor-not-allowed select-none shadow-xs"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
                       >
                         <PrintIcon className="w-3.5 h-3.5 !text-white text-white shrink-0" />
                         <span className="!text-white text-white font-semibold text-xs whitespace-nowrap">
-                          Print Receipt
+                          Receipt Preview &amp; QR
                         </span>
-                        <span className="absolute -top-2 -right-1 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider bg-amber-400 text-stone-900 border border-amber-300 rounded-full shadow-xs whitespace-nowrap leading-none pointer-events-none">
-                          Coming Soon
+                      </button>
+
+                      {/* Customer Review Details */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (order) {
+                            router.push(`/orders/${order._id}/review`);
+                          }
+                        }}
+                        disabled={!order}
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                      >
+                        <span className="material-symbols-outlined text-[16px] !text-white text-white shrink-0">
+                          rate_review
+                        </span>
+                        <span className="!text-white text-white font-semibold text-xs whitespace-nowrap">
+                          Review Details &amp; Ratings
                         </span>
                       </button>
 

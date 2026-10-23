@@ -1552,6 +1552,434 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
       foreignAdmin.query(api.surveys.getResults, { surveyId })
     ).rejects.toThrow("Survey not found");
   });
+
+  // ====================================================
+  // 14. ORDER RECEIPT INTEGRATION & CUSTOMER FEEDBACK QR
+  // ====================================================
+
+  test("20. Order Receipt & Review QR Binding: getOrCreateForOrder idempotency, getForRespondent order/item context, per-item answers submission, and reactive analytics connection", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+
+    // 1. Create an active survey with both order-level and item-level questions
+    const surveyId = await admin.mutation(api.surveys.create, {
+      name: "Bistro Multi-Item + Star Rating",
+      introduction: "Please evaluate your meal and dining service.",
+      afterSurveyContent: "Thank you for reviewing your meal with PREST!",
+      active: true,
+    });
+
+    const qOverall = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      type: "numeric",
+      questionText: "Overall Bistro Experience",
+      position: 1,
+      frequency: "once_per_order",
+      ratingDisplayMode: "stars",
+      lowLabel: "Poor",
+      highLabel: "Exceptional",
+    });
+
+    const qItemRating = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      type: "numeric",
+      questionText: "Rate each dish",
+      position: 2,
+      frequency: "per_order_item",
+      ratingDisplayMode: "stars",
+    });
+
+    const qComments = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      type: "long",
+      questionText: "Chef comments",
+      position: 3,
+      frequency: "once_per_order",
+    });
+
+    // 2. Create table, order, and order line items
+    const tableId = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      return await ctx.db.insert("organizationTables", {
+        tableNumber: "14",
+        seatingCapacity: 4,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const orderId = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      return await ctx.db.insert("orders", {
+        organizationId: orgId,
+        orderNumber: "4829",
+        tokenNumber: "14",
+        orderType: "DineIn",
+        orderSource: "POS",
+        orderStatusName: "Completed",
+        isCompleted: true,
+        isRejected: false,
+        isModify: false,
+        subTotal: 116000,
+        taxTotal: 11600,
+        totalAmount: 127600,
+        paymentMode: "Card",
+        paymentStatus: "Paid",
+        customerPhone: "+919521020647",
+        customerEmail: "guest.table14@example.com",
+        tableId,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    // Insert order items (Paneer Tikka, Butter Naan, Dal Makhani)
+    const item1Id = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      return await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId,
+        itemId: "dummyItem1" as any,
+        itemName: "Paneer Tikka",
+        itemPrice: 34000,
+        quantity: 1,
+        totalPrice: 34000,
+        isReady: true,
+        createdAt: now,
+      });
+    });
+
+    const item2Id = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      return await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId,
+        itemId: "dummyItem2" as any,
+        itemName: "Dal Makhani",
+        itemPrice: 38000,
+        quantity: 1,
+        totalPrice: 38000,
+        isReady: true,
+        createdAt: now,
+      });
+    });
+
+    // 3. Test getOrCreateForOrder (Idempotent QR Binding)
+    const binding1 = await t.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+      publicBaseUrl: "https://prest.dine",
+    });
+    expect(binding1).not.toBeNull();
+    expect(binding1?.surveyId).toBe(surveyId);
+    expect(binding1?.published).toBe(false);
+    expect(binding1?.surveyQrUrl).toBe(`https://prest.dine/attempts/${binding1?.attemptId}`);
+
+    // Call again to verify idempotency: must return existing attempt ID
+    const binding2 = await t.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+      publicBaseUrl: "https://prest.dine",
+    });
+    expect(binding2?.attemptId).toBe(binding1?.attemptId);
+
+    // 4. Test public respondent query (getForRespondent)
+    const respondentView = await t.query(api.surveyAttempts.getForRespondent, {
+      attemptId: binding1!.attemptId,
+    });
+    expect(respondentView.surveyName).toBe("Bistro Multi-Item + Star Rating");
+    expect(respondentView.orderNumber).toBe("4829");
+    expect(respondentView.tableNumber).toBe("14");
+    expect(respondentView.orderItems).toHaveLength(2);
+    expect(respondentView.orderItems![0].name).toBe("Paneer Tikka");
+    expect(respondentView.orderItems![1].name).toBe("Dal Makhani");
+    expect(respondentView.questions).toHaveLength(3);
+    expect(respondentView.questions[1].frequency).toBe("per_order_item");
+
+    // 5. Submit feedback including per-item evaluations
+    await t.mutation(api.surveyAttempts.submit, {
+      attemptId: binding1!.attemptId,
+      answers: [
+        { questionId: qOverall, numericValue: 5 },
+        {
+          questionId: qItemRating,
+          orderItemId: item1Id,
+          orderItemName: "Paneer Tikka",
+          numericValue: 5,
+        },
+        {
+          questionId: qItemRating,
+          orderItemId: item2Id,
+          orderItemName: "Dal Makhani",
+          numericValue: 4,
+        },
+        {
+          questionId: qComments,
+          answerText: "Exceptional dining experience! The dal makhani was authentic and creamy.",
+        },
+      ],
+    });
+
+    // 6. Verify submission transitions attempt to published
+    const updatedView = await t.query(api.surveyAttempts.getForRespondent, {
+      attemptId: binding1!.attemptId,
+    });
+    expect(updatedView.published).toBe(true);
+
+    // 7. Verify submission is immediately reflected in survey analytics
+    const results = await admin.query(api.surveys.getResults, { surveyId });
+    expect(results.totalPublishedAttempts).toBe(1);
+    expect(results.overallRating?.average).toBe(5);
+
+    const qCommentsResult: any = results.questions.find((q) => q.questionId === qComments);
+    expect(qCommentsResult.responses).toHaveLength(1);
+    expect(qCommentsResult.responses[0].answerText).toContain("Exceptional dining experience!");
+    expect(qCommentsResult.responses[0].tableNumber).toBe("Table 14");
+    expect(qCommentsResult.responses[0].orderNumber).toBe("4829");
+  });
+
+  // ====================================================
+  // 15. PRINTER & RECEIPT SETTINGS PERSISTENCE
+  // ====================================================
+
+  test("21. Hardware & Printer Settings: persistence of showQrCode, autoCutPaper, and popCashDrawer via organizations.update", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+
+    // Initial state
+    const initialOrg = await admin.query(api.organizations.get, { id: orgId });
+    expect(initialOrg).not.toBeNull();
+
+    // Toggle hardware settings
+    await admin.mutation(api.organizations.update, {
+      id: orgId,
+      showQrCode: false,
+      autoCutPaper: false,
+      popCashDrawer: true,
+    });
+
+    const updatedOrg = await admin.query(api.organizations.get, { id: orgId });
+    expect(updatedOrg?.showQrCode).toBe(false);
+    expect(updatedOrg?.autoCutPaper).toBe(false);
+    expect(updatedOrg?.popCashDrawer).toBe(true);
+
+    // Toggle back
+    await admin.mutation(api.organizations.update, {
+      id: orgId,
+      showQrCode: true,
+      autoCutPaper: true,
+      popCashDrawer: false,
+    });
+
+    const restoredOrg = await admin.query(api.organizations.get, { id: orgId });
+    expect(restoredOrg?.showQrCode).toBe(true);
+    expect(restoredOrg?.autoCutPaper).toBe(true);
+    expect(restoredOrg?.popCashDrawer).toBe(false);
+  });
+
+  // ====================================================
+  // 16. ORDER CUSTOMER REVIEW DETAILS & REAL FEEDBACK DATA
+  // ====================================================
+
+  test("22. Order Customer Review Details: intentional empty state when unreviewed, real review details retrieval, dish critiques, trailing benchmarks, and meeting flag", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+
+    // 1. Create survey with questions
+    const surveyId = await admin.mutation(api.surveys.create, {
+      name: "Bistro Feedback Survey",
+      active: true,
+    });
+
+    const qOverall = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      type: "numeric",
+      questionText: "Overall Dining Score",
+      position: 1,
+      frequency: "once_per_order",
+    });
+
+    const qDish = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      type: "numeric",
+      questionText: "Rate Dish",
+      position: 2,
+      frequency: "per_order_item",
+    });
+
+    const qNotes = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      type: "long",
+      questionText: "Guest notes",
+      position: 3,
+      frequency: "once_per_order",
+    });
+
+    // 2. Create order with two dishes
+    const orderId = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      return await ctx.db.insert("orders", {
+        organizationId: orgId,
+        orderNumber: "4829",
+        orderType: "DineIn",
+        orderSource: "POS",
+        orderStatusName: "Completed & Settled",
+        paymentMode: "UPI Terminal #2",
+        subTotal: 72000,
+        taxTotal: 3600,
+        totalAmount: 75600,
+        isCompleted: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const item1Id = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const itemId = await ctx.db.insert("items", {
+        organizationId: orgId,
+        name: "Paneer Tikka",
+        price: 34000,
+        published: true,
+        isAvailable: true,
+        isGst: true,
+        isVeg: true,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: true,
+        showCalorie: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId,
+        itemId,
+        itemName: "Paneer Tikka",
+        itemPrice: 34000,
+        quantity: 1,
+        totalPrice: 34000,
+        isReady: true,
+        createdAt: now,
+      });
+    });
+
+    const item2Id = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const itemId = await ctx.db.insert("items", {
+        organizationId: orgId,
+        name: "Dal Makhani",
+        price: 38000,
+        published: true,
+        isAvailable: true,
+        isGst: true,
+        isVeg: true,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: false,
+        showCalorie: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId,
+        itemId,
+        itemName: "Dal Makhani",
+        itemPrice: 38000,
+        quantity: 1,
+        totalPrice: 38000,
+        isReady: true,
+        createdAt: now,
+      });
+    });
+
+    // 3. Query before customer reviews -> Verify intentional Empty State
+    const unreviewed = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+    expect(unreviewed).not.toBeNull();
+    expect(unreviewed?.hasReview).toBe(false);
+    expect(unreviewed?.review).toBeNull();
+    expect(unreviewed?.order.orderNumber).toBe("4829");
+    expect(unreviewed?.items).toHaveLength(2);
+    expect(unreviewed?.items[0].customerScore).toBeNull();
+    expect(unreviewed?.items[0].operationalStatus).toBe("Pending Review");
+
+    // 4. Create review attempt and submit genuine responses
+    const attemptRes = await admin.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+    });
+    expect(attemptRes).not.toBeNull();
+    const attemptId = attemptRes!.attemptId;
+
+    await admin.mutation(api.surveyAttempts.submit, {
+      attemptId,
+      answers: [
+        {
+          questionId: qOverall,
+          numericValue: 5,
+          answerText: "5",
+        },
+        {
+          questionId: qDish,
+          orderItemId: item1Id.toString(),
+          orderItemName: "Paneer Tikka",
+          numericValue: 5,
+          answerText: "Excellent taste and tender cottage cheese!",
+        },
+        {
+          questionId: qDish,
+          orderItemId: item2Id.toString(),
+          orderItemName: "Dal Makhani",
+          numericValue: 3,
+          answerText: "Good flavour, could be richer/creamier",
+        },
+        {
+          questionId: qNotes,
+          answerText: "The service was quick and the staff checked in politely. Really enjoyed the main courses.",
+        },
+      ],
+    });
+
+    // 5. Query after customer reviews -> Verify complete real data
+    const reviewed = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+    expect(reviewed).not.toBeNull();
+    expect(reviewed?.hasReview).toBe(true);
+    expect(reviewed?.review?.overallScore).toBe(5);
+    expect(reviewed?.review?.overallRatingLabel).toBe("Exceptional Dining Experience");
+    expect(reviewed?.review?.customerVerbatim).toContain("Really enjoyed the main courses");
+    expect(reviewed?.review?.sentimentTags).toContain("Prompt Service");
+    expect(reviewed?.review?.sentimentTags).toContain("Polite Staff");
+    expect(reviewed?.review?.itemsRatedCount).toBe(2);
+
+    // Verify item-level scores and operational statuses
+    const paneer = reviewed?.items.find((i) => i.itemName === "Paneer Tikka");
+    expect(paneer?.customerScore).toBe(5);
+    expect(paneer?.operationalStatus).toBe("Highly Commended");
+    expect(paneer?.customerCritique).toBe("Excellent taste and tender cottage cheese!");
+
+    const dal = reviewed?.items.find((i) => i.itemName === "Dal Makhani");
+    expect(dal?.customerScore).toBe(3);
+    expect(dal?.operationalStatus).toBe("Recipe Calibration Note");
+    expect(dal?.customerCritique).toBe("Good flavour, could be richer/creamier");
+
+    // Verify benchmarks
+    expect(reviewed?.benchmarks).toHaveLength(2);
+    const paneerBm = reviewed?.benchmarks.find((b) => b.itemName === "Paneer Tikka");
+    expect(paneerBm?.thisBillScore).toBe(5);
+    expect(paneerBm?.avgScore30d).toBe(5);
+
+    // 6. Test Flag for Kitchen Meeting toggle mutation
+    expect(reviewed?.review?.flaggedForMeeting).toBe(false);
+    const flagRes = await admin.mutation(api.surveyAttempts.toggleFlagForMeeting, {
+      attemptId,
+    });
+    expect(flagRes.success).toBe(true);
+    expect(flagRes.flaggedForMeeting).toBe(true);
+
+    const recheck = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+    expect(recheck?.review?.flaggedForMeeting).toBe(true);
+  });
 });
 
 

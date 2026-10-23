@@ -517,14 +517,14 @@ function IndividualSurveyAnalyticsContent() {
                     {surveyResults.totalPublishedAttempts}
                   </span>
                   <span className="text-[11px] font-semibold text-[#137333] bg-[#E6F4EA] px-2.5 py-0.5 rounded-full">
-                    {surveyResults.completionRate}% Complete
+                    {surveyResults.totalPublishedAttempts > 0 ? `${surveyResults.completionRate}% Complete` : "0% Complete"}
                   </span>
                 </div>
                 <p className="text-[12px] text-[#5b5f64] flex items-center gap-1.5 mt-1">
                   <span className="material-symbols-outlined text-[15px] text-[#137333]">
                     verified
                   </span>
-                  <span>100% verified completion via Table QR & Terminal POS</span>
+                  <span>100% verified completion via Table QR &amp; Terminal POS</span>
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-[#FAF9F6] border border-[#E8E6E3] flex items-center justify-center text-[#1A1A1A]">
@@ -543,16 +543,16 @@ function IndividualSurveyAnalyticsContent() {
                     {overallAvg > 0 ? overallAvg.toFixed(1) : "—"}
                   </span>
                   <span className="text-[#5b5f64] text-[16px] font-medium">
-                    / {overallMax.toFixed(1)}
+                    {overallAvg > 0 ? `/ ${overallMax.toFixed(1)}` : "(No ratings yet)"}
                   </span>
 
                   {/* Star Visualization */}
                   <div className="flex items-center text-black ml-1">
                     {[1, 2, 3, 4, 5].map((starIdx) => {
                       const starVal = (starIdx / 5) * overallMax;
-                      const isFull = overallAvg >= starVal;
+                      const isFull = overallAvg > 0 && overallAvg >= starVal;
                       const isHalf =
-                        !isFull && overallAvg >= starVal - (overallMax / 5) * 0.5;
+                        overallAvg > 0 && !isFull && overallAvg >= starVal - (overallMax / 5) * 0.5;
                       return (
                         <span
                           key={starIdx}
@@ -566,9 +566,9 @@ function IndividualSurveyAnalyticsContent() {
                   </div>
                 </div>
                 <p className="text-[12px] text-[#5b5f64] truncate max-w-md mt-1">
-                  {surveyResults.overallRating
+                  {overallAvg > 0 && surveyResults.overallRating
                     ? `Calculated from numeric question: “${surveyResults.overallRating.questionText}”`
-                    : "No numeric rating question configured on this survey."}
+                    : "No ratings recorded yet for this survey."}
                 </p>
               </div>
               <div className="w-12 h-12 rounded-lg bg-[#FAF9F6] border border-[#E8E6E3] flex items-center justify-center text-[#1A1A1A]">
@@ -581,6 +581,39 @@ function IndividualSurveyAnalyticsContent() {
               </div>
             </div>
           </div>
+
+          {/* Zero Reviews Empty State Explanatory Banner */}
+          {surveyResults.totalPublishedAttempts === 0 && (
+            <div className="bg-white border border-[#E8E6E3] rounded-xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+              <div className="flex items-start gap-3.5">
+                <div className="w-10 h-10 rounded-full bg-[#FAF9F6] border border-[#E8E6E3] flex items-center justify-center text-[#5b5f64] shrink-0 mt-0.5">
+                  <span className="material-symbols-outlined text-[22px]">pending_actions</span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-[#1A1A1A]">
+                    Customer Feedback Awaiting Real Submissions
+                  </h3>
+                  <p className="text-xs text-[#5b5f64] mt-0.5 max-w-2xl">
+                    Customer feedback will appear here after customers submit reviews through the POS review experience or by scanning order bill receipts.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 shrink-0">
+                <Link
+                  href={`/surveys/${surveyResults.surveyId}/questions`}
+                  className="px-3.5 py-2 bg-[#FAF9F6] hover:bg-stone-100 text-[#1A1A1A] border border-[#E8E6E3] rounded-lg text-xs font-semibold transition-colors"
+                >
+                  Question Builder
+                </Link>
+                <Link
+                  href="/orders"
+                  className="px-3.5 py-2 bg-black hover:bg-stone-800 text-white rounded-lg text-xs font-semibold transition-colors shadow-xs"
+                >
+                  View Orders &amp; Receipts
+                </Link>
+              </div>
+            </div>
+          )}
 
           {/* ==================================================== */}
           {/* QUESTIONS FEED: RENDERS EVERY CONFIGURED QUESTION IN ORDER */}
