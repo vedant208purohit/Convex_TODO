@@ -104,6 +104,7 @@ export default function CustomerQueuePage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Queries & Mutations
+  const queueConfig = useQuery(api.organizationQueueConfigurations.get, {});
   const todayQueues = useQuery(api.organizationQueues.list, {
     reservationDate: getTodayDateString(),
   });
