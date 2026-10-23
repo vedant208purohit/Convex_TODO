@@ -475,6 +475,57 @@ export function OperationalReportView({
     return top;
   }, [tenderChannels]);
 
+  // Selected channel data for the Action audit modal
+  const selectedChannelData = useMemo(() => {
+    return (
+      tenderChannels.find((c) => c.mode === selectedChannelName) ||
+      tenderChannels[0] ||
+      null
+    );
+  }, [tenderChannels, selectedChannelName]);
+
+  // Selected channel order transactions for the Action audit modal
+  const selectedChannelOrders = useMemo(() => {
+    if (!selectedChannelName) return [];
+    const target = selectedChannelName.toLowerCase().trim();
+
+    return orders.filter((o) => {
+      if (isOrderUnpaidCancelled(o)) return false;
+
+      if (o.payments && Array.isArray(o.payments) && o.payments.length > 0) {
+        return o.payments.some((p: any) => {
+          const m = (p.paymentModeName || p.mode || p.paymentMode || "").toLowerCase().trim();
+          if (target === "cash" && m.includes("cash")) return true;
+          if (
+            target.includes("upi") &&
+            (m.includes("upi") || m.includes("qr") || m.includes("gpay") || m.includes("phonepe") || m.includes("paytm"))
+          )
+            return true;
+          if (
+            target.includes("card") &&
+            (m.includes("card") || m.includes("credit") || m.includes("debit") || m.includes("pos") || m.includes("visa") || m.includes("mastercard"))
+          )
+            return true;
+          return m.includes(target) || target.includes(m);
+        });
+      }
+
+      const orderMode = (o.paymentMode || o.paymentMethod || "Cash").toLowerCase().trim();
+      if (target === "cash" && orderMode.includes("cash")) return true;
+      if (
+        target.includes("upi") &&
+        (orderMode.includes("upi") || orderMode.includes("qr") || orderMode.includes("soundbox"))
+      )
+        return true;
+      if (
+        target.includes("card") &&
+        (orderMode.includes("card") || orderMode.includes("credit") || orderMode.includes("debit"))
+      )
+        return true;
+      return orderMode.includes(target) || target.includes(orderMode);
+    });
+  }, [orders, selectedChannelName]);
+
 
 
   // Staff name resolution lookup map from organization users
@@ -493,16 +544,64 @@ export function OperationalReportView({
     return map;
   }, [organizationUsersFromDb]);
 
-  // Helper to resolve floor/section name for an order
+  // Helper to resolve floor/section name for an order with dynamic table & layout resolution
   const resolveOrderFloorSection = (o: any): string => {
-    const tableVal = o.table?.number || o.table?.name || o.tableName || o.tableNumber;
-    if (tableVal) {
-      const str = String(tableVal).trim();
-      return str.toLowerCase().startsWith("table") ? str : `Table ${str}`;
-    }
+    // 1. Takeaway / Pickup
     const type = (o.orderType || "").toLowerCase();
     if (type.includes("take") || type.includes("pickup")) return "Takeaway Counter";
     if (type.includes("delivery")) return "Delivery Dispatch";
+
+    // 2. Lookup table from tables prop if tableId exists
+    let rawTableVal = "";
+    let layoutName = "";
+
+    if (o.tableId && Array.isArray(tables)) {
+      const foundTable = tables.find(
+        (t) => String(t._id) === String(o.tableId) || String(t.legacyId) === String(o.tableId)
+      );
+      if (foundTable) {
+        rawTableVal = foundTable.tableNumber || foundTable.tableName || foundTable.name || "";
+        if (foundTable.layoutId && Array.isArray(layouts)) {
+          const foundLayout = layouts.find(
+            (l) => String(l._id) === String(foundTable.layoutId) || String(l.legacyId) === String(foundTable.layoutId)
+          );
+          if (foundLayout?.name) {
+            layoutName = foundLayout.name.trim();
+          }
+        }
+      }
+    }
+
+    // 3. Fallback to order's direct table fields
+    if (!rawTableVal) {
+      rawTableVal = o.table?.number || o.table?.name || o.tableName || o.tableNumber || "";
+    }
+
+    if (rawTableVal) {
+      let str = String(rawTableVal).trim();
+      // Remove any repeated/misspelled prefixes: "tbale", "table", "tbl"
+      str = str.replace(/^(tbale|table|tbl)\s*/i, "");
+      // If starts with "t" followed by digit (e.g. "T1" or "t2")
+      str = str.replace(/^t(\d+)$/i, "$1");
+
+      let formattedTable = "";
+      if (/^\d+$/.test(str)) {
+        formattedTable = `Table ${str}`;
+      } else if (!str.toLowerCase().startsWith("table")) {
+        formattedTable = `Table ${str}`;
+      } else {
+        formattedTable = str;
+      }
+      // Ensure space between "Table" and digit if formatted like "Table1"
+      formattedTable = formattedTable.replace(/^Table(\d+)/i, "Table $1");
+
+      if (layoutName && !formattedTable.toLowerCase().includes(layoutName.toLowerCase())) {
+        return `${formattedTable} (${layoutName})`;
+      }
+      return formattedTable;
+    }
+
+    if (layoutName) return layoutName;
     return "Main Dining";
   };
 
@@ -2258,23 +2357,23 @@ export function OperationalReportView({
         activeModal === "slips" ||
         activeModal === "orders") && (
         <div className="fixed inset-0 z-50 bg-[#0c0a09]/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl border border-[#e7e5e4] max-w-lg w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl shadow-xl border border-[#e7e5e4] max-w-2xl w-full p-6 flex flex-col gap-4 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
-                  <span className="material-symbols-outlined text-[18px]">
-                    verified
+              <div className="flex items-center gap-2.5">
+                <span className="w-9 h-9 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center text-[#141010]">
+                  <span className="material-symbols-outlined text-[20px]">
+                    {selectedChannelData?.icon || "payments"}
                   </span>
                 </span>
                 <div>
                   <h3
-                    className="font-garamond text-xl font-normal text-[#141010]"
+                    className="font-garamond text-xl sm:text-2xl font-normal text-[#141010]"
                     style={{ fontFamily: "'EB Garamond', Georgia, serif" }}
                   >
-                    {selectedChannelName} Tender Audit
+                    {selectedChannelName} Tender Audit &amp; Settlement
                   </h3>
                   <span className="text-[11px] text-[#5e5e5e]">
-                    Batch ID #BAT-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}-{selectedChannelName.slice(0, 3).toUpperCase()}
+                    Batch ID #BAT-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}-{selectedChannelName.slice(0, 3).toUpperCase()} • {storeTz}
                   </span>
                 </div>
               </div>
@@ -2287,27 +2386,115 @@ export function OperationalReportView({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs text-[#141010]">
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex justify-between items-center">
-                <span className="text-[#5e5e5e]">Channel Status:</span>
-                <span className="font-semibold text-[#2e7d32] flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#2e7d32]"></span>
-                  Synchronized &amp; Settled
+            {/* Top KPI Cards for the Channel */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col">
+                <span className="text-[11px] text-[#5e5e5e] uppercase tracking-wider font-medium">Transactions</span>
+                <span className="text-sm sm:text-base font-semibold text-[#141010] mt-0.5">
+                  {selectedChannelData?.txns || selectedChannelOrders.length} txns
                 </span>
               </div>
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex justify-between items-center">
-                <span className="text-[#5e5e5e]">Store Regional Timezone:</span>
-                <span className="font-medium text-[#141010]">{storeTz}</span>
+              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col">
+                <span className="text-[11px] text-[#5e5e5e] uppercase tracking-wider font-medium">Gross Collections</span>
+                <span className="text-sm sm:text-base font-semibold text-[#141010] mt-0.5">
+                  {selectedChannelData?.grossAmount || formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true)}
+                </span>
               </div>
-              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex justify-between items-center">
-                <span className="text-[#5e5e5e]">Settlement Destination:</span>
-                <span className="font-medium text-[#141010]">
-                  Direct Merchant Bank Ledger
+              <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex flex-col">
+                <span className="text-[11px] text-[#5e5e5e] uppercase tracking-wider font-medium">Net Settled</span>
+                <span className="text-sm sm:text-base font-semibold text-[#2e7d32] mt-0.5">
+                  {selectedChannelData?.netSettled || formatPriceWithSymbol(0, resolvedCurrencySymbol, countryCode, true)}
                 </span>
               </div>
             </div>
 
+            {/* Individual Orders Settled under this Tender Channel */}
+            <div className="w-full overflow-x-auto max-h-64 border border-[#e7e5e4] rounded-lg">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#f8f5f4] text-[#5e5e5e] text-[11px] uppercase tracking-wider font-semibold border-b border-[#e7e5e4] sticky top-0">
+                    <th className="py-2.5 px-3">Order</th>
+                    <th className="py-2.5 px-3">Time</th>
+                    <th className="py-2.5 px-3">Table / Floor</th>
+                    <th className="py-2.5 px-3">Staff</th>
+                    <th className="py-2.5 px-3 text-right">Amount</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e7e5e4]/60 text-xs text-[#141010]">
+                  {selectedChannelOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-[#5e5e5e]">
+                        No individual orders recorded for {selectedChannelName} in this period.
+                      </td>
+                    </tr>
+                  ) : (
+                    selectedChannelOrders.map((o, oIdx) => {
+                      const rawNum = o.orderNumber || String(o._id || "").slice(-4);
+                      const ordNum = rawNum.startsWith("#") ? rawNum : `#${rawNum}`;
+                      const orderTime = o.createdAt
+                        ? new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                        : "—";
+                      const floor = resolveOrderFloorSection(o);
+                      const staff = resolveOrderStaffName(o);
+
+                      let paidVal = o.totalAmount || 0;
+                      if (o.payments && Array.isArray(o.payments)) {
+                        const pMatch = o.payments.find((p: any) => {
+                          const m = (p.paymentModeName || p.mode || p.paymentMode || "").toLowerCase();
+                          return m.includes(selectedChannelName.toLowerCase());
+                        });
+                        if (pMatch) {
+                          paidVal = pMatch.payAmount !== undefined ? pMatch.payAmount : (pMatch.amount || paidVal);
+                        }
+                      }
+
+                      return (
+                        <tr key={oIdx} className="hover:bg-[#faf6f5] transition-colors">
+                          <td className="py-2.5 px-3 font-semibold text-[#0c0a09]">{ordNum}</td>
+                          <td className="py-2.5 px-3 text-[#5e5e5e]">{orderTime}</td>
+                          <td className="py-2.5 px-3">{floor}</td>
+                          <td className="py-2.5 px-3">{staff}</td>
+                          <td className="py-2.5 px-3 text-right font-medium tabular-nums">
+                            {formatPriceWithSymbol(paidVal, resolvedCurrencySymbol, countryCode, true)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center">
+                            <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#f1edec] text-[#2e7d32] border border-[#e7e5e4] font-medium">
+                              {o.paymentStatus || "Paid"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Destination & Verification Status */}
+            <div className="p-3 rounded-lg bg-[#faf6f5] border border-[#e7e5e4] flex items-center justify-between text-xs">
+              <span className="text-[#5e5e5e]">
+                Settlement Destination:{" "}
+                <strong className="text-[#141010] font-medium">
+                  {selectedChannelName.toLowerCase() === "cash"
+                    ? "In-Drawer Register Till"
+                    : "Direct Merchant Bank Ledger"}
+                </strong>
+              </span>
+              <span className="font-semibold text-[#2e7d32] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#2e7d32]"></span>
+                Synchronized &amp; Settled
+              </span>
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#e7e5e4]">
+              <button
+                type="button"
+                onClick={() => setActiveModal(null)}
+                className="px-4 py-2 bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] text-xs font-medium rounded-full cursor-pointer"
+              >
+                Close
+              </button>
               <button
                 type="button"
                 onClick={() => {
