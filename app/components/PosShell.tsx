@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { UserButton, useClerk } from "@clerk/nextjs";
-import { ReactNode, useState, useEffect } from "react";
+import { ReactNode, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
@@ -220,6 +220,18 @@ type NavItem = {
   badge?: string;
 };
 
+function MarketplaceIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
+      <path d="M2 7h20" />
+      <path d="M22 7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2" />
+    </svg>
+  );
+}
+
 const navItems: NavItem[] = [
   {
     href: "/dashboard",
@@ -288,6 +300,11 @@ const navItems: NavItem[] = [
     icon: <QrCodesIcon className="w-4 h-4" />,
   },
   {
+    href: "/marketplace",
+    label: "Marketplace",
+    icon: <MarketplaceIcon className="w-4 h-4" />,
+  },
+  {
     href: "/settings",
     label: "Settings",
     icon: <SettingsIcon className="w-4 h-4" />,
@@ -310,6 +327,20 @@ const inventorySubItems = [
   { label: "Item library", tab: "itemLibrary", path: "/inventory/item-library" },
   { label: "Dead stock", tab: "deadStock", path: "/inventory/dead-stock" },
   { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
+];
+
+const marketplaceSubItems: {
+  label: string;
+  tab: string;
+  path: string;
+  disabled?: boolean;
+  badge?: string;
+}[] = [
+  { label: "Explore Products", tab: "explore", path: "/marketplace?tab=explore" },
+  { label: "Installed Products", tab: "installed", path: "/marketplace?tab=installed" },
+  { label: "Categories", tab: "categories", path: "/marketplace?tab=categories", disabled: true, badge: "Coming Soon" },
+  { label: "Subscriptions & Purchases", tab: "purchases", path: "/marketplace?tab=purchases" },
+  { label: "Wallet", tab: "wallet", path: "/marketplace/wallet" },
 ];
 
 function NavLink({
@@ -430,10 +461,12 @@ export function PosShell({
   const searchParams = useSearchParams();
   const isMenuPage = pathname.startsWith("/menu");
   const isInventoryPage = pathname.startsWith("/inventory");
+  const isMarketplacePage = pathname.startsWith("/marketplace");
   const currentTab = searchParams.get("tab") || "purchaseOrders";
 
   const [isMenuExpanded, setIsMenuExpanded] = useState(isMenuPage);
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
+  const [isMarketplaceExpanded, setIsMarketplaceExpanded] = useState(isMarketplacePage);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem("pos_main_sidebar_collapsed") === "true";
@@ -463,6 +496,48 @@ export function PosShell({
     }
   }, [isInventoryPage]);
 
+  useEffect(() => {
+    if (isMarketplacePage) {
+      setIsMarketplaceExpanded(true);
+    }
+  }, [isMarketplacePage]);
+
+  const navRef = useRef<HTMLElement | null>(null);
+  const activeMarketplaceSubRef = useRef<HTMLAnchorElement | null>(null);
+
+  useEffect(() => {
+    if (!isMarketplacePage || !isMarketplaceExpanded) return;
+
+    const scrollToActive = () => {
+      if (!navRef.current || !activeMarketplaceSubRef.current) return;
+      const nav = navRef.current;
+      const item = activeMarketplaceSubRef.current;
+      const navRect = nav.getBoundingClientRect();
+      const itemRect = item.getBoundingClientRect();
+
+      const isAbove = itemRect.top < navRect.top + 24;
+      const isBelow = itemRect.bottom > navRect.bottom - 24;
+
+      if (isAbove || isBelow) {
+        const currentScrollTop = nav.scrollTop;
+        const relativeItemTop = itemRect.top - navRect.top;
+        const targetScrollTop = currentScrollTop + relativeItemTop - (nav.clientHeight / 2) + (item.clientHeight / 2);
+        nav.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: "smooth",
+        });
+      }
+    };
+
+    const t1 = setTimeout(scrollToActive, 60);
+    const t2 = setTimeout(scrollToActive, 250);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [pathname, searchParams, isMarketplacePage, isMarketplaceExpanded]);
+
   const { signOut } = useClerk();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
@@ -474,7 +549,7 @@ export function PosShell({
   const [isAccepting, setIsAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const isDineInActive = activeOrg?.isDineIn !== false;
-  const branchName = activeOrg?.name || "Flagship Main Store";
+  const branchName = activeOrg?.name || (isMarketplacePage ? "The Grand Bistro HQ" : "Flagship Main Store");
 
   const isOwner = Boolean(
     activeOrg?.ownerClerkId &&
@@ -521,7 +596,7 @@ export function PosShell({
     };
   }, [isPendingInvitation, hasTicket, activeOrg?._id, acceptError, isAccepting]);
 
-  if (organizations !== undefined && (organizations.length === 0 || currentMembership === null)) {
+  if (!isMarketplacePage && organizations !== undefined && (organizations.length === 0 || currentMembership === null)) {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
         <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
@@ -558,7 +633,7 @@ export function PosShell({
     );
   }
 
-  if (currentMembership && currentMembership.status === "inactive") {
+  if (!isMarketplacePage && currentMembership && currentMembership.status === "inactive") {
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
         <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
@@ -595,7 +670,7 @@ export function PosShell({
     );
   }
 
-  if (isPendingInvitation) {
+  if (!isMarketplacePage && isPendingInvitation) {
     if (hasTicket && !acceptError) {
       return (
         <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
@@ -734,7 +809,7 @@ export function PosShell({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
+        <nav ref={navRef} className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
           {navItems.map((item) => {
             if (item.href === "/menu") {
               if (isCollapsed) {
@@ -920,6 +995,145 @@ export function PosShell({
                           <Link
                             key={sub.tab}
                             href={sub.path}
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
+                              ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
+                              : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
+                              }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (item.href === "/marketplace") {
+              const currentMarketplaceTab = searchParams.get("tab") || "explore";
+              if (isCollapsed) {
+                return (
+                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
+                    <Link
+                      href="/marketplace?tab=explore"
+                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${isMarketplacePage
+                        ? "bg-[#141010] text-white shadow-xs"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                        }`}
+                      title={item.label}
+                    >
+                      <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
+                    </Link>
+
+                    {/* Flyout Hover Menu Popover Card */}
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
+                      <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
+                          <span>Marketplace</span>
+                        </div>
+                        {marketplaceSubItems.map((sub) => {
+                          const isSubActive = pathname.startsWith("/marketplace/wallet")
+                            ? sub.tab === "wallet"
+                            : pathname === "/marketplace/checkout"
+                            ? sub.tab === "explore"
+                            : pathname === "/marketplace"
+                            ? (searchParams.get("tab") || "explore") === sub.tab
+                            : false;
+                          if (sub.disabled) {
+                            return (
+                              <div
+                                key={sub.tab}
+                                className="flex items-center justify-between px-3 py-2 text-xs rounded-xl opacity-60 cursor-not-allowed select-none text-[#78716c]"
+                                title="Coming Soon"
+                              >
+                                <span>{sub.label}</span>
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full">
+                                  {sub.badge || "Coming Soon"}
+                                </span>
+                              </div>
+                            );
+                          }
+                          return (
+                            <Link
+                              key={sub.tab}
+                              href={sub.path}
+                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${isSubActive
+                                ? "bg-[#0c0a09] text-white font-medium shadow-xs"
+                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                                }`}
+                            >
+                              <span>{sub.label}</span>
+                              {isSubActive && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={item.href} className="flex flex-col px-3 my-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsMarketplaceExpanded((prev) => !prev)}
+                    className={`w-full flex items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isMarketplacePage
+                      ? "bg-[#f1edec] text-[#141010] font-bold"
+                      : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                      }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 text-left">
+                      <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
+                      <span className="font-medium text-[14px] shrink-0">{item.label}</span>
+                    </div>
+                    <svg
+                      className={`w-3.5 h-3.5 text-[#78716c] shrink-0 ml-1 transition-transform duration-200 ${isMarketplaceExpanded ? "rotate-180" : ""
+                        }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isMarketplaceExpanded && (
+                    <div className="ml-5 pl-3 my-1.5 border-l border-[#e7e5e4] flex flex-col gap-1">
+                      {marketplaceSubItems.map((sub) => {
+                        const isSubActive = pathname.startsWith("/marketplace/wallet")
+                          ? sub.tab === "wallet"
+                          : pathname === "/marketplace/checkout"
+                          ? sub.tab === "explore"
+                          : pathname === "/marketplace"
+                          ? (searchParams.get("tab") || "explore") === sub.tab
+                          : false;
+                        if (sub.disabled) {
+                          return (
+                            <div
+                              key={sub.tab}
+                              className="flex items-center justify-between px-3.5 py-2 text-xs opacity-60 cursor-not-allowed select-none text-[#78716c]"
+                              title="Coming Soon"
+                            >
+                              <span>{sub.label}</span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0">
+                                <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+                                {sub.badge || "Coming Soon"}
+                              </span>
+                            </div>
+                          );
+                        }
+                        return (
+                          <Link
+                            key={sub.tab}
+                            href={sub.path}
+                            ref={isSubActive ? activeMarketplaceSubRef : null}
                             className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
                               ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
                               : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
