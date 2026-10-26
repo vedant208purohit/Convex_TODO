@@ -249,23 +249,25 @@ function LiveWaitlistStopwatch({ createdAt }: { createdAt?: number }) {
   if (!createdAt) {
     return (
       <span className="inline-flex items-center gap-1 text-[#645d58] bg-[#f4ece8] px-2.5 py-1 rounded-full font-semibold text-xs font-mono border border-[#e9e1dd]">
-        00m 00s
+        00h 00m 00s
       </span>
     );
   }
 
   const diffMs = Math.max(0, now - createdAt);
   const totalSeconds = Math.floor(diffMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
   const seconds = totalSeconds % 60;
 
+  const paddedHours = String(hours).padStart(2, "0");
   const paddedMins = String(minutes).padStart(2, "0");
   const paddedSecs = String(seconds).padStart(2, "0");
 
   return (
     <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full font-semibold text-xs font-mono border border-emerald-200">
       <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-ping" />
-      {paddedMins}m {paddedSecs}s
+      {paddedHours}h {paddedMins}m {paddedSecs}s
     </span>
   );
 }
@@ -374,6 +376,7 @@ export default function QueueDashboardPage() {
 
   // Drawer / Modal States
   const [isAddWaitlistOpen, setIsAddWaitlistOpen] = useState(false);
+  const [isTogglingIntake, setIsTogglingIntake] = useState(false);
   const [isAddReservationOpen, setIsAddReservationOpen] = useState(false);
   const [isChangeStatusOpen, setIsChangeStatusOpen] = useState(false);
   const [statusSubTab, setStatusSubTab] = useState<"assign" | "late" | "cancel">("assign");
@@ -842,20 +845,44 @@ export default function QueueDashboardPage() {
     ? displayTime(reservationItems[0].reservationTime)
     : "None Today";
 
-  // Intake status toggle
-  const isIntakeOn = queueConfig?.onlineWaitlist ?? true;
+  // Intake status toggle (derived from waitlist_off record for selectedDate, matching defx-pos-frontend)
+  const waitlistOffRecord = useMemo(() => {
+    if (!queueList) return null;
+    return (
+      queueList.find(
+        (q) =>
+          q.queueType === "waitlist_off" &&
+          q.reservationDate === selectedDate &&
+          q.deletedAt === undefined
+      ) || null
+    );
+  }, [queueList, selectedDate]);
+
+  const isIntakeOn = !waitlistOffRecord;
 
   async function handleToggleIntake() {
+    if (isTogglingIntake) return;
+    setIsTogglingIntake(true);
     try {
-      await updateConfig({
-        onlineWaitlist: !isIntakeOn,
-      });
-      showToast(
-        !isIntakeOn ? "Waitlist intake is now live" : "Waitlist intake paused for walk-ins",
-        "success"
-      );
+      if (isIntakeOn) {
+        // Turn OFF: create waitlist_off record for the date
+        await createQueue({
+          queueType: "waitlist_off",
+          reservationDate: selectedDate,
+          reservationTime: Date.now(),
+        });
+        showToast("Waitlist intake paused for walk-ins", "success");
+      } else if (waitlistOffRecord) {
+        // Turn ON: remove the waitlist_off record
+        await removeQueue({
+          id: waitlistOffRecord._id,
+        });
+        showToast("Waitlist intake is now live", "success");
+      }
     } catch (err: any) {
       showToast(`Error updating intake: ${err.message}`, "error");
+    } finally {
+      setIsTogglingIntake(false);
     }
   }
 
@@ -918,6 +945,10 @@ export default function QueueDashboardPage() {
   // Submit Add to Waitlist Form
   async function handleSubmitWaitlistForm(e: React.FormEvent) {
     e.preventDefault();
+    if (!isIntakeOn) {
+      showToast(`Failed to add to waitlist: Waitlist is turned off on ${selectedDate}`);
+      return;
+    }
     const maxDigits = getPhoneMaxLengthForCountry(waitlistCountryCode);
     const minDigits = getPhoneMinLengthForCountry(waitlistCountryCode);
     if (waitlistPhone.length < minDigits) {
@@ -1095,14 +1126,14 @@ export default function QueueDashboardPage() {
 
   return (
     <PosShell title="Queue & Host Folio">
-      <div className="flex-1 min-h-0 flex flex-col bg-[#fff8f5] text-[#1e1b19] overflow-y-scroll [scrollbar-gutter:stable]">
+      <div className="flex-1 min-h-0 flex flex-col bg-[#fff8f5] text-[#1e1b19] overflow-y-scroll [scrollbar-gutter:stable] font-sans">
         {/* Operational Header Section */}
         <div className="px-4 sm:px-6 lg:px-8 pt-4 sm:pt-5 pb-3.5 sm:pb-4 bg-[#fff8f5] flex flex-col gap-3 sm:gap-4 border-b border-[#eee7e3]">
           {/* Top Row: Page Title & Primary Action Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 min-h-[42px]">
             <div>
               <div className="flex items-center gap-2.5 sm:gap-3">
-                <h1 className="text-xl sm:text-3xl font-serif text-[#1e1b19] tracking-tight">Queue & Host Folio</h1>
+                <h1 className="text-xl sm:text-3xl font-semibold text-[#1e1b19] tracking-tight">Queue & Host Folio</h1>
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] sm:text-xs font-medium shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
                   Live Floor
@@ -1110,12 +1141,20 @@ export default function QueueDashboardPage() {
               </div>
             </div>
 
-            {/* Primary Action Button - Fixed width on desktop, full-width on mobile */}
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            {/* Primary Action Button - Stable container preventing layout shift */}
+            <div
+              className={`items-center gap-2 w-full sm:w-[195px] shrink-0 h-[42px] ${
+                activeTab === "waitlist" || activeTab === "reservations"
+                  ? "flex"
+                  : "hidden sm:flex sm:invisible pointer-events-none"
+              }`}
+            >
               <button
                 type="button"
                 onClick={handleMainPrimaryCTA}
-                className="w-full sm:w-[195px] flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-full bg-[#000000] text-white text-sm font-medium shadow-md hover:bg-neutral-800 active:scale-[0.98] transition-all shrink-0"
+                tabIndex={activeTab === "waitlist" || activeTab === "reservations" ? 0 : -1}
+                aria-hidden={activeTab !== "waitlist" && activeTab !== "reservations"}
+                className="w-full h-full flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-full bg-[#000000] text-white text-sm font-medium shadow-md hover:bg-neutral-800 active:scale-[0.98] transition-all shrink-0"
               >
                 <span className="material-symbols-outlined text-[18px]">add</span>
                 <span className="whitespace-nowrap">
@@ -1316,17 +1355,18 @@ export default function QueueDashboardPage() {
                   type="button"
                   role="switch"
                   aria-checked={isIntakeOn}
+                  disabled={isTogglingIntake || queueList === undefined}
                   onClick={handleToggleIntake}
                   className={`w-9 h-5 rounded-full transition-colors duration-200 ease-in-out ${isIntakeOn ? "bg-[#141010]" : "bg-[#ece7e6]"
                     } relative shrink-0 cursor-pointer focus:outline-none after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:shadow-xs after:transition-transform after:duration-200 ${isIntakeOn ? "after:translate-x-4" : ""
-                    }`}
+                    } ${(isTogglingIntake || queueList === undefined) ? "opacity-60 cursor-not-allowed" : ""}`}
                   aria-label="Toggle waitlist intake"
                 />
                 <span
                   className={`text-[10px] sm:text-[11px] font-bold w-5 sm:w-6 inline-flex items-center justify-center font-mono shrink-0 ${isIntakeOn ? "text-[#141010]" : "text-[#645d58]"
                     }`}
                 >
-                  {isIntakeOn ? "ON" : "OFF"}
+                  {isTogglingIntake ? "..." : isIntakeOn ? "ON" : "OFF"}
                 </span>
               </div>
             </div>
@@ -1432,7 +1472,7 @@ export default function QueueDashboardPage() {
                 </span>
               </button>
             </div>
-            <p className="text-xs sm:text-sm text-[#645d58] italic font-serif min-h-[18px] sm:min-h-[20px]">
+            <p className="text-xs sm:text-sm text-[#645d58] min-h-[18px] sm:min-h-[20px]">
               {tabSubtitles[activeTab] || ""}
             </p>
           </div>
@@ -1447,7 +1487,7 @@ export default function QueueDashboardPage() {
                 In Waitlist
               </span>
               <div className="flex items-baseline justify-between mt-1.5 sm:mt-2 gap-1">
-                <span className="text-xl sm:text-3xl font-serif text-[#1e1b19]">
+                <span className="text-xl sm:text-3xl font-bold text-[#1e1b19]">
                   {inWaitlistCount}
                 </span>
                 <span className="text-[10px] sm:text-xs font-semibold text-emerald-800 bg-emerald-50 px-1.5 sm:px-2.5 py-0.5 rounded-full border border-emerald-200 truncate">
@@ -1461,7 +1501,7 @@ export default function QueueDashboardPage() {
                 Active Tables
               </span>
               <div className="flex items-baseline justify-between mt-1.5 sm:mt-2 gap-1">
-                <span className="text-xl sm:text-3xl font-serif text-[#1e1b19]">
+                <span className="text-xl sm:text-3xl font-bold text-[#1e1b19]">
                   {activeTablesPercentage}
                   <span className="text-sm font-sans text-[#645d58]">%</span>
                 </span>
@@ -1476,7 +1516,7 @@ export default function QueueDashboardPage() {
                 Upcoming Bookings
               </span>
               <div className="flex items-baseline justify-between mt-1.5 sm:mt-2 gap-1">
-                <span className="text-xl sm:text-3xl font-serif text-[#1e1b19]">
+                <span className="text-xl sm:text-3xl font-bold text-[#1e1b19]">
                   {upcomingBookingsCount}
                 </span>
                 <span className="text-[10px] sm:text-xs font-semibold text-[#645d58] bg-[#f4ece8] px-1.5 sm:px-2.5 py-0.5 rounded-full truncate">
@@ -1490,7 +1530,7 @@ export default function QueueDashboardPage() {
                 Estimated Pace
               </span>
               <div className="flex items-baseline justify-between mt-1.5 sm:mt-2 gap-1">
-                <span className="text-xl sm:text-3xl font-serif text-[#1e1b19]">
+                <span className="text-xl sm:text-3xl font-bold text-[#1e1b19]">
                   {queueConfig?.defaultWaitTime || "15"}
                   <span className="text-sm font-sans text-[#645d58]">m</span>
                 </span>
@@ -1507,7 +1547,7 @@ export default function QueueDashboardPage() {
               <div className="w-20 h-20 rounded-full bg-[#eee7e3] flex items-center justify-center text-[#645d58] mb-4">
                 <span className="material-symbols-outlined text-4xl">inbox</span>
               </div>
-              <h3 className="text-2xl font-serif text-[#1e1b19] mb-2">No active queue entries</h3>
+              <h3 className="text-xl sm:text-2xl font-semibold text-[#1e1b19] mb-2">No active queue entries</h3>
               <p className="text-sm text-[#645d58] max-w-md mb-6">
                 The floor waitlist is currently clear. Add a walk-in guest or check scheduled reservations.
               </p>
@@ -1527,6 +1567,7 @@ export default function QueueDashboardPage() {
               {/* TAB 1: WAITLIST VIEW */}
               {activeTab === "waitlist" && (
                 <div className="flex flex-col gap-4">
+
                   {/* Desktop / Tablet Table View (hidden on small mobile screens) */}
                   <div className="hidden md:block bg-white rounded-2xl shadow-xs border border-[#e9e1dd] overflow-hidden">
                     <div className="overflow-x-auto">
@@ -1547,7 +1588,7 @@ export default function QueueDashboardPage() {
                         <tbody className="divide-y divide-[#eee7e3] text-sm text-[#1e1b19]">
                           {waitlistItems.length === 0 ? (
                             <tr>
-                              <td colSpan={9} className="py-12 text-center text-[#645d58] italic font-serif">
+                              <td colSpan={9} className="py-12 text-center text-[#645d58]">
                                 No active walk-in guests in the waitlist sequence.
                               </td>
                             </tr>
@@ -1709,7 +1750,7 @@ export default function QueueDashboardPage() {
                   {/* Mobile Card List View (Visible on < md screens) */}
                   <div className="flex md:hidden flex-col gap-3">
                     {waitlistItems.length === 0 ? (
-                      <div className="p-8 text-center bg-white rounded-2xl border border-[#e9e1dd] text-[#645d58] italic font-serif">
+                      <div className="p-8 text-center bg-white rounded-2xl border border-[#e9e1dd] text-[#645d58]">
                         No active walk-in guests in the waitlist sequence.
                       </div>
                     ) : (
@@ -1921,7 +1962,7 @@ export default function QueueDashboardPage() {
                         <tbody className="divide-y divide-[#eee7e3] text-sm text-[#1e1b19]">
                           {displayedReservationItems.length === 0 ? (
                             <tr>
-                              <td colSpan={9} className="py-12 text-center text-[#645d58] italic font-serif">
+                              <td colSpan={9} className="py-12 text-center text-[#645d58]">
                                 {reservationFilter === "pending"
                                   ? "No pending reservation requests awaiting approval."
                                   : `No table reservations scheduled for ${formatDisplayDate(selectedDate)}.`}
@@ -2093,7 +2134,7 @@ export default function QueueDashboardPage() {
                   {/* Mobile Reservations Card List */}
                   <div className="flex md:hidden flex-col gap-3">
                     {displayedReservationItems.length === 0 ? (
-                      <div className="p-8 text-center bg-white rounded-2xl border border-[#e9e1dd] text-[#645d58] italic font-serif">
+                      <div className="p-8 text-center bg-white rounded-2xl border border-[#e9e1dd] text-[#645d58]">
                         {reservationFilter === "pending"
                           ? "No pending reservation requests awaiting approval."
                           : `No table reservations scheduled for ${formatDisplayDate(selectedDate)}.`}
@@ -2271,7 +2312,7 @@ export default function QueueDashboardPage() {
                         <div className="flex items-start justify-between">
                           <div>
                             <span className="text-xs text-[#645d58] uppercase font-mono">TABLE 5</span>
-                            <h3 className="text-2xl font-serif text-[#1e1b19]">T-05</h3>
+                            <h3 className="text-2xl font-bold text-[#1e1b19]">T-05</h3>
                           </div>
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 text-xs font-semibold">
                             Available
@@ -2319,7 +2360,7 @@ export default function QueueDashboardPage() {
                                   <span className="text-xs text-[#645d58] uppercase font-mono tracking-wider">
                                     TBL #{table.tableNumber}
                                   </span>
-                                  <h3 className="text-2xl font-serif text-[#1e1b19] leading-tight">
+                                  <h3 className="text-2xl font-bold text-[#1e1b19] leading-tight">
                                     T-{table.tableNumber}
                                   </h3>
                                 </div>
@@ -2418,7 +2459,7 @@ export default function QueueDashboardPage() {
                       <tbody className="divide-y divide-[#eee7e3] text-sm text-[#1e1b19]">
                         {completedItems.length === 0 ? (
                           <tr>
-                            <td colSpan={6} className="py-12 text-center text-[#645d58] italic font-serif">
+                            <td colSpan={6} className="py-12 text-center text-[#645d58]">
                               No completed visits recorded today.
                             </td>
                           </tr>
@@ -2495,7 +2536,7 @@ export default function QueueDashboardPage() {
                       <tbody className="divide-y divide-[#eee7e3] text-sm text-[#1e1b19]">
                         {cancelledItems.length === 0 ? (
                           <tr>
-                            <td colSpan={7} className="py-12 text-center text-[#645d58] italic font-serif">
+                            <td colSpan={7} className="py-12 text-center text-[#645d58]">
                               No cancelled bookings recorded.
                             </td>
                           </tr>
@@ -2576,7 +2617,7 @@ export default function QueueDashboardPage() {
                     <span className="text-xs text-[#645d58] uppercase font-mono tracking-wider">
                       NEW WALK-IN ENTRY
                     </span>
-                    <h2 className="text-xl sm:text-2xl font-serif text-[#1e1b19]">Add to waitlist</h2>
+                    <h2 className="text-xl sm:text-2xl font-semibold text-[#1e1b19]">Add to waitlist</h2>
                   </div>
                   <button
                     type="button"
@@ -2589,6 +2630,7 @@ export default function QueueDashboardPage() {
 
                 {/* Form Body */}
                 <form onSubmit={handleSubmitWaitlistForm} className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4 sm:space-y-5">
+
                   {/* Phone */}
                   <div className="space-y-1">
                     <label className="text-xs font-semibold text-[#1e1b19] block">
@@ -2836,7 +2878,7 @@ export default function QueueDashboardPage() {
                     <span className="text-xs text-[#645d58] uppercase font-mono tracking-wider">
                       CALENDAR BOOKING
                     </span>
-                    <h2 className="text-xl sm:text-2xl font-serif text-[#1e1b19]">Add a reservation</h2>
+                    <h2 className="text-xl sm:text-2xl font-semibold text-[#1e1b19]">Add a reservation</h2>
                   </div>
                   <button
                     type="button"
@@ -3091,7 +3133,7 @@ export default function QueueDashboardPage() {
                         <span className="px-2.5 py-0.5 rounded-full bg-[#000000] text-white font-mono text-xs font-bold">
                           {formatShortTicketNumber(activeQueueItem.queueNumber)}
                         </span>
-                        <h3 className="text-base sm:text-lg font-serif text-[#1e1b19] font-semibold">
+                        <h3 className="text-base sm:text-lg font-semibold text-[#1e1b19]">
                           {parseCustomerInfo(activeQueueItem.notes, activeQueueItem.userId).name}
                         </h3>
                       </div>
@@ -3195,7 +3237,7 @@ export default function QueueDashboardPage() {
                                   <span>{table.tableNumber}</span>
                                 </div>
                                 <div>
-                                  <h4 className="text-sm sm:text-base font-serif text-[#1e1b19]">
+                                  <h4 className="text-sm sm:text-base font-semibold text-[#1e1b19]">
                                     Table {table.tableNumber}
                                   </h4>
                                   <div className="flex items-center gap-2 text-xs text-[#645d58] mt-0.5">
@@ -3384,7 +3426,7 @@ export default function QueueDashboardPage() {
                       <span className="material-symbols-outlined text-[20px]">sms</span>
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-serif font-semibold text-[#1e1b19]">Notify Customer</h3>
+                      <h3 className="text-base sm:text-lg font-semibold text-[#1e1b19]">Notify Customer</h3>
                       <span className="text-xs text-[#645d58] font-mono">
                         {contactName} ({contactPhone})
                       </span>
@@ -3452,7 +3494,7 @@ export default function QueueDashboardPage() {
                       <span className="material-symbols-outlined text-[20px]">phone_in_talk</span>
                     </div>
                     <div>
-                      <h3 className="text-base sm:text-lg font-serif font-semibold text-[#1e1b19]">Initiate Guest Call</h3>
+                      <h3 className="text-base sm:text-lg font-semibold text-[#1e1b19]">Initiate Guest Call</h3>
                       <span className="text-xs text-[#645d58]">{contactName}</span>
                     </div>
                   </div>
@@ -3509,7 +3551,7 @@ export default function QueueDashboardPage() {
               <div className="relative z-10 inline-block bg-white rounded-3xl text-left overflow-hidden shadow-2xl transform transition-all my-8 max-w-md w-full p-5 sm:p-6 space-y-4">
                 <div className="flex items-center justify-between border-b border-[#e9e1dd] pb-3">
                   <div>
-                    <h3 className="text-base sm:text-lg font-serif font-semibold text-[#1e1b19]">Queue Audit History</h3>
+                    <h3 className="text-base sm:text-lg font-semibold text-[#1e1b19]">Queue Audit History</h3>
                     <span className="text-xs text-[#645d58] font-mono">
                       Ticket {activeQueueItem.queueNumber || "QN001"}
                     </span>

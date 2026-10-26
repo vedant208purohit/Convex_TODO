@@ -304,19 +304,19 @@ function FrontDisplayIcon({ className = "w-4 h-4" }: { className?: string }) {
 
 type SettingsTab =
   | "organization"
-  | "onlineStore"
-  | "digitalStore"
-  | "printers"
   | "features"
   | "staff"
   // | "waiters"
   | "orderProcesses"
   | "payment"
   | "tables"
+  | "printers"
   | "liveScreens"
-  | "queue"
+  | "onlineStore"
+  | "digitalStore"
   | "frontDisplay"
-  | "branding";
+  | "branding"
+  | "queue";
 
 interface SettingsNavOption {
   id: SettingsTab;
@@ -331,22 +331,20 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <OrganizationIcon className="w-4 h-4" />,
   },
   {
-    id: "queue",
-    label: "Queue & Waitlist",
-    icon: <QueueIcon className="w-4 h-4" />,
-  },
-  {
-    id: "printers",
-    label: "Printers",
-    icon: <PrinterIcon className="w-4 h-4" />,
-  },
-  {
     id: "features",
     label: "Features",
     icon: <FeaturesIcon className="w-4 h-4" />,
   },
-  { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
-  // { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
+  {
+    id: "staff",
+    label: "Employees",
+    icon: <StaffIcon className="w-4 h-4" />,
+  },
+  // {
+  //   id: "waiters",
+  //   label: "Waiters",
+  //   icon: <WaiterIcon className="w-4 h-4" />,
+  // },
   {
     id: "orderProcesses",
     label: "Order Status",
@@ -361,6 +359,11 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     id: "tables",
     label: "Tables & Layouts",
     icon: <TablesIcon className="w-4 h-4" />,
+  },
+  {
+    id: "printers",
+    label: "Printers",
+    icon: <PrinterIcon className="w-4 h-4" />,
   },
   {
     id: "liveScreens",
@@ -379,13 +382,18 @@ const SETTINGS_TABS: SettingsNavOption[] = [
   },
   {
     id: "frontDisplay",
-    label: "Front display",
+    label: "Front Display",
     icon: <FrontDisplayIcon className="w-4 h-4" />,
   },
   {
     id: "branding",
     label: "Branding",
     icon: <BrandingIcon className="w-4 h-4" />,
+  },
+  {
+    id: "queue",
+    label: "Queue & Waitlist",
+    icon: <QueueIcon className="w-4 h-4" />,
   },
 ];
 
@@ -399,9 +407,13 @@ function SettingsContent() {
   // Read active tab from URL param, default to "organization"
   const rawTab = searchParams.get("tab");
   const validTabIds = SETTINGS_TABS.map((t) => t.id as string);
+  const normalizedTab =
+    rawTab === "orderStatus" || rawTab === "order-processes"
+      ? "orderProcesses"
+      : rawTab;
   const activeTab: SettingsTab =
-    rawTab && validTabIds.includes(rawTab)
-      ? (rawTab as SettingsTab)
+    normalizedTab && validTabIds.includes(normalizedTab)
+      ? (normalizedTab as SettingsTab)
       : "organization";
 
   // Update URL when tab changes
@@ -575,8 +587,6 @@ function SettingsContent() {
           {/* Right Panel: Settings Content Area */}
           <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-5 flex flex-col h-full min-h-0 overflow-hidden">
             {activeTab === "organization" && <OrganizationSettings />}
-            {activeTab === "queue" && <OrganizationQueueSettings />}
-            {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
             {/* {activeTab === "waiters" && <OrganizationWaiters />} */}
@@ -602,25 +612,27 @@ function SettingsContent() {
                 </div>
               )
             )}
+            {activeTab === "printers" && <OrganizationPrinters />}
             {activeTab === "liveScreens" && <OrganizationLiveScreens />}
             {activeTab === "onlineStore" && <OrganizationOnlineStore />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
             {activeTab === "frontDisplay" && <OrganizationFrontDisplaySettings />}
             {activeTab === "branding" && <OrganizationBranding />}
+            {activeTab === "queue" && <OrganizationQueueSettings />}
             {activeTab !== "organization" &&
-              activeTab !== "onlineStore" &&
-              activeTab !== "queue" &&
-              activeTab !== "printers" &&
               activeTab !== "features" &&
-              activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
               // activeTab !== "waiters" &&
+              activeTab !== "orderProcesses" &&
               activeTab !== "payment" &&
               activeTab !== "tables" &&
+              activeTab !== "printers" &&
               activeTab !== "liveScreens" &&
+              activeTab !== "onlineStore" &&
               activeTab !== "digitalStore" &&
               activeTab !== "frontDisplay" &&
-              activeTab !== "branding" && (
+              activeTab !== "branding" &&
+              activeTab !== "queue" && (
                 <div className="py-12 text-center">
                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                     {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}
