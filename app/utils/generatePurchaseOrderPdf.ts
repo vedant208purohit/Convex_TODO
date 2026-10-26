@@ -1,12 +1,20 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  formatStoreDate,
+  formatCurrencyAmount,
+  getCurrencyForCountry,
+  getPhoneCodeForCountry,
+  formatPhoneNumberWithCountryCode,
+} from "@/lib/constants/countries";
 
-interface PurchaseOrderPdfData {
+export interface PurchaseOrderPdfData {
   po: any;
   org: any;
+  supplier?: any;
 }
 
-export function downloadPurchaseOrderPdf({ po, org }: PurchaseOrderPdfData) {
+export function downloadPurchaseOrderPdf({ po, org, supplier }: PurchaseOrderPdfData) {
   if (!po) return;
 
   const doc = new jsPDF({
@@ -17,216 +25,213 @@ export function downloadPurchaseOrderPdf({ po, org }: PurchaseOrderPdfData) {
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 16;
-  let currentY = 20;
+  const contentWidth = pageWidth - margin * 2;
+  let currentY = 22;
 
-  // Currency Symbol
-  const rawSymbol = org?.defaultCurrencySymbol || org?.currencySymbol || "$";
+  // Currency Symbol from centralized country master or org setting
+  const countryCurrency = getCurrencyForCountry(org?.country);
+  const rawSymbol = org?.defaultCurrencySymbol || countryCurrency.symbol || "$";
   const currencySymbol =
     !rawSymbol || rawSymbol === "₹" || rawSymbol === "INR" || rawSymbol.charCodeAt(0) > 127
       ? "Rs."
       : rawSymbol;
 
-  // 1. Header Title: "PURCHASE ORDER"
+  // 1. Header Title: "PURCHASE ORDER" (Centered, Bold, Size 18)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(22);
-  doc.setTextColor(20, 20, 20);
-  doc.text("PURCHASE ORDER", margin, currentY);
+  doc.setFontSize(18);
+  doc.setTextColor(0, 0, 0);
+  doc.text("PURCHASE ORDER", pageWidth / 2, currentY, { align: "center" });
 
-  // Top Right Store Badge
-  const badgeSize = 12;
-  const badgeX = pageWidth - margin - badgeSize;
-  const badgeY = currentY - 7;
-  doc.setFillColor(20, 20, 19);
-  doc.roundedRect(badgeX, badgeY, badgeSize, badgeSize, 2, 2, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  const initialLetter = (org?.name ? org.name.charAt(0) : "P").toUpperCase();
-  doc.text(initialLetter, badgeX + 3.8, badgeY + 8.5);
+  currentY += 14;
 
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(50, 50, 50);
-  const storeNameText = (org?.name || "PREST STORE").toUpperCase();
-  doc.text(storeNameText, pageWidth - margin, badgeY + badgeSize + 4.5, { align: "right" });
+  // Helper function to print wrapped text and increment Y
+  const printLine = (
+    text: string,
+    isBold: boolean = false,
+    fontSize: number = 10,
+    lineHeight: number = 4.8
+  ) => {
+    if (!text) return;
+    doc.setFont("helvetica", isBold ? "bold" : "normal");
+    doc.setFontSize(fontSize);
+    doc.setTextColor(0, 0, 0);
+    const splitLines = doc.splitTextToSize(text, contentWidth);
+    for (const line of splitLines) {
+      doc.text(line, margin, currentY);
+      currentY += lineHeight;
+    }
+  };
 
-  currentY += 10;
+  // Resolved Supplier Object
+  const resolvedSupplier = supplier || po.supplier;
+  const supplierName =
+    resolvedSupplier?.supplierName ||
+    po.supplierName ||
+    resolvedSupplier?.companyName ||
+    po.companyName ||
+    "";
+  const supplierAddressParts = [
+    resolvedSupplier?.address || po.supplierAddress || po.address,
+    resolvedSupplier?.city || po.supplierCity,
+    resolvedSupplier?.state || po.supplierState,
+    resolvedSupplier?.country || po.supplierCountry,
+  ].filter(Boolean);
+  const supplierAddress = supplierAddressParts.join(", ");
+  const supplierGst =
+    resolvedSupplier?.gstNumber ||
+    po.supplierGstNumber ||
+    po.supplierGst ||
+    po.gstNumber;
+  const rawSupplierPhone =
+    resolvedSupplier?.phoneNumber ||
+    po.supplierPhoneNumber ||
+    po.supplierPhone ||
+    po.phoneNumber;
+  const supplierPhone = rawSupplierPhone
+    ? formatPhoneNumberWithCountryCode(
+        rawSupplierPhone,
+        getPhoneCodeForCountry(resolvedSupplier?.country || org?.country)
+      )
+    : "";
+  const supplierEmail =
+    resolvedSupplier?.email || po.supplierEmail || po.email;
 
-  // 2. PO Metadata Box
-  doc.setLineWidth(0.3);
-  doc.setDrawColor(220, 218, 210);
-  doc.setFillColor(250, 249, 247);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 22, 2, 2, "FD");
+  // 2. Supplier Section
+  printLine("Supplier", true, 13, 5.5);
+  if (supplierName) printLine(supplierName, false, 10, 4.8);
+  if (supplierAddress) printLine(supplierAddress, false, 10, 4.8);
+  if (supplierGst) printLine(`GST: ${supplierGst}`, false, 10, 4.8);
+  if (supplierPhone) printLine(`Phone: ${supplierPhone}`, false, 10, 4.8);
+  if (supplierEmail) printLine(`Email: ${supplierEmail}`, false, 10, 4.8);
 
-  const createdDate = po.createdAt ? new Date(po.createdAt).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }) : "N/A";
+  currentY += 3.5;
 
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
+  // 3. Buyer Section
+  const buyerName = org?.name || "";
+  const buyerAddressParts = [
+    org?.addressLine1,
+    org?.addressLine2,
+    org?.landmark,
+    org?.city,
+    org?.state,
+    org?.country,
+    org?.zipCode,
+  ].filter(Boolean);
+  const buyerAddress = buyerAddressParts.join(", ");
+  const buyerGst = org?.gstNumber;
+  const rawBuyerPhone = org?.phone || org?.mobile;
+  const buyerPhone = rawBuyerPhone
+    ? formatPhoneNumberWithCountryCode(
+        rawBuyerPhone,
+        getPhoneCodeForCountry(org?.country)
+      )
+    : "";
+  const buyerEmail = org?.email;
 
-  // Col 1: PO Number
-  doc.text("PO NUMBER", margin + 6, currentY + 7);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(20, 20, 20);
-  doc.text(po.poNumber || "PO-0000", margin + 6, currentY + 15);
+  printLine("Buyer", true, 13, 5.5);
+  if (buyerName) printLine(buyerName, false, 10, 4.8);
+  if (buyerAddress) printLine(buyerAddress, false, 10, 4.8);
+  if (buyerGst) printLine(`GST: ${buyerGst}`, false, 10, 4.8);
+  if (buyerPhone) printLine(`Phone: ${buyerPhone}`, false, 10, 4.8);
+  if (buyerEmail) printLine(`Email: ${buyerEmail}`, false, 10, 4.8);
 
-  // Col 2: Date
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
-  doc.text("DATE", margin + 60, currentY + 7);
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(20, 20, 20);
-  doc.text(createdDate, margin + 60, currentY + 15);
+  currentY += 3.5;
 
-  // Col 3: Priority
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
-  doc.text("PRIORITY", margin + 110, currentY + 7);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  const priorityText = (po.purchasePriority || "low").toUpperCase();
-  doc.setTextColor(
-    priorityText === "HIGH" ? 225 : priorityText === "MEDIUM" ? 180 : 100,
-    priorityText === "HIGH" ? 29 : priorityText === "MEDIUM" ? 115 : 100,
-    priorityText === "HIGH" ? 72 : priorityText === "MEDIUM" ? 20 : 100
+  // 4. PO Details Section
+  printLine("PO Details", true, 13, 5.5);
+  if (po.poNumber) printLine(`PO Number: ${po.poNumber}`, false, 10, 4.8);
+
+  const poDateFormatted = formatStoreDate(
+    po.createdAt,
+    org?.country,
+    org?.organizationTimeZone
   );
-  doc.text(priorityText, margin + 110, currentY + 15);
+  if (poDateFormatted) printLine(`PO Date: ${poDateFormatted}`, false, 10, 4.8);
 
-  // Col 4: Status
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(100, 100, 100);
-  doc.text("STATUS", margin + 155, currentY + 7);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(20, 20, 20);
-  doc.text((po.status || "DRAFTED").toUpperCase(), margin + 155, currentY + 15);
+  const priorityVal = po.purchasePriority || "low";
+  printLine(`Priority: ${priorityVal}`, false, 10, 4.8);
 
-  currentY += 28;
+  currentY += 6;
 
-  // 3. Supplier Details Box
-  doc.setFontSize(9.5);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 20, 20);
-  doc.text("VENDOR / SUPPLIER DETAILS", margin, currentY);
-
-  currentY += 4;
-  doc.setFillColor(255, 255, 255);
-  doc.setLineWidth(0.3);
-  doc.setDrawColor(225, 222, 215);
-  doc.roundedRect(margin, currentY, pageWidth - margin * 2, 26, 2, 2, "FD");
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "bold");
-  doc.setTextColor(20, 20, 20);
-  doc.text(po.supplierName || "Supplier Name N/A", margin + 6, currentY + 8);
-
-  doc.setFontSize(8.5);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(90, 90, 90);
-  if (po.companyName) {
-    doc.text(`Company: ${po.companyName}`, margin + 6, currentY + 14);
-  }
-  if (po.supplierEmail || po.email) {
-    doc.text(`Email: ${po.supplierEmail || po.email}`, margin + 6, currentY + 20);
-  }
-  if (po.supplierPhone || po.phoneNumber) {
-    doc.text(`Phone: ${po.supplierPhone || po.phoneNumber}`, margin + 100, currentY + 14);
-  }
-
-  currentY += 32;
-
-  // 4. Line Items Table (jspdf-autotable)
+  // 5. Line Items Table (Matching Photo 1 style + price columns)
   const items = po.items || [];
-  const tableData = items.map((item: any, idx: number) => [
-    idx + 1,
-    item.inventoryItemName || item.itemName || `Item #${idx + 1}`,
-    `${item.orderedQuantity || 0} ${item.unit || "unit"}`,
-    `${currencySymbol} ${(item.unitCost || 0).toFixed(2)}`,
-    `${currencySymbol} ${((item.orderedQuantity || 0) * (item.unitCost || 0)).toFixed(2)}`,
-  ]);
+  const tableData = items.map((item: any, idx: number) => {
+    const qty = typeof item.orderedQuantity === "number" ? item.orderedQuantity : 0;
+    const unitCost = typeof item.unitCost === "number" ? item.unitCost : 0;
+    const totalCost = typeof item.totalCost === "number" ? item.totalCost : qty * unitCost;
+
+    return [
+      idx + 1,
+      item.name || item.inventoryItemName || item.itemName || `Item #${idx + 1}`,
+      item.sku || item.skuNumber || "",
+      qty.toString(),
+      item.buyingUnit || item.unit || "",
+      `${currencySymbol} ${formatCurrencyAmount(unitCost, org?.country)}`,
+      `${currencySymbol} ${formatCurrencyAmount(totalCost, org?.country)}`,
+    ];
+  });
 
   autoTable(doc, {
     startY: currentY,
-    head: [["#", "Item Description", "Quantity & Unit", "Unit Cost", "Total Cost"]],
-    body: tableData.length > 0 ? tableData : [["-", "No line items found", "-", "-", "-"]],
-    theme: "grid",
+    head: [["SR NO", "Item Name", "SKU", "Ordered Quantity", "Buying Unit", "Unit Price", "Total Amount"]],
+    body: tableData.length > 0 ? tableData : [["-", "No line items found", "-", "-", "-", "-", "-"]],
+    theme: "plain",
     headStyles: {
-      fillColor: [244, 243, 239],
-      textColor: [80, 80, 80],
-      fontSize: 8.5,
+      font: "helvetica",
       fontStyle: "bold",
+      fontSize: 9.5,
+      textColor: [0, 0, 0],
       halign: "left",
+      lineWidth: { top: 0.5, bottom: 0.5, left: 0, right: 0 },
+      lineColor: [0, 0, 0],
+      cellPadding: { top: 3.5, bottom: 3.5, left: 2, right: 2 },
+    },
+    bodyStyles: {
+      font: "helvetica",
+      fontStyle: "normal",
+      fontSize: 9,
+      textColor: [0, 0, 0],
+      lineWidth: { top: 0, bottom: 0.25, left: 0, right: 0 },
+      lineColor: [30, 30, 30],
+      cellPadding: { top: 3.5, bottom: 3.5, left: 2, right: 2 },
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: "center" },
-      1: { cellWidth: "auto" },
-      2: { cellWidth: 35, halign: "center" },
-      3: { cellWidth: 35, halign: "right" },
-      4: { cellWidth: 35, halign: "right" },
-    },
-    styles: {
-      fontSize: 8.5,
-      cellPadding: 3.5,
-      textColor: [30, 30, 30],
-      lineColor: [230, 228, 220],
-      lineWidth: 0.2,
+      0: { cellWidth: 16, halign: "left" },
+      1: { cellWidth: "auto", halign: "left" },
+      2: { cellWidth: 24, halign: "left" },
+      3: { cellWidth: 30, halign: "left" },
+      4: { cellWidth: 24, halign: "left" },
+      5: { cellWidth: 26, halign: "right" },
+      6: { cellWidth: 30, halign: "right" },
     },
     margin: { left: margin, right: margin },
   });
 
-  const finalY = (doc as any).lastAutoTable.finalY || currentY + 40;
+  const finalY = (doc as any).lastAutoTable?.finalY || currentY + 30;
+  let summaryY = finalY + 6;
 
-  // 5. Total & Notes Summary Section
-  let summaryY = finalY + 8;
-
-  if (po.notes) {
-    doc.setFontSize(8.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 100, 100);
-    doc.text("NOTES / INSTRUCTIONS:", margin, summaryY);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(50, 50, 50);
-    doc.text(po.notes, margin, summaryY + 5);
-  }
-
-  // Right Aligned Total Box
-  const totalBoxWidth = 70;
-  const totalBoxX = pageWidth - margin - totalBoxWidth;
-  doc.setFillColor(248, 247, 243);
-  doc.setDrawColor(220, 218, 210);
-  doc.roundedRect(totalBoxX, summaryY, totalBoxWidth, 16, 2, 2, "FD");
-
-  doc.setFontSize(9);
+  // Total Amount below table
+  const totalAmountNum = typeof po.totalAmount === "number" ? po.totalAmount : 0;
   doc.setFont("helvetica", "bold");
-  doc.setTextColor(80, 80, 80);
-  doc.text("TOTAL AMOUNT:", totalBoxX + 6, summaryY + 10);
-  doc.setFontSize(11);
-  doc.setTextColor(20, 20, 20);
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
   doc.text(
-    `${currencySymbol} ${(po.totalAmount || 0).toFixed(2)}`,
-    totalBoxX + totalBoxWidth - 6,
-    summaryY + 10,
+    `Total Amount: ${currencySymbol} ${formatCurrencyAmount(totalAmountNum, org?.country)}`,
+    pageWidth - margin,
+    summaryY,
     { align: "right" }
   );
 
-  // 6. Authorized Signature Footer
-  const footerY = Math.max(summaryY + 30, 260);
-  doc.setLineWidth(0.3);
-  doc.setDrawColor(200, 198, 190);
-  doc.line(pageWidth - margin - 50, footerY, pageWidth - margin, footerY);
-  doc.setFontSize(8);
-  doc.setFont("helvetica", "normal");
-  doc.setTextColor(120, 120, 120);
-  doc.text("Authorized Signature", pageWidth - margin - 25, footerY + 4, { align: "center" });
+  // Notes if any
+  if (po.notes) {
+    summaryY += 8;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.text("Notes:", margin, summaryY);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.text(po.notes, margin, summaryY + 4.5);
+  }
 
   // Save & Download PDF File
   const filename = `${po.poNumber || "PO"}_Voucher.pdf`;

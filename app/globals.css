@@ -88,6 +88,19 @@ input:disabled {
   cursor: not-allowed;
 }
 
+.hex-token-input {
+  background-color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  appearance: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
 .btn-primary {
   background-color: #0c0a09 !important;
   color: #ffffff !important;

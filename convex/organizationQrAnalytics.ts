@@ -123,31 +123,47 @@ export const getIndividualAnalytics = query({
 
     const { startTs, endTs } = parseDateBounds(args.from, args.to);
 
-    // 1. Fetch telemetry scan records
-    const allScans = await ctx.db
+    const qrIdsToMatch = new Set<string>([String(qr._id)]);
+    if (qr.legacyId) qrIdsToMatch.add(qr.legacyId);
+    if ((qr as any).id) qrIdsToMatch.add(String((qr as any).id));
+
+    // 1. Fetch telemetry scan records matching any QR identifier or tableId
+    const rawScans = await ctx.db
       .query("organizationQrScans")
-      .withIndex("by_qr", (q) => q.eq("qrId", args.qrId))
       .collect();
+
+    const allScans = rawScans.filter((s: any) => {
+      if (s.deletedAt !== undefined) return false;
+      const sid = String(s.qrId || "");
+      return qrIdsToMatch.has(sid) || (qr.tableId && s.tableId === qr.tableId);
+    });
 
     const telemetryScansCount = allScans.filter(
-      (s) => s.deletedAt === undefined && s.scannedAt >= startTs && s.scannedAt <= endTs,
+      (s) => s.scannedAt >= startTs && s.scannedAt <= endTs,
     ).length;
 
-    const scans = Math.max(telemetryScansCount, qr.counter || 0);
+    const hasDateFilter = Boolean(args.from || args.to);
+    const scans = hasDateFilter || allScans.length > 0
+      ? telemetryScansCount
+      : Math.max(telemetryScansCount, qr.counter || 0);
 
-    // 2. Fetch ordering sessions
-    const allSessions = await ctx.db
+    // 2. Fetch ordering sessions matching any QR identifier or tableId
+    const rawSessions = await ctx.db
       .query("organizationOrderingSessions")
-      .withIndex("by_qr", (q) => q.eq("qrId", args.qrId))
       .collect();
 
-    const telemetrySessionsCount = allSessions.filter((s: any) => {
+    const allSessions = rawSessions.filter((s: any) => {
       if (s.deletedAt !== undefined) return false;
+      const sid = String(s.qrId || "");
+      return qrIdsToMatch.has(sid) || (qr.tableId && s.tableId === qr.tableId);
+    });
+
+    const telemetrySessionsCount = allSessions.filter((s: any) => {
       const st = s.startedAt ?? s.firstScanAt ?? s.createdAt ?? 0;
       return st >= startTs && st <= endTs;
     }).length;
 
-    const sessions = Math.max(telemetrySessionsCount, Math.min(scans, allSessions.length));
+    const sessions = telemetrySessionsCount;
 
     // Collect all session IDs for this QR code to attribute session-linked orders (Takeaway, Delivery, DineIn)
     const qrSessionIds = new Set<string>();
@@ -160,7 +176,7 @@ export const getIndividualAnalytics = query({
     const allOrders = await ctx.db.query("orders").collect();
     const validOrders = allOrders.filter(
       (o: any) =>
-        (o.qrId === args.qrId ||
+        (qrIdsToMatch.has(String(o.qrId || "")) ||
           (qr.tableId && o.tableId === qr.tableId) ||
           (o.sessionId && qrSessionIds.has(String(o.sessionId)))) &&
         !o.isRejected &&
@@ -170,16 +186,20 @@ export const getIndividualAnalytics = query({
         o.createdAt <= endTs,
     );
 
-    const allCarts = await ctx.db
+    const rawCarts = await ctx.db
       .query("organizationCarts")
-      .withIndex("by_qr", (q) => q.eq("qrId", args.qrId))
       .collect();
+
+    const allCarts = rawCarts.filter((c: any) => {
+      if (c.deletedAt !== undefined) return false;
+      const cid = String(c.qrId || "");
+      return qrIdsToMatch.has(cid) || (qr.tableId && c.tableId === qr.tableId);
+    });
 
     const cartSessionSet = new Set<string>();
 
     for (const c of allCarts) {
       if (
-        c.deletedAt === undefined &&
         (c.hasItems || (c.itemCount ?? 0) > 0) &&
         c.createdAt >= startTs &&
         c.createdAt <= endTs
@@ -191,7 +211,6 @@ export const getIndividualAnalytics = query({
     for (const s of allSessions) {
       const st = (s as any).startedAt ?? (s as any).firstScanAt ?? (s as any).createdAt ?? 0;
       if (
-        s.deletedAt === undefined &&
         ((s as any).cartItemCount ?? 0) > 0 &&
         st >= startTs &&
         st <= endTs
@@ -427,7 +446,8 @@ export const getOverallPerformance = query({
           .collect()
       ).filter((s) => s.deletedAt === undefined && s.scannedAt >= startTs && s.scannedAt <= endTs);
 
-      const scans = Math.max(scanRecords.length, qr.counter || 0);
+      const hasDateFilter = Boolean(args.from || args.to);
+      const scans = hasDateFilter ? scanRecords.length : Math.max(scanRecords.length, qr.counter || 0);
       for (const s of scanRecords) {
         const hour = getLocalHour(s.scannedAt, overallOrgTz);
         hourlyScans[hour] = (hourlyScans[hour] || 0) + 1;
@@ -444,7 +464,7 @@ export const getOverallPerformance = query({
         return st >= startTs && st <= endTs;
       });
 
-      const sessions = Math.max(sessionRecords.length, scans > 0 ? 1 : 0);
+      const sessions = sessionRecords.length;
 
       const sessionIdsForQr = new Set<string>();
       for (const s of sessionRecords) {

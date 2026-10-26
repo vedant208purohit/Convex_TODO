@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef, ChangeEvent } from "react";
 import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import { Toast, type ToastMessage, type ToastType } from "./Toast";
 
 type TabType = "details" | "timings" | "taxation" | "country";
 
@@ -62,6 +63,7 @@ interface OrgFormData {
 
 import {
   COUNTRIES_MASTER,
+  getCountryMaster,
   getStatesForCountry,
   getCurrencyForCountry,
   getTimezoneForCountry,
@@ -74,6 +76,41 @@ import {
 } from "@/lib/constants/countries";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+function EditPencilIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+      <path d="m15 5 4 4" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M3 6h18" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
+}
 
 function parseTimeToDayMinutes(timeStr: string): number {
   if (!timeStr || typeof timeStr !== "string") return 0;
@@ -219,10 +256,8 @@ export function OrganizationSettings() {
   const [taxGroupName, setTaxGroupName] = useState("");
   const [taxGroupMode, setTaxGroupMode] = useState<"Inclusive" | "Exclusive">("Exclusive");
   const [taxComponents, setTaxComponents] = useState<TaxComponentRow[]>([
-    { id: "1", name: "Central GST", code: "CGST", rate: "2.5" },
-    { id: "2", name: "State GST", code: "SGST", rate: "2.5" },
+    { id: "1", name: "", code: "", rate: "" },
   ]);
-  const [hiddenFallbackGroups, setHiddenFallbackGroups] = useState<string[]>([]);
   const [taxGroupPendingErrors, setTaxGroupPendingErrors] = useState<string[]>([]);
   const [taxGroupPendingFields, setTaxGroupPendingFields] = useState<Record<string, boolean>>({});
 
@@ -295,8 +330,20 @@ export function OrganizationSettings() {
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isUploadingFssaiDoc, setIsUploadingFssaiDoc] = useState(false);
   const [isUploadingGstDoc, setIsUploadingGstDoc] = useState(false);
-  const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Standard Notification Toast State (matching Menu page)
+  const [toast, setToast] = useState<ToastMessage | null>(null);
+  const showToast = (message: string, type: ToastType = "success", subtext?: string) => {
+    setToast({ message, type, subtext });
+  };
+  const setSuccessMessage = (msg: string | null) => {
+    if (msg) showToast(msg, "success");
+    else setToast(null);
+  };
+  const setErrorMessage = (msg: string | null) => {
+    if (msg) showToast(msg, "error");
+    else setToast(null);
+  };
 
   // Load Convex DB document into initialData & formData
   useEffect(() => {
@@ -568,10 +615,6 @@ export function OrganizationSettings() {
         setErrorMessage(err?.message || "Failed to delete tax group.");
         setTimeout(() => setErrorMessage(null), 4000);
       }
-    } else if (groupName) {
-      setHiddenFallbackGroups((prev) => [...prev, groupName]);
-      setSuccessMessage(`Tax group "${groupName}" removed successfully.`);
-      setTimeout(() => setSuccessMessage(null), 3000);
     }
   };
 
@@ -739,7 +782,7 @@ export function OrganizationSettings() {
           taxMode: taxGroupMode === "Inclusive" ? "inclusive" : "exclusive",
           componentIds: finalCompIds,
         });
-        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) updated in Convex Database successfully.`);
+        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) updated successfully.`);
       } else {
         // Create new tax group in Convex DB
         await createTaxGroupMutation({
@@ -748,17 +791,15 @@ export function OrganizationSettings() {
           taxMode: taxGroupMode === "Inclusive" ? "inclusive" : "exclusive",
           componentIds: finalCompIds,
         });
-        if (drawerMode === "edit") {
-          setHiddenFallbackGroups((prev) => [...prev, taxGroupName.trim()]);
-        }
+
         const actionText = drawerMode === "add" ? "created" : "updated";
-        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) ${actionText} in Convex Database successfully.`);
+        setSuccessMessage(`Tax Group "${taxGroupName.trim()}" (${totalTaxRate.toFixed(1)}%) ${actionText} successfully.`);
       }
 
       handleCloseTaxGroupDrawer();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to save Tax Group in Convex Database.");
+      setErrorMessage(err?.message || "Failed to save Tax Group.");
     } finally {
       setIsSaving(false);
     }
@@ -1136,7 +1177,7 @@ export function OrganizationSettings() {
 
       await updateOrg(updatePayload as any);
 
-      setSuccessMessage("Organization settings updated successfully in Convex Database!");
+      setSuccessMessage("Organization settings updated successfully!");
       if (isTimingsDrawerOpen) handleCloseTimingsDrawer();
       setTimeout(() => setSuccessMessage(null), 4000);
     } catch (err: any) {
@@ -1169,10 +1210,10 @@ export function OrganizationSettings() {
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden font-sans">
       {/* Sticky / Fixed Top Header (Title + Subtitle + Sub-Nav Tabs) */}
-      <div className="shrink-0 space-y-4 bg-[#fdf8f7] pb-2 border-b border-[#eadfd6]">
-        <h1 className="font-serif text-3xl font-light text-[#1f1a17]">
+      <div className="shrink-0 space-y-2 bg-[#fdf8f7] pb-1 border-b border-[#e7e5e4]">
+        <h1 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
           {activeTab === "timings"
             ? "Operational Timings"
             : activeTab === "taxation"
@@ -1181,7 +1222,7 @@ export function OrganizationSettings() {
             ? "Country Requirements"
             : "Restaurant Details"}
         </h1>
-        <p className="mt-1 text-sm text-[#6f655e]">
+        <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
           {activeTab === "timings"
             ? "Set your restaurant's opening hours for each day."
             : activeTab === "taxation"
@@ -1192,14 +1233,14 @@ export function OrganizationSettings() {
         </p>
 
         {/* Sub-Navigation Tabs */}
-        <nav className="mt-4 flex">
+        <nav className="mt-2.5 flex font-sans">
           <button
             type="button"
             onClick={() => setActiveTab("details")}
-            className={`pb-3 text-sm font-medium transition-all ${
+            className={`pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "details"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Restaurant Details
@@ -1207,10 +1248,10 @@ export function OrganizationSettings() {
           <button
             type="button"
             onClick={() => setActiveTab("timings")}
-            className={`ml-8 pb-3 text-sm font-medium transition-all ${
+            className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "timings"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Operational Timings
@@ -1218,10 +1259,10 @@ export function OrganizationSettings() {
           <button
             type="button"
             onClick={() => setActiveTab("taxation")}
-            className={`ml-8 pb-3 text-sm font-medium transition-all ${
+            className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "taxation"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Taxation
@@ -1229,10 +1270,10 @@ export function OrganizationSettings() {
           <button
             type="button"
             onClick={() => setActiveTab("country")}
-            className={`ml-8 pb-3 text-sm font-medium transition-all ${
+            className={`ml-6 pb-2 text-xs font-semibold transition-all cursor-pointer ${
               activeTab === "country"
-                ? "border-b-2 border-[#1f1a17] text-[#1f1a17]"
-                : "border-b-2 border-transparent text-[#6f655e] hover:text-[#1f1a17]"
+                ? "border-b-2 border-[#141010] text-[#141010]"
+                : "border-b-2 border-transparent text-[#5e5e5e] hover:text-[#141010]"
             }`}
           >
             Country Requirements
@@ -1241,35 +1282,12 @@ export function OrganizationSettings() {
       </div>
 
       {/* Scrollable Form & Content Area */}
-      <div className="flex-1 overflow-y-auto pt-6 space-y-8 pr-1 pb-16">
-        {/* Notifications */}
-      {successMessage && (
-        <div className="flex items-center justify-between rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-medium text-emerald-800 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span>✓</span>
-            <span>{successMessage}</span>
-          </div>
-          <button onClick={() => setSuccessMessage(null)} className="text-emerald-600 hover:text-emerald-900">
-            ✕
-          </button>
-        </div>
-      )}
+      <div className="flex-1 overflow-y-auto pt-3 space-y-4 pr-1 pb-2">
 
-      {errorMessage && (
-        <div className="flex items-center justify-between rounded-2xl border border-red-200 bg-red-50 p-4 text-sm font-medium text-red-800 shadow-sm">
-          <div className="flex items-center gap-2">
-            <span>⚠️</span>
-            <span>{errorMessage}</span>
-          </div>
-          <button onClick={() => setErrorMessage(null)} className="text-red-600 hover:text-red-900">
-            ✕
-          </button>
-        </div>
-      )}
 
       {/* TAB 1: RESTAURANT DETAILS */}
       {activeTab === "details" && (
-        <div className="space-y-8">
+        <div className="space-y-4">
 
           {/* Section 1: Basic Information */}
           <div className="space-y-4">
@@ -1297,21 +1315,23 @@ export function OrganizationSettings() {
                     )}
                   </div>
                   <p className="mt-4 text-sm font-medium text-[#1f1a17]">Organization Logo</p>
-                  <div className="mt-1 flex items-center gap-3">
+                  <div className="mt-2 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-xs font-medium text-[#8c4a3b] hover:underline"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[#eadfd6] bg-[#fcf8f6] px-2.5 py-1 text-xs font-medium text-[#1f1a17] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] cursor-pointer"
                     >
-                      {displayLogoUrl ? "Change" : "Edit"}
+                      <EditPencilIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                      <span>{displayLogoUrl ? "Change" : "Edit"}</span>
                     </button>
                     {displayLogoUrl && (
                       <button
                         type="button"
                         onClick={handleRemoveLogo}
-                        className="text-xs font-medium text-red-600 hover:underline"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100 cursor-pointer"
                       >
-                        Remove
+                        <TrashIcon className="w-3.5 h-3.5" />
+                        <span>Remove</span>
                       </button>
                     )}
                   </div>
@@ -1456,22 +1476,27 @@ export function OrganizationSettings() {
                     <label className="block text-xs font-semibold uppercase tracking-wider text-[#6f655e]">
                       Country*
                     </label>
-                    <span className="text-[10px] font-medium uppercase tracking-wider text-[#8a7e75] bg-[#eae4df] px-2 py-0.5 rounded-md">
-                      Read-only
-                    </span>
                   </div>
                   <select
                     value={formData.country || "India"}
-                    disabled
+                    onChange={(e) => {
+                      const newCountry = e.target.value;
+                      updateField("country", newCountry);
+                      const master = getCountryMaster(newCountry);
+                      if (master) {
+                        updateField("phoneCountryCode", master.phoneCode);
+                        updateField("defaultCurrency", master.currency.code);
+                        updateField("defaultCurrencySymbol", master.currency.symbol);
+                        updateField("organizationTimeZone", master.defaultTimezone);
+                      }
+                    }}
                     style={{
-                      backgroundColor: "#f5efeb",
-                      color: "#6f655e",
                       backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%238a7e75' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
                       backgroundPosition: "right 1rem center",
                       backgroundRepeat: "no-repeat",
                       backgroundSize: "1.5em 1.5em"
                     }}
-                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-[#f5efeb] px-4 py-3 pr-10 text-sm text-[#6f655e] cursor-not-allowed opacity-90 font-medium select-none"
+                    className="appearance-none mt-2 w-full rounded-xl border border-[#eadfd6] bg-white px-4 py-3 pr-10 text-sm text-[#1f1a17] font-medium cursor-pointer focus:outline-none focus:ring-1 focus:ring-stone-900"
                   >
                     {COUNTRY_OPTIONS.map((c) => (
                       <option key={c} value={c}>
@@ -1625,20 +1650,20 @@ export function OrganizationSettings() {
       {/* TAB 2: OPERATIONAL TIMINGS */}
       {activeTab === "timings" && (
         <div className="space-y-6">
-          <div className="overflow-hidden rounded-2xl border border-[#eadfd6] bg-white shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
+          <div className="overflow-x-auto rounded-2xl border border-[#eadfd6] bg-white shadow-sm">
+            <table className="w-full text-left border-collapse font-sans">
+              <thead className="sticky top-0 z-20 bg-[#fcf8f6] shadow-xs">
                 <tr className="border-b border-[#eadfd6] bg-[#fcf8f6]">
-                  <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/4">
+                  <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-1/4 bg-[#fcf8f6]">
                     Day
                   </th>
-                  <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/5">
+                  <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-1/5 bg-[#fcf8f6]">
                     Status
                   </th>
-                  <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-2/5">
+                  <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-2/5 bg-[#fcf8f6]">
                     Opening Hours
                   </th>
-                  <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] text-right w-1/6">
+                  <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] text-right w-1/6 bg-[#fcf8f6]">
                     Action
                   </th>
                 </tr>
@@ -1666,13 +1691,13 @@ export function OrganizationSettings() {
 
                   return (
                     <tr key={day} className="transition hover:bg-[#fdfbf9]">
-                      <td className="py-5 px-6 font-serif text-base font-normal text-[#1f1a17]">
+                      <td className="py-3.5 px-5 font-medium text-[13px] text-[#1f1a17]">
                         {day}
                       </td>
 
-                      <td className="py-5 px-6">
+                      <td className="py-3.5 px-5">
                         <span
-                          className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+                          className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
                             dayConfig.is_open
                               ? "bg-[#eaf4ed] text-[#1e6b37] border border-[#c6e6cf]"
                               : "bg-[#fdeaea] text-[#b91c1c] border border-[#f8c4c4]"
@@ -1682,18 +1707,18 @@ export function OrganizationSettings() {
                         </span>
                       </td>
 
-                      <td className="py-5 px-6 text-sm text-[#1f1a17] font-medium">
+                      <td className="py-3.5 px-5 text-[13px] text-[#1f1a17] font-medium">
                         {formattedHoursText}
                       </td>
 
-                      <td className="py-5 px-6 text-right">
+                      <td className="py-3.5 px-5 text-right">
                         <button
                           type="button"
                           onClick={handleOpenTimingsDrawer}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[#8a7e75] transition hover:bg-[#f3eeea] hover:text-[#1f1a17]"
+                          className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
                           title="Edit Timings"
                         >
-                          ✏️
+                          <EditPencilIcon className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
@@ -1724,7 +1749,7 @@ export function OrganizationSettings() {
           >
             <div className="w-screen max-w-md bg-white border-l border-[#eadfd6] shadow-2xl flex flex-col justify-between">
               <div className="flex items-center justify-between px-6 py-5 border-b border-[#eadfd6]">
-                <h2 className="font-serif text-2xl font-light text-[#1f1a17]">Edit timings</h2>
+                <h2 className="text-xl font-semibold text-[#1f1a17] font-sans">Edit timings</h2>
                 <button
                   type="button"
                   onClick={handleCloseTimingsDrawer}
@@ -1768,7 +1793,7 @@ export function OrganizationSettings() {
                               }`}
                             />
                           </button>
-                          <span className="font-serif text-lg font-normal text-[#1f1a17]">{day}</span>
+                          <span className="text-sm font-semibold text-[#1f1a17] font-sans">{day}</span>
                         </div>
 
                         <div className="flex items-center gap-1.5 relative copy-popover-container dot-popover-container">
@@ -1994,75 +2019,46 @@ export function OrganizationSettings() {
 
       {/* TAB 3: TAXATION */}
       {activeTab === "taxation" && (
-        <div className="space-y-6">
-          {/* Header Action Bar */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
-
-            <div className="flex items-center gap-3">
-              {/* Temporarily disabled Taxes Inclusive / Taxes Exclusive toggle
-              <div className="flex rounded-xl border border-[#eadfd6] bg-[#fdf8f7] p-1">
-                <button
-                  type="button"
-                  onClick={() => updateField("inclusiveGst", true)}
-                  className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${
-                    formData.inclusiveGst ? "bg-white text-[#1f1a17] shadow-sm" : "text-[#6f655e] hover:text-[#1f1a17]"
-                  }`}
-                >
-                  Taxes Inclusive
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateField("inclusiveGst", false)}
-                  className={`rounded-lg px-4 py-2 text-xs font-medium transition-all ${
-                    !formData.inclusiveGst ? "bg-white text-[#1f1a17] shadow-sm" : "text-[#6f655e] hover:text-[#1f1a17]"
-                  }`}
-                >
-                  Taxes Exclusive
-                </button>
-              </div>
-              */}
-
-              {/* Add Tax Group Button */}
+        <div className="space-y-4">
+          {/* Configured Taxes Card Table */}
+          <div className="overflow-hidden rounded-2xl border border-[#eadfd6] bg-white shadow-sm space-y-4 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-[#1f1a17]">Configured Taxes</h3>
               <button
                 type="button"
                 onClick={handleOpenAddTaxGroup}
-                className="flex h-10 items-center gap-2 rounded-full bg-[#191513] px-5 text-xs font-medium text-white shadow-sm transition hover:bg-[#2e2824]"
+                className="flex h-9 items-center gap-2 rounded-full bg-[#191513] px-4 text-xs font-medium text-white shadow-xs transition hover:bg-[#2e2824] cursor-pointer"
               >
                 <span>+</span>
                 <span>Add Tax Group</span>
               </button>
             </div>
-          </div>
-
-          {/* Configured Taxes Card Table */}
-          <div className="overflow-hidden rounded-2xl border border-[#eadfd6] bg-white shadow-sm space-y-4 p-6">
-            <h3 className="text-lg font-medium text-[#1f1a17]">Configured Taxes</h3>
 
             <div className="overflow-x-auto rounded-xl border border-[#eadfd6]">
-              <table className="w-full text-left border-collapse">
-                <thead>
+              <table className="w-full text-left border-collapse font-sans">
+                <thead className="sticky top-0 z-20 bg-[#fcf8f6] shadow-xs">
                   <tr className="border-b border-[#eadfd6] bg-[#fcf8f6]">
-                    <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/4">
+                    <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-1/4 bg-[#fcf8f6]">
                       TAX NAME
                     </th>
-                    <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-2/5">
+                    <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-2/5 bg-[#fcf8f6]">
                       TAX COMPONENTS
                     </th>
-                    <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/6">
+                    <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-1/6 bg-[#fcf8f6]">
                       TOTAL RATE
                     </th>
                     {/* Temporarily disabled MODE column header
-                    <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] w-1/6">
+                    <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] w-1/6 bg-[#fcf8f6]">
                       MODE
                     </th>
                     */}
-                    <th className="py-4 px-6 text-xs font-semibold uppercase tracking-wider text-[#6f655e] text-right w-1/12">
+                    <th className="py-3.5 px-5 text-[11px] font-semibold uppercase tracking-wider text-[#5e5e5e] text-right w-1/12 bg-[#fcf8f6]">
                       ACTION
                     </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#eadfd6]">
-                  {/* Render Convex DB Tax Groups if present */}
+                  {/* Render Convex DB Tax Groups */}
                   {dbTaxGroups && dbTaxGroups.length > 0 ? (
                     dbTaxGroups.map((group) => {
                       const comps = group.componentIds
@@ -2072,10 +2068,10 @@ export function OrganizationSettings() {
 
                       return (
                         <tr key={group._id} className="transition hover:bg-[#fdfbf9]">
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">
+                          <td className="py-3.5 px-5 text-[13px] font-medium text-[#1f1a17]">
                             {group.name} {group.isDefault ? "(Default)" : ""}
                           </td>
-                          <td className="py-5 px-6">
+                          <td className="py-3.5 px-5">
                             <div className="flex flex-wrap items-center gap-2">
                               {comps.map((c, idx) => (
                                 <span
@@ -2087,11 +2083,8 @@ export function OrganizationSettings() {
                               ))}
                             </div>
                           </td>
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">{totalRate.toFixed(1)}%</td>
-                          {/* Temporarily disabled MODE cell
-                          <td className="py-5 px-6 text-sm text-[#6f655e] capitalize">{group.taxMode}</td>
-                          */}
-                          <td className="py-5 px-6 text-right">
+                          <td className="py-3.5 px-5 text-[13px] font-medium text-[#1f1a17]">{totalRate.toFixed(1)}%</td>
+                          <td className="py-3.5 px-5 text-right">
                             <div className="flex items-center justify-end gap-2">
                               <button
                                 type="button"
@@ -2107,10 +2100,10 @@ export function OrganizationSettings() {
                                     group._id
                                   )
                                 }
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#5e5e5e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#141010] cursor-pointer"
                                 title="Edit Tax Group"
                               >
-                                ✏️
+                                <EditPencilIcon className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 type="button"
@@ -2118,7 +2111,7 @@ export function OrganizationSettings() {
                                 className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
                                 title="Delete Tax Group"
                               >
-                                🗑️
+                                <TrashIcon className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </td>
@@ -2126,146 +2119,13 @@ export function OrganizationSettings() {
                       );
                     })
                   ) : (
-                    <>
-                      {/* Fallback Pre-configured Default Rows */}
-                      {!hiddenFallbackGroups.includes("GST") && (
-                        <tr className="transition hover:bg-[#fdfbf9]">
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">GST</td>
-                          <td className="py-5 px-6">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                                CGST 2.5%
-                              </span>
-                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                                SGST 2.5%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">5%</td>
-                          {/* Temporarily disabled MODE cell
-                          <td className="py-5 px-6 text-sm text-[#6f655e]">
-                            {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
-                          </td>
-                          */}
-                          <td className="py-5 px-6 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenEditTaxGroup("GST", [
-                                    { name: "Central GST", code: "CGST", rate: "2.5" },
-                                    { name: "State GST", code: "SGST", rate: "2.5" },
-                                  ])
-                                }
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
-                                title="Edit Tax Group"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTaxGroup(undefined, "GST")}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
-                                title="Delete Tax Group"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-
-                      {!hiddenFallbackGroups.includes("GST 18%") && (
-                        <tr className="transition hover:bg-[#fdfbf9]">
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">GST 18%</td>
-                          <td className="py-5 px-6">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                                CGST 9%
-                              </span>
-                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                                SGST 9%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">18%</td>
-                          {/* Temporarily disabled MODE cell
-                          <td className="py-5 px-6 text-sm text-[#6f655e]">
-                            {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
-                          </td>
-                          */}
-                          <td className="py-5 px-6 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenEditTaxGroup("GST 18%", [
-                                    { name: "Central GST", code: "CGST", rate: "9" },
-                                    { name: "State GST", code: "SGST", rate: "9" },
-                                  ])
-                                }
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
-                                title="Edit Tax Group"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTaxGroup(undefined, "GST 18%")}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
-                                title="Delete Tax Group"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-
-                      {!hiddenFallbackGroups.includes("Service Tax") && (
-                        <tr className="transition hover:bg-[#fdfbf9]">
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">Service Tax</td>
-                          <td className="py-5 px-6">
-                            <div className="flex items-center gap-2">
-                              <span className="rounded-lg bg-[#f1edec] border border-[#e2dad8] px-2.5 py-1 text-xs font-medium text-[#1f1a17]">
-                                Service Tax 6%
-                              </span>
-                            </div>
-                          </td>
-                          <td className="py-5 px-6 font-medium text-[#1f1a17]">6%</td>
-                          {/* Temporarily disabled MODE cell
-                          <td className="py-5 px-6 text-sm text-[#6f655e]">
-                            {formData.inclusiveGst ? "Inclusive" : "Exclusive"}
-                          </td>
-                          */}
-                          <td className="py-5 px-6 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleOpenEditTaxGroup("Service Tax", [
-                                    { name: "Service Tax", code: "SERVICE", rate: "6" },
-                                  ])
-                                }
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-[#eadfd6] bg-[#fcf8f6] text-[#6f655e] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] hover:text-[#1f1a17] cursor-pointer"
-                                title="Edit Tax Group"
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteTaxGroup(undefined, "Service Tax")}
-                                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-600 transition hover:border-red-300 hover:bg-red-100 hover:text-red-700 cursor-pointer"
-                                title="Delete Tax Group"
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </>
+                    <tr>
+                      <td colSpan={4} className="py-12 text-center text-sm text-[#8c827a]">
+                        No taxes configured for this store. Click &quot;+ Add Tax Group&quot; to configure taxation.
+                      </td>
+                    </tr>
                   )}
+
                 </tbody>
               </table>
             </div>
@@ -2292,7 +2152,7 @@ export function OrganizationSettings() {
           >
             {/* Drawer Header */}
             <div className="flex items-center justify-between px-8 py-6 border-b border-[#eadfd6] bg-[#fcf8f6]">
-              <h2 className="font-serif text-2xl font-light text-[#1f1a17]">
+              <h2 className="text-xl font-semibold text-[#1f1a17] font-sans">
                 {drawerMode === "add" ? "Add Tax Group" : "Edit Tax Group"}
               </h2>
               <button
@@ -2375,7 +2235,7 @@ export function OrganizationSettings() {
               {/* Section 2: Tax Components */}
               <div className="space-y-4">
                 <div>
-                  <h3 className="font-serif text-xl font-light text-[#1f1a17]">Tax Components</h3>
+                  <h3 className="text-base font-semibold text-[#1f1a17] font-sans">Tax Components</h3>
                   <p className="mt-1 text-xs text-[#6f655e]">
                     Add the individual tax components that make up this tax group.
                   </p>
@@ -2469,10 +2329,10 @@ export function OrganizationSettings() {
                     <button
                       type="button"
                       onClick={() => handleRemoveComponentRow(comp.id)}
-                      className="flex h-9 w-9 items-center justify-center rounded text-[#8a7e75] hover:text-red-600 transition mt-5 shrink-0"
+                      className="flex h-9 w-9 items-center justify-center rounded border border-red-200 bg-red-50 text-red-600 hover:border-red-300 hover:bg-red-100 transition mt-5 shrink-0 cursor-pointer"
                       title="Remove component"
                     >
-                      🗑️
+                      <TrashIcon className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 ))}
@@ -2622,16 +2482,17 @@ export function OrganizationSettings() {
                             </a>
                           )}
                         </div>
-                        <div className="flex items-center gap-4 mt-1">
+                        <div className="flex items-center gap-2 mt-2">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               fssaiFileInputRef.current?.click();
                             }}
-                            className="text-xs font-medium text-[#1f1a17] hover:underline cursor-pointer"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#eadfd6] bg-[#fcf8f6] px-2.5 py-1 text-xs font-medium text-[#1f1a17] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] cursor-pointer"
                           >
-                            Change File
+                            <EditPencilIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                            <span>Change File</span>
                           </button>
                           <button
                             type="button"
@@ -2639,9 +2500,10 @@ export function OrganizationSettings() {
                               e.stopPropagation();
                               handleRemoveFssaiDocument();
                             }}
-                            className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100 cursor-pointer"
                           >
-                            Remove
+                            <TrashIcon className="w-3.5 h-3.5" />
+                            <span>Remove</span>
                           </button>
                         </div>
                       </div>
@@ -2757,16 +2619,17 @@ export function OrganizationSettings() {
                             </a>
                           )}
                         </div>
-                        <div className="flex items-center gap-4 mt-1">
+                        <div className="flex items-center gap-2 mt-2">
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               gstFileInputRef.current?.click();
                             }}
-                            className="text-xs font-medium text-[#1f1a17] hover:underline cursor-pointer"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-[#eadfd6] bg-[#fcf8f6] px-2.5 py-1 text-xs font-medium text-[#1f1a17] transition hover:border-[#1f1a17] hover:bg-[#f3eeea] cursor-pointer"
                           >
-                            Change File
+                            <EditPencilIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                            <span>Change File</span>
                           </button>
                           <button
                             type="button"
@@ -2774,9 +2637,10 @@ export function OrganizationSettings() {
                               e.stopPropagation();
                               handleRemoveGstDocument();
                             }}
-                            className="text-xs font-medium text-red-600 hover:underline cursor-pointer"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600 transition hover:border-red-300 hover:bg-red-100 cursor-pointer"
                           >
-                            Remove
+                            <TrashIcon className="w-3.5 h-3.5" />
+                            <span>Remove</span>
                           </button>
                         </div>
                       </div>
@@ -2814,12 +2678,12 @@ export function OrganizationSettings() {
 
       {/* FOOTER ACTIONS BAR (Fixed at bottom; Hidden on Operational Timings & Taxation since drawers handle actions) */}
       {activeTab !== "timings" && activeTab !== "taxation" && (
-        <div className="shrink-0 flex items-center justify-end gap-4 border-t border-[#eadfd6] bg-[#fdf8f7] pt-4 pb-2 z-20">
+        <div className="shrink-0 flex items-center justify-end gap-2.5 border-t border-[#e7e5e4] bg-[#fdf8f7] pt-2 pb-0 z-20">
           <button
             type="button"
             onClick={handleCancel}
             disabled={isSaving}
-            className="h-10 rounded-full border border-[#eadfd6] bg-white px-6 text-sm font-medium text-[#1f1a17] shadow-sm transition hover:bg-[#f3eeea] active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="h-8 rounded-full border border-[#e7e5e4] bg-white px-4 text-xs font-semibold text-[#141010] transition hover:bg-[#f1edec] active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             Cancel
           </button>
@@ -2827,11 +2691,11 @@ export function OrganizationSettings() {
             type="button"
             onClick={handleSave}
             disabled={isSaving}
-            className="flex h-10 items-center justify-center rounded-full bg-[#191513] px-6 text-sm font-medium text-white shadow-md transition hover:bg-[#2e2824] active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="flex h-8 items-center justify-center rounded-full bg-[#0c0a09] px-5 text-xs font-semibold text-white shadow-xs transition hover:bg-neutral-800 active:scale-95 disabled:opacity-50 cursor-pointer"
           >
             {isSaving ? (
               <div className="flex items-center gap-2">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+                <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
                 <span>Saving...</span>
               </div>
             ) : (
@@ -2840,6 +2704,9 @@ export function OrganizationSettings() {
           </button>
         </div>
       )}
+
+      {/* Standard Floating Toast Notification Component (Matching Menu Page) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

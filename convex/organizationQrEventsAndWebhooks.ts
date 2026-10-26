@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireAdminOrCashier } from "./organizationUsers";
+import { restoreInventoryForOrderInternal } from "./inventory";
 
 /**
  * Subticket 06: Idempotent Event & Webhook Processor
@@ -74,6 +75,7 @@ export const processEvent = mutation({
               paymentStatus: "Refunded",
               updatedAt: now,
             });
+            await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
           }
         } catch {
           // Ignore

@@ -1,10 +1,17 @@
 import { mutation, query, MutationCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { resolveNotificationsForOrderStatus } from "./processNotifications";
 import { handleOrderCompletionTransfer } from "./providerPaymentTransfers";
 import { Id } from "./_generated/dataModel";
 import { validateActivePaymentMode } from "./paymentModes";
 import { resolveOrderItemStation } from "./stations";
+import {
+  convertUnits,
+  deductInventoryForOrderInternal,
+  restoreInventoryForOrderInternal,
+  validateInventoryAvailabilityForItems,
+  checkInventoryAvailabilityForItems,
+} from "./inventory";
 
 // ==========================================
 // ORDER ACTIVITY DURATION & LIFECYCLE HELPER
@@ -73,6 +80,277 @@ export async function recordOrderActivity(
   return { activityId, totalDuration, position: nextPosition };
 }
 
+
+async function resolveWaiterInfo(ctx: any, waiterUserId?: string) {
+  if (!waiterUserId || !waiterUserId.trim()) return null;
+  const idStr = waiterUserId.trim();
+
+  try {
+    const userDoc = await ctx.db.get(idStr as any);
+    if (userDoc) {
+      const name = `${userDoc.firstName || ""} ${userDoc.lastName || ""}`.trim() || userDoc.name || userDoc.email || idStr;
+      return { id: userDoc._id, name };
+    }
+  } catch {}
+
+  const orgUser = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_user", (q: any) => q.eq("userId", idStr))
+    .first();
+  if (orgUser) {
+    const name = `${orgUser.firstName || ""} ${orgUser.lastName || ""}`.trim() || orgUser.email || idStr;
+    return { id: orgUser._id, name };
+  }
+
+  return { id: idStr, name: idStr };
+}
+
+// ==========================================
+// SCHEDULING TIMING & SLOT VALIDATION HELPERS
+// ==========================================
+
+export function parseTimeToMinutes(timeStr?: string | null): number | null {
+  if (!timeStr || typeof timeStr !== "string") return null;
+  const trimmed = timeStr.trim();
+
+  // 12-hour format: e.g. "11:00 AM", "2:30 PM", "12:39 PM"
+  const match12h = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (match12h) {
+    let h = parseInt(match12h[1], 10);
+    const m = parseInt(match12h[2], 10);
+    const period = match12h[3].toUpperCase();
+    if (period === "PM" && h < 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  // 24-hour format: e.g. "11:00", "23:59"
+  const match24h = trimmed.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (match24h) {
+    const h = parseInt(match24h[1], 10);
+    const m = parseInt(match24h[2], 10);
+    return h * 60 + m;
+  }
+
+  // Full date string format
+  const parsedDate = new Date(trimmed);
+  if (!isNaN(parsedDate.getTime())) {
+    return parsedDate.getHours() * 60 + parsedDate.getMinutes();
+  }
+
+  return null;
+}
+
+export function parseLeadTimeMinutes(limit?: string | number | null): number {
+  if (typeof limit === "number" && limit >= 0) {
+    if (limit <= 72) return limit * 60;
+    return limit;
+  }
+  if (!limit || typeof limit !== "string") return 30;
+
+  const trimmed = limit.trim().toLowerCase();
+  const matchNum = trimmed.match(/\d+/);
+  if (!matchNum) return 30;
+
+  const num = parseInt(matchNum[0], 10);
+  if (trimmed.includes("day")) return num * 24 * 60;
+  if (trimmed.includes("hour") || trimmed.includes("hr")) return num * 60;
+  if (trimmed.includes("min") || trimmed.includes("m")) return num;
+  if (num > 0 && num <= 72) return num * 60;
+  return num;
+}
+
+export function parseAdvanceDaysCount(
+  limit?: number | string | null,
+  limitType?: string | null
+): number {
+  const num = typeof limit === "number" ? limit : parseInt(String(limit || 7), 10);
+  const count = isNaN(num) || num <= 0 ? 7 : num;
+  const type = (limitType || "days").trim().toLowerCase();
+
+  if (type.startsWith("month")) {
+    return count * 30;
+  }
+  if (type.startsWith("week")) {
+    return count * 7;
+  }
+  return count;
+}
+
+export function getStoreTimeContext(timestamp: number, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: timeZone || "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    weekday: "long",
+  });
+
+  const parts = formatter.formatToParts(new Date(timestamp));
+  let year = "", month = "", day = "", hour = "0", minute = "0", weekday = "";
+  for (const p of parts) {
+    if (p.type === "year") year = p.value;
+    if (p.type === "month") month = p.value;
+    if (p.type === "day") day = p.value;
+    if (p.type === "hour") hour = p.value === "24" ? "00" : p.value;
+    if (p.type === "minute") minute = p.value;
+    if (p.type === "weekday") weekday = p.value;
+  }
+
+  const ymd = `${year}-${month}-${day}`;
+  const totalMinutes = parseInt(hour, 10) * 60 + parseInt(minute, 10);
+
+  return {
+    ymd,
+    weekday,
+    totalMinutes,
+  };
+}
+
+export function normalizeTargetDateYMD(dateStr: string, timeZone: string): { ymd: string; weekday: string } {
+  const trimmed = dateStr.trim();
+  // If in YYYY-MM-DD format
+  const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (ymdMatch) {
+    const d = new Date(parseInt(ymdMatch[1], 10), parseInt(ymdMatch[2], 10) - 1, parseInt(ymdMatch[3], 10), 12, 0, 0);
+    const dayFormatter = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "long" });
+    return { ymd: trimmed, weekday: dayFormatter.format(d) };
+  }
+
+  // Clean conversational prefixes: e.g. "Today (Fri, Oct 9)" -> "Fri, Oct 9"
+  const cleaned = trimmed.replace(/^(today|tomorrow)\s*\(/i, "").replace(/\)$/, "").trim();
+
+  // If missing 4-digit year, attach current store year
+  let parseTarget = cleaned;
+  if (!/\b\d{4}\b/.test(cleaned)) {
+    const currentStoreContext = getStoreTimeContext(Date.now(), timeZone);
+    const currentYear = currentStoreContext.ymd.split("-")[0];
+    parseTarget = `${cleaned}, ${currentYear}`;
+  }
+
+  const parsed = new Date(parseTarget);
+  if (!isNaN(parsed.getTime())) {
+    const ctx = getStoreTimeContext(parsed.getTime(), timeZone);
+    return { ymd: ctx.ymd, weekday: ctx.weekday };
+  }
+
+  return { ymd: trimmed, weekday: "Monday" };
+}
+
+export function validateScheduledOrderSlot(args: {
+  dateStr: string;
+  timeSlotStr: string;
+  isPickup: boolean;
+  scheduleConfig?: any;
+  timeZone: string;
+  currentTimeMs?: number;
+}) {
+  const now = args.currentTimeMs ?? Date.now();
+  const currentStoreTime = getStoreTimeContext(now, args.timeZone);
+  const targetDate = normalizeTargetDateYMD(args.dateStr, args.timeZone);
+
+  // 1. Check Date is not in the past
+  if (targetDate.ymd < currentStoreTime.ymd) {
+    throw new Error("Selected schedule date cannot be in the past.");
+  }
+
+  // 1.5 Check Date does not exceed configured advance booking horizon
+  const advanceLimit = args.isPickup
+    ? args.scheduleConfig?.advancePickupLimit
+    : args.scheduleConfig?.advanceDeliveryLimit;
+  const advanceLimitType = args.isPickup
+    ? args.scheduleConfig?.advancePickupLimitType
+    : args.scheduleConfig?.advanceDeliveryLimitType;
+  const horizonDays = parseAdvanceDaysCount(advanceLimit, advanceLimitType);
+
+  const [cYear, cMonth, cDay] = currentStoreTime.ymd.split("-").map(Number);
+  const maxDate = new Date(cYear, cMonth - 1, cDay + horizonDays, 23, 59, 59);
+  const maxYear = maxDate.getFullYear();
+  const maxM = String(maxDate.getMonth() + 1).padStart(2, "0");
+  const maxD = String(maxDate.getDate()).padStart(2, "0");
+  const maxYMD = `${maxYear}-${maxM}-${maxD}`;
+
+  if (targetDate.ymd > maxYMD) {
+    throw new Error(`Selected date is beyond the maximum advance booking limit (${horizonDays} days).`);
+  }
+
+  // 2. Parse slot window: e.g. "12:00 PM – 12:30 PM" or "12:00 PM - 12:30 PM"
+  const slotParts = args.timeSlotStr.split(/[–\-]/);
+  let slotStartMinutes: number | null = null;
+  let slotEndMinutes: number | null = null;
+
+  if (slotParts.length >= 2) {
+    slotStartMinutes = parseTimeToMinutes(slotParts[0]);
+    slotEndMinutes = parseTimeToMinutes(slotParts[1]);
+  } else {
+    slotStartMinutes = parseTimeToMinutes(args.timeSlotStr);
+    slotEndMinutes = slotStartMinutes !== null ? slotStartMinutes + 30 : null;
+  }
+
+  if (slotStartMinutes === null || slotEndMinutes === null) {
+    throw new Error(`Invalid scheduled time slot format: ${args.timeSlotStr}`);
+  }
+
+  // 3. Resolve lead time buffer
+  const rawLeadTime = args.isPickup
+    ? args.scheduleConfig?.advanceOrderTimeLimit
+    : args.scheduleConfig?.advanceScheduleDeliveryOrderTimeLimit;
+  const leadTimeMinutes = parseLeadTimeMinutes(rawLeadTime);
+
+  // 4. Real-time filtering for today: past slots or slots that have already started are rejected
+  const isToday = targetDate.ymd === currentStoreTime.ymd;
+  if (isToday) {
+    // A slot within minimum preparation lead time buffer cannot be booked
+    if (slotStartMinutes < currentStoreTime.totalMinutes + leadTimeMinutes) {
+      throw new Error("Selected time slot does not meet the minimum advance preparation lead time.");
+    }
+
+    // A slot that has ended (slotEnd <= currentStoreTime) is strictly expired
+    if (slotEndMinutes <= currentStoreTime.totalMinutes) {
+      throw new Error("Selected time slot has already ended. Please select an upcoming slot.");
+    }
+
+    // A slot that has already started (slotStart <= currentStoreTime) cannot be booked
+    if (slotStartMinutes <= currentStoreTime.totalMinutes) {
+      throw new Error("Selected time slot is no longer available. Please select an upcoming slot.");
+    }
+  }
+
+  // 5. Operating Hours & Weekly Schedule validation
+  const weeklyTimings = args.isPickup
+    ? args.scheduleConfig?.pickupTimings
+    : args.scheduleConfig?.deliveryTimings;
+
+  if (weeklyTimings) {
+    const daySchedule = weeklyTimings[targetDate.weekday];
+    if (daySchedule && !daySchedule.is_open) {
+      throw new Error(`The store is closed for ${args.isPickup ? "pickup" : "delivery"} on ${targetDate.weekday}.`);
+    }
+
+    if (daySchedule && Array.isArray(daySchedule.hours) && daySchedule.hours.length > 0) {
+      let isWithinAnyShift = false;
+      for (const shift of daySchedule.hours) {
+        const shiftStart = parseTimeToMinutes(shift.start_time);
+        const shiftEnd = parseTimeToMinutes(shift.end_time);
+        if (shiftStart !== null && shiftEnd !== null) {
+          if (slotStartMinutes >= shiftStart && slotEndMinutes <= shiftEnd) {
+            isWithinAnyShift = true;
+            break;
+          }
+        }
+      }
+
+      if (!isWithinAnyShift) {
+        throw new Error("Selected time slot is outside the store's configured operating hours.");
+      }
+    }
+  }
+}
+
 // ==========================================
 // 1. ORDER CREATION MUTATION (POS & ONLINE)
 // ==========================================
@@ -117,12 +395,16 @@ export const createOrder = mutation({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
 
-    // Scheduled Delivery Timing
+    // Scheduled Delivery & Pickup Timing
     scheduledDeliveryDate: v.optional(v.string()),
     scheduledDeliveryTime: v.optional(v.string()),
+    scheduledPickupDate: v.optional(v.string()),
+    scheduledPickupTime: v.optional(v.string()),
 
     paymentMode: v.optional(v.string()),
     specialNotes: v.optional(v.string()),
@@ -139,14 +421,85 @@ export const createOrder = mutation({
             })
           )
         ),
+        prepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
+        chefPrepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
       })
     ),
   },
   handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
     const now = Date.now();
     const todayStart = new Date(now).setHours(0, 0, 0, 0);
 
-    // Validation for Scheduled Delivery timing fields
+    const org = await ctx.db.get(args.organizationId);
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found or inactive.");
+    }
+    const orgTimeZone = org?.organizationTimeZone || "Asia/Kolkata";
+
+    // 0. Service-Mode Feature Toggle Enforcement
+    if (
+      args.orderSource === "PREST-QR" ||
+      args.orderSource === "PREST-DIGITAL-STORE" ||
+      args.orderSource === "PREST-ONLINE" ||
+      args.orderSource === "Prest-Online" ||
+      args.orderSource === "ONLINE"
+    ) {
+      if (args.orderType === "DineIn" && org.isDineIn === false) {
+        throw new Error("Dine In service is currently disabled for this store.");
+      }
+      if (args.orderType === "TakeAway" && org.isTakeAway === false) {
+        throw new Error("Takeaway service is currently disabled for this store.");
+      }
+      if (args.orderType === "ScheduledPickup") {
+        if (org.isTakeAway === false) {
+          throw new Error("Takeaway service is currently disabled for this store.");
+        }
+        if (org.scheduledPickup === false) {
+          throw new Error("Scheduled pickup is currently disabled for this store.");
+        }
+      }
+      if (args.orderType === "Delivery" && org.isDelivery === false) {
+        throw new Error("Delivery service is currently disabled for this store.");
+      }
+      if (args.orderType === "ScheduledDelivery") {
+        if (org.isDelivery === false) {
+          throw new Error("Delivery service is currently disabled for this store.");
+        }
+        if (org.scheduledDelivery === false) {
+          throw new Error("Scheduled delivery is currently disabled for this store.");
+        }
+      }
+    } else {
+      if (args.orderType === "ScheduledPickup" && org.scheduledPickup === false) {
+        throw new Error("Scheduled pickup is currently disabled for this store.");
+      }
+      if (args.orderType === "ScheduledDelivery" && org.scheduledDelivery === false) {
+        throw new Error("Scheduled delivery is currently disabled for this store.");
+      }
+    }
+
+    // Validation for Scheduled Delivery timing fields & operating hours slot
     if (args.orderType === "ScheduledDelivery") {
       if (!args.scheduledDeliveryDate || !args.scheduledDeliveryTime) {
         throw new Error(
@@ -155,10 +508,46 @@ export const createOrder = mutation({
       }
     }
 
+    // Validation for Scheduled Pickup timing fields
+    if (args.orderType === "ScheduledPickup") {
+      const pickupDate = args.scheduledPickupDate || args.scheduledDeliveryDate;
+      const pickupTime = args.scheduledPickupTime || args.scheduledDeliveryTime;
+      if (!pickupDate || !pickupTime) {
+        throw new Error(
+          "Scheduled pickup requires scheduledPickupDate and scheduledPickupTime."
+        );
+      }
+    }
+
+    // Validate scheduled slot against organization operating schedule
+    if (args.orderType === "ScheduledDelivery" || args.orderType === "ScheduledPickup") {
+      const isPickup = args.orderType === "ScheduledPickup";
+      const targetDate = (isPickup ? args.scheduledPickupDate || args.scheduledDeliveryDate : args.scheduledDeliveryDate)!;
+      const targetSlot = (isPickup ? args.scheduledPickupTime || args.scheduledDeliveryTime : args.scheduledDeliveryTime)!;
+
+      const scheduleConfigs = await ctx.db.query("organizationSchedulePickups").collect();
+      const activeSchedule = scheduleConfigs.find((c) => c.deletedAt === undefined);
+
+      validateScheduledOrderSlot({
+        dateStr: targetDate,
+        timeSlotStr: targetSlot,
+        isPickup,
+        scheduleConfig: activeSchedule,
+        timeZone: orgTimeZone,
+        currentTimeMs: now,
+      });
+    }
+
     // 0. Postpaid QR Verification Guard
     const reqTableId = args.tableId;
-    if (reqTableId && !args.cashierUserId && !args.waiterUserId) {
-      const org = await ctx.db.get(args.organizationId);
+    const isOnlinePayment =
+      args.paymentMode === "Razorpay" ||
+      args.paymentMode === "Online" ||
+      args.paymentMode === "Stripe" ||
+      args.paymentMode === "UPI" ||
+      args.paymentMode === "Card";
+
+    if (!isOnlinePayment && reqTableId && !args.cashierUserId && !args.waiterUserId) {
       if (org && org.dineinPospaid) {
         const identity = await ctx.auth.getUserIdentity();
         if (identity) {
@@ -213,6 +602,12 @@ export const createOrder = mutation({
     // Cache tax groups and components
     const taxGroupCache = new Map<string, any>();
     const taxCompCache = new Map<string, any>();
+
+    // 3.5 Validate inventory availability for recipes if negative stock is not allowed
+    const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, args.organizationId);
+    if (stockError) {
+      throw new ConvexError(stockError);
+    }
 
     // 4. Calculate Subtotal, Line Items, and Tax Amounts
     let rawSubTotal = 0;
@@ -380,6 +775,20 @@ export const createOrder = mutation({
         }
       }
 
+      // Resolve Chef Prep Preferences
+      const rawPrepPrefs = (inputItem as any).prepPreferences || (inputItem as any).chefPrepPreferences || [];
+      const resolvedPrepPreferences: Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }> = [];
+      for (const pref of rawPrepPrefs) {
+        if (typeof pref === "string" && pref.trim()) {
+          resolvedPrepPreferences.push({ name: pref.trim() });
+        } else if (pref && typeof pref === "object" && pref.name) {
+          resolvedPrepPreferences.push({
+            preferenceId: pref.preferenceId,
+            name: pref.name.trim(),
+          });
+        }
+      }
+
       lineItemConfigs.push({
         itemId: dbItem._id,
         itemName: dbItem.name,
@@ -387,6 +796,8 @@ export const createOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        prepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
+        chefPrepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
         isToGo: inputItem.isToGo ?? false,
       });
     }
@@ -439,8 +850,23 @@ export const createOrder = mutation({
       return `+91 90${timeSlice}${randomSeed}`;
     };
 
-    const resolvedCustomerPhone = args.customerPhone?.trim() || generateUniquePhone();
-    const resolvedCustomerName = args.customerName?.trim() || "Guest Customer";
+    let resolvedCustomerId = args.customerId;
+    if (!resolvedCustomerId && identity?.subject) {
+      const linkedCustomer = await ctx.db
+        .query("customers")
+        .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", identity.subject))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .first();
+      if (linkedCustomer) {
+        resolvedCustomerId = linkedCustomer._id;
+      }
+    }
+
+    const linkedCustDoc = resolvedCustomerId ? await ctx.db.get(resolvedCustomerId) : null;
+    const authPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
+    const resolvedCustomerPhone = args.customerPhone?.trim() || linkedCustDoc?.phone || authPhone || generateUniquePhone();
+    const resolvedCustomerName = args.customerName?.trim() || (linkedCustDoc?.firstName ? `${linkedCustDoc.firstName} ${linkedCustDoc.lastName || ""}`.trim() : "") || identity?.name?.trim() || "Guest Customer";
+    const resolvedCustomerEmail = args.customerEmail?.trim() || linkedCustDoc?.email || identity?.email?.trim();
 
     // 5.5 Validate Payment Mode Availability for Store Checkout
     if (args.paymentMode && args.paymentMode !== "Pending") {
@@ -458,7 +884,18 @@ export const createOrder = mutation({
         if (directQr && directQr.deletedAt === undefined) {
           autoQrId = directQr._id;
         }
-      } catch {}
+      } catch { }
+
+      if (!autoQrId) {
+        const qrList = await ctx.db
+          .query("organizationQrCodes")
+          .withIndex("by_legacy_id", (q) => q.eq("legacyId", String(args.qrId)))
+          .collect();
+        const foundQr = qrList.find((q) => q.deletedAt === undefined);
+        if (foundQr) {
+          autoQrId = foundQr._id;
+        }
+      }
     }
 
     if (!autoQrId && args.tableId) {
@@ -469,6 +906,40 @@ export const createOrder = mutation({
       const activeQr = tableQrs.find((q) => q.deletedAt === undefined);
       if (activeQr) {
         autoQrId = activeQr._id;
+      }
+    }
+
+    let effectiveTableId: Id<"organizationTables"> | undefined = args.tableId;
+
+    // If tableId was not passed directly or needs resolution from qrId
+    if (!effectiveTableId && autoQrId) {
+      const qrDoc = await ctx.db.get(autoQrId);
+      if (qrDoc && qrDoc.tableId) {
+        try {
+          const normTblId = ctx.db.normalizeId("organizationTables", qrDoc.tableId);
+          if (normTblId) {
+            const tblDoc = await ctx.db.get(normTblId);
+            if (tblDoc && tblDoc.deletedAt === undefined) {
+              effectiveTableId = tblDoc._id;
+            }
+          }
+        } catch { }
+
+        if (!effectiveTableId) {
+          const allTables = await ctx.db
+            .query("organizationTables")
+            .collect();
+          const found = allTables.find(
+            (t) =>
+              t.deletedAt === undefined &&
+              (t.legacyId === qrDoc.tableId ||
+                (qrDoc.tableNumber &&
+                  t.tableNumber.trim().toLowerCase() === qrDoc.tableNumber.trim().toLowerCase()))
+          );
+          if (found) {
+            effectiveTableId = found._id;
+          }
+        }
       }
     }
 
@@ -510,18 +981,18 @@ export const createOrder = mutation({
       orderSource: args.orderSource ?? "Prest-Cashier",
       orderStatusId: initialStatus?._id,
       orderStatusName: initialStatus?.name ?? "Accepted",
-      isCompleted: resolvedPaymentStatus === "Paid",
+      isCompleted: false,
       isRejected: false,
       isModify: false,
-      tableId: args.tableId,
+      tableId: effectiveTableId,
       qrId: autoQrId,
       waiterUserId: args.waiterUserId,
       cashierUserId: args.cashierUserId,
       membersOnTable: args.membersOnTable ?? 1,
-      customerId: args.customerId,
+      customerId: resolvedCustomerId,
       customerName: resolvedCustomerName,
       customerPhone: resolvedCustomerPhone,
-      customerEmail: args.customerEmail,
+      customerEmail: resolvedCustomerEmail,
       subTotal,
       taxTotal,
       discountAmount: args.discountAmount,
@@ -529,9 +1000,17 @@ export const createOrder = mutation({
       userAddressId: args.userAddressId,
       deliveryAddress: args.deliveryAddress,
       scheduledDeliveryDate:
-        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryDate : undefined,
+        args.scheduledDeliveryDate ||
+        args.scheduledPickupDate ||
+        (args.orderType === "ScheduledDelivery" || args.orderType === "ScheduledPickup"
+          ? new Date(now).toLocaleDateString("en-GB", { timeZone: orgTimeZone })
+          : undefined),
       scheduledDeliveryTime:
-        args.orderType === "ScheduledDelivery" ? args.scheduledDeliveryTime : undefined,
+        args.scheduledDeliveryTime ||
+        args.scheduledPickupTime ||
+        (args.orderType === "ScheduledDelivery" || args.orderType === "ScheduledPickup"
+          ? new Date(now).toLocaleTimeString("en-US", { timeZone: orgTimeZone, hour: "numeric", minute: "2-digit", hour12: true })
+          : undefined),
       totalAmount,
       paymentMode: args.paymentMode ?? "Cash",
       paymentStatus: resolvedPaymentStatus,
@@ -558,11 +1037,20 @@ export const createOrder = mutation({
         quantity: line.quantity,
         totalPrice: line.totalPrice,
         customizations: line.customizations,
+        prepPreferences: line.prepPreferences,
+        chefPrepPreferences: line.chefPrepPreferences,
         isReady: false,
         isToGo: line.isToGo ?? false,
         stationId,
         createdAt: now,
       });
+    }
+
+    // 7.5 Auto-deduct inventory stock for recipe ingredients
+    try {
+      await deductInventoryForOrderInternal(ctx, orderId);
+    } catch (e) {
+      console.warn("Auto inventory deduction notice for order", orderId, e);
     }
 
     // 8. Log Initial Activity Entry
@@ -673,11 +1161,18 @@ export const createOrder = mutation({
 // ==========================================
 
 export const listLiveOrders = query({
-  args: { organizationId: v.id("organizations") },
+  args: { organizationId: v.optional(v.id("organizations")) },
   handler: async (ctx, args) => {
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg) return [];
+      orgId = firstOrg._id;
+    }
+
     const activeOrders = await ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
       .filter((q) => q.eq(q.field("isCompleted"), false))
       .collect();
 
@@ -713,6 +1208,7 @@ export const listLiveOrders = query({
         })),
         activities: activities.sort((a, b) => a.position - b.position),
         table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+        waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
       });
     }
 
@@ -721,7 +1217,10 @@ export const listLiveOrders = query({
 });
 
 export const getOrderDetails = query({
-  args: { id: v.union(v.id("orders"), v.string()) },
+  args: {
+    id: v.union(v.id("orders"), v.string()),
+    sessionOrderId: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     let order = null;
     const normalizedId = ctx.db.normalizeId("orders", args.id);
@@ -795,6 +1294,24 @@ export const getOrderDetails = query({
       .withIndex("by_active", (q) => q.eq("active", true))
       .first();
 
+    let enrichedDeliveryAddress = order.deliveryAddress;
+    if (order.userAddressId) {
+      const userAddr = await ctx.db.get(order.userAddressId);
+      if (userAddr) {
+        enrichedDeliveryAddress = {
+          ...enrichedDeliveryAddress,
+          latitude: enrichedDeliveryAddress?.latitude ?? userAddr.latitude,
+          longitude: enrichedDeliveryAddress?.longitude ?? userAddr.longitude,
+          addressLine1: enrichedDeliveryAddress?.addressLine1 || userAddr.addressLine1,
+          addressLine2: enrichedDeliveryAddress?.addressLine2 || userAddr.addressLine2,
+          landmark: enrichedDeliveryAddress?.landmark || userAddr.landmark,
+          city: enrichedDeliveryAddress?.city || userAddr.city,
+          zipCode: enrichedDeliveryAddress?.zipCode || userAddr.zipCode,
+          addressType: enrichedDeliveryAddress?.addressType || userAddr.addressType,
+        };
+      }
+    }
+
     if (activeSurvey) {
       const attempt = await ctx.db
         .query("surveyAttempts")
@@ -814,11 +1331,73 @@ export const getOrderDetails = query({
       }
     }
 
+    // Look up active delivery attempt if any exists
+    const activeDelivery = await ctx.db
+      .query("orderDelivers")
+      .withIndex("by_order", (q) => q.eq("orderId", order._id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .order("desc")
+      .first();
+
+    let deliveryPartner: any = null;
+    if (activeDelivery) {
+      deliveryPartner = {
+        provider: activeDelivery.provider,
+        status: activeDelivery.status,
+        trackingUrl: activeDelivery.trackingUrl,
+        name: activeDelivery.partnerInfo?.name,
+        phone: activeDelivery.partnerInfo?.phone,
+        vehicleNumber: activeDelivery.partnerInfo?.vehicleNumber,
+        vehicleType: activeDelivery.partnerInfo?.vehicleType,
+        latitude: activeDelivery.partnerInfo?.latitude,
+        longitude: activeDelivery.partnerInfo?.longitude,
+      };
+    }
+
+    const org = await ctx.db.get(order.organizationId);
+    let restaurantInfo: any = null;
+    if (org && org.deletedAt === undefined) {
+      const addressParts = [
+        org.addressLine1,
+        org.addressLine2,
+        org.landmark,
+        org.city,
+        org.state,
+        org.zipCode,
+        org.country,
+      ].filter((p): p is string => Boolean(p && typeof p === "string" && p.trim().length > 0));
+
+      const formattedAddress = addressParts.join(", ");
+
+      restaurantInfo = {
+        _id: org._id,
+        name: org.name,
+        slug: org.slug,
+        phone: org.phone || org.mobile,
+        mobile: org.mobile,
+        address: formattedAddress || undefined,
+        addressLine1: org.addressLine1,
+        addressLine2: org.addressLine2,
+        landmark: org.landmark,
+        city: org.city,
+        state: org.state,
+        zipCode: org.zipCode,
+        country: org.country,
+        latitude: org.latitude,
+        longitude: org.longitude,
+      };
+    }
+
     return {
       ...order,
+      deliveryAddress: enrichedDeliveryAddress,
+      restaurant: restaurantInfo,
+      scheduledPickupDate: (order as any).scheduledPickupDate || order.scheduledDeliveryDate || null,
+      scheduledPickupTime: (order as any).scheduledPickupTime || order.scheduledDeliveryTime || null,
       paymentStatus: effectivePaymentStatus,
       orderStatusName: effectiveOrderStatusName,
       surveyQrUrl,
+      deliveryPartner: deliveryPartner || (order as any).deliveryPartner || null,
       totalCredit,
       totalDebit,
       netPaid,
@@ -841,6 +1420,7 @@ export const getOrderDetails = query({
       activities: activities.sort((a, b) => a.position - b.position),
       payments,
       table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+      waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
     };
   },
 });
@@ -880,7 +1460,26 @@ export const listCustomerOrders = query({
       allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
     }
 
+    const allowedCustomerIds = new Set<string>();
+
     if (clerkUserId) {
+      const linkedCustomer = await ctx.db
+        .query("customers")
+        .withIndex("by_clerk_user_id", (q) => q.eq("clerkUserId", clerkUserId))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .first();
+
+      if (linkedCustomer) {
+        allowedCustomerIds.add(linkedCustomer._id);
+        if (linkedCustomer.email) allowedEmails.add(linkedCustomer.email.toLowerCase().trim());
+        if (linkedCustomer.phone) {
+          const cDig = linkedCustomer.phone.replace(/\D/g, "");
+          if (cDig.length >= 7) {
+            allowedPhoneDigits.add(cDig.slice(-10));
+          }
+        }
+      }
+
       const userOrgRecords = await ctx.db
         .query("organizationUsers")
         .withIndex("by_user_and_org", (q) =>
@@ -910,6 +1509,11 @@ export const listCustomerOrders = query({
     const filteredOrders = orgOrders.filter((order) => {
       // Placed in current browser session
       if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
+        return true;
+      }
+
+      // Matched via authoritative customerId
+      if (order.customerId && allowedCustomerIds.has(order.customerId)) {
         return true;
       }
 
@@ -970,7 +1574,7 @@ export const listCustomerOrders = query({
 
 export const getCustomerStats = query({
   args: {
-    organizationId: v.id("organizations"),
+    organizationId: v.optional(v.id("organizations")),
     phone: v.optional(v.string()),
     name: v.optional(v.string()),
   },
@@ -984,10 +1588,24 @@ export const getCustomerStats = query({
       };
     }
 
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg) {
+        return {
+          dineInCount: 0,
+          takeawayCount: 0,
+          totalSpends: 0,
+          recentOrders: [],
+        };
+      }
+      orgId = firstOrg._id;
+    }
+
     const cleanP = args.phone.trim().replace(/\D/g, "");
     const allOrders = await ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
       .collect();
 
     const customerOrders = allOrders.filter((o) => {
@@ -1007,6 +1625,11 @@ export const getCustomerStats = query({
       createdAt: number;
       totalAmount: number;
       orderType: string;
+      scheduledDeliveryDate?: string;
+      scheduledDeliveryTime?: string;
+      paymentStatus?: string;
+      orderStatusName?: string;
+      isCompleted?: boolean;
       itemsSummary: string;
       items: Array<{ itemName: string; quantity: number }>;
     }> = [];
@@ -1027,6 +1650,11 @@ export const getCustomerStats = query({
         createdAt: ord.createdAt,
         totalAmount: ord.totalAmount,
         orderType: ord.orderType,
+        scheduledDeliveryDate: ord.scheduledDeliveryDate,
+        scheduledDeliveryTime: ord.scheduledDeliveryTime,
+        paymentStatus: ord.paymentStatus,
+        orderStatusName: ord.orderStatusName,
+        isCompleted: ord.isCompleted,
         itemsSummary,
         items: items.map((it) => ({ itemName: it.itemName, quantity: it.quantity })),
       });
@@ -1093,11 +1721,25 @@ export const updateOrderStatus = mutation({
       now,
     });
 
+    const statusLower = process.name.toLowerCase();
+    const isCancelOrReject =
+      statusLower.includes("cancel") ||
+      statusLower.includes("reject");
+
     await ctx.db.patch(order._id, {
       orderStatusId: process._id,
       orderStatusName: process.name,
+      ...(isCancelOrReject ? { isRejected: true } : {}),
       updatedAt: now,
     });
+
+    if (isCancelOrReject) {
+      try {
+        await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
+      } catch (err) {
+        console.error("Failed to restore inventory on order status cancel/reject:", err);
+      }
+    }
 
     // 4. Resolve process notifications if order status actually transitioned and not suppressed
     let notifications: any[] = [];
@@ -1207,11 +1849,11 @@ export const completeOrder = mutation({
         postpaidByOrder.length > 0
           ? postpaidByOrder
           : await ctx.db
-              .query("postpaidOrderRequests")
-              .withIndex("by_table_and_status", (q) =>
-                q.eq("tableId", orderTableId).eq("status", "approved")
-              )
-              .collect();
+            .query("postpaidOrderRequests")
+            .withIndex("by_table_and_status", (q) =>
+              q.eq("tableId", orderTableId).eq("status", "approved")
+            )
+            .collect();
 
       for (const req of toComplete) {
         if (
@@ -1235,76 +1877,11 @@ export const completeOrder = mutation({
       }
     }
 
-    // 4. AUTOMATIC INVENTORY STOCK DEDUCTION HOOK
-    const orderItems = await ctx.db
-      .query("orderItems")
-      .withIndex("by_order", (q) => q.eq("orderId", order._id))
-      .collect();
-
-    for (const orderItem of orderItems) {
-      // 4a. Deduct stock for base menu item recipes
-      const itemRecipes = await ctx.db
-        .query("recipes")
-        .withIndex("by_item", (q) => q.eq("itemId", orderItem.itemId))
-        .collect();
-
-      for (const recipe of itemRecipes) {
-        const invItem = await ctx.db.get(recipe.inventoryItemId);
-        if (invItem) {
-          const consumedQty = recipe.quantity * orderItem.quantity;
-          const newStock = Math.max(0, invItem.availableStock - consumedQty);
-
-          await ctx.db.insert("inventoryItemStocks", {
-            organizationId: order.organizationId,
-            inventoryItemId: invItem._id,
-            stockType: "debit",
-            quantity: consumedQty,
-            unit: recipe.unit,
-            sourceType: "OrderSale",
-            orderId: order._id,
-            createdAt: now,
-          });
-
-          await ctx.db.patch(invItem._id, {
-            availableStock: newStock,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // 4b. Deduct stock for customization option recipes
-      if (orderItem.customizations) {
-        for (const cust of orderItem.customizations) {
-          const custRecipes = await ctx.db
-            .query("recipes")
-            .withIndex("by_customization", (q) => q.eq("customizationItemId", cust.optionId))
-            .collect();
-
-          for (const recipe of custRecipes) {
-            const invItem = await ctx.db.get(recipe.inventoryItemId);
-            if (invItem) {
-              const consumedQty = recipe.quantity * orderItem.quantity;
-              const newStock = Math.max(0, invItem.availableStock - consumedQty);
-
-              await ctx.db.insert("inventoryItemStocks", {
-                organizationId: order.organizationId,
-                inventoryItemId: invItem._id,
-                stockType: "debit",
-                quantity: consumedQty,
-                unit: recipe.unit,
-                sourceType: "OrderSale",
-                orderId: order._id,
-                createdAt: now,
-              });
-
-              await ctx.db.patch(invItem._id, {
-                availableStock: newStock,
-                updatedAt: now,
-              });
-            }
-          }
-        }
-      }
+    // 4. AUTOMATIC INVENTORY STOCK DEDUCTION HOOK (Unified & Idempotent)
+    try {
+      await deductInventoryForOrderInternal(ctx, order._id);
+    } catch (e) {
+      console.warn("Auto inventory deduction notice for completeOrder", order._id, e);
     }
 
     // 5. Automated Provider Payment Transfer Hook (Fail-safe marketplace payout routing)
@@ -1325,7 +1902,7 @@ export const completeOrder = mutation({
 
 export const listOrders = query({
   args: {
-    organizationId: v.id("organizations"),
+    organizationId: v.optional(v.id("organizations")),
     startDate: v.optional(v.number()),
     endDate: v.optional(v.number()),
     search: v.optional(v.string()),
@@ -1355,9 +1932,26 @@ export const listOrders = query({
     pageSize: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    let orgId = args.organizationId;
+    if (!orgId) {
+      const firstOrg = await ctx.db.query("organizations").first();
+      if (!firstOrg) {
+        return {
+          orders: [],
+          totalCount: 0,
+          totalGrossAmount: 0,
+          statusCounts: { All: 0 },
+          page: args.page ?? 1,
+          pageSize: args.pageSize ?? 15,
+          totalPages: 0,
+        };
+      }
+      orgId = firstOrg._id;
+    }
+
     let ordersQuery = ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId));
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId));
 
     const allOrders = await ordersQuery.collect();
 
@@ -1447,6 +2041,7 @@ export const listOrders = query({
         })),
         payments,
         table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
+        waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
       });
     }
 
@@ -1528,7 +2123,7 @@ export const addOrderPayment = mutation({
 
     if (netPaid >= order.totalAmount) {
       nextPaymentStatus = "Paid";
-      isCompleted = true;
+      isCompleted = order.isCompleted;
       isRejected = false;
       if (nextOrderStatusName === "Cancelled / Refunded") {
         nextOrderStatusName = "Accepted";
@@ -1555,11 +2150,81 @@ export const addOrderPayment = mutation({
       updatedAt: now,
     });
 
+    // 3. Restore inventory if order has been refunded or cancelled
+    if (
+      args.paymentType === "Debit" &&
+      (nextPaymentStatus === "Refunded" ||
+        nextOrderStatusName === "Cancelled / Refunded" ||
+        isRejected === true)
+    ) {
+      try {
+        await restoreInventoryForOrderInternal(ctx, order._id, "Refund");
+      } catch (e) {
+        console.error("Failed to restore inventory on refund in addOrderPayment:", e);
+      }
+    }
+
     return {
       success: true,
       netPaid: (netPaid / 100).toFixed(2),
       paymentStatus: nextPaymentStatus,
     };
+  },
+});
+
+// ==========================================
+// 8. CUSTOMER ONLINE PAYMENT CONFIRMATION
+// ==========================================
+
+export const confirmOrderPayment = mutation({
+  args: {
+    orderId: v.id("orders"),
+    paymentMode: v.optional(v.string()),
+    transactionReference: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+
+    const now = Date.now();
+    const payModeName = args.paymentMode || order.paymentMode || "Razorpay";
+
+    // Mark payment status Paid WITHOUT prematurely completing the order
+    await ctx.db.patch(order._id, {
+      paymentStatus: "Paid",
+      paymentMode: payModeName,
+      updatedAt: now,
+    });
+
+    // Record Credit entry in orderPayments
+    await ctx.db.insert("orderPayments", {
+      organizationId: order.organizationId,
+      orderId: order._id,
+      paymentModeName: payModeName,
+      paymentType: "Credit",
+      amount: order.totalAmount,
+      payAmount: order.totalAmount,
+      refundAmount: 0,
+      transactionReference: args.transactionReference,
+      createdAt: now,
+    });
+
+    return { success: true, orderId: order._id, paymentStatus: "Paid" };
+  },
+});
+
+export const reopenOrderForKitchen = mutation({
+  args: {
+    orderId: v.id("orders"),
+  },
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    if (!order) throw new Error("Order not found");
+    await ctx.db.patch(order._id, {
+      isCompleted: false,
+      updatedAt: Date.now(),
+    });
+    return { success: true, orderId: order._id };
   },
 });
 
@@ -1581,6 +2246,8 @@ export const updateOrderCustomer = mutation({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
   },
@@ -1707,6 +2374,13 @@ export const cancelOrder = mutation({
       now,
     });
 
+    // Restore inventory stock back to available stock
+    try {
+      await restoreInventoryForOrderInternal(ctx, order._id, "Cancellation");
+    } catch (e) {
+      console.error("Failed to restore inventory on cancelOrder:", e);
+    }
+
     return { success: true };
   },
 });
@@ -1737,6 +2411,28 @@ export const addItemsToExistingOrder = mutation({
             })
           )
         ),
+        prepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
+        chefPrepPreferences: v.optional(
+          v.array(
+            v.union(
+              v.string(),
+              v.object({
+                preferenceId: v.optional(v.id("chefPrepPreferences")),
+                name: v.string(),
+              })
+            )
+          )
+        ),
       })
     ),
   },
@@ -1748,6 +2444,12 @@ export const addItemsToExistingOrder = mutation({
     }
 
     const now = Date.now();
+    // Validate inventory availability for new items if negative stock is not allowed
+    const stockError = await checkInventoryAvailabilityForItems(ctx, args.items, order.organizationId);
+    if (stockError) {
+      throw new ConvexError(stockError);
+    }
+
     let additionalSubTotal = 0;
     const lineItemConfigs: Array<any> = [];
 
@@ -1775,6 +2477,20 @@ export const addItemsToExistingOrder = mutation({
         }
       }
 
+      // Resolve Chef Prep Preferences
+      const rawPrepPrefs = (inputItem as any).prepPreferences || (inputItem as any).chefPrepPreferences || [];
+      const resolvedPrepPreferences: Array<{ preferenceId?: Id<"chefPrepPreferences">; name: string }> = [];
+      for (const pref of rawPrepPrefs) {
+        if (typeof pref === "string" && pref.trim()) {
+          resolvedPrepPreferences.push({ name: pref.trim() });
+        } else if (pref && typeof pref === "object" && pref.name) {
+          resolvedPrepPreferences.push({
+            preferenceId: pref.preferenceId,
+            name: pref.name.trim(),
+          });
+        }
+      }
+
       const itemLineTotal = itemUnitPrice * inputItem.quantity;
       additionalSubTotal += itemLineTotal;
 
@@ -1785,6 +2501,8 @@ export const addItemsToExistingOrder = mutation({
         quantity: inputItem.quantity,
         totalPrice: itemLineTotal,
         customizations: resolvedCustomizations,
+        prepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
+        chefPrepPreferences: resolvedPrepPreferences.length > 0 ? resolvedPrepPreferences : undefined,
         isToGo: inputItem.isToGo ?? false,
       });
     }
@@ -1806,6 +2524,8 @@ export const addItemsToExistingOrder = mutation({
         quantity: line.quantity,
         totalPrice: line.totalPrice,
         customizations: line.customizations,
+        prepPreferences: line.prepPreferences,
+        chefPrepPreferences: line.chefPrepPreferences,
         isReady: false,
         isToGo: line.isToGo ?? false,
         stationId,
@@ -1984,130 +2704,8 @@ export const moveOrderTable = mutation({
   },
 });
 
-// ==========================================
-// AUTHENTICATED CUSTOMER ORDERS QUERY
-// ==========================================
 
-export const listCustomerOrders = query({
-  args: {
-    organizationId: v.id("organizations"),
-    orderIds: v.optional(v.array(v.string())),
-    placedOrderIds: v.optional(v.array(v.string())),
-    customerPhone: v.optional(v.string()),
-    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
-  },
-  handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    const sessionOrderIds = args.orderIds || args.placedOrderIds || [];
-    const placedSet = new Set(sessionOrderIds);
 
-    if (!identity && placedSet.size === 0) {
-      return [];
-    }
-
-    const clerkUserId = identity?.subject;
-    const userEmail = identity?.email?.toLowerCase().trim();
-    const rawPhone = ((identity?.phoneNumber || (identity as any)?.phone || "") as string).trim();
-    const cleanPhoneDigits = rawPhone.replace(/\D/g, "");
-
-    // Collect allowed email and phone identifiers for this user
-    const allowedEmails = new Set<string>();
-    if (userEmail) allowedEmails.add(userEmail);
-
-    const allowedPhoneDigits = new Set<string>();
-    if (cleanPhoneDigits && cleanPhoneDigits.length >= 7) {
-      allowedPhoneDigits.add(cleanPhoneDigits.slice(-10));
-    }
-
-    if (clerkUserId) {
-      const userOrgRecords = await ctx.db
-        .query("organizationUsers")
-        .withIndex("by_user_and_org", (q) =>
-          q.eq("userId", clerkUserId).eq("organizationId", args.organizationId)
-        )
-        .collect();
-
-      for (const u of userOrgRecords) {
-        if (u.deletedAt !== undefined) continue;
-        if (u.email) allowedEmails.add(u.email.toLowerCase().trim());
-        if (u.phone) {
-          const uDig = u.phone.replace(/\D/g, "");
-          if (uDig.length >= 7) {
-            allowedPhoneDigits.add(uDig.slice(-10));
-          }
-        }
-      }
-    }
-
-    // Query orders for this store
-    const orgOrders = await ctx.db
-      .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.organizationId))
-      .collect();
-
-    // Strictly filter to orders belonging to this authenticated customer or placed in session
-    const filteredOrders = orgOrders.filter((order) => {
-      // Placed in current browser session
-      if (placedSet.has(order._id) || placedSet.has(order.orderNumber)) {
-        return true;
-      }
-
-      if (order.customerEmail) {
-        const oEmail = order.customerEmail.toLowerCase().trim();
-        if (allowedEmails.has(oEmail)) return true;
-      }
-
-      if (order.customerPhone) {
-        const oDigits = order.customerPhone.replace(/\D/g, "");
-        if (oDigits.length >= 7) {
-          const oLast10 = oDigits.slice(-10);
-          if (allowedPhoneDigits.has(oLast10)) return true;
-        }
-      }
-
-      return false;
-    });
-
-    const sorted = filteredOrders.sort((a, b) => b.createdAt - a.createdAt);
-
-    const enrichedOrders: Array<any> = [];
-    for (const order of sorted) {
-      const items = await ctx.db
-        .query("orderItems")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
-
-      const activities = await ctx.db
-        .query("orderActivities")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
-
-      let tableInfo: any = null;
-      if (order.tableId) {
-        try {
-          tableInfo = await ctx.db.get(order.tableId as Id<"organizationTables">);
-        } catch {
-          // Table doc format fallback
-        }
-      }
-
-      enrichedOrders.push({
-        ...order,
-        display_sub_total: (order.subTotal / 100).toFixed(2),
-        display_tax_total: (order.taxTotal / 100).toFixed(2),
-        display_discount_amount: order.discountAmount ? (order.discountAmount / 100).toFixed(2) : "0.00",
-        display_total_amount: (order.totalAmount / 100).toFixed(2),
-        items: items.map((i) => ({
-          ...i,
-          display_item_price: (i.itemPrice / 100).toFixed(2),
-          display_total_price: (i.totalPrice / 100).toFixed(2),
-        })),
-        activities: activities.sort((a, b) => a.position - b.position),
-        table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
-      });
-    }
-
-    return enrichedOrders;
 /**
  * Lists all activity transitions and duration metrics for an order.
  */
@@ -2132,5 +2730,4 @@ export const listOrderActivities = query({
   },
 });
 
-
-
+export { advanceOrderLifecycle } from "./workstation";

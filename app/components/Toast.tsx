@@ -46,7 +46,7 @@ export function Toast({ toast, onClose }: ToastProps) {
       }}
     >
       <div
-        className={`flex items-start gap-3 p-4 rounded-xl shadow-2xl border backdrop-blur-md transition-all ${
+        className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border backdrop-blur-md transition-all ${
           isSuccess
             ? "bg-[#0c0a09] text-white border-[#27272a]/80 shadow-black/40"
             : isError
@@ -57,7 +57,7 @@ export function Toast({ toast, onClose }: ToastProps) {
         }`}
       >
         {/* Status Icon Badge */}
-        <div className="shrink-0 mt-0.5">
+        <div className="shrink-0 flex items-center justify-center">
           {isSuccess && (
             <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center">
               <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -97,12 +97,12 @@ export function Toast({ toast, onClose }: ToastProps) {
         </div>
 
         {/* Message Content */}
-        <div className="flex-1 min-w-0 pr-1">
-          <p className="text-xs font-semibold leading-snug tracking-normal">
+        <div className="flex-1 min-w-0 flex flex-col justify-center">
+          <p className="text-xs font-semibold leading-normal tracking-normal text-white">
             {toast.message}
           </p>
           {toast.subtext && (
-            <p className="text-[11px] text-neutral-400 mt-1 leading-normal break-words">
+            <p className="text-[11px] text-neutral-400 mt-0.5 leading-normal break-words">
               {toast.subtext}
             </p>
           )}
@@ -112,7 +112,7 @@ export function Toast({ toast, onClose }: ToastProps) {
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 -mr-1 -mt-1 p-1 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
+          className="shrink-0 p-1 text-neutral-400 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer flex items-center justify-center"
           title="Dismiss notification"
           aria-label="Close"
         >

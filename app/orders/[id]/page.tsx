@@ -57,6 +57,52 @@ function formatTableDisplay(tableNum?: string): string {
   return `Table ${clean}`;
 }
 
+function getOrderTableDisplay(order?: {
+  table?: { number?: string } | null;
+  orderType?: string;
+} | null): string {
+  if (order?.table && order.table.number) {
+    return formatTableDisplay(order.table.number);
+  }
+  const type = order?.orderType;
+  if (type === "DineIn") {
+    return "Direct Dine-In";
+  }
+  if (type === "Delivery" || type === "ScheduledDelivery") {
+    return "Delivery";
+  }
+  if (type === "TakeAway" || type === "ScheduledPickup") {
+    return "Counter / Takeaway";
+  }
+  return "N/A";
+}
+
+function getOrderWaiterDisplay(order?: {
+  waiter?: { name?: string } | null;
+  waiterUserId?: string | null;
+  waiterName?: string | null;
+} | null): string {
+  if (order?.waiter?.name && order.waiter.name.trim()) {
+    return order.waiter.name.trim();
+  }
+  if (order?.waiterName && order.waiterName.trim()) {
+    return order.waiterName.trim();
+  }
+  if (order?.waiterUserId && order.waiterUserId.trim()) {
+    return order.waiterUserId.trim();
+  }
+  return "Not Assigned";
+}
+
+function formatOrderTypeLabel(type?: string): string {
+  if (!type) return "Dine-In";
+  if (type === "ScheduledPickup") return "Scheduled Pickup";
+  if (type === "ScheduledDelivery") return "Scheduled Delivery";
+  if (type === "TakeAway") return "Takeaway";
+  if (type === "DineIn") return "Dine-In";
+  return type.replace(/([A-Z])/g, " $1").trim();
+}
+
 // ==========================================
 // PIXEL-PERFECT SVG ICONS (PREST THEME)
 // ==========================================
@@ -157,6 +203,24 @@ function ArrowLeftIcon({ className = "w-4 h-4" }: { className?: string }) {
         d="M10 19l-7-7m0 0l7-7m-7 7h18"
         strokeLinecap="round"
         strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ChevronDownIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="2"
+        d="M19 9l-7 7-7-7"
       />
     </svg>
   );
@@ -426,6 +490,7 @@ export default function OrderDetailsDynamicPage() {
   // Mutations
   const addPaymentMutation = useMutation(api.orders.addOrderPayment);
   const cancelOrderMutation = useMutation(api.orders.cancelOrder);
+  const updateOrderStatusMutation = useMutation(api.orders.updateOrderStatus);
 
   // Drawer and Modal States
   const [drawerTab, setDrawerTab] = useState<
@@ -440,6 +505,8 @@ export default function OrderDetailsDynamicPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingOrder, setIsDeletingOrder] = useState(false);
   const [isEditOrderOpen, setIsEditOrderOpen] = useState(false);
+  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
+  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
   // Notification Toast
   const [notificationMessage, setNotificationMessage] = useState<string | null>(
@@ -452,6 +519,44 @@ export default function OrderDetailsDynamicPage() {
       setNotificationMessage(null);
     }, 4000);
   };
+
+  const handleUpdateStatus = async (
+    processId: Id<"organizationOrderProcesses">,
+    processName: string,
+  ) => {
+    if (!orderId || !order) return;
+    try {
+      setIsUpdatingStatus(true);
+      await updateOrderStatusMutation({
+        orderId: order._id,
+        processId,
+      });
+      showToast(`Order status updated to "${processName}"`);
+      setIsStatusDropdownOpen(false);
+    } catch (err: any) {
+      showToast(err.message || "Failed to update order status");
+    } finally {
+      setIsUpdatingStatus(false);
+    }
+  };
+
+  const currentProcess =
+    dbProcesses?.find(
+      (p) =>
+        p.name.trim().toLowerCase() ===
+        (order?.orderStatusName || "").trim().toLowerCase(),
+    ) || dbProcesses?.find((p) => p._id === order?.orderStatusId);
+  const currentProcessColor =
+    currentProcess?.processColor ||
+    (order?.orderStatusName === "Cancelled" ||
+    order?.orderStatusName === "Cancelled / Refunded" ||
+    order?.isRejected
+      ? "#e11d48"
+      : order?.orderStatusName === "Completed" ||
+          order?.orderStatusName === "Delivered" ||
+          order?.isCompleted
+        ? "#219653"
+        : "#EA9C1B");
 
   // Payment Settlement Handler
   const handleSettlePayment = async () => {
@@ -556,15 +661,15 @@ export default function OrderDetailsDynamicPage() {
       setIsDeletingOrder(true);
       await cancelOrderMutation({
         orderId: order._id,
-        reason: "Deleted by admin from Order Details",
+        reason: "Cancelled by admin from Order Details",
       });
       setIsDeleteDialogOpen(false);
-      showToast(`Order ${order.orderNumber} deleted successfully.`);
+      showToast(`Order ${order.orderNumber} cancelled successfully.`);
       setTimeout(() => {
         router.push("/orders");
       }, 600);
     } catch (err: any) {
-      showToast(err.message || "Failed to delete order");
+      showToast(err.message || "Failed to cancel order");
     } finally {
       setIsDeletingOrder(false);
     }
@@ -718,10 +823,73 @@ export default function OrderDetailsDynamicPage() {
                 <ArrowLeftIcon className="w-4 h-4 text-[#5e5e5e]" />
                 <span>Back to Orders</span>
               </button>
-              <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-900 border border-amber-200/80 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                <span>{order.orderStatusName || "Live Order Status"}</span>
-              </span>
+
+              {/* Interactive Status Transition Dropdown Synced with Settings -> Order Statuses */}
+              <div className="relative">
+                {isStatusDropdownOpen && (
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setIsStatusDropdownOpen(false)}
+                  />
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                  disabled={isUpdatingStatus}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-semibold bg-white border border-[#e7e5e4] hover:border-[#141010] text-[#141010] shadow-2xs transition-all cursor-pointer relative z-50"
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: currentProcessColor }}
+                  />
+                  <span>{order.orderStatusName || "Active Status"}</span>
+                  <ChevronDownIcon className="w-3.5 h-3.5 text-[#5e5e5e]" />
+                </button>
+
+                {isStatusDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-60 bg-white border border-[#e7e5e4] rounded-xl shadow-xl z-50 py-1 overflow-hidden animate-in fade-in duration-150">
+                    <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#7a716b] border-b border-[#f1edec]">
+                      Transition Order Status
+                    </div>
+                    <div className="max-h-60 overflow-y-auto">
+                      {(dbProcesses && dbProcesses.length > 0
+                        ? dbProcesses
+                        : [
+                            { _id: "p1" as any, name: "Accepted", processColor: "#262626" },
+                            { _id: "p2" as any, name: "In progress", processColor: "#EA9C1B" },
+                            { _id: "p3" as any, name: "Ready to deliver", processColor: "#FC8019" },
+                            { _id: "p4" as any, name: "Delivered", processColor: "#219653" },
+                          ]
+                      ).map((proc) => {
+                        const isCurrent =
+                          (order.orderStatusName || "").trim().toLowerCase() ===
+                          proc.name.trim().toLowerCase();
+                        return (
+                          <button
+                            key={proc._id}
+                            type="button"
+                            onClick={() => handleUpdateStatus(proc._id, proc.name)}
+                            className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-left transition-colors cursor-pointer hover:bg-[#fdf8f7] ${
+                              isCurrent ? "bg-[#f1edec] font-semibold text-[#0c0a09]" : "text-[#44403c]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <span
+                                className="w-2 h-2 rounded-full shrink-0"
+                                style={{ backgroundColor: proc.processColor || "#262626" }}
+                              />
+                              <span>{proc.name}</span>
+                            </div>
+                            {isCurrent && (
+                              <span className="text-[10px] text-[#219653] font-semibold">Current</span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -731,83 +899,117 @@ export default function OrderDetailsDynamicPage() {
           <div className="max-w-[1600px] mx-auto space-y-6">
             {/* BEGIN: MetadataStrip */}
             <section
-              className="bg-white border border-[#e7e5e4] rounded-xl p-4 lg:px-6 shadow-xs"
+              className="bg-white border border-[#e7e5e4] rounded-xl p-4 lg:px-6 shadow-xs overflow-x-auto pb-3 [scrollbar-width:thin] [scrollbar-color:#e7e5e4_transparent]"
               data-purpose="order-metadata-strip"
             >
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-4 divide-y sm:divide-y-0 sm:divide-x divide-[#e7e5e4]">
-                <div className="pt-2 sm:pt-0 sm:pr-4">
+              <div className="flex items-center justify-between min-w-max divide-x divide-[#e7e5e4] gap-2 pb-1">
+                <div className="pr-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Order #
                   </span>
-                  <span className="text-xs font-semibold text-[#0c0a09]">
+                  <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                     {order.orderNumber || "-"}
                   </span>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:px-4">
+                <div className="px-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Token #
                   </span>
-                  <span className="text-xs font-semibold text-[#0c0a09]">
+                  <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                     {order.tokenNumber || "-"}
                   </span>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:px-4">
+                <div className="px-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Order Type
                   </span>
-                  <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded bg-[#f1edec] text-[#0c0a09]">
-                    {order.orderType || "DineIn"}
+                  <span className="inline-flex items-center px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[#f1edec] text-[#0c0a09] whitespace-nowrap">
+                    {formatOrderTypeLabel(order.orderType)}
                   </span>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:px-4">
+                <div className="px-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Order Status
                   </span>
-                  <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-700">
-                    <span className="h-1.5 w-1.5 rounded-full bg-amber-600" />{" "}
-                    {order.orderStatusName || "Accepted"}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setIsStatusDropdownOpen(!isStatusDropdownOpen)}
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap hover:opacity-80 transition-opacity cursor-pointer"
+                    style={{ color: currentProcessColor }}
+                  >
+                    <span
+                      className="h-2 w-2 rounded-full shrink-0"
+                      style={{ backgroundColor: currentProcessColor }}
+                    />
+                    <span>{order.orderStatusName || "Accepted"}</span>
+                    <ChevronDownIcon className="w-3 h-3 ml-0.5 text-[#7a716b]" />
+                  </button>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:px-4">
+                <div className="px-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Date
                   </span>
-                  <span className="text-xs font-semibold text-[#0c0a09]">
+                  <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                     {formattedOrderDate}
                   </span>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:px-4">
+                <div className="px-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Time
                   </span>
-                  <span className="text-xs font-semibold text-[#0c0a09]">
+                  <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                     {formattedOrderTime}
                   </span>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:px-4">
+                <div className="px-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Source
                   </span>
-                  <span className="text-xs font-semibold text-[#0c0a09]">
+                  <span className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap">
                     {order.orderSource || "Prest Cashier"}
                   </span>
                 </div>
-                <div className="pt-2 sm:pt-0 sm:pl-4">
+                <div className="pl-4">
                   <span className="block text-[11px] font-semibold tracking-wider uppercase text-[#7a716b] mb-0.5">
                     Table
                   </span>
                   <span
-                    className="text-xs font-semibold text-[#0c0a09] truncate block"
-                    title={order.table ? formatTableDisplay(order.table.number) : "N/A"}
+                    className="text-xs font-semibold text-[#0c0a09] whitespace-nowrap block"
+                    title={getOrderTableDisplay(order)}
                   >
-                    {order.table
-                      ? formatTableDisplay(order.table.number)
-                      : "Counter / Takeaway"}
+                    {getOrderTableDisplay(order)}
                   </span>
                 </div>
               </div>
             </section>
             {/* END: MetadataStrip */}
+
+            {/* Scheduled Order Timing Banner */}
+            {(order.orderType === "ScheduledPickup" ||
+              order.orderType === "ScheduledDelivery" ||
+              order.scheduledDeliveryDate ||
+              order.scheduledDeliveryTime) && (
+              <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-3.5 px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                    {order.orderType === "ScheduledDelivery"
+                      ? "Scheduled Delivery Timing:"
+                      : "Scheduled Pickup Timing:"}
+                  </span>
+                  <span className="text-sm font-extrabold text-[#0c0a09] bg-white px-3 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                    {order.scheduledDeliveryDate || formattedOrderDate}
+                    {" • "}
+                    {order.scheduledDeliveryTime || formattedOrderTime}
+                  </span>
+                </div>
+                <span className="text-xs font-semibold text-amber-800">
+                  {order.orderType === "ScheduledDelivery"
+                    ? "Requested Customer Delivery Slot"
+                    : "Requested Customer Pickup Slot"}
+                </span>
+              </div>
+            )}
 
             {/* BEGIN: TwoColumnLayout */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -868,16 +1070,14 @@ export default function OrderDetailsDynamicPage() {
                       <span className="font-medium">
                         {order.deliveryAddress
                           ? `${order.deliveryAddress.addressLine1}, ${order.deliveryAddress.city || ""}`
-                          : order.table
-                            ? `${formatTableDisplay(order.table.number)} (Ground Floor)`
-                            : "Standard Counter Pickup"}
+                          : getOrderTableDisplay(order)}
                       </span>
                     </div>
                     <div className="text-xs text-[#7a716b]">
                       Assigned Captain:{" "}
-                      <span className="font-semibold text-[#0c0a09]">
-                        Johan Coder
-                      </span>
+                        <span className="font-semibold text-[#0c0a09]">
+                          {getOrderWaiterDisplay(order)}
+                        </span>
                     </div>
                   </div>
                 </section>
@@ -947,6 +1147,11 @@ export default function OrderDetailsDynamicPage() {
                                         .join(", ")}
                                     </span>
                                   )}
+                                {((item.prepPreferences && item.prepPreferences.length > 0) || (item.chefPrepPreferences && item.chefPrepPreferences.length > 0)) && (
+                                  <span className="text-xs text-[#0c0a09] font-medium block mt-0.5">
+                                    Chef Prep: {(item.prepPreferences || item.chefPrepPreferences).map((p: any) => p.name).join(", ")}
+                                  </span>
+                                )}
                               </td>
                               <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
                                 {currencySymbol}{formatCurrencyAmount(item.display_item_price ?? ((item.itemPrice || 0) / 100), activeOrg?.country)}
@@ -986,35 +1191,70 @@ export default function OrderDetailsDynamicPage() {
                           </span>
                         </div>
 
-                        {order.taxInfoSnapshot?.components &&
-                        order.taxInfoSnapshot.components.length > 0 ? (
-                          order.taxInfoSnapshot.components.map(
-                            (c: any, i: number) => (
-                              <div
-                                key={i}
-                                className="flex justify-between items-center text-[#7a716b]"
-                              >
-                                <span>
-                                  {c.name} ({c.rate}%)
-                                </span>
-                                <span className="font-semibold text-[#0c0a09]">
-                                  +{currencySymbol}
-                                  {formatCurrencyAmount(
-                                    ((order.subTotal || 0) * c.rate) / 10000,
-                                    activeOrg?.country
-                                  )}
-                                </span>
-                              </div>
-                            ),
-                          )
-                        ) : (
-                          <div className="flex justify-between items-center text-[#7a716b]">
-                            <span>GST (Tax Total)</span>
-                            <span className="font-semibold text-[#0c0a09]">
-                              {currencySymbol}{formatCurrencyAmount(order?.display_tax_total ?? ((order?.taxTotal || 0) / 100), activeOrg?.country)}
-                            </span>
-                          </div>
-                        )}
+                        {(() => {
+                          const subTotal = order?.subTotal || 0;
+                          const totalAmount = order?.totalAmount || 0;
+                          const discount = order?.discountAmount || 0;
+                          const delivery = order?.deliveryCharge || 0;
+                          const derivedExclusivePaise = Math.max(
+                            0,
+                            totalAmount - subTotal + discount - delivery
+                          );
+
+                          // If no exclusive tax was charged on top, DO NOT show inclusive tax at all (it's inside subtotal)
+                          if (derivedExclusivePaise <= 0) {
+                            return null;
+                          }
+
+                          if (
+                            order.taxInfoSnapshot?.components &&
+                            order.taxInfoSnapshot.components.length > 0
+                          ) {
+                            const totalRate = order.taxInfoSnapshot.components.reduce(
+                              (acc: number, c: any) => acc + (Number(c.rate) || 0),
+                              0
+                            );
+                            return order.taxInfoSnapshot.components.map(
+                              (c: any, i: number) => {
+                                const compShare =
+                                  totalRate > 0
+                                    ? (Number(c.rate) || 0) / totalRate
+                                    : 1 / order.taxInfoSnapshot.components.length;
+                                const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+                                return (
+                                  <div
+                                    key={i}
+                                    className="flex justify-between items-center text-[#7a716b]"
+                                  >
+                                    <span>
+                                      {c.name} ({c.rate}%)
+                                    </span>
+                                    <span className="font-semibold text-[#0c0a09]">
+                                      +{currencySymbol}
+                                      {formatCurrencyAmount(
+                                        compTaxPaise / 100,
+                                        activeOrg?.country
+                                      )}
+                                    </span>
+                                  </div>
+                                );
+                              }
+                            );
+                          }
+
+                          return (
+                            <div className="flex justify-between items-center text-[#7a716b]">
+                              <span>GST (Tax Total)</span>
+                              <span className="font-semibold text-[#0c0a09]">
+                                +{currencySymbol}
+                                {formatCurrencyAmount(
+                                  derivedExclusivePaise / 100,
+                                  activeOrg?.country
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })()}
 
                         {parseFloat(order.display_discount_amount || "0") >
                           0 && (
@@ -1175,26 +1415,70 @@ export default function OrderDetailsDynamicPage() {
                         {currencySymbol}{formatCurrencyAmount(order?.display_sub_total ?? ((order?.subTotal || 0) / 100), activeOrg?.country)}
                       </span>
                     </div>
-                    <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                      <span>CGST (2.5%)</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          {currencySymbol}
-                        {formatCurrencyAmount(
-                          order.subTotal ? ((order.subTotal * 0.025) / 100) : 0,
-                          activeOrg?.country
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center text-[#7a716b] text-xs">
-                      <span>SGST (2.5%)</span>
-                        <span className="font-semibold text-[#0c0a09]">
-                          {currencySymbol}
-                        {formatCurrencyAmount(
-                          order.subTotal ? ((order.subTotal * 0.025) / 100) : 0,
-                          activeOrg?.country
-                        )}
-                      </span>
-                    </div>
+                    {(() => {
+                      const subTotal = order?.subTotal || 0;
+                      const totalAmount = order?.totalAmount || 0;
+                      const discount = order?.discountAmount || 0;
+                      const delivery = order?.deliveryCharge || 0;
+                      const derivedExclusivePaise = Math.max(
+                        0,
+                        totalAmount - subTotal + discount - delivery
+                      );
+
+                      // If no exclusive tax was charged on top, DO NOT show inclusive tax at all (it's inside subtotal)
+                      if (derivedExclusivePaise <= 0) {
+                        return null;
+                      }
+
+                      if (
+                        order.taxInfoSnapshot?.components &&
+                        order.taxInfoSnapshot.components.length > 0
+                      ) {
+                        const totalRate = order.taxInfoSnapshot.components.reduce(
+                          (acc: number, c: any) => acc + (Number(c.rate) || 0),
+                          0
+                        );
+                        return order.taxInfoSnapshot.components.map(
+                          (c: any, i: number) => {
+                            const compShare =
+                              totalRate > 0
+                                ? (Number(c.rate) || 0) / totalRate
+                                : 1 / order.taxInfoSnapshot.components.length;
+                            const compTaxPaise = Math.round(derivedExclusivePaise * compShare);
+                            return (
+                              <div
+                                key={i}
+                                className="flex justify-between items-center text-[#7a716b] text-xs"
+                              >
+                                <span>
+                                  {c.name} ({c.rate}%)
+                                </span>
+                                <span className="font-semibold text-[#0c0a09]">
+                                  +{currencySymbol}
+                                  {formatCurrencyAmount(
+                                    compTaxPaise / 100,
+                                    activeOrg?.country
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          }
+                        );
+                      }
+
+                      return (
+                        <div className="flex justify-between items-center text-[#7a716b] text-xs">
+                          <span>GST (Tax Total)</span>
+                          <span className="font-semibold text-[#0c0a09]">
+                            +{currencySymbol}
+                            {formatCurrencyAmount(
+                              derivedExclusivePaise / 100,
+                              activeOrg?.country
+                            )}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {parseFloat(order.display_discount_amount || "0") > 0 && (
                       <div className="flex justify-between items-center text-emerald-700 text-xs">
                         <span className="font-medium">Discount</span>
@@ -1283,29 +1567,52 @@ export default function OrderDetailsDynamicPage() {
                       </span>
                     </button>
 
-                    {/* Delete Order */}
-                    <button
-                      type="button"
-                      onClick={() => setIsDeleteDialogOpen(true)}
-                      style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                      className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
-                    >
-                      <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
-                      <span className="!text-white text-white font-semibold text-xs">
-                        Delete Order
-                      </span>
-                    </button>
+                    {/* Cancel Order */}
+                    {(() => {
+                      const hasPayment = Boolean(
+                        order?.paymentStatus === "Paid" ||
+                        (order?.netPaid && order.netPaid > 0) ||
+                        (order?.totalCredit && order.totalCredit > 0) ||
+                        (order?.payments && order.payments.length > 0)
+                      );
+                      return (
+                        <button
+                          type="button"
+                          onClick={() => !hasPayment && setIsDeleteDialogOpen(true)}
+                          disabled={hasPayment}
+                          title={hasPayment ? "Cannot cancel an order with completed payments. Issue a refund first." : undefined}
+                          style={{
+                            backgroundColor: hasPayment ? "#292524" : "#1c1917",
+                            color: "#ffffff"
+                          }}
+                          className={`flex items-center justify-center gap-2 px-3 py-2.5 !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs ${
+                            hasPayment
+                              ? "opacity-40 cursor-not-allowed select-none bg-[#292524]"
+                              : "bg-[#1c1917] hover:bg-black cursor-pointer hover:opacity-95"
+                          }`}
+                        >
+                          <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
+                          <span className="!text-white text-white font-semibold text-xs">
+                            Cancel Order
+                          </span>
+                        </button>
+                      );
+                    })()}
 
                     {/* Print Receipt */}
                     <button
                       type="button"
-                      onClick={handlePrintReceipt}
+                      disabled
+                      title="Print Thermal Receipt (Coming Soon)"
                       style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                      className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                      className="relative flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] !text-white text-white text-xs font-semibold rounded-lg opacity-40 cursor-not-allowed select-none shadow-xs"
                     >
-                      <PrintIcon className="w-3.5 h-3.5 !text-white text-white" />
-                      <span className="!text-white text-white font-semibold text-xs">
+                      <PrintIcon className="w-3.5 h-3.5 !text-white text-white shrink-0" />
+                      <span className="!text-white text-white font-semibold text-xs whitespace-nowrap">
                         Print Receipt
+                      </span>
+                      <span className="absolute -top-2 -right-1 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider bg-amber-400 text-stone-900 border border-amber-300 rounded-full shadow-xs whitespace-nowrap leading-none pointer-events-none">
+                        Coming Soon
                       </span>
                     </button>
 
@@ -1628,7 +1935,7 @@ export default function OrderDetailsDynamicPage() {
                                 }
                                 className="py-2 text-xs font-medium font-sans bg-[#faf8f5] hover:bg-[#f4eee8] text-[#141010] border border-[#e7e5e4] rounded-md transition-colors text-center cursor-pointer"
                               >
-                                {currencySymbol}{amt.toLocaleString("en-US")}
+                                {currencySymbol}{formatCurrencyAmount(amt, activeOrg?.country, 0, 0)}
                               </button>
                             ));
                           })()}
@@ -1957,10 +2264,10 @@ export default function OrderDetailsDynamicPage() {
                 id="delete-dialog-title"
                 className="text-lg font-bold text-[#141010] mb-2 font-sans"
               >
-                Delete {order.orderNumber}?
+                Cancel {order.orderNumber}?
               </h3>
               <p className="text-sm text-[#4b5563] mb-6 font-sans">
-                Are you sure you want to delete this order?
+                Are you sure you want to cancel this order?
               </p>
 
               {/* Action Buttons */}
@@ -1979,7 +2286,7 @@ export default function OrderDetailsDynamicPage() {
                   onClick={handleConfirmDeleteOrder}
                   className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-[#ef4444] hover:bg-[#dc2626] text-white transition-colors cursor-pointer shadow-xs disabled:opacity-50"
                 >
-                  {isDeletingOrder ? "Deleting..." : "Confirm"}
+                  {isDeletingOrder ? "Cancelling..." : "Confirm"}
                 </button>
               </div>
             </div>

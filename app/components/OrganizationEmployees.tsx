@@ -4,6 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id, Doc } from "../../convex/_generated/dataModel";
+import { Toast, ToastMessage } from "./Toast";
 
 // ====================================================
 // SVG ICONS & VISUAL ASSETS (Pixel-Perfect Match)
@@ -562,6 +563,25 @@ export function OrganizationEmployees() {
     {},
   );
 
+  const isAdmin = useMemo(() => {
+    if (!currentMembership) return false;
+    const roles = Array.isArray(currentMembership.userType)
+      ? currentMembership.userType
+      : typeof currentMembership.userType === "string"
+        ? [currentMembership.userType]
+        : [];
+    return roles.some((r: string) => {
+      const lower = (r || "").toLowerCase();
+      return (
+        lower === "admin" ||
+        lower === "store_admin" ||
+        lower === "org_admin" ||
+        lower === "owner" ||
+        lower === "super_admin"
+      );
+    });
+  }, [currentMembership]);
+
   const roleModuleMapping = useMemo<Record<string, string[]>>(() => {
     return {
       admin: [
@@ -591,9 +611,9 @@ export function OrganizationEmployees() {
   // Local State
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedRoleFilter, setSelectedRoleFilter] = useState("all");
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState("all");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // Drawer & Modal States
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -651,7 +671,10 @@ export function OrganizationEmployees() {
   const [deleteTarget, setDeleteTarget] = useState<{
     id: Id<"organizationUsers">;
     userId: string;
+    name?: string;
+    email?: string;
   } | null>(null);
+  const [formStatus, setFormStatus] = useState<string>("active");
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Pagination State
@@ -744,13 +767,9 @@ export function OrganizationEmployees() {
         selectedRoleFilter === "all" ||
         emp.userType.includes(selectedRoleFilter);
 
-      const matchesStatus =
-        selectedStatusFilter === "all" ||
-        (selectedStatusFilter === "active" ? true : false);
-
-      return matchesSearch && matchesRole && matchesStatus;
+      return matchesSearch && matchesRole;
     });
-  }, [employees, searchTerm, selectedRoleFilter, selectedStatusFilter]);
+  }, [employees, searchTerm, selectedRoleFilter]);
 
   // Paginated employees
   const totalPages = Math.ceil((filteredEmployees.length || 1) / itemsPerPage);
@@ -776,8 +795,16 @@ export function OrganizationEmployees() {
 
   // Drawer Handlers
   const handleOpenAddDrawer = () => {
+    if (!isAdmin) {
+      setToast({
+        message: "Forbidden: You do not have permission to add employees. Only store administrators can perform this action.",
+        type: "error",
+      });
+      return;
+    }
     setDrawerMode("add");
     setEditingId(null);
+    setFormStatus("invited");
     setFormFirstName("");
     setFormLastName("");
     setFormUserIdentifier("");
@@ -799,8 +826,16 @@ export function OrganizationEmployees() {
   };
 
   const handleOpenEditDrawer = (emp: Doc<"organizationUsers">) => {
+    if (!isAdmin) {
+      setToast({
+        message: "Forbidden: You do not have permission to edit employees. Only store administrators can perform this action.",
+        type: "error",
+      });
+      return;
+    }
     setDrawerMode("edit");
     setEditingId(emp._id);
+    setFormStatus(emp.status || "active");
     const meta = getEmployeeDisplayMeta(emp);
 
     if (emp.firstName || emp.lastName) {
@@ -884,15 +919,35 @@ export function OrganizationEmployees() {
       errors.push("Email Address is missing");
       pending.email = true;
     } else if (!isValidEmail(emailVal)) {
-      errors.push("Valid Email Address format is required (e.g. name@domain.com)");
+      errors.push(
+        "Valid Email Address format is required (e.g. name@domain.com)",
+      );
       pending.email = true;
+    } else if (emailVal && employees) {
+      const normalizedInputEmail = emailVal.trim().toLowerCase();
+      const isDuplicate = employees.some((emp) => {
+        if (emp.deletedAt) return false;
+        if (drawerMode === "edit" && editingId && emp._id === editingId) return false;
+        const empEmail = (emp.email || "").trim().toLowerCase();
+        const empUserId = (emp.userId || "").trim().toLowerCase();
+        return empEmail === normalizedInputEmail || empUserId === normalizedInputEmail;
+      });
+
+      if (isDuplicate) {
+        errors.push(
+          `User ID / Email address "${emailVal}" already exists in this organization. Please use a different email.`,
+        );
+        pending.email = true;
+      }
     }
 
     const hasStaffRole = formRoles.some((r) =>
       STAFF_ROLE_CARDS.some((card) => card.key === r),
     );
     if (!hasStaffRole) {
-      errors.push("Staff Role is missing (select Cashier, Captain, Waiter, Chef, Worker, or Admin)");
+      errors.push(
+        "Staff Role is missing (select Cashier, Captain, Waiter, Chef, Worker, or Admin)",
+      );
       pending.staffRoles = true;
     }
 
@@ -900,7 +955,9 @@ export function OrganizationEmployees() {
       MODULE_ACCESS_CARDS.some((card) => card.key === m),
     );
     if (!hasModuleAccess) {
-      errors.push("Access Module is missing (select at least one module under 'What can this employee access?')");
+      errors.push(
+        "Access Module is missing (select at least one module under 'What can this employee access?')",
+      );
       pending.moduleAccess = true;
     }
 
@@ -912,17 +969,32 @@ export function OrganizationEmployees() {
       // Auto-scroll drawer and focus the first pending field
       if (pending.firstName) {
         firstNameInputRef.current?.focus();
-        firstNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        firstNameInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.lastName) {
         lastNameInputRef.current?.focus();
-        lastNameInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        lastNameInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.email) {
         emailInputRef.current?.focus();
-        emailInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        emailInputRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.staffRoles) {
-        staffRolesSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        staffRolesSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       } else if (pending.moduleAccess) {
-        moduleAccessSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        moduleAccessSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
       }
       return;
     }
@@ -939,37 +1011,78 @@ export function OrganizationEmployees() {
           ? customPermissions
           : undefined;
 
-           if (drawerMode === "add") {
+      if (drawerMode === "add") {
+        if (!isAdmin) {
+          const forbiddenErr = "Forbidden: You do not have permission to assign or add employees. Only store administrators can perform this action.";
+          setDrawerPendingErrors([forbiddenErr]);
+          setToast({ message: forbiddenErr, type: "error" });
+          drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+
         const primaryRole =
           formRoles.find((r) => STAFF_ROLE_CARDS.some((c) => c.key === r)) ||
           formRoles[0] ||
           "cashier";
 
-        const res = await fetch("/api/staff/create", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+        let createdViaApi = false;
+        let apiErrorMsg: string | null = null;
+        try {
+          const res = await fetch("/api/staff/create", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              firstName: formFirstName.trim(),
+              lastName: formLastName.trim(),
+              email: effectiveUserId,
+              role: primaryRole,
+              userType: formRoles,
+              userPermission: permissionPayload,
+            }),
+          });
+
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success) {
+            createdViaApi = true;
+          } else {
+            apiErrorMsg = data.error || (res.status === 403 ? "Forbidden: You do not have permission to manage employees for this store. Admin access required." : "Failed to assign employee.");
+          }
+        } catch (fetchErr: any) {
+          apiErrorMsg = fetchErr?.message || "Failed to communicate with staff provisioning service.";
+        }
+
+        if (!createdViaApi) {
+          if (apiErrorMsg && (apiErrorMsg.includes("Forbidden") || apiErrorMsg.includes("Admin access required") || apiErrorMsg.includes("permission"))) {
+            throw new Error(apiErrorMsg);
+          }
+
+          // Fallback direct store creation via Convex mutation ONLY if not an authorization rejection
+          await createEmployeeMutation({
             firstName: formFirstName.trim(),
             lastName: formLastName.trim(),
             email: effectiveUserId,
-            role: primaryRole,
+            userId: effectiveUserId,
+            status: "invited",
             userType: formRoles,
             userPermission: permissionPayload,
-          }),
-        });
-
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "Failed to create employee.");
+          });
         }
 
-        setSuccessMessage(
-          `Employee "${formFirstName.trim()} ${formLastName.trim()}" created successfully. An invitation has been sent!`,
-        );
+        setToast({
+          message: `Employee "${formFirstName.trim()} ${formLastName.trim()}" created successfully.`,
+          type: "success",
+        });
       } else if (editingId) {
+        if (!isAdmin) {
+          const forbiddenErr = "Forbidden: You do not have permission to edit employees. Only store administrators can perform this action.";
+          setDrawerPendingErrors([forbiddenErr]);
+          setToast({ message: forbiddenErr, type: "error" });
+          drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+          return;
+        }
+
         await updateEmployeeMutation({
           id: editingId,
           firstName: formFirstName.trim(),
@@ -977,14 +1090,39 @@ export function OrganizationEmployees() {
           userType: formRoles,
           ...(permissionPayload ? { userPermission: permissionPayload } : {}),
         });
-        setSuccessMessage(`Employee updated successfully!`);
+        setToast({ message: "Employee updated successfully!", type: "success" });
       }
 
-
       handleCloseDrawer();
-      setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to save employee record.");
+      const errMsg = err?.message || "";
+      const isForbidden =
+        errMsg.includes("Forbidden") ||
+        errMsg.includes("Admin access required") ||
+        errMsg.includes("permission");
+
+      if (isForbidden) {
+        const friendlyErr = "Forbidden: You do not have permission to assign or manage employees. Only store administrators can perform this action.";
+        setDrawerPendingErrors([friendlyErr]);
+        setToast({ message: friendlyErr, type: "error" });
+        drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      } else if (
+        errMsg.toLowerCase().includes("already") ||
+        errMsg.toLowerCase().includes("duplicate") ||
+        errMsg.toLowerCase().includes("exists") ||
+        errMsg.toLowerCase().includes("conflict")
+      ) {
+        const customErr = `User ID / Email address "${emailVal}" already exists in this organization.`;
+        setDrawerPendingErrors([customErr]);
+        setPendingFields({ email: true });
+        setToast({ message: customErr, type: "error" });
+        emailInputRef.current?.focus();
+        drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        setDrawerPendingErrors([errMsg || "Failed to save employee record."]);
+        setToast({ message: errMsg || "Failed to save employee record.", type: "error" });
+        drawerBodyRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -993,16 +1131,43 @@ export function OrganizationEmployees() {
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
 
-    setErrorMessage(null);
+    if (!isAdmin) {
+      setToast({
+        message: "Forbidden: You do not have permission to delete employees. Only store administrators can perform this action.",
+        type: "error",
+      });
+      setDeleteTarget(null);
+      return;
+    }
+
     setIsDeleting(true);
 
     try {
-      await removeEmployeeMutation({ id: deleteTarget.id });
-      setSuccessMessage(`Employee removed successfully.`);
+      const res = await fetch("/api/staff/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: deleteTarget.id,
+          defaultClerkId: deleteTarget.userId,
+          email: deleteTarget.email,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        await removeEmployeeMutation({ id: deleteTarget.id });
+      }
+
+      setToast({ message: "Employee removed successfully.", type: "success" });
       setDeleteTarget(null);
-      setTimeout(() => setSuccessMessage(null), 3500);
     } catch (err: any) {
-      setErrorMessage(err?.message || "Failed to remove employee.");
+      try {
+        await removeEmployeeMutation({ id: deleteTarget.id });
+        setToast({ message: "Employee removed successfully.", type: "success" });
+      } catch (fallbackErr: any) {
+        setToast({ message: err?.message || "Failed to remove employee.", type: "error" });
+      }
       setDeleteTarget(null);
     } finally {
       setIsDeleting(false);
@@ -1031,53 +1196,19 @@ export function OrganizationEmployees() {
   );
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 h-full space-y-4">
-      {/* Toast Feedback Alerts */}
-      {successMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-emerald-50 border border-emerald-200 px-5 py-3 text-xs text-emerald-800 shadow-sm animate-fade-in shrink-0">
-          <div className="flex items-center gap-2">
-            <span>✓</span>
-            <span className="font-medium">{successMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setSuccessMessage(null)}
-            className="text-emerald-600 hover:text-emerald-900 cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+    <div className="flex flex-col flex-1 h-full min-h-0 font-sans">
+      {/* FIXED TOP HEADER SECTION */}
+      <div className="shrink-0 border-b border-[#e7e5e4] pb-3 mb-3">
+        <h2 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
+          Employees
+        </h2>
+        <p className="font-sans text-sm text-[#5e5e5e] mt-1.5 leading-normal">
+          Manage store staff, assign branch roles, and configure system permissions.
+        </p>
+      </div>
 
-      {errorMessage && (
-        <div className="flex items-center justify-between rounded-xl bg-red-50 border border-red-200 px-5 py-3 text-xs text-red-800 shadow-sm animate-fade-in shrink-0">
-          <div className="flex items-center gap-2">
-            <span>⚠️</span>
-            <span className="font-medium">{errorMessage}</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setErrorMessage(null)}
-            className="text-red-600 hover:text-red-900 cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-      )}
-
-      {/* TOP HEADER SECTION */}
-      <div className="space-y-4 shrink-0">
-        {/* Title & Subtitle */}
-        <div className="border-b border-[#e7e5e4] pb-4">
-          <h2 className="font-garamond text-2xl lg:text-3xl text-[#141010] font-normal leading-tight">
-            Employees
-          </h2>
-          <p className="text-xs text-[#78716c] mt-1">
-            Manage store staff, assign branch roles, and configure system
-            permissions.
-          </p>
-        </div>
-
+      {/* SCROLLABLE CONTENT AREA BELOW FIXED HEADER */}
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-4 pr-1 pb-6 custom-scrollbar">
         {/* Control Bar (Search, Dropdowns & Add Employee Button) */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-[#faf8f7] p-3 rounded-xl border border-[#e7e5e4]">
           {/* Left Controls: Search + Filters */}
@@ -1129,212 +1260,222 @@ export function OrganizationEmployees() {
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </div>
-
-            {/* Status Filter */}
-            <div className="relative inline-flex items-center shrink-0">
-              <select
-                value={selectedStatusFilter}
-                onChange={(e) => {
-                  setSelectedStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="appearance-none rounded-xl border border-[#e7e5e4] bg-white pl-3.5 pr-8 py-2 text-xs font-semibold text-[#1c1917] shadow-xs cursor-pointer hover:border-[#a8a29e] focus:border-[#141010] focus:outline-none transition shrink-0"
-              >
-                <option value="all">Active</option>
-                <option value="active">Active Status</option>
-                <option value="inactive">Inactive</option>
-              </select>
-              <svg
-                className="w-3.5 h-3.5 text-[#78716c] pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 fill-none stroke-current stroke-2"
-                viewBox="0 0 24 24"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </div>
           </div>
 
           {/* Add Employee Button */}
           <button
             type="button"
             onClick={handleOpenAddDrawer}
-            className="flex items-center justify-center gap-1.5 bg-[#141010] text-white hover:bg-[#282320] active:scale-95 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all cursor-pointer shrink-0 border border-[#282320]"
+            disabled={!isAdmin}
+            title={!isAdmin ? "Only store administrators can add employees" : undefined}
+            className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all shrink-0 border ${
+              isAdmin
+                ? "bg-[#141010] text-white hover:bg-[#282320] active:scale-95 cursor-pointer border-[#282320]"
+                : "bg-neutral-200 text-neutral-400 border-neutral-300 cursor-not-allowed opacity-60"
+            }`}
           >
-            <PlusIcon className="w-4 h-4 text-white" />
-            <span className="text-white font-semibold text-xs">
+            <PlusIcon className={`w-4 h-4 ${isAdmin ? "text-white" : "text-neutral-400"}`} />
+            <span className={`font-semibold text-xs ${isAdmin ? "text-white" : "text-neutral-400"}`}>
               Add employee
             </span>
           </button>
         </div>
-      </div>
 
-      {/* MAIN EMPLOYEE TABLE CARD */}
-      <div className="flex-1 flex flex-col min-h-[400px] rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
-        {/* Inner Scrollable Box with Sticky Table Header */}
-        <div className="flex-1 w-full overflow-x-auto overflow-y-auto custom-scrollbar min-h-0">
-          <table className="w-full min-w-[640px] text-left border-collapse table-fixed">
-            <colgroup>
-              <col className="w-[30%]" />
-              <col className="w-[24%]" />
-              <col className="w-[16%]" />
-              <col className="w-[14%]" />
-              <col className="w-[16%]" />
-            </colgroup>
+        {/* MAIN EMPLOYEE TABLE CARD */}
+        <div className="w-full rounded-xl border border-[#e7e5e4] bg-white shadow-sm overflow-hidden">
+          {/* Horizontal Scroll Box for table */}
+          <div className="w-full overflow-x-auto custom-scrollbar">
+          <table className="w-full text-left border-collapse">
             <thead className="sticky top-0 z-10 bg-[#faf8f7] border-b border-[#e7e5e4] shadow-xs">
               <tr>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   EMPLOYEE
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   ROLES
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   JOINED
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] bg-[#faf8f7] align-middle">
                   STATUS
                 </th>
-                <th className="py-3 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] text-right truncate bg-[#faf8f7]">
+                <th className="py-3.5 px-3.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] text-right bg-[#faf8f7] align-middle">
                   ACTION
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#f3efe]">
+            <tbody className="divide-y divide-[#e7e5e4]">
               {filteredEmployees.length > 0 ? (
-                filteredEmployees.map((emp) => {
-                  const isCurrentCaller =
-                    currentMembership?.userId === emp.userId;
-                  const meta = getEmployeeDisplayMeta(emp);
+                <>
+                  {filteredEmployees.map((emp) => {
+                    const callerEmail = (currentMembership as any)?.email;
+                    const empEmail = (emp as any)?.email;
+                    const isCurrentCaller = Boolean(
+                      (currentMembership?.userId &&
+                        currentMembership.userId === emp.userId) ||
+                      (currentMembership?._id &&
+                        currentMembership._id === emp._id) ||
+                      (callerEmail &&
+                        empEmail &&
+                        String(callerEmail).trim().toLowerCase() ===
+                          String(empEmail).trim().toLowerCase()),
+                    );
+                    const meta = getEmployeeDisplayMeta(emp);
 
-                  const formattedJoined = emp.createdAt
-                    ? new Date(emp.createdAt).toLocaleDateString("en-GB", {
-                        day: "2-digit",
-                        month: "short",
-                        year: "numeric",
-                      })
-                    : "12 Aug 2024";
+                    const formattedJoined = emp.createdAt
+                      ? new Date(emp.createdAt).toLocaleDateString("en-GB", {
+                          day: "2-digit",
+                          month: "short",
+                          year: "numeric",
+                        })
+                      : "12 Aug 2024";
 
-                  return (
-                    <tr
-                      key={emp._id}
-                      className="transition-colors hover:bg-[#fdfbfb]"
-                    >
-                      {/* EMPLOYEE COLUMN */}
-                      <td className="py-3.5 px-3.5 min-w-0">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1c1917] text-xs font-bold text-white border border-[#e7e5e4] shadow-xs">
-                            {meta.initials}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-semibold text-xs text-[#1c1917] tracking-wide truncate">
-                                {meta.name}
-                              </span>
-                              {isCurrentCaller && (
-                                <span className="rounded bg-[#e7e5e4] px-1.5 py-0.2 text-[9px] font-semibold text-[#44403c] shrink-0">
-                                  You
+                    return (
+                      <tr
+                        key={emp._id}
+                        className="transition-colors hover:bg-[#fdfbfb] align-middle"
+                      >
+                        {/* EMPLOYEE COLUMN */}
+                        <td className="py-3.5 px-3.5 align-middle">
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#1c1917] text-xs font-bold text-white border border-[#e7e5e4] shadow-xs">
+                              {meta.initials}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-semibold text-xs text-[#1c1917] tracking-wide whitespace-nowrap">
+                                  {meta.name}
                                 </span>
-                              )}
-                            </div>
-                            <div
-                              className="text-[11px] text-[#78716c] mt-0.5 truncate"
-                              title={emp.userId}
-                            >
-                              {emp.userId}
+                                {isCurrentCaller && (
+                                  <span className="rounded bg-[#e7e5e4] px-1.5 py-0.2 text-[9px] font-semibold text-[#44403c] shrink-0">
+                                    You
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </td>
+                        </td>
 
-                      {/* ROLES COLUMN */}
-                      <td className="py-3.5 px-3.5">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {emp.userType.map((type) => {
-                            const matchRole = STAFF_ROLE_CARDS.find(
-                              (r) => r.key === type,
-                            );
-                            const matchMod = MODULE_ACCESS_CARDS.find(
-                              (m) => m.key === type,
-                            );
-                            const label =
-                              matchRole?.label || matchMod?.label || type;
-                            const isAdmin = type === "admin";
+                        {/* ROLES COLUMN */}
+                        <td className="py-3.5 px-3.5 align-middle">
+                          <div className="flex flex-wrap items-center gap-1 max-w-[320px] py-1">
+                            {emp.userType.map((type) => {
+                              const matchRole = STAFF_ROLE_CARDS.find(
+                                (r) => r.key === type,
+                              );
+                              const matchMod = MODULE_ACCESS_CARDS.find(
+                                (m) => m.key === type,
+                              );
+                              const label =
+                                matchRole?.label || matchMod?.label || type;
+                              const isAdmin = type === "admin";
 
-                            return (
-                              <span
-                                key={type}
-                                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium ${
-                                  isAdmin
-                                    ? "bg-[#1c1917] text-white shadow-xs"
-                                    : "bg-[#f5f5f4] border border-[#e7e5e4] text-[#44403c]"
-                                }`}
-                              >
-                                {isAdmin && (
-                                  <ShieldAdminIcon className="w-3 h-3 text-white" />
-                                )}
-                                {label}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      </td>
+                              return (
+                                <span
+                                  key={type}
+                                  className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-medium shrink-0 ${
+                                    isAdmin
+                                      ? "bg-[#1c1917] text-white shadow-xs"
+                                      : "bg-[#f5f5f4] border border-[#e7e5e4] text-[#44403c]"
+                                  }`}
+                                >
+                                  {isAdmin && (
+                                    <ShieldAdminIcon className="w-3 h-3 text-white" />
+                                  )}
+                                  {label}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </td>
 
-                      {/* JOINED COLUMN */}
-                      <td className="py-3.5 px-3.5 text-xs text-[#57534e] whitespace-nowrap">
-                        {formattedJoined}
-                      </td>
+                        {/* JOINED COLUMN */}
+                        <td className="py-3.5 px-3.5 text-xs text-[#57534e] whitespace-nowrap align-middle">
+                          {formattedJoined}
+                        </td>
 
-                      {/* STATUS COLUMN */}
-                      <td className="py-3.5 px-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
-                          Active
-                        </span>
-                      </td>
+                        {/* STATUS COLUMN */}
+                        <td className="py-3.5 px-3.5 whitespace-nowrap align-middle">
+                          {emp.status === "invited" || (!emp.status && !emp.userType?.includes("admin")) ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0"></span>
+                              Invited
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+                              Active
+                            </span>
+                          )}
+                        </td>
 
-                      {/* ACTION COLUMN */}
-                      <td className="py-3.5 px-3.5 text-right whitespace-nowrap">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setViewingTarget(emp)}
-                            className="p-1.5 text-[#78716c] hover:text-[#1c1917] hover:bg-[#f5f5f4] rounded-lg transition-colors cursor-pointer"
-                            title="View Employee Details"
-                          >
-                            <EyeIcon className="w-4 h-4" />
-                          </button>
+                        {/* ACTION COLUMN */}
+                        <td className="py-3.5 px-3.5 text-right whitespace-nowrap align-middle">
+                          <div className="flex items-center justify-end gap-1.5 py-0.5">
+                            {/* VIEW BUTTON - ALWAYS ENABLED */}
+                            <button
+                              type="button"
+                              onClick={() => setViewingTarget(emp)}
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#e7e5e4] bg-[#faf8f7] text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010] transition-colors cursor-pointer shrink-0"
+                              title="View Employee Details"
+                            >
+                              <EyeIcon className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditDrawer(emp)}
-                            className="p-1.5 text-[#78716c] hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
-                            title="Edit Employee Roles & Permissions"
-                          >
-                            <EditIcon className="w-4 h-4" />
-                          </button>
+                            {/* EDIT BUTTON - DISABLED FOR LOGGED IN ACCOUNT OR NON-ADMIN */}
+                            <button
+                              type="button"
+                              disabled={isCurrentCaller || !isAdmin}
+                              onClick={() =>
+                                !isCurrentCaller && isAdmin && handleOpenEditDrawer(emp)
+                              }
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-[#e7e5e4] bg-[#faf8f7] text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010] transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                              title={
+                                !isAdmin
+                                  ? "Only store administrators can edit employees"
+                                  : isCurrentCaller
+                                  ? "You cannot edit your own account"
+                                  : "Edit Employee Roles & Permissions"
+                              }
+                            >
+                              <EditIcon className="w-3.5 h-3.5" />
+                            </button>
 
-                          <button
-                            type="button"
-                            disabled={isCurrentCaller}
-                            onClick={() =>
-                              setDeleteTarget({
-                                id: emp._id,
-                                userId: emp.userId,
-                              })
-                            }
-                            className="p-1.5 text-[#78716c] hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                            title={
-                              isCurrentCaller
-                                ? "You cannot remove yourself"
-                                : "Remove Employee"
-                            }
-                          >
-                            <TrashIcon className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
+                            {/* DELETE BUTTON - DISABLED FOR LOGGED IN ACCOUNT OR NON-ADMIN */}
+                            <button
+                              type="button"
+                              disabled={isCurrentCaller || !isAdmin}
+                              onClick={() =>
+                                !isCurrentCaller &&
+                                isAdmin &&
+                                setDeleteTarget({
+                                  id: emp._id,
+                                  userId: emp.userId,
+                                  name: meta.name,
+                                })
+                              }
+                              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-rose-200/80 bg-rose-50/50 text-rose-600 hover:bg-rose-100/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                              title={
+                                !isAdmin
+                                  ? "Only store administrators can remove employees"
+                                  : isCurrentCaller
+                                  ? "You cannot remove yourself"
+                                  : "Remove Employee"
+                              }
+                            >
+                              <TrashIcon className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {/* Bottom spacer row to prevent last row clipping in scroll container */}
+                  <tr className="h-3 bg-transparent pointer-events-none">
+                    <td colSpan={5} className="p-0 border-0 h-3"></td>
+                  </tr>
+                </>
               ) : (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-[#78716c]">
@@ -1365,6 +1506,7 @@ export function OrganizationEmployees() {
           </div>
         </div>
       </div>
+    </div>
 
       {/* ==================================================== */}
       {/* VIEW EMPLOYEE SLIDE-OVER DRAWER (Matches Design Mockup) */}
@@ -1430,10 +1572,17 @@ export function OrganizationEmployees() {
                             <h3 className="text-base font-extrabold text-neutral-900 tracking-tight">
                               {meta.name}
                             </h3>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold rounded-full">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                              Active Employee
-                            </span>
+                            {activeViewingDoc?.status === "invited" || (!activeViewingDoc?.status && !activeViewingDoc?.userType?.includes("admin")) ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[11px] font-semibold rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                Invited Employee
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold rounded-full">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                Active Employee
+                              </span>
+                            )}
                           </div>
 
                           <div className="mt-1.5 space-y-1 text-xs text-neutral-600">
@@ -1671,55 +1820,86 @@ export function OrganizationEmployees() {
             </div>
 
             {/* Drawer Sticky Footer */}
-            <div className="border-t border-neutral-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
-              <button
-                type="button"
-                disabled={Boolean(
-                  currentMembership?._id === activeViewingDoc._id,
-                )}
-                onClick={() => {
-                  const docToDel = activeViewingDoc;
-                  setViewingTarget(null);
-                  setDeleteTarget({
-                    id: docToDel._id,
-                    userId: docToDel.userId,
-                  });
-                }}
-                className="px-3.5 py-2 text-xs font-medium text-rose-400 hover:text-rose-500 bg-white hover:bg-rose-50/60 rounded-xl border border-rose-200 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-2xs"
-              >
-                <TrashIcon className="w-3.5 h-3.5 text-rose-400" />
-                <span>Deactivate employee</span>
-              </button>
+            {(() => {
+              const viewingCallerEmail = (currentMembership as any)?.email;
+              const viewingDocEmail = (activeViewingDoc as any)?.email;
+              const isViewingCurrentCaller = Boolean(
+                (currentMembership?.userId &&
+                  currentMembership.userId === activeViewingDoc.userId) ||
+                (currentMembership?._id &&
+                  currentMembership._id === activeViewingDoc._id) ||
+                (viewingCallerEmail &&
+                  viewingDocEmail &&
+                  String(viewingCallerEmail).trim().toLowerCase() ===
+                    String(viewingDocEmail).trim().toLowerCase()),
+              );
 
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setViewingTarget(null)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition focus:outline-none cursor-pointer shadow-2xs"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const docToEdit = activeViewingDoc;
-                    setViewingTarget(null);
-                    handleOpenEditDrawer(docToEdit);
-                  }}
-                  className="px-4.5 py-2 text-xs font-bold text-white bg-black hover:bg-neutral-800 active:scale-95 rounded-xl transition-all shadow-sm focus:outline-none cursor-pointer flex items-center gap-2 border border-black"
-                >
-                  <svg
-                    className="w-3.5 h-3.5 text-amber-400 fill-current shrink-0"
-                    viewBox="0 0 24 24"
+              return (
+                <div className="border-t border-neutral-200 bg-white px-6 py-4 flex items-center justify-between shrink-0">
+                  <button
+                    type="button"
+                    disabled={isViewingCurrentCaller}
+                    onClick={() => {
+                      if (isViewingCurrentCaller) return;
+                      const docToDel = activeViewingDoc;
+                      const viewMeta = getEmployeeDisplayMeta(docToDel);
+                      setViewingTarget(null);
+                      setDeleteTarget({
+                        id: docToDel._id,
+                        userId: docToDel.userId,
+                        name: viewMeta.name,
+                        email: docToDel.email,
+                      });
+                    }}
+                    title={
+                      isViewingCurrentCaller
+                        ? "You cannot deactivate your own account"
+                        : "Deactivate employee"
+                    }
+                    className="px-3.5 py-2 text-xs font-medium text-rose-400 hover:text-rose-500 bg-white hover:bg-rose-50/60 rounded-xl border border-rose-200 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-2xs"
                   >
-                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
-                  </svg>
-                  <span className="text-white font-bold text-xs tracking-wide">
-                    Edit employee
-                  </span>
-                </button>
-              </div>
-            </div>
+                    <TrashIcon className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Deactivate employee</span>
+                  </button>
+
+                  <div className="flex items-center gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setViewingTarget(null)}
+                      className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition focus:outline-none cursor-pointer shadow-2xs"
+                    >
+                      Close
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isViewingCurrentCaller}
+                      onClick={() => {
+                        if (isViewingCurrentCaller) return;
+                        const docToEdit = activeViewingDoc;
+                        setViewingTarget(null);
+                        handleOpenEditDrawer(docToEdit);
+                      }}
+                      title={
+                        isViewingCurrentCaller
+                          ? "You cannot edit your own account"
+                          : "Edit employee"
+                      }
+                      className="px-4.5 py-2 text-xs font-bold text-white bg-black hover:bg-neutral-800 rounded-xl transition-all shadow-sm focus:outline-none cursor-pointer flex items-center gap-2 border border-black disabled:opacity-40 disabled:cursor-not-allowed disabled:bg-neutral-600 disabled:border-neutral-600"
+                    >
+                      <svg
+                        className="w-3.5 h-3.5 text-amber-400 fill-current shrink-0"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" />
+                      </svg>
+                      <span className="text-white font-bold text-xs tracking-wide">
+                        Edit employee
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
           </aside>
         </div>
       )}
@@ -1751,10 +1931,17 @@ export function OrganizationEmployees() {
                     {drawerMode === "add" ? "Add employee" : "Edit employee"}
                   </h2>
                   {drawerMode === "edit" && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                      Active
-                    </span>
+                    formStatus === "invited" ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                        Invited
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-full">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        Active
+                      </span>
+                    )
                   )}
                 </div>
                 <p className="text-xs text-neutral-500">
@@ -1786,7 +1973,10 @@ export function OrganizationEmployees() {
             </div>
 
             {/* Drawer Scrollable Body */}
-            <div ref={drawerBodyRef} className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+            <div
+              ref={drawerBodyRef}
+              className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar"
+            >
               {/* TOP DRAWER PENDING ERRORS POPUP */}
               {drawerPendingErrors.length > 0 && (
                 <div className="rounded-xl border border-rose-300 bg-rose-50 p-4 shadow-md text-xs text-rose-900 space-y-2.5 animate-fade-in shrink-0">
@@ -1795,7 +1985,10 @@ export function OrganizationEmployees() {
                       <span className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600 text-white text-xs font-black shadow-xs">
                         !
                       </span>
-                      <span>Action Required: {drawerPendingErrors.length} pending item{drawerPendingErrors.length > 1 ? "s" : ""}</span>
+                      <span>
+                        Action Required: {drawerPendingErrors.length} pending
+                        item{drawerPendingErrors.length > 1 ? "s" : ""}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -1806,7 +1999,8 @@ export function OrganizationEmployees() {
                     </button>
                   </div>
                   <p className="text-[11px] text-rose-700 font-medium">
-                    Please complete the missing details highlighted below to save this employee profile:
+                    Please complete the missing details highlighted below to
+                    save this employee profile:
                   </p>
                   <ul className="list-disc pl-5 space-y-1 text-xs font-semibold text-rose-800">
                     {drawerPendingErrors.map((err, idx) => (
@@ -1848,7 +2042,10 @@ export function OrganizationEmployees() {
                       onChange={(e) => {
                         setFormFirstName(e.target.value);
                         if (pendingFields.firstName && e.target.value.trim()) {
-                          setPendingFields((prev) => ({ ...prev, firstName: false }));
+                          setPendingFields((prev) => ({
+                            ...prev,
+                            firstName: false,
+                          }));
                         }
                       }}
                       placeholder="e.g. John"
@@ -1879,7 +2076,10 @@ export function OrganizationEmployees() {
                       onChange={(e) => {
                         setFormLastName(e.target.value);
                         if (pendingFields.lastName && e.target.value.trim()) {
-                          setPendingFields((prev) => ({ ...prev, lastName: false }));
+                          setPendingFields((prev) => ({
+                            ...prev,
+                            lastName: false,
+                          }));
                         }
                       }}
                       placeholder="e.g. Doe"
@@ -1907,22 +2107,34 @@ export function OrganizationEmployees() {
                   </label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-neutral-400">
-                      <EnvelopeIcon className={`w-4 h-4 ${pendingFields.email ? "text-rose-500" : "text-neutral-400"}`} />
+                      <EnvelopeIcon
+                        className={`w-4 h-4 ${pendingFields.email ? "text-rose-500" : "text-neutral-400"}`}
+                      />
                     </div>
                     <input
                       ref={emailInputRef}
                       id="user-identifier"
                       type="email"
+                      disabled={drawerMode === "edit"}
                       value={formUserIdentifier}
                       onChange={(e) => {
+                        if (drawerMode === "edit") return;
                         setFormUserIdentifier(e.target.value);
-                        if (pendingFields.email && isValidEmail(e.target.value.trim())) {
-                          setPendingFields((prev) => ({ ...prev, email: false }));
+                        if (
+                          pendingFields.email &&
+                          isValidEmail(e.target.value.trim())
+                        ) {
+                          setPendingFields((prev) => ({
+                            ...prev,
+                            email: false,
+                          }));
                         }
                       }}
                       placeholder="e.g. john@gmail.com"
                       className={`w-full text-sm rounded-md border pl-9 pr-3 py-2 text-neutral-800 focus:outline-none transition ${
-                        pendingFields.email
+                        drawerMode === "edit"
+                          ? "bg-neutral-100 text-neutral-500 cursor-not-allowed border-neutral-300"
+                          : pendingFields.email
                           ? "border-rose-500 bg-rose-50/30 ring-2 ring-rose-200 animate-pulse"
                           : "border-neutral-300 bg-white focus:border-black focus:ring-1 focus:ring-black"
                       }`}
@@ -1930,7 +2142,10 @@ export function OrganizationEmployees() {
                   </div>
                   {pendingFields.email ? (
                     <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1">
-                      <span>⚠️</span> {formUserIdentifier.trim() ? "Please enter a valid email address (e.g. name@domain.com)." : "Email Address is required."}
+                      <span>⚠️</span>{" "}
+                      {formUserIdentifier.trim()
+                        ? "Please enter a valid email address (e.g. name@domain.com)."
+                        : "Email Address is required."}
                     </p>
                   ) : (
                     <p className="text-[12px] text-neutral-500">
@@ -1953,7 +2168,9 @@ export function OrganizationEmployees() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className={`text-xs font-bold uppercase tracking-wider ${pendingFields.staffRoles ? "text-rose-700" : "text-neutral-600"}`}>
+                    <h3
+                      className={`text-xs font-bold uppercase tracking-wider ${pendingFields.staffRoles ? "text-rose-700" : "text-neutral-600"}`}
+                    >
                       STAFF ROLES <span className="text-rose-500">*</span>
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
@@ -1978,7 +2195,10 @@ export function OrganizationEmployees() {
                         onClick={() => {
                           handleSelectRole(card.key);
                           if (pendingFields.staffRoles) {
-                            setPendingFields((prev) => ({ ...prev, staffRoles: false }));
+                            setPendingFields((prev) => ({
+                              ...prev,
+                              staffRoles: false,
+                            }));
                           }
                         }}
                         className={`flex flex-col justify-between p-3 rounded-lg cursor-pointer select-none transition ${
@@ -2039,8 +2259,11 @@ export function OrganizationEmployees() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className={`text-xs font-bold uppercase tracking-wider ${pendingFields.moduleAccess ? "text-rose-700" : "text-neutral-600"}`}>
-                      What can this employee access? <span className="text-rose-500">*</span>
+                    <h3
+                      className={`text-xs font-bold uppercase tracking-wider ${pendingFields.moduleAccess ? "text-rose-700" : "text-neutral-600"}`}
+                    >
+                      What can this employee access?{" "}
+                      <span className="text-rose-500">*</span>
                     </h3>
                     <p className="text-xs text-neutral-500 mt-0.5">
                       Select the areas this employee needs to use.
@@ -2063,7 +2286,10 @@ export function OrganizationEmployees() {
                         onClick={() => {
                           handleToggleModule(mod.key);
                           if (pendingFields.moduleAccess) {
-                            setPendingFields((prev) => ({ ...prev, moduleAccess: false }));
+                            setPendingFields((prev) => ({
+                              ...prev,
+                              moduleAccess: false,
+                            }));
                           }
                         }}
                         className={`flex items-center gap-2 p-2.5 rounded-lg cursor-pointer select-none transition ${
@@ -2283,6 +2509,9 @@ export function OrganizationEmployees() {
                           setDeleteTarget({
                             id: editingId,
                             userId: formUserIdentifier,
+                            name:
+                              `${formFirstName} ${formLastName}`.trim() ||
+                              formUserIdentifier,
                           });
                           handleCloseDrawer();
                         }
@@ -2335,35 +2564,46 @@ export function OrganizationEmployees() {
         </div>
       )}
 
-      {/* DELETE CONFIRMATION MODAL */}
+      {/* DELETE CONFIRMATION MODAL (Matching Menu Category Delete Dialog) */}
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            onClick={() => setDeleteTarget(null)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs animate-fade-in"
-          />
-
-          <div className="relative w-full max-w-md rounded-xl border border-[#e7e5e4] bg-white p-6 shadow-2xl space-y-4 animate-scale-up z-10">
-            <div className="flex items-center gap-3 text-red-600">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-xl border border-red-200">
-                🗑️
-              </div>
-              <h3 className="font-garamond text-xl font-normal text-[#1c1917]">
-                Remove Employee
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-[2px] animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-[440px] w-full p-6 shadow-2xl animate-in zoom-in-95 duration-200 relative text-[#101828] font-sans border border-slate-100">
+            {/* Red Soft Circular Alert Badge */}
+            <div className="w-12 h-12 rounded-full bg-rose-50 flex items-center justify-center mb-4 border border-rose-100/60">
+              <svg
+                className="w-6 h-6 text-rose-600 stroke-[2.2]"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                <line x1="12" y1="9" x2="12" y2="13" />
+                <line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
             </div>
 
-            <p className="text-xs text-[#78716c]">
-              Are you sure you want to remove staff member{" "}
-              <strong className="text-[#1c1917]">{deleteTarget.userId}</strong>?
-              They will lose access to the store portal.
+            {/* Modal Heading */}
+            <h3 className="text-xl font-bold text-[#101828] tracking-tight">
+              Delete employee?
+            </h3>
+
+            {/* Modal Message */}
+            <p className="text-sm text-[#475467] leading-relaxed mt-2.5">
+              Are you sure you want to delete{" "}
+              <strong className="font-bold text-[#101828]">
+                {deleteTarget.name || deleteTarget.userId}
+              </strong>
+              ? This action will remove this staff member and revoke their access to this store. This action cannot be undone.
             </p>
 
-            <div className="flex items-center justify-end gap-3 pt-2">
+            {/* Action Buttons Footer */}
+            <div className="flex items-center justify-end gap-3 mt-6 pt-2">
               <button
                 type="button"
                 onClick={() => setDeleteTarget(null)}
-                className="h-9 rounded-xl border border-[#e7e5e4] bg-white px-4 text-xs font-medium text-[#1c1917] transition hover:bg-[#f5f5f4] cursor-pointer"
+                className="px-4.5 py-2.5 rounded-xl border border-[#D0D5DD] bg-white text-sm font-semibold text-[#344054] hover:bg-slate-50 transition cursor-pointer shadow-2xs"
               >
                 Cancel
               </button>
@@ -2371,14 +2611,17 @@ export function OrganizationEmployees() {
                 type="button"
                 onClick={handleConfirmDelete}
                 disabled={isDeleting}
-                className="h-9 rounded-xl bg-red-600 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-red-700 disabled:opacity-40 cursor-pointer"
+                className="px-5 py-2.5 rounded-xl bg-[#D92D20] hover:bg-[#B42318] active:bg-[#912018] text-white text-sm font-semibold transition cursor-pointer disabled:opacity-50 border-0 shadow-2xs"
               >
-                {isDeleting ? "Removing..." : "Confirm Delete"}
+                {isDeleting ? "Deleting..." : "Delete"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Standard Floating Toast Notification Component (Matching Menu Page) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }

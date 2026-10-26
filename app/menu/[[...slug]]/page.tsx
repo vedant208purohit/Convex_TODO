@@ -838,7 +838,9 @@ export default function MenuPage() {
 
   const currencySymbol =
     organization?.defaultCurrencySymbol ||
-    (organization?.country ? getCurrencyForCountry(organization.country).symbol : undefined) ||
+    (organization?.country
+      ? getCurrencyForCountry(organization.country).symbol
+      : undefined) ||
     taxSettings?.currencySymbol ||
     "$";
 
@@ -920,6 +922,16 @@ export default function MenuPage() {
   );
   const ensureItemTypesMutation = useMutation(api.menu.ensureDefaultItemTypes);
 
+  // Chef Prep Preferences Queries & Mutations
+  const masterChefPrepPreferences = useQuery(
+    api.chefPrepPreferences.list,
+    organization?._id ? { organizationId: organization._id } : "skip",
+  );
+  const updateItemPreferencesMutation = useMutation(
+    api.chefPrepPreferences.updateItemPreferences,
+  );
+  const createPreferenceMutation = useMutation(api.chefPrepPreferences.create);
+
   useEffect(() => {
     if (
       organization?._id &&
@@ -933,8 +945,9 @@ export default function MenuPage() {
   }, [organization?._id, rawItemTypes, ensureItemTypesMutation]);
 
   const availableItemTypes = useMemo(() => {
+    let types: Array<{ id: string; name: string; label: string; icon: string }> = [];
     if (rawItemTypes && rawItemTypes.length > 0) {
-      return rawItemTypes.map((t) => ({
+      types = rawItemTypes.map((t) => ({
         id: t._id,
         name: t.name,
         label: t.name,
@@ -950,15 +963,23 @@ export default function MenuPage() {
                   ? "🥚"
                   : "🟢"),
       }));
+    } else {
+      types = [
+        { id: "veg", name: "Vegetarian", label: "Vegetarian", icon: "🟢" },
+        { id: "non_veg", name: "Non-Veg", label: "Non-Veg", icon: "🔴" },
+        { id: "vegan", name: "Vegan", label: "Vegan", icon: "🌿" },
+        { id: "jain", name: "Jain", label: "Jain", icon: "🟡" },
+        { id: "egg", name: "Contains Egg", label: "Contains Egg", icon: "🥚" },
+      ];
     }
-    return [
-      { id: "veg", name: "Vegetarian", label: "Vegetarian", icon: "🟢" },
-      { id: "non_veg", name: "Non-Veg", label: "Non-Veg", icon: "🔴" },
-      { id: "vegan", name: "Vegan", label: "Vegan", icon: "🌿" },
-      { id: "jain", name: "Jain", label: "Jain", icon: "🟡" },
-      { id: "egg", name: "Contains Egg", label: "Contains Egg", icon: "🥚" },
-    ];
-  }, [rawItemTypes]);
+    if (organization?.isVeg) {
+      types = types.filter((t) => {
+        const lower = (t.name || t.label || t.id || "").toLowerCase();
+        return !lower.includes("non") && !lower.includes("egg");
+      });
+    }
+    return types;
+  }, [rawItemTypes, organization?.isVeg]);
 
   // Standard Notification Toast State
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -1223,10 +1244,32 @@ export default function MenuPage() {
   }, [categories, selectedCategoryId]);
 
   // Category Items query
-  const categoryItems = useQuery(
+  const rawCategoryItems = useQuery(
     api.menu.listCategoryItems,
     activeCategory?._id ? { categoryId: activeCategory._id } : "skip",
   );
+
+  const categoryItems = useMemo(() => {
+    if (!rawCategoryItems) return undefined;
+    if (!organization?.isVeg) return rawCategoryItems;
+    return rawCategoryItems.filter(({ item }) => {
+      if (item.isVeg === false) return false;
+      const dt = (item.dietaryType || "").toLowerCase();
+      if (dt.includes("non") || dt.includes("egg")) return false;
+      if (item.itemTypeIds && item.itemTypeIds.length > 0 && rawItemTypes) {
+        const hasNonVegOrEgg = item.itemTypeIds.some((typeId: any) => {
+          const matched = rawItemTypes.find((t) => t._id === typeId);
+          if (matched) {
+            const name = matched.name.toLowerCase();
+            return name.includes("non") || name.includes("egg");
+          }
+          return false;
+        });
+        if (hasNonVegOrEgg) return false;
+      }
+      return true;
+    });
+  }, [rawCategoryItems, organization?.isVeg, rawItemTypes]);
 
   // Active selected item for customizations view
   const activeItem = useMemo(() => {
@@ -1267,14 +1310,23 @@ export default function MenuPage() {
 
   const filteredChoices = useMemo(() => {
     if (!activeCustomization?.items) return [];
-    if (!choiceSearchQuery.trim()) return activeCustomization.items;
+    let items = activeCustomization.items;
+    if (organization?.isVeg) {
+      items = items.filter((c: any) => {
+        if (c.isVeg === false) return false;
+        const dt = (c.dietaryType || "").toLowerCase();
+        if (dt.includes("non") || dt.includes("egg")) return false;
+        return true;
+      });
+    }
+    if (!choiceSearchQuery.trim()) return items;
     const q = choiceSearchQuery.toLowerCase();
-    return activeCustomization.items.filter(
+    return items.filter(
       (c: any) =>
         c.name.toLowerCase().includes(q) ||
         (c.description && c.description.toLowerCase().includes(q)),
     );
-  }, [activeCustomization, choiceSearchQuery]);
+  }, [activeCustomization, choiceSearchQuery, organization?.isVeg]);
 
   // All existing items for 'Add Existing Item' Drawer
   const allExistingItems = useQuery(
@@ -1417,44 +1469,36 @@ export default function MenuPage() {
   // Active Tax Group resolved for choice tax calculations
   const resolvedChoiceTaxGroup = useMemo(() => {
     if (!taxGroups || taxGroups.length === 0) return null;
+    if (choiceSelectedTaxGroupId === "none") return null;
     if (choiceSelectedTaxGroupId) {
       return taxGroups.find((g) => g._id === choiceSelectedTaxGroupId) || null;
     }
-    return taxGroups.find((g) => g.isDefault) || taxGroups[0] || null;
+    return taxGroups.find((g) => g.isDefault) || null;
   }, [taxGroups, choiceSelectedTaxGroupId]);
 
   // Choice Tax Breakdown computation
   const choiceTaxBreakdown = useMemo(() => {
     const rawPrice = parseFloat(choicePrice || "0");
-    if (
-      isNaN(rawPrice) ||
-      rawPrice <= 0 ||
-      !choiceIsGst ||
-      !resolvedChoiceTaxGroup
-    ) {
+    if (isNaN(rawPrice) || rawPrice <= 0 || !choiceIsGst) {
       return null;
     }
 
     let components = (taxComponents || []).filter((c) =>
-      resolvedChoiceTaxGroup.componentIds?.includes(c._id),
+      resolvedChoiceTaxGroup?.componentIds?.includes(c._id),
     );
 
-    if (components.length === 0) {
-      components = [
-        {
-          _id: "tax_demo" as any,
-          _creationTime: 0,
-          name: "Tax",
-          code: "TAX",
-          rate: 5.0,
-          organizationId: "" as any,
-          createdAt: 0,
-        },
-      ];
-    }
-    const totalRate = components.reduce((sum, c) => sum + c.rate, 0) || 5;
+    const totalRate = components.reduce((sum, c) => sum + c.rate, 0) || 0;
 
-    if (totalRate <= 0) return null;
+    if (totalRate <= 0) {
+      return {
+        mode: choiceTaxMode,
+        basePrice: rawPrice.toFixed(2),
+        totalTax: "0.00",
+        finalPrice: rawPrice.toFixed(2),
+        totalRate: 0,
+        components: [],
+      };
+    }
 
     if (choiceTaxMode === "inclusive") {
       const base = rawPrice / (1 + totalRate / 100);
@@ -1551,6 +1595,20 @@ export default function MenuPage() {
     },
     [selectedDietaryType],
   );
+
+  // Keep dietary type normalized to veg if pure vegetarian restaurant is active
+  useEffect(() => {
+    if (organization?.isVeg) {
+      const lower = (selectedDietaryType || "").toLowerCase();
+      if (lower.includes("non") || lower.includes("egg")) {
+        setSelectedDietaryType("veg");
+      }
+      const choiceLower = (choiceDietaryType || "").toLowerCase();
+      if (choiceLower.includes("non") || choiceLower.includes("egg")) {
+        setChoiceDietaryType("veg");
+      }
+    }
+  }, [organization?.isVeg, selectedDietaryType, choiceDietaryType]);
   const [itemShowItemType, setItemShowItemType] = useState(true);
   const [itemIsSpicy, setItemIsSpicy] = useState(false);
   const [itemIsAvailable, setItemIsAvailable] = useState(true);
@@ -1640,6 +1698,26 @@ export default function MenuPage() {
     string | null
   >(null);
   const [childNutrientNameInput, setChildNutrientNameInput] = useState("");
+
+  // Chef Prep Preferences State for Item Setup
+  const [selectedChefPrepPrefIds, setSelectedChefPrepPrefIds] = useState<
+    string[]
+  >([]);
+  const [isQuickCreatePrefOpen, setIsQuickCreatePrefOpen] = useState(false);
+  const [quickCreatePrefName, setQuickCreatePrefName] = useState("");
+  const [isSubmittingQuickPref, setIsSubmittingQuickPref] = useState(false);
+
+  // Linked preferences query for active editing item
+  const linkedItemPrefs = useQuery(
+    api.chefPrepPreferences.getLinkedPreferencesForItem,
+    editingItem?._id ? { itemId: editingItem._id } : "skip",
+  );
+
+  useEffect(() => {
+    if (editingItem && linkedItemPrefs) {
+      setSelectedChefPrepPrefIds(linkedItemPrefs.map((p) => p._id));
+    }
+  }, [editingItem?._id, linkedItemPrefs]);
 
   const handleToggleAllergen = (allergenName: string) => {
     setItemSelectedAllergens((prev) =>
@@ -1837,10 +1915,11 @@ export default function MenuPage() {
   // Active Tax Group resolved for item tax calculations
   const resolvedTaxGroup = useMemo(() => {
     if (!taxGroups || taxGroups.length === 0) return null;
+    if (itemSelectedTaxGroupId === "none") return null;
     if (itemSelectedTaxGroupId) {
       return taxGroups.find((g) => g._id === itemSelectedTaxGroupId) || null;
     }
-    return taxGroups.find((g) => g.isDefault) || taxGroups[0] || null;
+    return taxGroups.find((g) => g.isDefault) || null;
   }, [taxGroups, itemSelectedTaxGroupId]);
 
   // Tax Breakdown computation
@@ -1857,22 +1936,20 @@ export default function MenuPage() {
       resolvedTaxGroup?.componentIds?.includes(c._id),
     );
 
-    if (matchedComponents.length === 0) {
-      matchedComponents = [
-        {
-          _id: "tax_demo" as any,
-          _creationTime: 0,
-          name: "Tax",
-          code: "TAX",
-          rate: 5.0,
-          organizationId: "" as any,
-          createdAt: 0,
-        },
-      ];
-    }
-
     const totalTaxRate =
-      matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 5;
+      matchedComponents.reduce((sum, c) => sum + c.rate, 0) || 0;
+
+    if (totalTaxRate === 0) {
+      return {
+        mode: itemTaxMode,
+        isDemo,
+        basePrice: effectivePrice.toFixed(2),
+        totalTaxAmount: "0.00",
+        finalPrice: effectivePrice.toFixed(2),
+        components: [],
+        totalRate: 0,
+      };
+    }
 
     if (itemTaxMode === "inclusive") {
       const basePrice = effectivePrice / (1 + totalTaxRate / 100);
@@ -2173,8 +2250,8 @@ export default function MenuPage() {
     setItemQuantity("");
     setItemQuantityUnit("g");
     setItemIsGst(true);
-    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
-    setItemSelectedTaxGroupId(defaultTg?._id || "");
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
+    setItemSelectedTaxGroupId(defaultTg?._id || "none");
     setItemTaxMode(defaultTg?.taxMode || "inclusive");
     setItemMarkAsBestseller(false);
     setItemSkuNumber("");
@@ -2213,6 +2290,7 @@ export default function MenuPage() {
     setActiveNutrientMenuId(null);
     setEditingNutrientId(null);
     setAddingChildForNutrientId(null);
+    setSelectedChefPrepPrefIds([]);
     setItemError(null);
     setIsAddItemOpen(true);
     setIsAddItemDropdownOpen(false);
@@ -2224,14 +2302,22 @@ export default function MenuPage() {
     setItemName(item.name);
     setItemPrice((item.price / 100).toFixed(2));
     setItemDescription(item.description || "");
-    setItemIsVeg(item.isVeg ?? true);
+    setItemIsVeg(organization?.isVeg ? true : (item.isVeg ?? true));
+    let initialDietary = "veg";
     if (item.itemTypeIds && item.itemTypeIds.length > 0) {
-      setSelectedDietaryType(item.itemTypeIds[0]);
+      initialDietary = item.itemTypeIds[0];
     } else if (item.dietaryType) {
-      setSelectedDietaryType(item.dietaryType);
+      initialDietary = item.dietaryType;
     } else {
-      setSelectedDietaryType(item.isVeg === false ? "non_veg" : "veg");
+      initialDietary = item.isVeg === false ? "non_veg" : "veg";
     }
+    if (organization?.isVeg) {
+      const lower = String(initialDietary || "").toLowerCase();
+      if (lower.includes("non") || lower.includes("egg") || item.isVeg === false) {
+        initialDietary = "veg";
+      }
+    }
+    setSelectedDietaryType(initialDietary);
     setItemShowItemType(item.showItemType ?? true);
     setItemIsSpicy(item.isSpicy ?? false);
     setItemIsAvailable(item.isAvailable ?? true);
@@ -2239,8 +2325,8 @@ export default function MenuPage() {
     setItemQuantity(item.quantity ? String(item.quantity) : "");
     setItemQuantityUnit(item.quantityUnit || "g");
     setItemIsGst(item.isGst ?? true);
-    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
-    setItemSelectedTaxGroupId(item.taxGroupId || defaultTg?._id || "");
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
+    setItemSelectedTaxGroupId(item.taxGroupId || defaultTg?._id || "none");
     setItemTaxMode(item.taxMode || defaultTg?.taxMode || "inclusive");
     setItemMarkAsBestseller(item.markAsBestseller ?? false);
     setItemSkuNumber(item.skuNumber || "");
@@ -2290,6 +2376,10 @@ export default function MenuPage() {
     setActiveNutrientMenuId(null);
     setEditingNutrientId(null);
     setAddingChildForNutrientId(null);
+    const initialPrefIds = (item.chefPrepPreferences || [])
+      .map((p: any) => p._id || p.id || p.preferenceId)
+      .filter(Boolean);
+    setSelectedChefPrepPrefIds(initialPrefIds);
     setItemError(null);
     setIsAddItemOpen(true);
   };
@@ -2633,6 +2723,7 @@ export default function MenuPage() {
     const trimmedItemName = itemName.trim();
     try {
       const isVegBool = (() => {
+        if (organization?.isVeg) return true;
         const matchedType = availableItemTypes.find((t) =>
           isDietaryTypeSelected(t),
         );
@@ -2653,9 +2744,12 @@ export default function MenuPage() {
           ? [matchedTypeObj.id as Id<"itemTypes">]
           : undefined;
 
-      const effectiveTaxGroupId = (itemSelectedTaxGroupId ||
-        resolvedTaxGroup?._id ||
-        undefined) as Id<"taxGroups"> | undefined;
+      const effectiveTaxGroupId =
+        itemSelectedTaxGroupId === "none"
+          ? undefined
+          : ((itemSelectedTaxGroupId ||
+              resolvedTaxGroup?._id ||
+              undefined) as Id<"taxGroups"> | undefined);
 
       if (editingItem) {
         await updateItemMutation({
@@ -2693,20 +2787,28 @@ export default function MenuPage() {
           nutrients: itemNutrients,
           imageAssetId: itemImageAssetId
             ? (itemImageAssetId as Id<"organization_assets">)
-            : undefined,
+            : null,
           threeDModelAssetId:
             show3dAndroidUpload && item3dAndroidAssetId
               ? (item3dAndroidAssetId as Id<"organization_assets">)
-              : undefined,
+              : null,
           threeDModelIosAssetId:
             show3dIosUpload && item3dIosAssetId
               ? (item3dIosAssetId as Id<"organization_assets">)
-              : undefined,
+              : null,
           videoAssetId:
             showVideoUpload && itemVideoAssetId
               ? (itemVideoAssetId as Id<"organization_assets">)
-              : undefined,
+              : null,
         });
+
+        // Persist Chef Prep Preferences for editing item
+        await updateItemPreferencesMutation({
+          organizationId: organization._id,
+          itemId: editingItem._id,
+          preferenceIds: selectedChefPrepPrefIds as Id<"chefPrepPreferences">[],
+        });
+
         showToast(`Item "${trimmedItemName}" updated successfully`, "success");
       } else {
         const newItemId = await createItemMutation({
@@ -2765,6 +2867,16 @@ export default function MenuPage() {
           categoryId: targetCatId,
           itemId: newItemId,
         });
+
+        // Persist Chef Prep Preferences for new item
+        if (selectedChefPrepPrefIds.length > 0) {
+          await updateItemPreferencesMutation({
+            organizationId: organization._id,
+            itemId: newItemId,
+            preferenceIds:
+              selectedChefPrepPrefIds as Id<"chefPrepPreferences">[],
+          });
+        }
 
         // Set active item to newly created item to view its customizations!
         setSelectedItemId(newItemId);
@@ -2883,14 +2995,35 @@ export default function MenuPage() {
   };
 
   const filteredExistingItems = useMemo(() => {
-    if (!allExistingItems || !existingItemSearchQuery.trim()) return [];
+    if (!allExistingItems) return [];
+    let items = allExistingItems;
+    if (organization?.isVeg) {
+      items = items.filter((item: any) => {
+        if (item.isVeg === false) return false;
+        const dt = (item.dietaryType || "").toLowerCase();
+        if (dt.includes("non") || dt.includes("egg")) return false;
+        if (item.itemTypeIds && item.itemTypeIds.length > 0 && rawItemTypes) {
+          const hasNonVegOrEgg = item.itemTypeIds.some((typeId: string) => {
+            const matched = rawItemTypes.find((t) => t._id === typeId);
+            if (matched) {
+              const name = matched.name.toLowerCase();
+              return name.includes("non") || name.includes("egg");
+            }
+            return false;
+          });
+          if (hasNonVegOrEgg) return false;
+        }
+        return true;
+      });
+    }
+    if (!existingItemSearchQuery.trim()) return [];
     const query = existingItemSearchQuery.toLowerCase();
-    return allExistingItems.filter(
+    return items.filter(
       (item) =>
         item.name.toLowerCase().includes(query) ||
         (item.categoryName && item.categoryName.toLowerCase().includes(query)),
     );
-  }, [allExistingItems, existingItemSearchQuery]);
+  }, [allExistingItems, existingItemSearchQuery, organization?.isVeg, rawItemTypes]);
 
   // Add Existing Customization Handlers
   const handleOpenAddExistingCustomizationDrawer = () => {
@@ -3293,8 +3426,8 @@ export default function MenuPage() {
     setChoiceCalorie("");
     setChoiceCalorieMetric("kcal");
     setChoiceIsGst(false);
-    const defaultTg = taxGroups?.find((g) => g.isDefault) || taxGroups?.[0];
-    setChoiceSelectedTaxGroupId(defaultTg?._id || "");
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
+    setChoiceSelectedTaxGroupId(defaultTg?._id || "none");
     setChoiceTaxMode(defaultTg?.taxMode || "inclusive");
     setIsChoiceAdvancedOpen(false);
     setIsAddChoiceOpen(true);
@@ -3306,9 +3439,14 @@ export default function MenuPage() {
     setChoicePrice((choice.price / 100).toFixed(2));
     setChoiceDescription(choice.description || "");
     setChoiceIsAvailable(choice.isAvailable ?? true);
-    setChoiceDietaryType(
-      choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg"),
-    );
+    let initialChoiceDietary = choice.dietaryType || (choice.isVeg === false ? "non_veg" : "veg");
+    if (organization?.isVeg) {
+      const lower = String(initialChoiceDietary || "").toLowerCase();
+      if (lower.includes("non") || lower.includes("egg") || choice.isVeg === false) {
+        initialChoiceDietary = "veg";
+      }
+    }
+    setChoiceDietaryType(initialChoiceDietary);
     setChoiceShowQuantity(!!choice.showQuantity);
     setChoiceQuantity(choice.quantity ? String(choice.quantity) : "");
     setChoiceQuantityUnit(choice.quantityUnit || "g");
@@ -3316,11 +3454,11 @@ export default function MenuPage() {
     setChoiceCalorie(choice.calorie || "");
     setChoiceCalorieMetric(choice.calorieMetric || "kcal");
     setChoiceIsGst(!!choice.isGst);
+    const defaultTg = taxGroups?.find((g) => g.isDefault);
     setChoiceSelectedTaxGroupId(
       choice.taxGroupId ||
-        taxGroups?.find((g) => g.isDefault)?._id ||
-        taxGroups?.[0]?._id ||
-        "",
+        defaultTg?._id ||
+        "none",
     );
     setChoiceTaxMode(choice.taxMode || "inclusive");
     setIsChoiceAdvancedOpen(
@@ -3348,6 +3486,7 @@ export default function MenuPage() {
         ? parseFloat(choiceQuantity)
         : undefined;
     const isVeg =
+      organization?.isVeg ||
       choiceDietaryType === "veg" ||
       choiceDietaryType === "vegan" ||
       choiceDietaryType === "jain";
@@ -3387,7 +3526,7 @@ export default function MenuPage() {
           calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
           isGst: choiceIsGst,
           taxGroupId:
-            choiceIsGst && choiceSelectedTaxGroupId
+            choiceIsGst && choiceSelectedTaxGroupId && choiceSelectedTaxGroupId !== "none"
               ? (choiceSelectedTaxGroupId as any)
               : undefined,
           taxMode: choiceIsGst ? choiceTaxMode : undefined,
@@ -3419,7 +3558,7 @@ export default function MenuPage() {
           calorieMetric: choiceShowCalorie ? choiceCalorieMetric : undefined,
           isGst: choiceIsGst,
           taxGroupId:
-            choiceIsGst && choiceSelectedTaxGroupId
+            choiceIsGst && choiceSelectedTaxGroupId && choiceSelectedTaxGroupId !== "none"
               ? (choiceSelectedTaxGroupId as any)
               : undefined,
           taxMode: choiceIsGst ? choiceTaxMode : undefined,
@@ -3682,7 +3821,7 @@ export default function MenuPage() {
                                 Click to upload item image
                               </p>
                               <p className="text-[11px] text-[#5e5e5e]">
-                                JPG, PNG, WEBP (Max 10MB)
+                                JPG, PNG, WEBP (Max 25MB)
                               </p>
                             </div>
                           </div>
@@ -4320,9 +4459,11 @@ export default function MenuPage() {
                               <div className="relative">
                                 <select
                                   value={
-                                    itemSelectedTaxGroupId ||
-                                    resolvedTaxGroup?._id ||
-                                    ""
+                                    itemSelectedTaxGroupId === "none"
+                                      ? "none"
+                                      : itemSelectedTaxGroupId ||
+                                        resolvedTaxGroup?._id ||
+                                        "none"
                                   }
                                   onChange={(e) => {
                                     setItemSelectedTaxGroupId(e.target.value);
@@ -4336,16 +4477,19 @@ export default function MenuPage() {
                                   className="w-full bg-white border border-[#e7e5e4] rounded-lg px-3 py-2 appearance-none focus:outline-none focus:border-[#141010] text-[#0c0a09] text-xs font-medium"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
-                                    taxGroups.map((tg) => (
-                                      <option key={tg._id} value={tg._id}>
-                                        {tg.name}{" "}
-                                        {tg.isDefault
-                                          ? "⭐ (Store Default)"
-                                          : ""}
-                                      </option>
-                                    ))
+                                    <>
+                                      <option value="none">None (0% Tax)</option>
+                                      {taxGroups.map((tg) => (
+                                        <option key={tg._id} value={tg._id}>
+                                          {tg.name}{" "}
+                                          {tg.isDefault
+                                            ? "⭐ (Store Default)"
+                                            : ""}
+                                        </option>
+                                      ))}
+                                    </>
                                   ) : (
-                                    <option value="">Default Store Tax</option>
+                                    <option value="none">None (0% Tax)</option>
                                   )}
                                 </select>
                                 <ChevronDownIcon className="absolute right-3 top-3 w-4 h-4 text-[#5e5e5e] pointer-events-none" />
@@ -4426,6 +4570,14 @@ export default function MenuPage() {
                                   {taxBreakdown.basePrice}
                                 </span>
                               </div>
+                              {taxBreakdown.totalRate === 0 && (
+                                <div className="flex justify-between text-[#5e5e5e] text-xs">
+                                  <span>• Tax (0%):</span>
+                                  <span className="font-medium text-[#141010]">
+                                    +{currencySymbol}0.00
+                                  </span>
+                                </div>
+                              )}
                               {taxBreakdown.components.map((c, idx) => (
                                 <div
                                   key={idx}
@@ -4884,6 +5036,137 @@ export default function MenuPage() {
                         </div>
                       </div>
                     )}
+
+                    {/* Card: Chef Prep Preferences Connection */}
+                    <div className="bg-white rounded-xl border border-[#e7e5e4] p-6 lg:p-8 shadow-sm space-y-6">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-[#7f7570] text-[20px]">
+                              soup_kitchen
+                            </span>
+                            <h2 className="text-[20px] font-semibold text-[#0c0a09]">
+                              Chef Prep Preferences
+                            </h2>
+                          </div>
+                          <p className="text-sm text-[#78716c] mt-1">
+                            Select which preparation options are available to
+                            customers when ordering this item. Manage master
+                            preferences in{" "}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                router.push("/menu/chef-prep-preferences")
+                              }
+                              className="underline font-medium text-[#0c0a09] hover:text-[#44403c] cursor-pointer"
+                            >
+                              Menu → Chef Prep Preferences
+                            </button>
+                            .
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Preference Checklist */}
+                      {masterChefPrepPreferences === undefined ? (
+                        <div className="py-4 text-center text-sm text-[#78716c]">
+                          Loading preferences...
+                        </div>
+                      ) : masterChefPrepPreferences.length === 0 ? (
+                        <div className="p-4 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex flex-col items-center justify-center text-center gap-2">
+                          <p className="text-sm text-[#78716c]">
+                            No chef prep preferences created yet.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setIsQuickCreatePrefOpen(true)}
+                            className="text-xs font-semibold text-[#0c0a09] underline hover:text-[#44403c] cursor-pointer"
+                          >
+                            + Create first preference
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          {masterChefPrepPreferences.map((pref) => {
+                            const isChecked = selectedChefPrepPrefIds.includes(
+                              pref._id,
+                            );
+                            return (
+                              <label
+                                key={pref._id}
+                                className={`flex items-center justify-between p-3.5 rounded-xl border transition-all cursor-pointer select-none ${
+                                  isChecked
+                                    ? "bg-[#faf2ee] border-[#0c0a09]/20 shadow-xs"
+                                    : "bg-white border-[#e7e5e4] hover:bg-[#faf9f8] opacity-75"
+                                }`}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setSelectedChefPrepPrefIds((prev) => [
+                                          ...prev,
+                                          pref._id,
+                                        ]);
+                                      } else {
+                                        setSelectedChefPrepPrefIds((prev) =>
+                                          prev.filter((id) => id !== pref._id),
+                                        );
+                                      }
+                                    }}
+                                    className="w-4 h-4 accent-black rounded cursor-pointer"
+                                  />
+                                  <span
+                                    className={`text-sm font-medium ${isChecked ? "text-[#0c0a09]" : "text-[#78716c]"}`}
+                                  >
+                                    {pref.name}
+                                  </span>
+                                </div>
+                                <span
+                                  style={
+                                    isChecked
+                                      ? {
+                                          color: "#ffffff",
+                                          backgroundColor: "#0c0a09",
+                                        }
+                                      : undefined
+                                  }
+                                  className={`text-[11px] font-semibold tracking-wider uppercase px-2.5 py-0.5 rounded-full ${
+                                    isChecked
+                                      ? "bg-[#0c0a09] !text-white"
+                                      : "bg-[#f5f5f4] text-[#a8a29e]"
+                                  }`}
+                                >
+                                  {isChecked ? "Active" : "Excluded"}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Master Link Alert Notice */}
+                      <div className="p-3.5 rounded-xl bg-[#faf2ee] border border-[#f4ece8] flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2 text-xs text-[#78716c]">
+                          <span className="material-symbols-outlined text-[#7f7570] text-[18px]">
+                            lightbulb
+                          </span>
+                          <span>
+                            Need a new preference? Add it first in Menu → Chef
+                            Prep Preferences.
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setIsQuickCreatePrefOpen(true)}
+                          className="text-xs font-semibold text-[#0c0a09] underline hover:text-[#44403c] shrink-0 cursor-pointer"
+                        >
+                          + Create new
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {/* Right Column: Live Card Preview & AI Assistant */}
@@ -6645,7 +6928,7 @@ export default function MenuPage() {
                                         {currencySymbol}
                                         {formatCurrencyAmount(
                                           item.price / 100,
-                                          organization?.country
+                                          organization?.country,
                                         )}
                                       </td>
 
@@ -7084,7 +7367,7 @@ export default function MenuPage() {
                             {currencySymbol}
                             {formatCurrencyAmount(
                               item.price / 100,
-                              organization?.country
+                              organization?.country,
                             )}
                           </span>
                         </div>
@@ -7648,21 +7931,30 @@ export default function MenuPage() {
                               </label>
                               <div className="relative">
                                 <select
-                                  value={choiceSelectedTaxGroupId}
+                                  value={
+                                    choiceSelectedTaxGroupId === "none"
+                                      ? "none"
+                                      : choiceSelectedTaxGroupId ||
+                                        resolvedChoiceTaxGroup?._id ||
+                                        "none"
+                                  }
                                   onChange={(e) =>
                                     setChoiceSelectedTaxGroupId(e.target.value)
                                   }
                                   className="w-full bg-white border border-neutral-300 rounded-md px-3 py-1.5 appearance-none focus:outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 text-neutral-900 text-xs font-medium shadow-xs"
                                 >
                                   {taxGroups && taxGroups.length > 0 ? (
-                                    taxGroups.map((tg) => (
-                                      <option key={tg._id} value={tg._id}>
-                                        {tg.name}{" "}
-                                        {tg.isDefault ? "⭐ (Default)" : ""}
-                                      </option>
-                                    ))
+                                    <>
+                                      <option value="none">None (0% Tax)</option>
+                                      {taxGroups.map((tg) => (
+                                        <option key={tg._id} value={tg._id}>
+                                          {tg.name}{" "}
+                                          {tg.isDefault ? "⭐ (Default)" : ""}
+                                        </option>
+                                      ))}
+                                    </>
                                   ) : (
-                                    <option value="">Default Store Tax</option>
+                                    <option value="none">None (0% Tax)</option>
                                   )}
                                 </select>
                                 <ChevronDownIcon className="absolute right-2.5 top-2.5 w-3.5 h-3.5 text-neutral-500 pointer-events-none" />
@@ -7706,7 +7998,13 @@ export default function MenuPage() {
                                     Tax Breakdown (
                                     {choiceTaxBreakdown.totalRate}%):
                                   </span>
-                                  <span className="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                                  <span
+                                    className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border ${
+                                      choiceTaxBreakdown.mode === "inclusive"
+                                        ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                        : "text-blue-700 bg-blue-50 border-blue-200"
+                                    }`}
+                                  >
                                     {choiceTaxBreakdown.mode === "inclusive"
                                       ? "Inclusive"
                                       : "Exclusive"}
@@ -7719,6 +8017,14 @@ export default function MenuPage() {
                                     {choiceTaxBreakdown.basePrice}
                                   </span>
                                 </div>
+                                {choiceTaxBreakdown.totalRate === 0 && (
+                                  <div className="flex justify-between text-neutral-500">
+                                    <span>• Tax (0%):</span>
+                                    <span className="font-medium text-neutral-900">
+                                      +{currencySymbol}0.00
+                                    </span>
+                                  </div>
+                                )}
                                 {choiceTaxBreakdown.components.map((c, idx) => (
                                   <div
                                     key={idx}
@@ -8568,6 +8874,101 @@ export default function MenuPage() {
                   className="px-4 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-lg text-xs font-semibold transition cursor-pointer"
                 >
                   Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Quick Create Preference Modal */}
+        {isQuickCreatePrefOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs">
+            <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-6 flex flex-col gap-4 border border-[#e7e5e4]">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-[#0c0a09]">
+                  Add Chef Prep Preference
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickCreatePrefOpen(false);
+                    setQuickCreatePrefName("");
+                  }}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-[#78716c] hover:bg-[#f5f5f4]"
+                >
+                  <span className="material-symbols-outlined text-[20px]">
+                    close
+                  </span>
+                </button>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[#0c0a09] uppercase tracking-wider mb-1.5">
+                  Preference Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  maxLength={32}
+                  value={quickCreatePrefName}
+                  onChange={(e) => setQuickCreatePrefName(e.target.value)}
+                  placeholder="e.g. No Onion, Less Spicy"
+                  className="w-full px-4 py-2.5 rounded-xl border border-[#e7e5e4] text-sm text-[#0c0a09] outline-none focus:border-black"
+                  autoFocus
+                />
+                <p className="text-xs text-[#78716c] mt-1.5">
+                  Instructs the kitchen prep station without altering inventory
+                  deductions or pricing.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsQuickCreatePrefOpen(false);
+                    setQuickCreatePrefName("");
+                  }}
+                  className="px-4 py-2 rounded-full text-xs font-medium text-[#78716c] hover:bg-[#f5f5f4]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={
+                    !quickCreatePrefName.trim() || isSubmittingQuickPref
+                  }
+                  onClick={async () => {
+                    if (!organization?._id || !quickCreatePrefName.trim())
+                      return;
+                    setIsSubmittingQuickPref(true);
+                    try {
+                      const newPrefId = await createPreferenceMutation({
+                        organizationId: organization._id,
+                        name: quickCreatePrefName.trim(),
+                      });
+                      setSelectedChefPrepPrefIds((prev) => [
+                        ...prev,
+                        newPrefId,
+                      ]);
+                      setQuickCreatePrefName("");
+                      setIsQuickCreatePrefOpen(false);
+                      showToast(
+                        `Preference "${quickCreatePrefName.trim()}" created`,
+                        "success",
+                      );
+                    } catch (err: any) {
+                      showToast(
+                        err.message || "Failed to create preference",
+                        "error",
+                      );
+                    } finally {
+                      setIsSubmittingQuickPref(false);
+                    }
+                  }}
+                  style={{ color: "#ffffff", backgroundColor: "#0c0a09" }}
+                  className="px-5 py-2 rounded-full text-xs font-semibold bg-[#0c0a09] !text-white hover:bg-[#252626] disabled:opacity-50"
+                >
+                  <span className="!text-white" style={{ color: "#ffffff" }}>
+                    {isSubmittingQuickPref ? "Creating..." : "Create & Select"}
+                  </span>
                 </button>
               </div>
             </div>

@@ -223,13 +223,15 @@ export default defineSchema({
     avatarUrl: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
+    status: v.optional(v.string()), // "invited" | "active" | "inactive" | "suspended"
     createdAt: v.optional(v.number()),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
     .index("by_org", ["organizationId"])
-    .index("by_user_and_org", ["userId", "organizationId"]),
+    .index("by_user_and_org", ["userId", "organizationId"])
+    .index("by_email", ["email"]),
 
   // Customer Domain Table (Migrated from legacy Rails users where user_type includes 'customer')
   customers: defineTable({
@@ -246,6 +248,11 @@ export default defineSchema({
     // Payment Gateway Identifier (e.g. Razorpay Customer ID from legacy user.razorpay_customer_id)
     razorpayCustomerId: v.optional(v.string()),
 
+    // Clerk Identity & Phone Verification Status
+    clerkUserId: v.optional(v.string()),
+    isPhoneVerified: v.optional(v.boolean()),
+    phoneVerifiedAt: v.optional(v.number()),
+
     // Optional Avatar Asset / Storage reference
     avatarStorageId: v.optional(v.id("_storage")),
     avatarAssetId: v.optional(v.id("organization_assets")),
@@ -257,7 +264,8 @@ export default defineSchema({
   })
     .index("by_phone", ["phone"])
     .index("by_email", ["email"])
-    .index("by_legacy_id", ["legacyId"]),
+    .index("by_legacy_id", ["legacyId"])
+    .index("by_clerk_user_id", ["clerkUserId"]),
 
   // Customer Addresses Domain Table (Migrated from legacy Rails user_addresses)
   userAddresses: defineTable({
@@ -294,6 +302,25 @@ export default defineSchema({
   })
     .index("by_customer", ["customerId"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // Customer Mobile Phone OTP Verification Domain Table
+  customerPhoneVerifications: defineTable({
+    phone: v.string(), // E.164 normalized phone, e.g. "+919876543210"
+    countryCode: v.string(), // e.g. "+91"
+    otpHash: v.string(), // Secure SHA-256 hash of normalized phone + OTP + secret
+    expiresAt: v.number(), // Expiration timestamp ms
+    attempts: v.number(), // Failed verification count
+    maxAttempts: v.number(), // Max attempts allowed (e.g. 5)
+    resendAvailableAt: v.number(), // Cooldown timestamp ms
+    verifiedAt: v.optional(v.number()),
+    clerkUserId: v.string(), // Associated Clerk user subject
+    organizationId: v.optional(v.id("organizations")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_phone", ["phone"])
+    .index("by_clerk_user", ["clerkUserId"])
+    .index("by_phone_and_user", ["phone", "clerkUserId"]),
 
   // Master Global Features Catalog (Super Admin & Base Features)
   features: defineTable({
@@ -485,6 +512,36 @@ export default defineSchema({
     createdAt: v.number(),
     deletedAt: v.optional(v.number()),
   }).index("by_customization", ["customizationId"]),
+
+  // Chef Prep Preferences Master Table
+  chefPrepPreferences: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    name: v.string(),
+    status: v.optional(v.union(v.literal("active"), v.literal("inactive"))),
+    isActive: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_name", ["organizationId", "name"])
+    .index("by_org_deleted", ["organizationId", "deletedAt"]),
+
+  // Item to Chef Prep Preferences Junction Table (Normalized Multi-Relationship)
+  itemChefPrepPreferences: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    itemId: v.id("items"),
+    preferenceId: v.id("chefPrepPreferences"),
+    createdAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_item", ["itemId"])
+    .index("by_preference", ["preferenceId"])
+    .index("by_item_preference", ["itemId", "preferenceId"])
+    .index("by_org_preference", ["organizationId", "preferenceId"]),
 
   // Organization Languages Domain Table
   organizationLanguages: defineTable({
@@ -1085,6 +1142,8 @@ postpaidOrderRequests: defineTable({
         city: v.optional(v.string()),
         zipCode: v.optional(v.string()),
         addressType: v.optional(v.string()),
+        latitude: v.optional(v.number()),
+        longitude: v.optional(v.number()),
       })
     ),
 
@@ -1132,6 +1191,22 @@ postpaidOrderRequests: defineTable({
           optionId: v.id("customizationItems"),
           optionName: v.string(),
           price: v.number(),
+        })
+      )
+    ),
+    prepPreferences: v.optional(
+      v.array(
+        v.object({
+          preferenceId: v.optional(v.id("chefPrepPreferences")),
+          name: v.string(),
+        })
+      )
+    ),
+    chefPrepPreferences: v.optional(
+      v.array(
+        v.object({
+          preferenceId: v.optional(v.id("chefPrepPreferences")),
+          name: v.string(),
         })
       )
     ),
@@ -1189,6 +1264,8 @@ postpaidOrderRequests: defineTable({
     fssaiLicNumber: v.optional(v.string()),
     address: v.optional(v.string()),
     city: v.optional(v.string()),
+    country: v.optional(v.string()),
+    state: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
     deletedAt: v.optional(v.number()),
@@ -1206,6 +1283,8 @@ postpaidOrderRequests: defineTable({
     baselineStockLevel: v.optional(v.number()),
     availableStock: v.number(),
     unitCost: v.optional(v.number()),
+    allowNegativeStock: v.optional(v.boolean()),
+    supplierIds: v.optional(v.array(v.id("suppliers"))),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1219,12 +1298,29 @@ postpaidOrderRequests: defineTable({
     inventoryItemId: v.id("inventoryItems"),
     quantity: v.number(),
     unit: v.string(),
+    yield: v.optional(v.number()),
+    yieldUnit: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_item", ["itemId"])
     .index("by_customization", ["customizationItemId"])
-    .index("by_inventory_item", ["inventoryItemId"]),
+    .index("by_inventory_item", ["inventoryItemId"])
+    .index("by_org", ["organizationId"]),
+
+  recipeAssignments: defineTable({
+    organizationId: v.id("organizations"),
+    sourceRecipeItemId: v.id("items"), // The master recipe / dish item being mapped from
+    targetItemId: v.optional(v.id("items")), // The menu item that gets ordered
+    targetCustomizationItemId: v.optional(v.id("customizationItems")), // Or the modifier option that gets ordered
+    portionMultiplier: v.number(), // Portion deducted per order (e.g. 1, 2, 0.5)
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_source_recipe", ["sourceRecipeItemId"])
+    .index("by_target_item", ["targetItemId"])
+    .index("by_target_customization", ["targetCustomizationItemId"]),
 
   purchaseOrders: defineTable({
     organizationId: v.id("organizations"),
@@ -1249,7 +1345,8 @@ postpaidOrderRequests: defineTable({
   })
     .index("by_org", ["organizationId"])
     .index("by_supplier", ["supplierId"])
-    .index("by_status", ["organizationId", "status"]),
+    .index("by_status", ["organizationId", "status"])
+    .index("by_org_created", ["organizationId", "createdAt"]),
 
   purchaseOrderItems: defineTable({
     organizationId: v.id("organizations"),
@@ -1258,6 +1355,9 @@ postpaidOrderRequests: defineTable({
     unit: v.string(),
     orderedQuantity: v.number(),
     receivedQuantity: v.optional(v.number()),
+    missingQuantity: v.optional(v.number()),
+    isReceived: v.optional(v.boolean()),
+    isMissing: v.optional(v.boolean()),
     unitCost: v.number(),
     totalCost: v.number(),
     createdAt: v.number(),
@@ -1271,16 +1371,22 @@ postpaidOrderRequests: defineTable({
     unit: v.string(),
     sourceType: v.string(), // "PurchaseOrder", "OrderSale", "ManualAdjustment", "DeadStock"
     purchaseOrderId: v.optional(v.id("purchaseOrders")),
+    poNumber: v.optional(v.string()),
     supplierId: v.optional(v.id("suppliers")),
     orderId: v.optional(v.id("orders")),
     isDeadStock: v.optional(v.boolean()),
     reasonForDeadStock: v.optional(v.string()),
+    expiryDate: v.optional(v.number()),
+    receivedDate: v.optional(v.number()),
+    markedDate: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("by_inventory_item", ["inventoryItemId"])
     .index("by_org", ["organizationId"])
     .index("by_po", ["purchaseOrderId"])
-    .index("by_order", ["orderId"]),
+    .index("by_order", ["orderId"])
+    .index("by_org_created", ["organizationId", "createdAt"])
+    .index("by_org_deadstock", ["organizationId", "isDeadStock"]),
 
   // Organization Schedule Pickups Domain Table
   organizationSchedulePickups: defineTable({
@@ -1504,4 +1610,78 @@ postpaidOrderRequests: defineTable({
     .index("by_attempt_question", ["attemptId", "questionId"])
     .index("by_question_id", ["questionId"])
     .index("by_legacy_id", ["legacyId"]),
+
+  // ==========================================
+  // Customer Front Display (CFD) Domain Entities
+  // ==========================================
+
+  organizationFrontDisplaySettings: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    cfdEnabled: v.boolean(),
+    displayLayout: v.union(
+      v.literal("split"),
+      v.literal("cart"),
+      v.literal("media")
+    ),
+    theme: v.union(
+      v.literal("light"),
+      v.literal("dark"),
+      v.literal("warm")
+    ),
+    showPaymentQr: v.boolean(),
+    storeUpiAddress: v.optional(v.string()),
+    showCashTenderedChangeDue: v.boolean(),
+    merchantDisplayName: v.optional(v.string()),
+    showStarRatingSurvey: v.boolean(),
+    showWhatsappReceipt: v.boolean(),
+    returnToWelcomeTimeout: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  customerFrontDisplays: defineTable({
+    legacyId: v.optional(v.string()),
+    organizationId: v.id("organizations"),
+    terminalId: v.optional(v.string()),
+    name: v.string(),
+    workstationName: v.optional(v.string()),
+    connectionType: v.union(v.literal("hdmi"), v.literal("network")),
+    ipAddress: v.optional(v.string()),
+    status: v.union(
+      v.literal("active"),
+      v.literal("offline"),
+      v.literal("pending_pair")
+    ),
+    latencyMs: v.optional(v.number()),
+    lastSeenAt: v.number(),
+    pairingCode: v.optional(v.string()),
+    pairingCodeExpiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_terminal", ["terminalId"])
+    .index("by_pairing_code", ["pairingCode"])
+    .index("by_legacy_id", ["legacyId"]),
+
+  frontDisplaySessions: defineTable({
+    organizationId: v.id("organizations"),
+    terminalId: v.string(),
+    state: v.union(
+      v.literal("idle"),
+      v.literal("ringing"),
+      v.literal("payment_qr"),
+      v.literal("cash_tender"),
+      v.literal("completed")
+    ),
+    payload: v.any(),
+    updatedAt: v.number(),
+  })
+    .index("by_org_terminal", ["organizationId", "terminalId"]),
 }, { schemaValidation: false });
+

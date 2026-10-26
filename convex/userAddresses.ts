@@ -62,6 +62,11 @@ export const getCustomerAddresses = query({
       return [];
     }
 
+    const identity = await ctx.auth.getUserIdentity();
+    if (identity && customer.clerkUserId && customer.clerkUserId !== identity.subject) {
+      return [];
+    }
+
     const addresses = await ctx.db
       .query("userAddresses")
       .withIndex("by_customer", (q) => q.eq("customerId", args.customerId))

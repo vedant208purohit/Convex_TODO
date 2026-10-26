@@ -36,7 +36,7 @@ describe("Subticket 03: QR Order Attribution Unit & Integration Tests", () => {
     });
 
     await t.mutation(api.organizationQrCustomerJourney.recordCartActivity, {
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
       itemCount: 2,
     });
 
@@ -66,7 +66,7 @@ describe("Subticket 03: QR Order Attribution Unit & Integration Tests", () => {
     const attribRes = await asAdmin.mutation(api.organizationQrOrderAttribution.attributeOrderToQr, {
       orderId,
       qrId: qr.qrId,
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
     });
 
     expect(attribRes.orderId).toBe(orderId);
@@ -98,7 +98,7 @@ describe("Subticket 03: QR Order Attribution Unit & Integration Tests", () => {
     });
 
     await t.mutation(api.organizationQrCustomerJourney.recordCartActivity, {
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
       itemCount: 1,
     });
 
@@ -127,7 +127,7 @@ describe("Subticket 03: QR Order Attribution Unit & Integration Tests", () => {
     await asAdmin.mutation(api.organizationQrOrderAttribution.attributeOrderToQr, {
       orderId,
       qrId: qr.qrId,
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
     });
 
     const stats = await asAdmin.query(api.organizationQrOrderAttribution.getOrderAttributionStats, {

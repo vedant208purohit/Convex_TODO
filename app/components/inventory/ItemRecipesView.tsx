@@ -1,10 +1,16 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { getCurrencyForCountry } from "@/lib/constants/countries";
+import { getCurrencyForCountry, formatStoreDateTime } from "@/lib/constants/countries";
+import { Toast, type ToastMessage, type ToastType } from "@/app/components/Toast";
+
+function isValidConvexId(id: any): boolean {
+  return typeof id === "string" && id.length > 10 && !id.startsWith("recipe_");
+}
 
 const UNITS_LIST = [
   "Kilogram (kg)",
@@ -25,6 +31,7 @@ export function ItemRecipesView({
 }: {
   organizationId: Id<"organizations">;
 }) {
+  const router = useRouter();
   const organizations = useQuery(api.organizations.list);
   const activeOrg =
     organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
@@ -47,13 +54,101 @@ export function ItemRecipesView({
   // Backend Mutations
   const linkRecipeMutation = useMutation(api.inventory.linkItemRecipe);
   const removeRecipeMutation = useMutation(api.inventory.removeItemRecipe);
+  const deleteRecipeDishMutation = useMutation(api.inventory.deleteRecipeDish);
+  const duplicateRecipeDishMutation = useMutation(api.inventory.duplicateRecipeDish);
+  const updateItemMutation = useMutation(api.menu.updateItem);
   const createItemMutation = useMutation(api.menu.createItem);
+  const assignRecipeMutation = useMutation(api.inventory.assignRecipeToMenuItem);
+  const unassignRecipeMutation = useMutation(api.inventory.unassignRecipeFromMenuItem);
+
+  // Customization Options extracted from menuData for Modifier Mapping (safe, zero network errors)
+  const customizationOptions = useMemo(() => {
+    const list: Array<{ _id: string; name: string; groupName: string; price: number }> = [];
+    if (menuData && Array.isArray(menuData)) {
+      for (const cat of menuData) {
+        if (cat.items && Array.isArray(cat.items)) {
+          for (const item of cat.items) {
+            if (item.customizations && Array.isArray(item.customizations)) {
+              for (const cust of item.customizations) {
+                if (cust.items && Array.isArray(cust.items)) {
+                  for (const ci of cust.items) {
+                    if (!list.some((existing) => existing._id === ci._id)) {
+                      list.push({
+                        _id: ci._id,
+                        name: ci.name,
+                        groupName: cust.name || "Modifier",
+                        price: ci.price || 0,
+                      });
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    return list;
+  }, [menuData]);
 
   // View Navigation State ("LIST" Master View vs "DETAIL" Ingredients View)
   const [viewState, setViewState] = useState<"LIST" | "DETAIL">("LIST");
   const [selectedDishId, setSelectedDishId] = useState<Id<"items"> | null>(
     null,
   );
+
+  // Recipe Mapped Menu Items & Modifiers Query
+  const recipeAssignments = useQuery(
+    api.inventory.getRecipeAssignments,
+    selectedDishId && typeof selectedDishId === "string" && !selectedDishId.startsWith("recipe_")
+      ? { organizationId, sourceRecipeItemId: selectedDishId as Id<"items"> }
+      : "skip"
+  );
+
+  // Selected Dish Active Ingredients Query & Selection State
+  const detailRecipeIngredients = useQuery(
+    api.inventory.getItemRecipe,
+    selectedDishId && isValidConvexId(selectedDishId)
+      ? { itemId: selectedDishId as Id<"items"> }
+      : "skip"
+  );
+  const currentIngredients = useMemo(
+    () => detailRecipeIngredients || [],
+    [detailRecipeIngredients]
+  );
+  const [selectedIngredientIds, setSelectedIngredientIds] = useState<Set<string>>(
+    new Set()
+  );
+
+  // Reset selected ingredients whenever active recipe changes
+  useEffect(() => {
+    setSelectedIngredientIds(new Set());
+  }, [selectedDishId]);
+
+  const handleToggleSelectAllIngredients = () => {
+    if (
+      currentIngredients.length > 0 &&
+      selectedIngredientIds.size === currentIngredients.length
+    ) {
+      setSelectedIngredientIds(new Set());
+    } else {
+      setSelectedIngredientIds(
+        new Set(currentIngredients.map((r) => r._id))
+      );
+    }
+  };
+
+  const handleToggleIngredient = (id: string) => {
+    setSelectedIngredientIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // Local state for custom recipes created directly in Item Recipes view (with localStorage persistence)
   const [customRecipes, setCustomRecipes] = useState<
@@ -91,7 +186,19 @@ export function ItemRecipesView({
         try {
           const parsed = JSON.parse(savedYields);
           if (parsed && typeof parsed === "object") {
-            setRecipeYieldMap(parsed);
+            const cleaned: Record<string, { quantity: number; unit: string }> = {};
+            for (const [k, v] of Object.entries(parsed as Record<string, any>)) {
+              if (v && typeof v === "object") {
+                cleaned[k] = {
+                  quantity: v.quantity ?? 1,
+                  unit:
+                    v.unit && v.unit.toLowerCase() !== "portion"
+                      ? v.unit
+                      : "Kilogram (kg)",
+                };
+              }
+            }
+            setRecipeYieldMap(cleaned);
           }
         } catch (e) {
           console.error("Error reading saved yields from localStorage:", e);
@@ -117,6 +224,39 @@ export function ItemRecipesView({
   // Search Query State
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Editing existing recipe ID (null when creating new recipe)
+  const [editingDishId, setEditingDishId] = useState<Id<"items"> | null>(null);
+
+  // Row Selection State for Bulk Actions (Select All / Delete Selection)
+  const [selectedRecipeIds, setSelectedRecipeIds] = useState<Set<string>>(new Set());
+
+  // Deleted Recipe IDs State (synced with localStorage for instant deletion and persistence)
+  const [deletedRecipeIds, setDeletedRecipeIds] = useState<string[]>([]);
+
+  // Sync deleted recipes from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedDeleted = localStorage.getItem("pos_deleted_recipes");
+      if (savedDeleted) {
+        try {
+          const parsed = JSON.parse(savedDeleted);
+          if (Array.isArray(parsed)) {
+            setDeletedRecipeIds(parsed);
+          }
+        } catch (e) {
+          console.error("Error reading saved deleted recipes from localStorage:", e);
+        }
+      }
+    }
+  }, []);
+
+  // Persist deletedRecipeIds to localStorage whenever updated
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("pos_deleted_recipes", JSON.stringify(deletedRecipeIds));
+    }
+  }, [deletedRecipeIds]);
+
   // Context Menu State (3-dots popup)
   const [openContextMenuId, setOpenContextMenuId] = useState<string | null>(
     null,
@@ -127,7 +267,7 @@ export function ItemRecipesView({
     "ADD_RECIPE" | "ADD_INGREDIENT" | "ASSIGN_MENU_ITEM" | null
   >(null);
 
-  // 1. Create New Recipe Drawer Form State (EXACT 3 FIELDS ONLY)
+  // 1. Create / Edit Recipe Drawer Form State (EXACT 3 FIELDS ONLY)
   const [recipeDishName, setRecipeDishName] = useState("");
   const [recipeQuantity, setRecipeQuantity] = useState<number | "">("");
   const [recipeUnit, setRecipeUnit] = useState("Kilogram (kg)");
@@ -136,6 +276,90 @@ export function ItemRecipesView({
   const [selectedIngredientId, setSelectedIngredientId] = useState<string>("");
   const [ingredientQuantity, setIngredientQuantity] = useState<number | "">("");
   const [ingredientUnit, setIngredientUnit] = useState("piece (pc)");
+  const [editingIngredientRecipeId, setEditingIngredientRecipeId] = useState<Id<"recipes"> | null>(null);
+
+  // 3. Assign Menu Item Drawer Form State
+  const [selectedTargetItemId, setSelectedTargetItemId] = useState<string>("");
+  const [selectedTargetCustId, setSelectedTargetCustId] = useState<string>("");
+  const [portionMultiplier, setPortionMultiplier] = useState<number>(1);
+  const [isAssigning, setIsAssigning] = useState<boolean>(false);
+
+  // Directly query Convex for customizations of the selected menu item
+  const targetItemCustomizationsQuery = useQuery(
+    api.menu.listCustomizations,
+    selectedTargetItemId && isValidConvexId(selectedTargetItemId)
+      ? { itemId: selectedTargetItemId as Id<"items"> }
+      : "skip"
+  );
+
+  // Target item customization options from direct Convex query with fallback to menuData
+  const targetItemCustomizations = useMemo(() => {
+    if (!selectedTargetItemId) return [];
+
+    // 1. Direct query from DB via api.menu.listCustomizations
+    if (
+      targetItemCustomizationsQuery &&
+      Array.isArray(targetItemCustomizationsQuery) &&
+      targetItemCustomizationsQuery.length > 0
+    ) {
+      return targetItemCustomizationsQuery.map((c: any) => ({
+        id: c._id || c.id,
+        name: c.name,
+        items: (c.items || []).map((ci: any) => ({
+          id: ci._id || ci.id,
+          name: ci.name,
+          price:
+            ci.display_price !== undefined
+              ? Number(ci.display_price)
+              : ci.price
+              ? ci.price > 100
+                ? ci.price / 100
+                : ci.price
+              : 0,
+        })),
+      }));
+    }
+
+    // 2. Fallback to menuData (handling item.item?._id || item._id)
+    if (menuData && Array.isArray(menuData)) {
+      for (const cat of menuData) {
+        if (cat.items && Array.isArray(cat.items)) {
+          const found = cat.items.find(
+            (it: any) =>
+              String(it.item?._id || it._id || it.id) ===
+              String(selectedTargetItemId)
+          );
+          if (found) {
+            const custs =
+              found.customizations ||
+              found.item?.customizations ||
+              found.customization_groups ||
+              [];
+            if (Array.isArray(custs) && custs.length > 0) {
+              return custs.map((c: any) => ({
+                id: c.id || c._id,
+                name: c.name,
+                items: (c.customization_items || c.items || []).map((ci: any) => ({
+                  id: ci.id || ci._id,
+                  name: ci.name,
+                  price:
+                    ci.display_price !== undefined
+                      ? Number(ci.display_price)
+                      : ci.price
+                      ? ci.price > 100
+                        ? ci.price / 100
+                        : ci.price
+                      : 0,
+                })),
+              }));
+            }
+          }
+        }
+      }
+    }
+
+    return [];
+  }, [selectedTargetItemId, targetItemCustomizationsQuery, menuData]);
 
   // Submission & Error State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -143,29 +367,47 @@ export function ItemRecipesView({
   const [recipeNameError, setRecipeNameError] = useState("");
   const [recipeQtyError, setRecipeQtyError] = useState("");
 
-  // Delete Confirmation State
-  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+  // Delete Dialog Modal State (matching Menu modal styling and full impact factor)
+  const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
-    recipeId: Id<"recipes"> | null;
-    ingredientName: string;
-    dishName: string;
+    mode: "SINGLE_RECIPE" | "BULK_RECIPES" | "INGREDIENT" | "BULK_INGREDIENTS";
+    dishName?: string;
+    dishId?: Id<"items">;
+    count?: number;
+    ingredientId?: Id<"recipes">;
+    ingredientName?: string;
   }>({
     isOpen: false,
-    recipeId: null,
-    ingredientName: "",
-    dishName: "",
+    mode: "SINGLE_RECIPE",
   });
-  const [isRemoving, setIsRemoving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Toast Notification State
-  const [toastMessage, setToastMessage] = useState<{
-    type: "success" | "error";
-    text: string;
-  } | null>(null);
+  // Standard Menu-style Toast Notification (top-right)
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const showToast = (text: string, type: "success" | "error" = "success") => {
-    setToastMessage({ text, type });
-    setTimeout(() => setToastMessage(null), 4000);
+  // Column Sorting state
+  const [sortField, setSortField] = useState<
+    "name" | "quantity" | "createdAt" | "updatedAt" | null
+  >(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleSort = (
+    field: "name" | "quantity" | "createdAt" | "updatedAt"
+  ) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const showToast = (
+    message: string,
+    type: ToastType = "success",
+    subtext?: string,
+  ) => {
+    setToast({ message, type, subtext });
   };
 
   // Close Context Menu on outside click
@@ -175,8 +417,8 @@ export function ItemRecipesView({
     return () => window.removeEventListener("click", handleOutsideClick);
   }, []);
 
-  // Extract Combined Menu Dishes List
-  const menuItemsList = useMemo(() => {
+  // 1. All catalog menu items from POS Menu (used ONLY for Assign Menu Item drawer & lookups)
+  const allCatalogMenuItems = useMemo(() => {
     const map = new Map<
       string,
       {
@@ -188,23 +430,20 @@ export function ItemRecipesView({
       }
     >();
 
-    // 1. First add custom recipes created in recipe manager
-    for (const item of customRecipes) {
-      map.set(item._id, item);
-    }
-
-    // 2. Add menu categories items
     if (menuData && Array.isArray(menuData)) {
       for (const cat of menuData) {
         if (cat.items && Array.isArray(cat.items)) {
           for (const item of cat.items) {
-            if (!map.has(item._id)) {
-              map.set(item._id, {
-                _id: item._id as Id<"items">,
-                name: item.name,
-                price: item.price ?? 0,
+            const rawId = item?.item?._id || item?._id || item?.id;
+            const rawName = item?.item?.name || item?.name;
+            const rawPrice = item?.item?.price ?? item?.price ?? 0;
+            if (rawId && !map.has(rawId)) {
+              map.set(rawId, {
+                _id: rawId as Id<"items">,
+                name: rawName,
+                price: rawPrice,
                 categoryName: cat.name,
-                createdAt: item._creationTime || Date.now(),
+                createdAt: item?.item?._creationTime || item?._creationTime || Date.now(),
               });
             }
           }
@@ -212,7 +451,6 @@ export function ItemRecipesView({
       }
     }
 
-    // 3. Add raw unassigned menu items
     if (allMenuItemsRaw && Array.isArray(allMenuItemsRaw)) {
       for (const item of allMenuItemsRaw) {
         if (!map.has(item._id)) {
@@ -228,21 +466,59 @@ export function ItemRecipesView({
     }
 
     return Array.from(map.values());
-  }, [menuData, allMenuItemsRaw, customRecipes]);
+  }, [menuData, allMenuItemsRaw]);
+
+  // 2. Only actual recipes: either created manually via "+ Add new recipe"
+  // or existing items in the catalog that are recipes or have configured yields
+  const recipeDishesList = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        _id: Id<"items">;
+        name: string;
+        price: number;
+        categoryName?: string;
+        createdAt?: number;
+      }
+    >();
+
+    const deletedSet = new Set(deletedRecipeIds);
+
+    // 1. Add custom recipes created manually by the user
+    for (const item of customRecipes) {
+      if (!deletedSet.has(item._id)) {
+        map.set(item._id, item);
+      }
+    }
+
+    // 2. Also include any catalog item that was explicitly configured with a recipe yield
+    // or marked as "Item Recipe" (e.g. Vadapav)
+    for (const item of allCatalogMenuItems) {
+      if (
+        !deletedSet.has(item._id) &&
+        !map.has(item._id) &&
+        (recipeYieldMap[item._id] || item.categoryName === "Item Recipe")
+      ) {
+        map.set(item._id, item);
+      }
+    }
+
+    return Array.from(map.values());
+  }, [customRecipes, allCatalogMenuItems, recipeYieldMap, deletedRecipeIds]);
 
   // Selected Dish Object for Detail View
   const selectedDish = useMemo(() => {
     if (!selectedDishId) return null;
     return (
-      menuItemsList.find((d) => d._id === selectedDishId) ||
-      customRecipes.find((d) => d._id === selectedDishId) ||
+      recipeDishesList.find((d) => d._id === selectedDishId) ||
+      allCatalogMenuItems.find((d) => d._id === selectedDishId) ||
       null
     );
-  }, [menuItemsList, customRecipes, selectedDishId]);
+  }, [recipeDishesList, allCatalogMenuItems, selectedDishId]);
 
-  // Filtered Menu Items for List View
+  // Filtered & Sorted Menu Items for List View
   const filteredMenuItems = useMemo(() => {
-    let items = menuItemsList;
+    let items = [...recipeDishesList];
     const q = searchQuery.toLowerCase().trim();
     if (q) {
       items = items.filter(
@@ -251,12 +527,287 @@ export function ItemRecipesView({
           (m.categoryName && m.categoryName.toLowerCase().includes(q)),
       );
     }
+    if (sortField) {
+      items.sort((a, b) => {
+        let valA: string | number = "";
+        let valB: string | number = "";
+        if (sortField === "name") {
+          valA = a.name.toLowerCase();
+          valB = b.name.toLowerCase();
+        } else if (sortField === "quantity") {
+          valA = recipeYieldMap[a._id]?.quantity ?? 1;
+          valB = recipeYieldMap[b._id]?.quantity ?? 1;
+        } else if (sortField === "createdAt") {
+          valA = a.createdAt || (a as any)._creationTime || 0;
+          valB = b.createdAt || (b as any)._creationTime || 0;
+        } else if (sortField === "updatedAt") {
+          valA = (a as any).updatedAt || a.createdAt || (a as any)._creationTime || 0;
+          valB = (b as any).updatedAt || b.createdAt || (b as any)._creationTime || 0;
+        }
+        if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+        if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
     return items;
-  }, [menuItemsList, searchQuery]);
+  }, [recipeDishesList, searchQuery, sortField, sortOrder, recipeYieldMap]);
+
+  // Selection Logic
+  const isAllSelected =
+    filteredMenuItems.length > 0 &&
+    filteredMenuItems.every((d) => selectedRecipeIds.has(d._id));
+
+  const isSomeSelected =
+    selectedRecipeIds.size > 0 && !isAllSelected;
+
+  const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isAllSelected) {
+      setSelectedRecipeIds(new Set());
+    } else {
+      setSelectedRecipeIds(new Set(filteredMenuItems.map((d) => d._id)));
+    }
+  };
+
+  const handleToggleSelect = (dishId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setSelectedRecipeIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(dishId)) {
+        next.delete(dishId);
+      } else {
+        next.add(dishId);
+      }
+      return next;
+    });
+  };
+
+  // Export Recipes to CSV Handler
+  const handleExportRecipes = () => {
+    const itemsToExport =
+      selectedRecipeIds.size > 0
+        ? filteredMenuItems.filter((d) => selectedRecipeIds.has(d._id))
+        : filteredMenuItems;
+
+    if (itemsToExport.length === 0) {
+      showToast("No recipes to export.", "error");
+      return;
+    }
+
+    const headers = [
+      "Recipe Name",
+      "Quantity / Yield",
+      "Category",
+      "Created On",
+    ];
+
+    const rows = itemsToExport.map((dish) => {
+      const yieldObj = recipeYieldMap[dish._id];
+      const rawUnit = yieldObj?.unit || "Kilogram (kg)";
+      const displayUnit =
+        !rawUnit || rawUnit.toLowerCase() === "portion" ? "Kilogram (kg)" : rawUnit;
+      const yieldStr = yieldObj
+        ? `${yieldObj.quantity} ${displayUnit}`
+        : "1 Kilogram (kg)";
+      const createdDate = dish.createdAt
+        ? formatStoreDateTime(
+            dish.createdAt,
+            activeOrg?.country,
+            activeOrg?.organizationTimeZone,
+          )
+        : "—";
+
+      return [
+        `"${(dish.name || "").replace(/"/g, '""')}"`,
+        `"${yieldStr}"`,
+        `"${(dish.categoryName || "General").replace(/"/g, '""')}"`,
+        `"${createdDate}"`,
+      ];
+    });
+
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `item_recipes_export_${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setOpenContextMenuId(null);
+    showToast(`Exported ${itemsToExport.length} recipe(s) to CSV!`);
+  };
+
+  // Trigger Bulk Delete Selected Recipes Dialog
+  const handleOpenBulkDeleteDialog = () => {
+    if (selectedRecipeIds.size === 0) {
+      showToast("Please select at least one recipe to delete.", "error");
+      return;
+    }
+    setOpenContextMenuId(null);
+    setDeleteDialog({
+      isOpen: true,
+      mode: "BULK_RECIPES",
+      count: selectedRecipeIds.size,
+    });
+  };
+
+  // Trigger Single Recipe Delete Dialog
+  const handleOpenSingleDeleteDialog = (dish: {
+    _id: Id<"items">;
+    name: string;
+  }) => {
+    setOpenContextMenuId(null);
+    setDeleteDialog({
+      isOpen: true,
+      mode: "SINGLE_RECIPE",
+      dishId: dish._id,
+      dishName: dish.name,
+    });
+  };
+
+  // Confirm and Execute Deletion from Modal Dialog
+  const handleConfirmDeleteDialog = async () => {
+    setIsDeleting(true);
+    try {
+      if (deleteDialog.mode === "SINGLE_RECIPE" && deleteDialog.dishId) {
+        const dishId = deleteDialog.dishId;
+        const dishName = deleteDialog.dishName || "Recipe";
+
+        // 1. Remove from local customRecipes
+        setCustomRecipes((prev) => prev.filter((d) => d._id !== dishId));
+        // 2. Add to deletedRecipeIds so it vanishes immediately from combined list
+        setDeletedRecipeIds((prev) => [...new Set([...prev, dishId])]);
+        // 3. Deselect if selected
+        setSelectedRecipeIds((prev) => {
+          const next = new Set(prev);
+          next.delete(dishId);
+          return next;
+        });
+
+        // 4. Delete database records if Convex ID
+        if (isValidConvexId(dishId)) {
+          try {
+            await deleteRecipeDishMutation({ itemId: dishId as Id<"items"> });
+          } catch (e) {
+            console.warn("Delete recipe dish error:", e);
+          }
+        }
+
+        // Return to LIST view if deleting active recipe in DETAIL view
+        if (viewState === "DETAIL") {
+          setViewState("LIST");
+          setSelectedDishId(null);
+        }
+
+        showToast(`Recipe "${dishName}" deleted successfully!`);
+      } else if (deleteDialog.mode === "BULK_RECIPES") {
+        const count = selectedRecipeIds.size;
+        const idsToDelete = Array.from(selectedRecipeIds);
+
+        // 1. Remove from local customRecipes
+        setCustomRecipes((prev) =>
+          prev.filter((d) => !selectedRecipeIds.has(d._id)),
+        );
+        // 2. Add to deletedRecipeIds
+        setDeletedRecipeIds((prev) => [...new Set([...prev, ...idsToDelete])]);
+
+        // 3. Delete database records for valid Convex IDs
+        for (const id of idsToDelete) {
+          if (isValidConvexId(id)) {
+            try {
+              await deleteRecipeDishMutation({ itemId: id as Id<"items"> });
+            } catch (e) {
+              console.warn("Delete recipe dish error for", id, e);
+            }
+          }
+        }
+
+        setSelectedRecipeIds(new Set());
+        showToast(`${count} recipe(s) deleted successfully!`);
+      } else if (deleteDialog.mode === "INGREDIENT" && deleteDialog.ingredientId) {
+        await removeRecipeMutation({ id: deleteDialog.ingredientId });
+        showToast(`"${deleteDialog.ingredientName || "Ingredient"}" removed from recipe.`);
+      } else if (deleteDialog.mode === "BULK_INGREDIENTS") {
+        const count = selectedIngredientIds.size;
+        for (const ingId of selectedIngredientIds) {
+          try {
+            await removeRecipeMutation({ id: ingId as Id<"recipes"> });
+          } catch (e) {
+            console.warn("Error removing ingredient:", e);
+          }
+        }
+        setSelectedIngredientIds(new Set());
+        showToast(`${count} ingredient(s) removed from recipe.`);
+      }
+
+      setDeleteDialog({ isOpen: false, mode: "SINGLE_RECIPE" });
+    } catch (err: any) {
+      console.error("Deletion failed:", err);
+      showToast(err?.message || "Failed to delete.", "error");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Duplicate Recipe Handler
+  const handleDuplicateRecipe = async (dish: {
+    _id: Id<"items">;
+    name: string;
+    price: number;
+    categoryName?: string;
+  }) => {
+    const copyName = `${dish.name} (Copy)`;
+    const y = recipeYieldMap[dish._id];
+    const existingYield = {
+      quantity: y?.quantity ?? 1,
+      unit:
+        y?.unit && y.unit.toLowerCase() !== "portion"
+          ? y.unit
+          : "Kilogram (kg)",
+    };
+
+    let newDishId: Id<"items">;
+    if (isValidConvexId(dish._id)) {
+      try {
+        const res = await duplicateRecipeDishMutation({
+          organizationId,
+          sourceItemId: dish._id as Id<"items">,
+          newName: copyName,
+        });
+        newDishId = res.newItemId;
+      } catch (e) {
+        console.warn("Convex duplicate fallback:", e);
+        newDishId = `recipe_${Date.now()}` as Id<"items">;
+      }
+    } else {
+      newDishId = `recipe_${Date.now()}` as Id<"items">;
+    }
+
+    setCustomRecipes((prev) => [
+      {
+        _id: newDishId,
+        name: copyName,
+        price: dish.price,
+        categoryName: dish.categoryName || "Item Recipe",
+        createdAt: Date.now(),
+      },
+      ...prev,
+    ]);
+
+    setRecipeYieldMap((prev) => ({
+      ...prev,
+      [newDishId]: { ...existingYield },
+    }));
+
+    setOpenContextMenuId(null);
+    showToast(`Recipe "${dish.name}" duplicated as "${copyName}"!`);
+  };
 
   // Open Create Recipe Drawer
   const openCreateRecipeDrawer = () => {
     setDrawerError(null);
+    setEditingDishId(null);
     setRecipeNameError("");
     setRecipeQtyError("");
     setRecipeDishName("");
@@ -268,17 +819,48 @@ export function ItemRecipesView({
   // Open Add Ingredient Drawer
   const openAddIngredientDrawer = () => {
     setDrawerError(null);
-    const firstIng =
-      inventoryItems && inventoryItems.length > 0 ? inventoryItems[0] : null;
+    setEditingIngredientRecipeId(null);
+    // Find first ingredient not already added to this recipe, otherwise first item
+    const unaddedIng = (inventoryItems || []).find(
+      (i) => !currentIngredients.some((ci) => ci.inventoryItemId === i._id)
+    );
+    const firstIng = unaddedIng || (inventoryItems && inventoryItems.length > 0 ? inventoryItems[0] : null);
+
     setSelectedIngredientId(firstIng ? firstIng._id : "");
-    setIngredientQuantity("");
+
+    const existingInRecipe = firstIng
+      ? currentIngredients.find((ci) => ci.inventoryItemId === firstIng._id)
+      : null;
+
+    setIngredientQuantity(existingInRecipe ? existingInRecipe.quantity : "");
     setIngredientUnit(
-      firstIng ? firstIng.servingUnit || firstIng.buyingUnit || "piece (pc)" : "piece (pc)",
+      existingInRecipe?.unit ||
+        (firstIng
+          ? firstIng.servingUnit || firstIng.buyingUnit || "piece (pc)"
+          : "piece (pc)")
     );
     setActiveDrawer("ADD_INGREDIENT");
   };
 
-  // Handle Save Recipe Submit (EXACTLY 3 FIELDS: Name, Quantity, Units)
+  // Open Edit Ingredient Drawer for an existing ingredient in the recipe
+  const openEditIngredientDrawer = (ingredientRecipe: any) => {
+    setDrawerError(null);
+    setEditingIngredientRecipeId(ingredientRecipe._id);
+    setSelectedIngredientId(ingredientRecipe.inventoryItemId);
+    setIngredientQuantity(ingredientRecipe.quantity);
+    const foundInv = (inventoryItems || []).find(
+      (i) => i._id === ingredientRecipe.inventoryItemId
+    );
+    setIngredientUnit(
+      ingredientRecipe.unit ||
+        foundInv?.servingUnit ||
+        foundInv?.buyingUnit ||
+        "piece (pc)"
+    );
+    setActiveDrawer("ADD_INGREDIENT");
+  };
+
+  // Handle Save Recipe Submit (Supporting both Edit and Create)
   const handleSaveRecipeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setDrawerError(null);
@@ -305,26 +887,59 @@ export function ItemRecipesView({
 
     setIsSubmitting(true);
     try {
-      // Find matching item or create new item in database
-      let targetDish = menuItemsList.find(
-        (m) =>
-          m.name.toLowerCase().trim() === recipeDishName.toLowerCase().trim(),
-      );
-      let targetDishId = targetDish?._id;
+      // 1. If editing existing recipe, update name & yield
+      if (editingDishId) {
+        const updatedName = recipeDishName.trim();
+        const updatedQty = Number(recipeQuantity) || 1;
+        const updatedUnit =
+          recipeUnit && recipeUnit.toLowerCase() !== "portion"
+            ? recipeUnit
+            : "Kilogram (kg)";
 
-      if (!targetDishId) {
-        try {
-          targetDishId = await createItemMutation({
-            organizationId,
-            name: recipeDishName.trim(),
-            price: 0,
-            published: true,
-            isAvailable: true,
-          });
-        } catch (dbErr) {
-          console.warn("Backend create item warn:", dbErr);
-          targetDishId = `recipe_${Date.now()}` as Id<"items">;
+        setCustomRecipes((prev) =>
+          prev.map((x) =>
+            x._id === editingDishId ? { ...x, name: updatedName } : x,
+          ),
+        );
+
+        setRecipeYieldMap((prev) => ({
+          ...prev,
+          [editingDishId]: {
+            quantity: updatedQty,
+            unit: updatedUnit,
+          },
+        }));
+
+        if (isValidConvexId(editingDishId)) {
+          try {
+            await updateItemMutation({
+              id: editingDishId as Id<"items">,
+              name: updatedName,
+            });
+          } catch (dbErr) {
+            console.warn("Backend updateItem error:", dbErr);
+          }
         }
+
+        setEditingDishId(null);
+        setActiveDrawer(null);
+        showToast(`Recipe "${updatedName}" updated successfully!`);
+        return;
+      }
+
+      // 2. Otherwise creating a new recipe
+      let targetDishId: Id<"items">;
+      try {
+        targetDishId = await createItemMutation({
+          organizationId,
+          name: recipeDishName.trim(),
+          price: 0,
+          published: false,
+          isAvailable: true,
+        });
+      } catch (dbErr) {
+        console.warn("Backend create item warn:", dbErr);
+        targetDishId = `recipe_${Date.now()}` as Id<"items">;
       }
 
       const newRecipeObj = {
@@ -380,43 +995,133 @@ export function ItemRecipesView({
 
     setIsSubmitting(true);
     try {
+      let activeItemId = selectedDishId;
+      if (
+        typeof activeItemId === "string" &&
+        (activeItemId.startsWith("recipe_") || !activeItemId)
+      ) {
+        const dishName = selectedDish?.name || "Recipe Item";
+        const createdId = await createItemMutation({
+          organizationId,
+          name: dishName,
+          price: 0,
+          published: true,
+          isAvailable: true,
+        });
+        activeItemId = createdId;
+        setSelectedDishId(createdId);
+      }
+
+      const existingYield = recipeYieldMap[selectedDishId];
+      const dishYield = {
+        quantity: existingYield?.quantity ?? 1,
+        unit:
+          existingYield?.unit && existingYield.unit.toLowerCase() !== "portion"
+            ? existingYield.unit
+            : "Kilogram (kg)",
+      };
+
+      // If editing an existing recipe item and switched to a different inventory item, remove old link
+      if (editingIngredientRecipeId) {
+        const oldDoc = currentIngredients.find((ci) => ci._id === editingIngredientRecipeId);
+        if (oldDoc && String(oldDoc.inventoryItemId) !== String(selectedIngredientId)) {
+          await removeRecipeMutation({ id: editingIngredientRecipeId });
+        }
+      }
+
       await linkRecipeMutation({
         organizationId,
-        itemId: selectedDishId,
+        itemId: activeItemId as Id<"items">,
         inventoryItemId: selectedIngredientId as Id<"inventoryItems">,
         quantity: Number(ingredientQuantity),
         unit: ingredientUnit,
+        yield: dishYield.quantity,
+        yieldUnit: dishYield.unit,
       });
 
+      const wasEditing = !!editingIngredientRecipeId;
       setActiveDrawer(null);
+      setEditingIngredientRecipeId(null);
       setIngredientQuantity("");
-      showToast("Ingredient added to recipe successfully!");
+      showToast(
+        wasEditing
+          ? "Ingredient updated successfully!"
+          : "Ingredient added to recipe successfully!"
+      );
     } catch (err: any) {
-      console.error("Add ingredient failed:", err);
-      setDrawerError(err?.message || "Failed to add ingredient.");
+      console.error("Save ingredient failed:", err);
+      setDrawerError(err?.message || "Failed to save ingredient.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  // Handle Delete Recipe Line
-  const handleConfirmDelete = async () => {
-    if (!deleteConfirmation.recipeId) return;
-    setIsRemoving(true);
-    try {
-      await removeRecipeMutation({ id: deleteConfirmation.recipeId });
-      showToast("Ingredient removed from recipe.", "success");
-    } catch (err: any) {
-      console.error("Failed to remove recipe ingredient:", err);
-      showToast(err?.message || "Failed to remove ingredient.", "error");
-    } finally {
-      setIsRemoving(false);
-      setDeleteConfirmation({
-        isOpen: false,
-        recipeId: null,
-        ingredientName: "",
-        dishName: "",
+
+
+  // Handle Assign Menu Item / Modifier Submit
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedDishId) return;
+
+    let activeSourceItemId = selectedDishId;
+    if (
+      typeof activeSourceItemId === "string" &&
+      activeSourceItemId.startsWith("recipe_")
+    ) {
+      const dishName = selectedDish?.name || "Recipe Item";
+      const createdId = await createItemMutation({
+        organizationId,
+        name: dishName,
+        price: 0,
+        published: true,
+        isAvailable: true,
       });
+      activeSourceItemId = createdId;
+      setSelectedDishId(createdId);
+    }
+
+    if (!selectedTargetItemId) {
+      alert("Please select a target menu item.");
+      return;
+    }
+
+    setIsAssigning(true);
+    try {
+      if (selectedTargetCustId) {
+        await assignRecipeMutation({
+          organizationId,
+          sourceRecipeItemId: activeSourceItemId as Id<"items">,
+          targetCustomizationItemId: selectedTargetCustId as Id<"customizationItems">,
+          portionMultiplier: Number(portionMultiplier) || 1,
+        });
+      } else {
+        await assignRecipeMutation({
+          organizationId,
+          sourceRecipeItemId: activeSourceItemId as Id<"items">,
+          targetItemId: selectedTargetItemId as Id<"items">,
+          portionMultiplier: Number(portionMultiplier) || 1,
+        });
+      }
+      setActiveDrawer(null);
+      setSelectedTargetItemId("");
+      setSelectedTargetCustId("");
+      setPortionMultiplier(1);
+      showToast("Menu item linked to recipe successfully!");
+    } catch (err: any) {
+      console.error("Failed to assign recipe:", err);
+      alert(err?.message || "Failed to link recipe.");
+    } finally {
+      setIsAssigning(false);
+    }
+  };
+
+  const handleUnassign = async (assignmentId: Id<"recipeAssignments">) => {
+    try {
+      await unassignRecipeMutation({ id: assignmentId });
+      showToast("Mapping removed.");
+    } catch (err: any) {
+      console.error("Failed to unassign:", err);
+      alert(err?.message || "Failed to remove mapping.");
     }
   };
 
@@ -435,47 +1140,8 @@ export function ItemRecipesView({
 
   return (
     <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-[#fbf9f8] p-8 font-sans">
-      {/* Toast Notification Banner */}
-      {toastMessage && (
-        <div
-          className={`fixed bottom-6 right-6 z-50 px-4 py-3 rounded-full shadow-lg border text-xs font-medium flex items-center space-x-2 transition-all duration-300 ${
-            toastMessage.type === "success"
-              ? "bg-[#1e1b19] text-white border-[#33302d]"
-              : "bg-rose-900 text-white border-rose-800"
-          }`}
-        >
-          {toastMessage.type === "success" ? (
-            <svg
-              className="w-4 h-4 text-emerald-400 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M5 13l4 4L19 7"
-              />
-            </svg>
-          ) : (
-            <svg
-              className="w-4 h-4 text-rose-400 shrink-0"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          )}
-          <span>{toastMessage.text}</span>
-        </div>
-      )}
+      {/* Standard Menu-style Toast Notification (Top-Right) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* VIEW 1: ITEM RECIPES MASTER LIST VIEW */}
       {viewState === "LIST" && (
@@ -483,10 +1149,10 @@ export function ItemRecipesView({
           {/* Header Bar */}
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]/70">
             <div>
-              <h1 className="font-serif text-3xl md:text-[32px] text-[#0c0a09] font-medium tracking-tight">
+              <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
                 Item recipes
               </h1>
-              <p className="text-xs md:text-sm text-[#78716c] mt-0.5">
+              <p className="text-xs text-stone-500 mt-1">
                 Set the ingredients used to prepare each menu item.
               </p>
             </div>
@@ -494,12 +1160,12 @@ export function ItemRecipesView({
             <div className="flex items-center gap-3">
               {/* Search Bar */}
               <div className="relative w-64 md:w-72">
-                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-[#a8a29e]">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-[18px] text-stone-400">
                   search
                 </span>
                 <input
                   type="text"
-                  className="w-full bg-white rounded-full pl-9 pr-4 py-2 text-xs text-[#1c1917] placeholder:text-[#a8a29e] border border-[#e7e5e4] focus:outline-none focus:ring-1 focus:ring-[#0c0a09] shadow-2xs transition"
+                  className="w-full bg-white rounded-lg pl-9 pr-3 py-2 text-xs text-stone-900 placeholder:text-stone-400 border border-[#e7e5e4] focus:outline-none focus:border-stone-800 shadow-2xs transition"
                   placeholder="Search recipe"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -516,29 +1182,44 @@ export function ItemRecipesView({
                       openContextMenuId === "bulk" ? null : "bulk",
                     );
                   }}
-                  className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f5f5f4] hover:bg-[#e7e5e4] text-[#1c1917] transition flex items-center space-x-1 cursor-pointer"
+                  className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-white border border-[#e7e5e4] hover:bg-stone-50 text-stone-700 shadow-2xs transition flex items-center space-x-1.5 cursor-pointer"
                 >
                   <span>Actions</span>
+                  {selectedRecipeIds.size > 0 && (
+                    <span className="bg-stone-900 text-white text-[10px] px-1.5 py-0.2 rounded-md font-mono">
+                      {selectedRecipeIds.size}
+                    </span>
+                  )}
                   <span className="material-symbols-outlined text-[16px]">
                     expand_more
                   </span>
                 </button>
 
                 {openContextMenuId === "bulk" && (
-                  <div className="absolute right-0 top-10 w-44 bg-white rounded-xl shadow-xl border border-[#e7e5e4] z-30 py-1 flex flex-col text-left text-xs">
+                  <div className="absolute right-0 top-10 w-48 bg-white rounded-lg shadow-lg border border-[#e7e5e4] z-30 py-1 flex flex-col text-left text-xs">
                     <button
                       type="button"
-                      className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
-                      onClick={() => showToast("Exporting recipes...")}
+                      className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition font-medium flex items-center justify-between cursor-pointer"
+                      onClick={handleExportRecipes}
                     >
-                      Export recipes
+                      <span>Export recipes</span>
+                      {selectedRecipeIds.size > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-stone-100 rounded text-stone-600 font-mono">
+                          {selectedRecipeIds.size}
+                        </span>
+                      )}
                     </button>
                     <button
                       type="button"
-                      className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
-                      onClick={() => showToast("Duplicating selection...")}
+                      className="px-4 py-2 hover:bg-rose-50 text-rose-600 text-left transition font-medium flex items-center justify-between cursor-pointer"
+                      onClick={handleOpenBulkDeleteDialog}
                     >
-                      Duplicate selection
+                      <span>Delete selection</span>
+                      {selectedRecipeIds.size > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-rose-100 text-rose-700 rounded font-mono">
+                          {selectedRecipeIds.size}
+                        </span>
+                      )}
                     </button>
                   </div>
                 )}
@@ -548,73 +1229,182 @@ export function ItemRecipesView({
               <button
                 type="button"
                 onClick={openCreateRecipeDrawer}
-                className="inline-flex items-center space-x-1.5 bg-[#0c0a09] hover:bg-[#292524] text-white !text-white text-xs font-medium px-4 py-2.5 rounded-full transition shadow-sm cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center space-x-1.5 bg-stone-900 hover:bg-stone-800 text-white !text-white text-xs font-semibold px-4 py-2.5 rounded-lg transition shadow-2xs cursor-pointer whitespace-nowrap"
               >
                 <span className="material-symbols-outlined text-[18px] text-white">
                   add
                 </span>
-                <span className="text-white font-medium">
-                  Add new recipe
-                </span>
+                <span>Add new recipe</span>
               </button>
             </div>
           </div>
 
-          {/* Main Table Container matching SuppliersView */}
-          <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+          {/* Main Table Container matching PO & Item Library */}
+          <div className="mt-6 flex-1 flex flex-col">
             {filteredMenuItems.length === 0 ? (
               /* Empty Master State */
               <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
-                <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
-                  <span className="material-symbols-outlined text-[#78716c] text-[28px]">
+                <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-stone-500 mb-4">
+                  <span className="material-symbols-outlined text-stone-500 text-[28px]">
                     menu_book
                   </span>
                 </div>
-                <h2 className="font-serif text-2xl text-[#0c0a09] font-medium">
+                <h2 className="text-xl font-bold text-stone-900">
                   No item recipes found
                 </h2>
-                <p className="text-xs text-[#78716c] max-w-sm mt-1 mb-6">
+                <p className="text-xs text-stone-500 max-w-sm mt-1 mb-6">
                   Set the ingredients used to prepare each menu item to track
                   live depletion accurately.
                 </p>
                 <button
                   type="button"
                   onClick={openCreateRecipeDrawer}
-                  className="px-5 py-2.5 rounded-full text-xs font-medium bg-[#0c0a09] text-white hover:bg-[#292524] transition shadow-sm cursor-pointer"
+                  className="px-5 py-2.5 rounded-lg text-xs font-semibold bg-stone-900 text-white hover:bg-stone-800 transition shadow-2xs cursor-pointer"
                 >
-                  <span className="text-white font-medium">
-                    Add new recipe
-                  </span>
+                  <span>Add new recipe</span>
                 </button>
               </div>
             ) : (
               /* Master Table Card View */
-              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-xs overflow-visible flex flex-col flex-1">
-                <div className="flex-1 overflow-visible">
-                  <table className="w-full text-left border-collapse">
+              <div className="bg-white border border-[#e7e5e4] rounded-xl shadow-2xs overflow-hidden flex flex-col flex-1">
+                <div className="overflow-x-auto flex-1">
+                  <table className="w-full text-left border-collapse text-xs">
                     <thead>
-                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9]/80 text-[11px] uppercase tracking-wider text-[#78716c] font-medium select-none">
-                        <th className="py-3 px-5 w-12 text-center font-normal">
+                      <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] font-semibold uppercase tracking-wider text-[#78716c] select-none">
+                        <th className="py-3 px-5 w-12 text-center">
                           <input
                             type="checkbox"
-                            className="rounded accent-[#0c0a09] w-4 h-4 cursor-pointer"
+                            checked={isAllSelected}
+                            ref={(el) => {
+                              if (el) el.indeterminate = isSomeSelected;
+                            }}
+                            onChange={handleSelectAll}
+                            className="rounded accent-stone-900 w-4 h-4 cursor-pointer"
                           />
                         </th>
-                        <th className="py-3 px-5 font-normal w-[35%]">Supplier Name / Recipe</th>
-                        <th className="py-3 px-5 font-normal w-[20%]">Quantity</th>
-                        <th className="py-3 px-5 font-normal w-[20%]">Created on</th>
-                        <th className="py-3 px-5 font-normal w-[15%]">Updated on</th>
-                        <th className="py-3 px-5 text-right font-normal w-16">
+                        <th
+                          className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none w-[35%]"
+                          onClick={() => handleSort("name")}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span>Recipe Name</span>
+                            {sortField === "name" ? (
+                              <span className="text-stone-900 font-bold">
+                                {sortOrder === "asc" ? "↑" : "↓"}
+                              </span>
+                            ) : (
+                              <svg
+                                className="w-3 h-3 text-stone-300"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none w-[20%]"
+                          onClick={() => handleSort("quantity")}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span>Quantity</span>
+                            {sortField === "quantity" ? (
+                              <span className="text-stone-900 font-bold">
+                                {sortOrder === "asc" ? "↑" : "↓"}
+                              </span>
+                            ) : (
+                              <svg
+                                className="w-3 h-3 text-stone-300"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none w-[20%]"
+                          onClick={() => handleSort("createdAt")}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span>Created on</span>
+                            {sortField === "createdAt" ? (
+                              <span className="text-stone-900 font-bold">
+                                {sortOrder === "asc" ? "↑" : "↓"}
+                              </span>
+                            ) : (
+                              <svg
+                                className="w-3 h-3 text-stone-300"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none w-[15%]"
+                          onClick={() => handleSort("updatedAt")}
+                        >
+                          <div className="flex items-center space-x-1.5">
+                            <span>Updated on</span>
+                            {sortField === "updatedAt" ? (
+                              <span className="text-stone-900 font-bold">
+                                {sortOrder === "asc" ? "↑" : "↓"}
+                              </span>
+                            ) : (
+                              <svg
+                                className="w-3 h-3 text-stone-300"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                                />
+                              </svg>
+                            )}
+                          </div>
+                        </th>
+                        <th className="py-3 px-5 text-right font-semibold w-16">
                           Actions
                         </th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
+                    <tbody className="divide-y divide-[#f5f5f4] text-xs">
                       {filteredMenuItems.map((dish) => (
                         <MasterRecipeRowItem
                           key={dish._id}
                           dish={dish}
+                          country={activeOrg?.country}
+                          timezone={activeOrg?.organizationTimeZone}
                           yieldInfo={recipeYieldMap[dish._id]}
+                          isSelected={selectedRecipeIds.has(dish._id)}
+                          onToggleSelect={() => handleToggleSelect(dish._id)}
                           isOpenMenu={openContextMenuId === dish._id}
                           onToggleMenu={(e) => {
                             e.stopPropagation();
@@ -627,10 +1417,19 @@ export function ItemRecipesView({
                             setViewState("DETAIL");
                           }}
                           onEditRecipeName={() => {
+                            setEditingDishId(dish._id);
                             setRecipeDishName(dish.name);
                             const y = recipeYieldMap[dish._id];
-                            setRecipeQuantity(y?.quantity || 5);
-                            setRecipeUnit(y?.unit || "Kilogram (kg)");
+                            setRecipeQuantity(y?.quantity ?? 1);
+                            const rawUnit = y?.unit;
+                            setRecipeUnit(
+                              rawUnit && rawUnit.toLowerCase() !== "portion"
+                                ? rawUnit
+                                : "Kilogram (kg)",
+                            );
+                            setRecipeNameError("");
+                            setRecipeQtyError("");
+                            setDrawerError(null);
                             setActiveDrawer("ADD_RECIPE");
                           }}
                           onAssignMenuItem={() => {
@@ -638,53 +1437,35 @@ export function ItemRecipesView({
                             setActiveDrawer("ASSIGN_MENU_ITEM");
                           }}
                           onViewDeadStock={() => {
-                            window.location.href = "/inventory/dead-stock";
+                            router.push("/inventory/dead-stock");
                           }}
-                          onDuplicateRecipe={() => {
-                            const newId = `recipe_${Date.now()}` as Id<"items">;
-                            setCustomRecipes((prev) => [
-                              {
-                                _id: newId,
-                                name: `${dish.name} (Copy)`,
-                                price: dish.price,
-                                categoryName: dish.categoryName || "Item Recipe",
-                                createdAt: Date.now(),
-                              },
-                              ...prev,
-                            ]);
-                            showToast(`Recipe "${dish.name}" duplicated!`);
-                          }}
-                          onDeleteRecipe={() => {
-                            setCustomRecipes((prev) =>
-                              prev.filter((d) => d._id !== dish._id),
-                            );
-                            showToast(`Recipe "${dish.name}" deleted!`);
-                          }}
+                          onDuplicateRecipe={() => handleDuplicateRecipe(dish)}
+                          onDeleteRecipe={() => handleOpenSingleDeleteDialog(dish)}
                         />
                       ))}
                     </tbody>
                   </table>
                 </div>
 
-                {/* Pagination Footer matching SuppliersView */}
-                <div className="px-6 py-4 bg-white border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#78716c] shrink-0">
-                  <div>
-                    Showing <span className="font-medium text-[#1c1917]">{filteredMenuItems.length}</span> of{" "}
-                    <span className="font-medium text-[#1c1917]">{filteredMenuItems.length}</span> recipes
-                  </div>
-                  <div className="flex items-center space-x-3">
+                {/* Pagination Footer matching PO & Suppliers */}
+                <div className="py-3.5 px-5 bg-[#fafaf9]/60 border-t border-[#e7e5e4] flex items-center justify-between text-xs text-[#78716c] shrink-0">
+                  <span>
+                    Showing <strong className="text-stone-900">{filteredMenuItems.length}</strong> of{" "}
+                    <strong className="text-stone-900">{filteredMenuItems.length}</strong> recipes
+                  </span>
+                  <div className="flex items-center space-x-2 text-xs">
                     <button
                       type="button"
                       disabled
-                      className="px-3 py-1 rounded border border-[#e7e5e4] bg-[#fafaf9] text-[#a8a29e] cursor-not-allowed font-medium"
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                     >
                       Previous
                     </button>
-                    <span className="font-medium text-[#1c1917]">1 / 1</span>
+                    <span className="px-2 font-medium text-stone-900">1 / 1</span>
                     <button
                       type="button"
                       disabled
-                      className="px-3 py-1 rounded border border-[#e7e5e4] bg-[#fafaf9] text-[#a8a29e] cursor-not-allowed font-medium"
+                      className="px-3 py-1 border border-[#e7e5e4] rounded-lg bg-white text-stone-800 hover:bg-stone-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs font-medium"
                     >
                       Next
                     </button>
@@ -718,20 +1499,27 @@ export function ItemRecipesView({
                 </span>
               </div>
               <div className="flex items-baseline space-x-3">
-                <h1 className="font-serif text-3xl text-[#1e1b19] tracking-tight font-medium">
+                <h1 className="text-2xl font-bold text-stone-900 tracking-tight">
                   {selectedDish.name}
                 </h1>
                 <span className="text-xs text-[#645d58] font-normal">
                   Yield:{" "}
-                  {recipeYieldMap[selectedDish._id]
-                    ? `${recipeYieldMap[selectedDish._id].quantity} ${recipeYieldMap[selectedDish._id].unit}`
-                    : "5 kilogram (kg)"}
+                  {(() => {
+                    const y = recipeYieldMap[selectedDish._id];
+                    const rawUnit = y?.unit || "Kilogram (kg)";
+                    const cleanUnit =
+                      !rawUnit || rawUnit.toLowerCase() === "portion"
+                        ? "Kilogram (kg)"
+                        : rawUnit;
+                    const qty = y?.quantity ?? 1;
+                    return `${qty} ${cleanUnit}`;
+                  })()}
                 </span>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              {/* Actions Dropdown Button */}
+              {/* Actions Dropdown Button (matching screenshot design) */}
               <div className="relative">
                 <button
                   type="button"
@@ -743,22 +1531,118 @@ export function ItemRecipesView({
                         : "detail_actions",
                     );
                   }}
-                  className="px-4 py-2 rounded-full text-xs font-semibold bg-[#f4ece8] hover:bg-[#e9e1dd] text-[#1e1b19] transition flex items-center space-x-1 cursor-pointer"
+                  className="px-4 py-2 rounded-lg text-xs font-semibold bg-white border border-[#1e1b19] text-[#1e1b19] hover:bg-stone-50 transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
                 >
-                  <span>Actions</span>
+                  <span className="font-semibold text-xs">Actions</span>
                   <span className="material-symbols-outlined text-[16px]">
-                    expand_more
+                    {openContextMenuId === "detail_actions"
+                      ? "arrow_drop_up"
+                      : "arrow_drop_down"}
                   </span>
                 </button>
 
                 {openContextMenuId === "detail_actions" && (
-                  <div className="absolute right-0 top-10 w-48 bg-white rounded-xl shadow-xl border border-[#e9e1dd] z-30 py-1 flex flex-col text-left text-xs">
+                  <div className="absolute right-0 top-11 w-52 bg-white rounded-xl shadow-xl border border-stone-200 z-30 py-1.5 flex flex-col text-left text-xs font-medium">
                     <button
                       type="button"
-                      className="px-4 py-2 hover:bg-[#f4ece8] text-[#1e1b19] text-left transition"
-                      onClick={() => setActiveDrawer("ASSIGN_MENU_ITEM")}
+                      className="px-4 py-2.5 hover:bg-stone-100 text-[#1e1b19] text-left transition cursor-pointer"
+                      onClick={() => {
+                        setOpenContextMenuId(null);
+                        if (!selectedDish) return;
+                        setEditingDishId(selectedDish._id);
+                        setRecipeDishName(selectedDish.name);
+                        const currentYield = recipeYieldMap[selectedDish._id];
+                        setRecipeQuantity(currentYield?.quantity ?? 1);
+                        setRecipeUnit(currentYield?.unit || "Kilogram (kg)");
+                        setActiveDrawer("ADD_RECIPE");
+                      }}
                     >
-                      Assign menu item
+                      Edit recipe name
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-4 py-2.5 hover:bg-stone-100 text-[#1e1b19] text-left transition cursor-pointer"
+                      onClick={() => {
+                        setOpenContextMenuId(null);
+                        if (selectedIngredientIds.size === 1) {
+                          const targetId = Array.from(selectedIngredientIds)[0];
+                          const targetItem = currentIngredients.find((r) => r._id === targetId);
+                          if (targetItem) {
+                            openEditIngredientDrawer(targetItem);
+                            return;
+                          }
+                        }
+                        if (currentIngredients.length > 0) {
+                          openEditIngredientDrawer(currentIngredients[0]);
+                        } else {
+                          openAddIngredientDrawer();
+                        }
+                      }}
+                    >
+                      Edit recipe items
+                    </button>
+
+                    <button
+                      type="button"
+                      className="px-4 py-2.5 hover:bg-stone-100 text-[#1e1b19] text-left transition cursor-pointer"
+                      onClick={() => {
+                        setOpenContextMenuId(null);
+                        if (selectedIngredientIds.size > 0) {
+                          setSelectedIngredientIds(new Set());
+                        } else {
+                          setSelectedIngredientIds(
+                            new Set(currentIngredients.map((r) => r._id))
+                          );
+                        }
+                      }}
+                    >
+                      {selectedIngredientIds.size > 0
+                        ? "Deselect all items"
+                        : "Select all items"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className={`px-4 py-2.5 text-left transition ${
+                        selectedIngredientIds.size === 0
+                          ? "text-stone-400 hover:bg-transparent cursor-not-allowed"
+                          : "text-[#1e1b19] hover:bg-stone-100 cursor-pointer"
+                      }`}
+                      onClick={() => {
+                        setOpenContextMenuId(null);
+                        if (selectedIngredientIds.size === 0) {
+                          showToast("Please select ingredients to remove first.", "error");
+                          return;
+                        }
+                        setDeleteDialog({
+                          isOpen: true,
+                          mode: "BULK_INGREDIENTS",
+                          count: selectedIngredientIds.size,
+                          dishName: selectedDish?.name,
+                        });
+                      }}
+                    >
+                      Remove selected items
+                    </button>
+
+                    <div className="border-t border-stone-100 my-1" />
+
+                    <button
+                      type="button"
+                      className="px-4 py-2.5 hover:bg-rose-50 text-rose-600 font-semibold text-left transition cursor-pointer"
+                      onClick={() => {
+                        setOpenContextMenuId(null);
+                        if (!selectedDish) return;
+                        setDeleteDialog({
+                          isOpen: true,
+                          mode: "SINGLE_RECIPE",
+                          dishId: selectedDish._id,
+                          dishName: selectedDish.name,
+                        });
+                      }}
+                    >
+                      Delete recipe
                     </button>
                   </div>
                 )}
@@ -787,16 +1671,82 @@ export function ItemRecipesView({
             </div>
           </div>
 
+          {/* Assigned Menu Items Card */}
+          <div className="mb-6 p-5 bg-white rounded-2xl border border-[#e9e1dd] shadow-2xs">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="font-semibold text-xs text-[#1e1b19] uppercase tracking-wider flex items-center space-x-2">
+                  <span>Assigned Menu Items</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#f4ece8] text-[#1e1b19]">
+                    {recipeAssignments?.length || 0}
+                  </span>
+                </h3>
+                <p className="text-[11px] text-[#645d58] mt-0.5">
+                  When any of these assigned menu items or modifiers are ordered at POS, this recipe's ingredients are automatically deducted.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTargetItemId(allCatalogMenuItems[0]?._id || "");
+                  setSelectedTargetCustId(customizationOptions?.[0]?._id || "");
+                  setActiveDrawer("ASSIGN_MENU_ITEM");
+                }}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-[#1e1b19] hover:bg-[#292524] text-white !text-white transition shadow-2xs cursor-pointer shrink-0 self-start sm:self-auto"
+              >
+                <span className="material-symbols-outlined text-[16px] text-white">link</span>
+                <span className="text-white">Assign menu item</span>
+              </button>
+            </div>
+
+            {(!recipeAssignments || recipeAssignments.length === 0) ? (
+              <div className="p-3.5 bg-[#fbf9f8] rounded-xl border border-dashed border-[#e9e1dd] text-center text-xs text-[#78716c]">
+                No menu items assigned yet. Click <strong className="text-[#1e1b19]">"Assign menu item"</strong> to attach this recipe formula to one or multiple POS dishes or modifiers.
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2 pt-1">
+                {recipeAssignments.map((a) => (
+                  <div
+                    key={a._id}
+                    className="inline-flex items-center space-x-2 px-3 py-1.5 rounded-xl bg-[#fafaf9] border border-[#e7e5e4] text-xs font-medium text-[#1c1917]"
+                  >
+                    <span className="text-[13px]">
+                      {a.targetType === "MenuItem" ? "🍽️" : "✨"}
+                    </span>
+                    <span className="font-semibold">{a.targetName}</span>
+                    <span className="text-[10px] text-stone-600 font-mono bg-stone-200/60 px-1.5 py-0.5 rounded font-semibold">
+                      {a.portionMultiplier}x portion
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleUnassign(a._id)}
+                      className="text-stone-400 hover:text-rose-600 transition p-0.5 cursor-pointer ml-1"
+                      title="Remove assignment"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">close</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Sub-recipe Ingredients Breakdown Card */}
           <RecipeIngredientsBreakdownCard
             dish={selectedDish}
+            recipeList={currentIngredients}
             inventoryItems={inventoryItems || []}
             currencySymbol={currencySymbol}
+            selectedIngredientIds={selectedIngredientIds}
+            onToggleSelectAll={handleToggleSelectAllIngredients}
+            onToggleIngredient={handleToggleIngredient}
             onOpenAddIngredient={openAddIngredientDrawer}
+            onEditIngredient={openEditIngredientDrawer}
             onDeleteIngredient={(recipeId, ingName) => {
-              setDeleteConfirmation({
+              setDeleteDialog({
                 isOpen: true,
-                recipeId,
+                mode: "INGREDIENT",
+                ingredientId: recipeId,
                 ingredientName: ingName,
                 dishName: selectedDish.name,
               });
@@ -805,58 +1755,188 @@ export function ItemRecipesView({
         </div>
       )}
 
-      {/* Delete Confirmation Dialog Modal */}
-      {deleteConfirmation.isOpen && (
-        <div className="fixed inset-0 bg-[#1e1b19]/30 backdrop-blur-[2px] z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-[#e9e1dd] rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-rose-600">
-              <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-rose-600">
-                  warning
-                </span>
-              </div>
-              <div>
-                <h3 className="font-serif text-lg font-medium text-[#1e1b19]">
-                  Remove Recipe Line
-                </h3>
-                <p className="text-xs text-[#645d58]">
-                  Dish: {deleteConfirmation.dishName}
-                </p>
-              </div>
+      {/* ---------------------------------------------------- */}
+      {/* MODAL: DELETE CONFIRMATION (MATCHING MENU PRESET DESIGN WITH FULL FACTOR BREAKDOWN) */}
+      {/* ---------------------------------------------------- */}
+      {deleteDialog.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans animate-in fade-in duration-200">
+          <div
+            className="fixed inset-0"
+            onClick={() => {
+              if (!isDeleting) {
+                setDeleteDialog((prev) => ({ ...prev, isOpen: false }));
+              }
+            }}
+          />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 z-10 space-y-4 border border-stone-200">
+            {/* Warning Icon Badge */}
+            <div className="w-11 h-11 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-[24px] text-rose-600">
+                warning
+              </span>
             </div>
 
-            <p className="text-xs text-[#4d4541]">
-              Are you sure you want to remove{" "}
-              <strong className="text-[#1e1b19]">
-                {deleteConfirmation.ingredientName}
-              </strong>{" "}
-              from this recipe?
-            </p>
+            {/* Title & Description */}
+            <div>
+              <h4 className="text-base font-bold text-stone-900">
+                {deleteDialog.mode === "SINGLE_RECIPE" && "Delete recipe?"}
+                {deleteDialog.mode === "BULK_RECIPES" &&
+                  `Delete ${deleteDialog.count} recipes?`}
+                {deleteDialog.mode === "INGREDIENT" &&
+                  "Remove ingredient from recipe?"}
+                {deleteDialog.mode === "BULK_INGREDIENTS" &&
+                  `Remove ${deleteDialog.count} ingredients?`}
+              </h4>
+              <p className="text-xs text-stone-600 mt-1 leading-relaxed">
+                {deleteDialog.mode === "SINGLE_RECIPE" && (
+                  <>
+                    Are you sure you want to delete the recipe for{" "}
+                    <strong className="text-stone-900">
+                      {deleteDialog.dishName}
+                    </strong>
+                    ?
+                  </>
+                )}
+                {deleteDialog.mode === "BULK_RECIPES" && (
+                  <>
+                    Are you sure you want to delete{" "}
+                    <strong className="text-stone-900">
+                      {deleteDialog.count} selected recipes
+                    </strong>
+                    ?
+                  </>
+                )}
+                {deleteDialog.mode === "INGREDIENT" && (
+                  <>
+                    Are you sure you want to remove{" "}
+                    <strong className="text-stone-900">
+                      {deleteDialog.ingredientName}
+                    </strong>{" "}
+                    from{" "}
+                    <strong className="text-stone-900">
+                      {deleteDialog.dishName}
+                    </strong>
+                    ?
+                  </>
+                )}
+                {deleteDialog.mode === "BULK_INGREDIENTS" && (
+                  <>
+                    Are you sure you want to remove the{" "}
+                    <strong className="text-stone-900">
+                      {deleteDialog.count} selected ingredients
+                    </strong>{" "}
+                    from{" "}
+                    <strong className="text-stone-900">
+                      {deleteDialog.dishName}
+                    </strong>
+                    ?
+                  </>
+                )}
+              </p>
+            </div>
 
-            <div className="flex items-center justify-end space-x-3 pt-2">
+            {/* "What will happen:" Factor Callout Box */}
+            <div className="bg-stone-50 border border-stone-200/80 rounded-xl p-3.5 space-y-2 text-xs text-stone-700">
+              <div className="font-semibold text-stone-900 flex items-center space-x-1.5">
+                <span className="material-symbols-outlined text-[16px] text-amber-600">
+                  info
+                </span>
+                <span>What will happen:</span>
+              </div>
+              <ul className="space-y-1 text-stone-600 list-disc list-inside text-[11px] leading-relaxed">
+                {deleteDialog.mode === "SINGLE_RECIPE" && (
+                  <>
+                    <li>
+                      All ingredient formulas and batch ratios for this recipe will be unlinked.
+                    </li>
+                    <li>
+                      Automatic stock depletion will stop when this item or its assigned POS menu items are ordered.
+                    </li>
+                    <li>
+                      Any menu item or modifier assignments linked to this recipe will be unmapped.
+                    </li>
+                    <li className="text-rose-600 font-medium">
+                      This action cannot be undone.
+                    </li>
+                  </>
+                )}
+                {deleteDialog.mode === "BULK_RECIPES" && (
+                  <>
+                    <li>
+                      All {deleteDialog.count} selected recipes and their ingredient formulas will be removed.
+                    </li>
+                    <li>
+                      Automatic inventory deduction will stop for all menu items and modifiers mapped to these recipes.
+                    </li>
+                    <li>
+                      All linked POS menu item and modifier assignments will be unmapped.
+                    </li>
+                    <li className="text-rose-600 font-medium">
+                      This action cannot be undone.
+                    </li>
+                  </>
+                )}
+                {deleteDialog.mode === "INGREDIENT" && (
+                  <>
+                    <li>
+                      This ingredient will be removed from the formula of {deleteDialog.dishName}.
+                    </li>
+                    <li>
+                      Stock for this ingredient will no longer be deducted when this recipe is ordered.
+                    </li>
+                    <li className="text-rose-600 font-medium">
+                      This action cannot be undone.
+                    </li>
+                  </>
+                )}
+                {deleteDialog.mode === "BULK_INGREDIENTS" && (
+                  <>
+                    <li>
+                      The {deleteDialog.count} selected ingredients will be removed from the formula of {deleteDialog.dishName}.
+                    </li>
+                    <li>
+                      Stock for these ingredients will no longer be deducted when this recipe is ordered.
+                    </li>
+                    <li className="text-rose-600 font-medium">
+                      This action cannot be undone.
+                    </li>
+                  </>
+                )}
+              </ul>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-stone-100">
               <button
                 type="button"
+                disabled={isDeleting}
                 onClick={() =>
-                  setDeleteConfirmation({
-                    isOpen: false,
-                    recipeId: null,
-                    ingredientName: "",
-                    dishName: "",
-                  })
+                  setDeleteDialog((prev) => ({ ...prev, isOpen: false }))
                 }
-                className="px-4 py-2 border border-[#e9e1dd] rounded-full text-xs text-[#4d4541] hover:bg-[#f4ece8] font-medium transition cursor-pointer"
+                className="px-4 py-2 border border-stone-300 text-stone-700 bg-white hover:bg-stone-50 rounded-full text-xs font-semibold transition cursor-pointer disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleConfirmDelete}
-                disabled={isRemoving}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-xs font-medium transition cursor-pointer disabled:bg-rose-200"
+                onClick={handleConfirmDeleteDialog}
+                disabled={isDeleting}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-full text-xs font-semibold shadow-xs transition cursor-pointer disabled:opacity-50 flex items-center space-x-1.5"
                 style={{ color: "#ffffff" }}
               >
+                {isDeleting && (
+                  <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                )}
                 <span className="text-white" style={{ color: "#ffffff" }}>
-                  {isRemoving ? "Removing..." : "Confirm Delete"}
+                  {isDeleting
+                    ? "Deleting..."
+                    : deleteDialog.mode === "SINGLE_RECIPE"
+                      ? "Delete recipe"
+                      : deleteDialog.mode === "BULK_RECIPES"
+                        ? "Delete selection"
+                        : deleteDialog.mode === "BULK_INGREDIENTS"
+                          ? "Remove ingredients"
+                          : "Remove ingredient"}
                 </span>
               </button>
             </div>
@@ -882,12 +1962,15 @@ export function ItemRecipesView({
       >
         {/* Drawer Header */}
         <div className="h-16 px-6 border-b border-[#e9e1dd] flex items-center justify-between shrink-0">
-          <h2 className="font-serif text-xl font-medium text-[#1e1b19]">
-            Create new recipe
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
+            {editingDishId ? "Edit recipe name" : "Create new recipe"}
           </h2>
           <button
             type="button"
-            onClick={() => setActiveDrawer(null)}
+            onClick={() => {
+              setActiveDrawer(null);
+              setEditingDishId(null);
+            }}
             className="p-1.5 rounded-full hover:bg-[#f4ece8] text-[#7f7570] hover:text-[#1e1b19] transition cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -993,7 +2076,10 @@ export function ItemRecipesView({
           <div className="pt-4 flex items-center justify-end space-x-3 border-t border-[#e9e1dd]">
             <button
               type="button"
-              onClick={() => setActiveDrawer(null)}
+              onClick={() => {
+                setActiveDrawer(null);
+                setEditingDishId(null);
+              }}
               className="px-4 py-2 rounded-full font-semibold text-[#645d58] hover:bg-[#f4ece8] transition cursor-pointer"
             >
               Cancel
@@ -1005,7 +2091,13 @@ export function ItemRecipesView({
               style={{ color: "#ffffff" }}
             >
               <span className="text-white" style={{ color: "#ffffff" }}>
-                {isSubmitting ? "Saving..." : "Save recipe"}
+                {isSubmitting
+                  ? editingDishId
+                    ? "Updating..."
+                    : "Saving..."
+                  : editingDishId
+                    ? "Update recipe"
+                    : "Save recipe"}
               </span>
             </button>
           </div>
@@ -1023,12 +2115,15 @@ export function ItemRecipesView({
         }`}
       >
         <div className="h-16 px-6 border-b border-[#e9e1dd] flex items-center justify-between shrink-0">
-          <h2 className="font-serif text-xl font-medium text-[#1e1b19]">
-            Add ingredient
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
+            {editingIngredientRecipeId ? "Edit ingredient" : "Add ingredient"}
           </h2>
           <button
             type="button"
-            onClick={() => setActiveDrawer(null)}
+            onClick={() => {
+              setActiveDrawer(null);
+              setEditingIngredientRecipeId(null);
+            }}
             className="p-1.5 rounded-full hover:bg-[#f4ece8] text-[#7f7570] hover:text-[#1e1b19] transition cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -1062,9 +2157,21 @@ export function ItemRecipesView({
                   const id = e.target.value;
                   setSelectedIngredientId(id);
                   const found = inventoryItems?.find((i) => i._id === id);
-                  if (found) {
+                  const existingInRecipe = currentIngredients.find(
+                    (ci) => ci.inventoryItemId === id
+                  );
+                  if (existingInRecipe) {
+                    setIngredientQuantity(existingInRecipe.quantity);
                     setIngredientUnit(
-                      found.servingUnit || found.buyingUnit || "piece (pc)",
+                      existingInRecipe.unit ||
+                        found?.servingUnit ||
+                        found?.buyingUnit ||
+                        "piece (pc)"
+                    );
+                  } else if (found) {
+                    setIngredientQuantity("");
+                    setIngredientUnit(
+                      found.servingUnit || found.buyingUnit || "piece (pc)"
                     );
                   }
                 }}
@@ -1072,18 +2179,37 @@ export function ItemRecipesView({
                 <option value="" disabled>
                   Select ingredient from library
                 </option>
-                {(inventoryItems || []).map((ing) => (
-                  <option key={ing._id} value={ing._id}>
-                    {ing.name} ({ing.servingUnit || ing.buyingUnit}) -{" "}
-                    {currencySymbol}
-                    {ing.unitCost ?? 0}/unit
-                  </option>
-                ))}
+                {(inventoryItems || []).map((ing) => {
+                  const isAlreadyAssigned = currentIngredients.some(
+                    (ci) => ci.inventoryItemId === ing._id
+                  );
+                  return (
+                    <option key={ing._id} value={ing._id}>
+                      {ing.name} ({ing.servingUnit || ing.buyingUnit}) -{" "}
+                      {currencySymbol}
+                      {ing.unitCost ?? 0}/unit
+                      {isAlreadyAssigned ? " • (Already added)" : ""}
+                    </option>
+                  );
+                })}
               </select>
               <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7f7570] pointer-events-none text-[18px]">
                 expand_more
               </span>
             </div>
+
+            {currentIngredients.some(
+              (ci) => ci.inventoryItemId === selectedIngredientId
+            ) && (
+              <div className="flex items-center space-x-1.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-[11px] mt-1.5">
+                <span className="material-symbols-outlined text-[16px] text-amber-600 shrink-0">
+                  info
+                </span>
+                <span>
+                  This ingredient is already added to this recipe. Submitting will update its quantity.
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Quantity and Unit */}
@@ -1123,7 +2249,10 @@ export function ItemRecipesView({
           <div className="pt-4 flex items-center justify-end space-x-3 border-t border-[#e9e1dd]">
             <button
               type="button"
-              onClick={() => setActiveDrawer(null)}
+              onClick={() => {
+                setActiveDrawer(null);
+                setEditingIngredientRecipeId(null);
+              }}
               className="px-4 py-2 rounded-full font-semibold text-[#645d58] hover:bg-[#f4ece8] transition cursor-pointer"
             >
               Cancel
@@ -1135,7 +2264,13 @@ export function ItemRecipesView({
               style={{ color: "#ffffff" }}
             >
               <span className="text-white" style={{ color: "#ffffff" }}>
-                {isSubmitting ? "Linking..." : "Add ingredient"}
+                {isSubmitting
+                  ? editingIngredientRecipeId
+                    ? "Saving..."
+                    : "Linking..."
+                  : editingIngredientRecipeId
+                    ? "Save changes"
+                    : "Add ingredient"}
               </span>
             </button>
           </div>
@@ -1153,57 +2288,47 @@ export function ItemRecipesView({
         }`}
       >
         <div className="h-16 px-6 border-b border-[#e9e1dd] flex items-center justify-between shrink-0">
-          <h2 className="font-serif text-xl font-medium text-[#1e1b19]">
+          <h2 className="text-xl font-bold text-stone-900 tracking-tight">
             Assign menu item
           </h2>
           <button
             type="button"
-            onClick={() => setActiveDrawer(null)}
+            onClick={() => {
+              setActiveDrawer(null);
+              setSelectedTargetItemId("");
+              setSelectedTargetCustId("");
+            }}
             className="p-1.5 rounded-full hover:bg-[#f4ece8] text-[#7f7570] hover:text-[#1e1b19] transition cursor-pointer"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-[#1e1b19]">
-          <p className="text-[#645d58]">
-            Connect this recipe to a terminal menu item or modifier option to
-            deduct inventory automatically on sale.
-          </p>
-
-          <div className="space-y-1.5">
-            <label className="block font-semibold text-[#4d4541]">
-              Assignment Type
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center space-x-2 p-3 rounded-lg bg-[#f4ece8] cursor-pointer">
-                <input
-                  type="radio"
-                  name="assignType"
-                  defaultChecked
-                  className="accent-[#000000]"
-                />
-                <span className="font-medium text-[#1e1b19]">Menu Item</span>
-              </label>
-              <label className="flex items-center space-x-2 p-3 rounded-lg bg-[#f4ece8] cursor-pointer">
-                <input
-                  type="radio"
-                  name="assignType"
-                  className="accent-[#000000]"
-                />
-                <span className="font-medium text-[#1e1b19]">
-                  Customization
-                </span>
-              </label>
-            </div>
+        <form
+          onSubmit={handleAssignSubmit}
+          className="flex-1 overflow-y-auto p-6 space-y-5 text-xs text-[#1e1b19]"
+        >
+          <div>
+            <p className="text-xs text-[#645d58]">
+              Connect this recipe formula to a terminal menu item or modifier option to deduct inventory automatically upon order completion.
+            </p>
           </div>
 
           <div className="space-y-1.5">
             <label className="block font-semibold text-[#4d4541]">
-              Select active menu item <span className="text-rose-500">*</span>
+              Select target menu item <span className="text-rose-500">*</span>
             </label>
-            <select className="w-full bg-[#f4ece8]/50 px-3.5 py-2.5 rounded-lg border border-[#d0c4be] text-xs text-[#1e1b19]">
-              {menuItemsList.map((m) => (
+            <select
+              required
+              value={selectedTargetItemId}
+              onChange={(e) => {
+                setSelectedTargetItemId(e.target.value);
+                setSelectedTargetCustId("");
+              }}
+              className="w-full bg-[#f4ece8]/50 px-3.5 py-2.5 rounded-lg border border-[#d0c4be] text-xs text-[#1e1b19] font-medium"
+            >
+              <option value="">Select menu dish</option>
+              {allCatalogMenuItems.map((m) => (
                 <option key={m._id} value={m._id}>
                   {m.name} ({m.categoryName || "General"})
                 </option>
@@ -1211,40 +2336,83 @@ export function ItemRecipesView({
             </select>
           </div>
 
+          {/* Target Customization (only shown if the selected item has customizations) */}
+          {targetItemCustomizations.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="block font-semibold text-[#4d4541]">
+                Select target customization / modifier option
+              </label>
+              <select
+                value={selectedTargetCustId}
+                onChange={(e) => setSelectedTargetCustId(e.target.value)}
+                className="w-full bg-[#f4ece8]/50 px-3.5 py-2.5 rounded-lg border border-[#d0c4be] text-xs text-[#1e1b19] font-medium"
+              >
+                <option value="">Base menu item (Entire dish)</option>
+                {targetItemCustomizations.map((group: any) => (
+                  <optgroup key={group.id} label={group.name}>
+                    {group.items.map((opt: any) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.name} {opt.price > 0 ? `(+${currencySymbol}${opt.price})` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+              <p className="text-[11px] text-stone-500">
+                Leave as &quot;Base menu item&quot; if this recipe applies to the entire dish, or select a specific modifier/option if it applies only when that customization is selected.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <label className="block font-semibold text-[#4d4541]">
               Portion deducted per order <span className="text-rose-500">*</span>
             </label>
-            <input
-              type="number"
-              defaultValue="1"
-              className="w-32 bg-[#f4ece8]/50 px-3.5 py-2.5 rounded-lg border border-[#d0c4be] text-xs text-[#1e1b19]"
-            />
+            <div className="flex items-center space-x-2">
+              <input
+                type="number"
+                min="0.01"
+                step="any"
+                required
+                value={portionMultiplier}
+                onChange={(e) =>
+                  setPortionMultiplier(
+                    e.target.value ? Number(e.target.value) : ("" as any)
+                  )
+                }
+                className="w-32 bg-[#f4ece8]/50 px-3.5 py-2.5 rounded-lg border border-[#d0c4be] text-xs text-[#1e1b19] font-mono"
+              />
+              <span className="text-stone-500 text-xs font-medium">x portion</span>
+            </div>
+            <p className="text-[11px] text-stone-500">
+              e.g. 1.0 for standard serving, 2.0 for large/double serving, 0.5 for half serving.
+            </p>
           </div>
 
           <div className="pt-4 flex items-center justify-end space-x-3 border-t border-[#e9e1dd]">
             <button
               type="button"
-              onClick={() => setActiveDrawer(null)}
+              onClick={() => {
+                setActiveDrawer(null);
+                setSelectedTargetItemId("");
+                setSelectedTargetCustId("");
+              }}
               className="px-4 py-2 rounded-full font-semibold text-[#645d58] hover:bg-[#f4ece8] transition cursor-pointer"
             >
               Cancel
             </button>
             <button
-              type="button"
-              onClick={() => {
-                setActiveDrawer(null);
-                showToast("Menu item assigned successfully!");
-              }}
-              className="px-5 py-2 rounded-full font-semibold bg-[#000000] text-white hover:bg-[#292524] transition shadow-xs cursor-pointer"
+              type="submit"
+              disabled={isAssigning || !selectedTargetItemId}
+              className="px-5 py-2 rounded-full font-semibold bg-[#000000] text-white hover:bg-[#292524] transition shadow-xs cursor-pointer disabled:bg-stone-300"
               style={{ color: "#ffffff" }}
             >
               <span className="text-white" style={{ color: "#ffffff" }}>
-                Link menu item
+                {isAssigning ? "Linking..." : "Link to recipe"}
               </span>
             </button>
           </div>
-        </div>
+        </form>
       </aside>
     </div>
   );
@@ -1254,6 +2422,10 @@ export function ItemRecipesView({
 function MasterRecipeRowItem({
   dish,
   yieldInfo,
+  country,
+  timezone,
+  isSelected,
+  onToggleSelect,
   isOpenMenu,
   onToggleMenu,
   onOpenDetail,
@@ -1271,6 +2443,10 @@ function MasterRecipeRowItem({
     createdAt?: number;
   };
   yieldInfo?: { quantity: number; unit: string };
+  country?: string;
+  timezone?: string;
+  isSelected: boolean;
+  onToggleSelect: () => void;
   isOpenMenu: boolean;
   onToggleMenu: (e: React.MouseEvent) => void;
   onOpenDetail: () => void;
@@ -1292,49 +2468,64 @@ function MasterRecipeRowItem({
   const recipeList = recipes || [];
 
   const createdDateStr = dish.createdAt
-    ? new Date(dish.createdAt).toISOString().slice(0, 19).replace("T", " ")
-    : "2026-09-24 16:41:31";
+    ? formatStoreDateTime(dish.createdAt, country, timezone)
+    : "—";
 
-  const formattedYield = yieldInfo
-    ? `${yieldInfo.quantity} ${yieldInfo.unit}`
-    : recipeList.length > 0
-      ? `${recipeList.reduce((a, b) => a + (b.quantity || 0), 0)} ${recipeList[0].unit || "kg"}`
-      : "5 kilogram (kg)";
+  const dbYield = recipeList.find(
+    (r) => r.yield !== undefined && r.yield !== null && Number(r.yield) > 0,
+  );
+
+  const rawUnit = dbYield?.yieldUnit || yieldInfo?.unit || "Kilogram (kg)";
+  const displayUnit =
+    !rawUnit || rawUnit.toLowerCase() === "portion" ? "Kilogram (kg)" : rawUnit;
+  const displayQty = dbYield?.yield ?? yieldInfo?.quantity ?? 1;
+  const formattedYield = `${displayQty} ${displayUnit}`;
 
   return (
-    <tr className="hover:bg-[#fafaf9] transition-colors group">
-      <td className="py-4 px-5 w-12 text-center">
+    <tr
+      className={`hover:bg-[#fafaf9] transition-colors group ${
+        isSelected ? "bg-stone-50/70" : ""
+      }`}
+    >
+      <td
+        className="py-3.5 px-5 w-12 text-center"
+        onClick={(e) => e.stopPropagation()}
+      >
         <input
           type="checkbox"
-          className="rounded accent-[#0c0a09] w-4 h-4 cursor-pointer"
+          checked={isSelected}
+          onChange={onToggleSelect}
+          className="rounded accent-stone-900 w-4 h-4 cursor-pointer"
         />
       </td>
 
-      <td className="py-4 px-5 font-medium text-[#1c1917] w-[35%]">
+      <td className="py-3.5 px-5 font-semibold text-stone-900 w-[35%]">
         <button
           type="button"
           onClick={onOpenDetail}
-          className="text-left font-medium text-[#1c1917] hover:underline focus:outline-none cursor-pointer"
+          className="text-left font-semibold text-stone-900 hover:underline focus:outline-none cursor-pointer"
         >
           {dish.name}
         </button>
       </td>
 
-      <td className="py-4 px-5 text-[#1c1917] font-medium w-[20%]">
+      <td className="py-3.5 px-5 text-stone-700 font-medium w-[20%]">
         {formattedYield}
       </td>
 
-      <td className="py-4 px-5 text-[#78716c] tabular-nums font-mono w-[20%]">
+      <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap w-[20%]">
         {createdDateStr}
       </td>
 
-      <td className="py-4 px-5 text-[#78716c] w-[15%]">43 minutes ago</td>
+      <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap w-[15%]">
+        {createdDateStr}
+      </td>
 
-      <td className="py-4 px-5 text-right w-16 relative">
+      <td className="py-3.5 px-5 text-right w-16 relative">
         <button
           type="button"
           onClick={onToggleMenu}
-          className="p-1 rounded-full hover:bg-[#f5f5f4] text-[#a8a29e] hover:text-[#1c1917] transition cursor-pointer"
+          className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-800 transition cursor-pointer"
         >
           <span className="material-symbols-outlined text-[18px]">
             more_vert
@@ -1342,46 +2533,46 @@ function MasterRecipeRowItem({
         </button>
 
         {isOpenMenu && (
-          <div className="absolute right-2 top-full mt-1 w-52 bg-white rounded-xl shadow-2xl border border-[#e7e5e4] z-50 py-1 flex flex-col text-left text-xs font-normal">
+          <div className="absolute right-2 top-full mt-1 w-52 bg-white rounded-lg shadow-lg border border-[#e7e5e4] z-50 py-1 flex flex-col text-left text-xs font-normal">
             <button
               type="button"
               onClick={onOpenDetail}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition font-medium"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition font-medium cursor-pointer"
             >
               Edit recipe items
             </button>
             <button
               type="button"
               onClick={onEditRecipeName}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               Edit recipe name
             </button>
             <button
               type="button"
               onClick={onOpenDetail}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               View item recipe
             </button>
             <button
               type="button"
               onClick={onAssignMenuItem}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               Assign menu item
             </button>
             <button
               type="button"
               onClick={onViewDeadStock}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               View dead stock log
             </button>
             <button
               type="button"
               onClick={onDuplicateRecipe}
-              className="px-4 py-2 hover:bg-[#fafaf9] text-[#1c1917] text-left transition"
+              className="px-4 py-2 hover:bg-stone-50 text-stone-800 text-left transition cursor-pointer"
             >
               Duplicate recipe
             </button>
@@ -1402,27 +2593,32 @@ function MasterRecipeRowItem({
 // Recipe Detail Ingredients Breakdown Card Renderer
 function RecipeIngredientsBreakdownCard({
   dish,
+  recipeList = [],
   inventoryItems,
   currencySymbol = "₹",
+  selectedIngredientIds,
+  onToggleSelectAll,
+  onToggleIngredient,
   onOpenAddIngredient,
+  onEditIngredient,
   onDeleteIngredient,
 }: {
   dish: { _id: Id<"items">; name: string; price: number };
+  recipeList?: any[];
   inventoryItems: any[];
   currencySymbol?: string;
+  selectedIngredientIds: Set<string>;
+  onToggleSelectAll: () => void;
+  onToggleIngredient: (id: string) => void;
   onOpenAddIngredient: () => void;
+  onEditIngredient: (item: any) => void;
   onDeleteIngredient: (recipeId: Id<"recipes">, ingName: string) => void;
 }) {
-  const isValidConvexId =
-    typeof dish._id === "string" &&
-    dish._id.length > 10 &&
-    !dish._id.includes("_");
-
-  const recipes = useQuery(
-    api.inventory.getItemRecipe,
-    isValidConvexId ? { itemId: dish._id as Id<"items"> } : "skip",
-  );
-  const recipeList = recipes || [];
+  const isAllSelected =
+    recipeList.length > 0 && selectedIngredientIds.size === recipeList.length;
+  const isSomeSelected =
+    selectedIngredientIds.size > 0 &&
+    selectedIngredientIds.size < recipeList.length;
 
   if (recipeList.length === 0) {
     return (
@@ -1432,7 +2628,7 @@ function RecipeIngredientsBreakdownCard({
             menu_book
           </span>
         </div>
-        <h2 className="font-serif text-2xl text-[#1e1b19]">
+        <h2 className="text-xl font-bold text-stone-900">
           No ingredients configured yet
         </h2>
         <p className="text-xs text-[#645d58] max-w-md mt-1 mb-6">
@@ -1472,13 +2668,18 @@ function RecipeIngredientsBreakdownCard({
               <th className="py-3.5 px-6 w-12 text-center">
                 <input
                   type="checkbox"
+                  ref={(el) => {
+                    if (el) el.indeterminate = isSomeSelected;
+                  }}
+                  checked={isAllSelected}
+                  onChange={onToggleSelectAll}
                   className="rounded accent-[#000000] w-4 h-4 cursor-pointer"
                 />
               </th>
               <th className="py-3.5 px-6 font-semibold w-[40%]">Raw item / Recipe</th>
               <th className="py-3.5 px-6 font-semibold w-[25%]">Quantity</th>
-              <th className="py-3.5 px-6 font-semibold w-[25%]">Unit</th>
-              <th className="py-3.5 px-6 text-right font-semibold w-16">Delete</th>
+              <th className="py-3.5 px-6 font-semibold w-[20%]">Unit</th>
+              <th className="py-3.5 px-6 text-right font-semibold w-24">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#e9e1dd]/60 font-medium">
@@ -1488,15 +2689,20 @@ function RecipeIngredientsBreakdownCard({
               );
               const ingName =
                 r.ingredientName || invItem?.name || "Raw Ingredient";
+              const isChecked = selectedIngredientIds.has(r._id);
 
               return (
                 <tr
                   key={r._id}
-                  className="hover:bg-[#f4ece8]/30 transition-colors"
+                  className={`transition-colors ${
+                    isChecked ? "bg-stone-50" : "hover:bg-[#f4ece8]/30"
+                  }`}
                 >
                   <td className="py-3 px-5 text-center">
                     <input
                       type="checkbox"
+                      checked={isChecked}
+                      onChange={() => onToggleIngredient(r._id)}
                       className="rounded accent-[#000000] w-4 h-4 cursor-pointer"
                     />
                   </td>
@@ -1514,16 +2720,28 @@ function RecipeIngredientsBreakdownCard({
                   </td>
 
                   <td className="py-3 px-5 text-right">
-                    <button
-                      type="button"
-                      onClick={() => onDeleteIngredient(r._id, ingName)}
-                      className="p-1 rounded-full hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition cursor-pointer"
-                      title="Delete ingredient"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        delete
-                      </span>
-                    </button>
+                    <div className="flex items-center justify-end space-x-1">
+                      <button
+                        type="button"
+                        onClick={() => onEditIngredient(r)}
+                        className="p-1.5 rounded-full hover:bg-stone-200/60 text-stone-600 hover:text-stone-900 transition cursor-pointer"
+                        title="Edit ingredient"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">
+                          edit
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteIngredient(r._id, ingName)}
+                        className="p-1.5 rounded-full hover:bg-rose-50 text-rose-500 hover:text-rose-700 transition cursor-pointer"
+                        title="Delete ingredient"
+                      >
+                        <span className="material-symbols-outlined text-[17px]">
+                          delete
+                        </span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

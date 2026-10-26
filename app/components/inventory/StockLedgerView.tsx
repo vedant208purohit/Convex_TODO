@@ -28,12 +28,29 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
   const inventoryItems = useQuery(api.inventory.listInventoryItems, { organizationId });
 
   // Real existing backend queries & mutations
-  const rawLedgerRecords: any[] = [];
+  const rawLedgerRecords = useQuery(api.inventory.listStockLedger, { organizationId });
 
   // Filters state (frontend-only)
   const [searchQuery, setSearchQuery] = useState("");
   const [stockTypeFilter, setStockTypeFilter] = useState<"all" | "credit" | "debit">("all");
   const [sourceTypeFilter, setSourceTypeFilter] = useState<string>("all");
+
+  // Column Sorting state
+  const [sortField, setSortField] = useState<
+    "createdAt" | "itemName" | "movement" | "quantity" | "triggerSource" | null
+  >(null);
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+
+  const handleSort = (
+    field: "createdAt" | "itemName" | "movement" | "quantity" | "triggerSource"
+  ) => {
+    if (sortField === field) {
+      setSortOrder(sortOrder === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
 
   // Map inventory items by ID for quick lookup
   const itemMap = useMemo(() => {
@@ -71,7 +88,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
 
   // Frontend filtering
   const filteredEntries = useMemo(() => {
-    return ledgerEntries.filter((entry) => {
+    let list = ledgerEntries.filter((entry) => {
       // Stock type filter
       if (stockTypeFilter !== "all" && entry.stockType !== stockTypeFilter) {
         return false;
@@ -95,7 +112,35 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
 
       return true;
     });
-  }, [ledgerEntries, stockTypeFilter, sourceTypeFilter, searchQuery]);
+
+    if (sortField) {
+      list = [...list].sort((a, b) => {
+        let valA: string | number = "";
+        let valB: string | number = "";
+        if (sortField === "createdAt") {
+          valA = a.createdAt;
+          valB = b.createdAt;
+        } else if (sortField === "itemName") {
+          valA = (a.itemName || "").toLowerCase();
+          valB = (b.itemName || "").toLowerCase();
+        } else if (sortField === "movement") {
+          valA = a.stockType || "";
+          valB = b.stockType || "";
+        } else if (sortField === "quantity") {
+          valA = a.quantity ?? 0;
+          valB = b.quantity ?? 0;
+        } else if (sortField === "triggerSource") {
+          valA = (a.sourceType || "").toLowerCase();
+          valB = (b.sourceType || "").toLowerCase();
+        }
+        if (valA < valB) return sortOrder === "asc" ? -1 : 1;
+        if (valA > valB) return sortOrder === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return list;
+  }, [ledgerEntries, stockTypeFilter, sourceTypeFilter, searchQuery, sortField, sortOrder]);
 
   // Summary Metrics
   const metrics = useMemo(() => {
@@ -124,7 +169,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-[#e7e5e4]">
         <div>
-          <h1 className="font-serif text-3xl font-medium text-[#0c0a09] tracking-tight">Stock Movement Ledger</h1>
+          <h1 className="text-2xl font-bold text-stone-900 tracking-tight">Stock Movement Ledger</h1>
           <p className="text-xs text-[#78716c] mt-0.5">
             Immutable chronological audit log of all raw material credits, restocks, sales depletions, and spoilage.
           </p>
@@ -180,20 +225,20 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Total Audit Entries</span>
-          <p className="font-serif text-2xl font-semibold text-[#0c0a09] mt-1">{metrics.total}</p>
+          <p className="text-2xl font-bold text-stone-900 mt-1">{metrics.total}</p>
         </div>
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Inbound Restocks (Credits)</span>
-          <p className="font-serif text-2xl font-semibold text-emerald-700 mt-1">+{metrics.credits}</p>
+          <p className="text-2xl font-bold text-emerald-700 mt-1">+{metrics.credits}</p>
         </div>
         <div className="bg-white border border-[#e7e5e4] rounded-xl p-4 shadow-xs">
           <span className="text-[11px] font-medium text-[#78716c] uppercase tracking-wider">Outbound Depletions (Debits)</span>
-          <p className="font-serif text-2xl font-semibold text-rose-700 mt-1">-{metrics.debits}</p>
+          <p className="text-2xl font-bold text-rose-700 mt-1">-{metrics.debits}</p>
         </div>
       </div>
 
       {/* Main Table / Empty State */}
-      <div className="mt-6 flex-1 flex flex-col overflow-hidden">
+      <div className="mt-6 flex-1 flex flex-col">
         {filteredEntries.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-[#e7e5e4] rounded-2xl p-12 bg-white/50 text-center my-2">
             <div className="w-14 h-14 rounded-full bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#78716c] mb-4">
@@ -206,7 +251,7 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
                 />
               </svg>
             </div>
-            <h3 className="font-serif text-2xl font-medium text-[#0c0a09]">No stock movement records found</h3>
+            <h3 className="text-xl font-bold text-stone-900">No stock movement records found</h3>
             <p className="text-xs text-[#78716c] max-w-sm mt-1">
               Stock movement audit entries will automatically appear here when purchase orders are settled, POS orders are completed, or dead stock is logged.
             </p>
@@ -216,13 +261,143 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
             <div className="overflow-x-auto overflow-y-auto flex-1">
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9]/80 text-[11px] uppercase tracking-wider text-[#78716c] font-medium sticky top-0 bg-white z-10">
-                    <th className="py-3.5 px-5 font-normal">Timestamp</th>
-                    <th className="py-3.5 px-5 font-normal">Ingredient Item</th>
-                    <th className="py-3.5 px-5 font-normal">Movement Type</th>
-                    <th className="py-3.5 px-5 font-normal">Quantity & Unit</th>
-                    <th className="py-3.5 px-5 font-normal">Trigger Source</th>
-                    <th className="py-3.5 px-5 text-right font-normal">Audit Reference</th>
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[11px] uppercase tracking-wider text-[#78716c] font-semibold sticky top-0 z-20 select-none">
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("createdAt")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Timestamp</span>
+                        {sortField === "createdAt" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("itemName")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Ingredient Item</span>
+                        {sortField === "itemName" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("movement")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Movement Type</span>
+                        {sortField === "movement" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("quantity")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Quantity & Unit</span>
+                        {sortField === "quantity" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="py-3 px-5 cursor-pointer hover:text-stone-900 select-none"
+                      onClick={() => handleSort("triggerSource")}
+                    >
+                      <div className="flex items-center space-x-1.5">
+                        <span>Trigger Source</span>
+                        {sortField === "triggerSource" ? (
+                          <span className="text-stone-900 font-bold">
+                            {sortOrder === "asc" ? "↑" : "↓"}
+                          </span>
+                        ) : (
+                          <svg
+                            className="w-3 h-3 text-stone-300"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth="2"
+                              d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"
+                            />
+                          </svg>
+                        )}
+                      </div>
+                    </th>
+                    <th className="py-3 px-5 text-right font-semibold select-none">Audit Reference</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#e7e5e4]/70 text-xs">
@@ -230,8 +405,8 @@ export function StockLedgerView({ organizationId }: { organizationId: Id<"organi
                     const isCredit = entry.stockType === "credit";
                     return (
                       <tr key={entry._id} className="hover:bg-[#fafaf9] transition-colors">
-                        <td className="py-4 px-5 text-[#57534e] whitespace-nowrap">
-                          {formatStoreDateTime(entry.createdAt, activeOrg?.organizationTimeZone, activeOrg?.country)}
+                        <td className="py-3.5 px-5 text-stone-900 font-medium whitespace-nowrap">
+                          {formatStoreDateTime(entry.createdAt, activeOrg?.country, activeOrg?.organizationTimeZone)}
                         </td>
                         <td className="py-4 px-5 font-medium text-[#0c0a09]">{entry.itemName}</td>
                         <td className="py-4 px-5">

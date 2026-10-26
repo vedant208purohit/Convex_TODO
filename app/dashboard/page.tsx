@@ -2,6 +2,7 @@
 
 import { PosShell } from "../components/PosShell";
 import { DigitalMenuCatalog } from "../components/DigitalMenuCatalog";
+import { ComingSoonOverlay } from "../components/ComingSoonOverlay";
 
 const stats = [
   { title: "Total Sales", value: "$4,285.50", delta: "+12.5% from yesterday", icon: "▣" },
@@ -19,7 +20,11 @@ const sourceData = [
 export default function DashboardPage() {
   return (
     <PosShell title="Management Portal" subtitle="Analytics">
-      <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
+      <ComingSoonOverlay
+        title="Dashboard Analytics"
+        description="Executive sales analytics, live revenue metrics, and channel breakdowns will be available here soon."
+      >
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 lg:p-8">
         <div className="space-y-8">
           <section className="space-y-3">
             <h1 className="text-[21px] font-medium">Today’s Overview</h1>
@@ -102,6 +107,7 @@ export default function DashboardPage() {
           </section>
         </div>
       </div>
+    </ComingSoonOverlay>
     </PosShell>
   );
 }

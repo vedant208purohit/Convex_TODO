@@ -8,6 +8,8 @@ import { Id } from "@/convex/_generated/dataModel";
 import {
   COUNTRY_DIAL_OPTIONS,
   formatCurrencyAmount,
+  getCurrencyForCountry,
+  getPhoneCodeForCountry,
 } from "@/lib/constants/countries";
 
 interface EditOrderDrawerProps {
@@ -24,14 +26,17 @@ export default function EditOrderDrawer({
   onSuccess,
 }: EditOrderDrawerProps) {
   const organizations = useQuery(api.organizations.list);
-  const currencySymbol = organizations?.[0]?.defaultCurrencySymbol || "$";
+  const activeOrg = organizations?.[0];
+  const countryKey = activeOrg?.country || "US";
+  const currencySymbol = activeOrg?.defaultCurrencySymbol || getCurrencyForCountry(countryKey)?.symbol || "$";
+  const storeDialCode = (activeOrg as any)?.phoneCountryCode || getPhoneCodeForCountry(countryKey) || "+1";
   const updateOrderCustomer = useMutation(api.orders.updateOrderCustomer);
   const deleteMultipleOrderItems = useMutation(api.orders.deleteMultipleOrderItems);
 
   // Form State
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [countryCode, setCountryCode] = useState("+91");
+  const [countryCode, setCountryCode] = useState(storeDialCode);
   const [phone, setPhone] = useState("");
   const [phoneError, setPhoneError] = useState<string | null>(null);
 
@@ -53,22 +58,31 @@ export default function EditOrderDrawer({
         setLastName("");
       }
 
+      const defaultDial = (activeOrg as any)?.phoneCountryCode || getPhoneCodeForCountry(countryKey) || "+1";
       const rawPhone = (order.customerPhone || "").trim();
-      if (rawPhone.startsWith("+91")) {
-        setCountryCode("+91");
-        setPhone(rawPhone.replace(/^\+91\s*/, ""));
-      } else if (rawPhone.startsWith("+1")) {
-        setCountryCode("+1");
-        setPhone(rawPhone.replace(/^\+1\s*/, ""));
-      } else {
-        setCountryCode("+91");
-        setPhone(rawPhone);
+      let matchedDial = defaultDial;
+      let matchedDigits = rawPhone;
+
+      if (rawPhone) {
+        const sortedOptions = [...COUNTRY_DIAL_OPTIONS].sort(
+          (a, b) => b.code.length - a.code.length
+        );
+        for (const opt of sortedOptions) {
+          if (rawPhone.startsWith(opt.code)) {
+            matchedDial = opt.code;
+            matchedDigits = rawPhone.slice(opt.code.length).trim();
+            break;
+          }
+        }
       }
+
+      setCountryCode(matchedDial);
+      setPhone(matchedDigits);
 
       setPhoneError(null);
       setSelectedItemIds(new Set());
     }
-  }, [order, isOpen]);
+  }, [order, isOpen, activeOrg]);
 
   if (!isOpen || !order) return null;
 
@@ -199,24 +213,28 @@ export default function EditOrderDrawer({
                 </div>
               </div>
 
-              {/* Phone Number with Country Flag Selector */}
+              {/* Phone Number with Country Dial Selector */}
               <div>
                 <label className="block text-xs font-semibold text-[#44403c] mb-1">Phone Number</label>
                 <div className="flex rounded-lg border border-[#d6d3d1] focus-within:ring-2 focus-within:ring-[#78716c] focus-within:border-transparent overflow-hidden bg-white">
-                  {/* Country Flag Dropdown */}
-                  <div className="flex items-center gap-1.5 px-3 bg-[#f5f5f4] border-r border-[#d6d3d1] text-xs font-medium text-[#44403c]">
-                    <span className="text-base leading-none">🇮🇳</span>
+                  {/* Country Dial Dropdown */}
+                  <div className="relative flex items-center bg-[#f5f5f4] border-r border-[#d6d3d1]">
                     <select
                       value={countryCode}
                       onChange={(e) => setCountryCode(e.target.value)}
-                      className="bg-transparent border-none text-xs font-semibold text-[#1c1917] focus:outline-none cursor-pointer pr-1"
+                      className="appearance-none bg-transparent h-full pl-3 pr-7 py-2 text-xs font-semibold text-[#1c1917] focus:outline-none cursor-pointer flex items-center"
                     >
                       {COUNTRY_DIAL_OPTIONS.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
+                        <option key={opt.code} value={opt.code} className="text-[#1c1917]">
                           {opt.iso} {opt.code}
                         </option>
                       ))}
                     </select>
+                    <div className="pointer-events-none absolute right-2 flex items-center text-stone-500">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+                      </svg>
+                    </div>
                   </div>
                   {/* Phone Input */}
                   <input
@@ -226,7 +244,7 @@ export default function EditOrderDrawer({
                       setPhone(e.target.value);
                       if (phoneError) setPhoneError(null);
                     }}
-                    placeholder="98989 89898"
+                    placeholder="Phone number"
                     className="flex-1 px-3 py-2 text-sm text-[#0c0a09] bg-transparent focus:outline-none"
                   />
                 </div>

@@ -1,7 +1,9 @@
 "use client";
 
-import { ReactNode, useCallback, useEffect, Suspense } from "react";
+import { ReactNode, useCallback, useEffect, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { PosShell } from "../components/PosShell";
 import { OrganizationSettings } from "../components/OrganizationSettings";
 import { OrderProcessesView } from "../components/order-processes/OrderProcessesView";
@@ -12,9 +14,12 @@ import { OrganizationPaymentModes } from "../components/OrganizationPaymentModes
 import { OrganizationTablesSettings } from "../components/OrganizationTablesSettings";
 import { OrganizationQueueSettings } from "../components/OrganizationQueueSettings";
 import { OrganizationDigitalStore } from "../components/OrganizationDigitalStore";
+import { OrganizationOnlineStore } from "../components/OrganizationOnlineStore";
 import { OrganizationBranding } from "../components/OrganizationBranding";
 import { OrganizationPrinters } from "../components/OrganizationPrinters";
+import { OrganizationLiveScreens } from "../components/OrganizationLiveScreens";
 import { OrganizationQrManagement } from "../components/OrganizationQrManagement";
+import { OrganizationFrontDisplaySettings } from "../components/OrganizationFrontDisplaySettings";
 
 // ==========================================
 // PIXEL-PERFECT SETTINGS SVG ICONS
@@ -259,19 +264,59 @@ function BrandingIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function OnlineStoreIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" />
+      <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+      <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" />
+      <path d="M2 7h20" />
+      <path d="M22 7a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2" />
+    </svg>
+  );
+}
+
+function FrontDisplayIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+      <line x1="12" x2="12" y1="17" y2="21" />
+    </svg>
+  );
+}
+
 type SettingsTab =
   | "organization"
-  | "printers"
   | "features"
   | "staff"
-  | "waiters"
+  // | "waiters"
   | "orderProcesses"
   | "payment"
   | "tables"
+  | "printers"
   | "liveScreens"
-  | "queue"
+  | "onlineStore"
   | "digitalStore"
-  | "branding";
+  | "frontDisplay"
+  | "branding"
+  | "queue";
 
 interface SettingsNavOption {
   id: SettingsTab;
@@ -286,22 +331,20 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <OrganizationIcon className="w-4 h-4" />,
   },
   {
-    id: "queue",
-    label: "Queue & Waitlist",
-    icon: <QueueIcon className="w-4 h-4" />,
-  },
-  {
-    id: "printers",
-    label: "Printers",
-    icon: <PrinterIcon className="w-4 h-4" />,
-  },
-  {
     id: "features",
     label: "Features",
     icon: <FeaturesIcon className="w-4 h-4" />,
   },
-  { id: "staff", label: "Employees", icon: <StaffIcon className="w-4 h-4" /> },
-  { id: "waiters", label: "Waiters", icon: <WaiterIcon className="w-4 h-4" /> },
+  {
+    id: "staff",
+    label: "Employees",
+    icon: <StaffIcon className="w-4 h-4" />,
+  },
+  // {
+  //   id: "waiters",
+  //   label: "Waiters",
+  //   icon: <WaiterIcon className="w-4 h-4" />,
+  // },
   {
     id: "orderProcesses",
     label: "Order Status",
@@ -318,9 +361,19 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <TablesIcon className="w-4 h-4" />,
   },
   {
+    id: "printers",
+    label: "Printers",
+    icon: <PrinterIcon className="w-4 h-4" />,
+  },
+  {
     id: "liveScreens",
     label: "Live Screens",
     icon: <LiveScreensIcon className="w-4 h-4" />,
+  },
+  {
+    id: "onlineStore",
+    label: "Online Store",
+    icon: <OnlineStoreIcon className="w-4 h-4" />,
   },
   {
     id: "digitalStore",
@@ -328,21 +381,40 @@ const SETTINGS_TABS: SettingsNavOption[] = [
     icon: <DigitalStoreIcon className="w-4 h-4" />,
   },
   {
+    id: "frontDisplay",
+    label: "Front Display",
+    icon: <FrontDisplayIcon className="w-4 h-4" />,
+  },
+  {
     id: "branding",
     label: "Branding",
     icon: <BrandingIcon className="w-4 h-4" />,
   },
+  {
+    id: "queue",
+    label: "Queue & Waitlist",
+    icon: <QueueIcon className="w-4 h-4" />,
+  },
 ];
 
 function SettingsContent() {
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const isDineInActive = activeOrg?.isDineIn !== false;
   const router = useRouter();
   const searchParams = useSearchParams();
 
   // Read active tab from URL param, default to "organization"
   const rawTab = searchParams.get("tab");
   const validTabIds = SETTINGS_TABS.map((t) => t.id as string);
+  const normalizedTab =
+    rawTab === "orderStatus" || rawTab === "order-processes"
+      ? "orderProcesses"
+      : rawTab;
   const activeTab: SettingsTab =
-    rawTab && validTabIds.includes(rawTab) ? (rawTab as SettingsTab) : "organization";
+    normalizedTab && validTabIds.includes(normalizedTab)
+      ? (normalizedTab as SettingsTab)
+      : "organization";
 
   // Update URL when tab changes
   const setActiveTab = useCallback(
@@ -353,6 +425,27 @@ function SettingsContent() {
     },
     [router, searchParams],
   );
+
+  const [isSettingsCollapsed, setIsSettingsCollapsed] = useState<boolean>(
+    () => {
+      if (typeof window !== "undefined") {
+        return (
+          localStorage.getItem("pos_settings_sidebar_collapsed") === "true"
+        );
+      }
+      return false;
+    },
+  );
+
+  const toggleSettingsSidebar = () => {
+    setIsSettingsCollapsed((prev: boolean) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pos_settings_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
 
   // If user navigates directly to ?tab=qrCodes, send them to the dedicated full-width /qr-codes page
   useEffect(() => {
@@ -381,31 +474,110 @@ function SettingsContent() {
         {/* Settings Two-Panel Layout */}
         <div className="flex-1 flex flex-col lg:flex-row w-full p-5 lg:p-7 gap-5 min-h-0 overflow-hidden">
           {/* Left Panel: Settings Navigation */}
-          <div className="w-full lg:w-48 xl:w-56 shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full">
-            <div className="p-3.5 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0">
-              <h2 className="font-sans text-[15px] font-semibold text-[#141010]">
-                Settings Menu
-              </h2>
+          <div
+            className={`shrink-0 flex flex-col bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] overflow-hidden h-full transition-all duration-300 ease-in-out ${isSettingsCollapsed ? "w-full lg:w-20" : "w-full lg:w-48 xl:w-56"
+              }`}
+          >
+            <div className="p-3.5 border-b border-[#e7e5e4] bg-[#fdf8f7] shrink-0 flex items-center justify-between">
+              {!isSettingsCollapsed && (
+                <h2 className="font-sans text-[15px] font-semibold text-[#141010]">
+                  Settings Menu
+                </h2>
+              )}
+              <button
+                type="button"
+                onClick={toggleSettingsSidebar}
+                className={`p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${isSettingsCollapsed ? "mx-auto" : ""
+                  }`}
+                title={
+                  isSettingsCollapsed
+                    ? "Expand Settings Menu"
+                    : "Collapse Settings Menu"
+                }
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform duration-200 ${isSettingsCollapsed ? "rotate-180" : ""
+                    }`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                  />
+                </svg>
+              </button>
             </div>
 
             <nav className="flex-1 py-1.5 divide-y divide-[#e7e5e4]/50 overflow-y-auto">
               {SETTINGS_TABS.map((tab) => {
                 const isSelected = activeTab === tab.id;
+                if (isSettingsCollapsed) {
+                  const isTabDisabled = tab.id === "tables" && !isDineInActive;
+                  return (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => {
+                        if (tab.id === "liveScreens") {
+                          router.push("/live-order-screen");
+                          return;
+                        }
+                        if (!isTabDisabled) setActiveTab(tab.id);
+                      }}
+                      disabled={isTabDisabled}
+                      title={isTabDisabled ? "Dine-in is disabled in Settings" : tab.label}
+                      className={`w-12 h-12 mx-auto my-1 flex items-center justify-center rounded-xl transition-all select-none ${isTabDisabled
+                        ? "opacity-40 cursor-not-allowed text-[#8a7e75]"
+                        : isSelected
+                          ? "bg-[#0c0a09] text-white shadow-xs cursor-pointer"
+                          : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] cursor-pointer"
+                        }`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center shrink-0">
+                        {tab.icon}
+                      </span>
+                    </button>
+                  );
+                }
+
+                const isComingSoon = tab.id === "printers";
+                const isTabDisabled = tab.id === "tables" && !isDineInActive;
                 return (
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors cursor-pointer select-none whitespace-nowrap ${
-                      isSelected
-                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09]"
-                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent"
-                    }`}
+                    onClick={() => {
+                      if (tab.id === "liveScreens") {
+                        router.push("/live-order-screen");
+                        return;
+                      }
+                      if (!isTabDisabled) setActiveTab(tab.id);
+                    }}
+                    disabled={isTabDisabled}
+                    title={isTabDisabled ? "Dine-in is disabled in Settings" : undefined}
+                    className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left text-[13.5px] lg:text-[14px] font-medium transition-colors select-none whitespace-nowrap ${isTabDisabled
+                      ? "opacity-40 cursor-not-allowed text-[#8a7e75] border-l-4 border-l-transparent"
+                      : isSelected
+                        ? "bg-[#fafafa] text-[#141010] font-bold border-l-4 border-l-[#0c0a09] cursor-pointer"
+                        : "text-[#5e5e5e] hover:bg-white hover:text-[#141010] border-l-4 border-l-transparent cursor-pointer"
+                      }`}
                   >
-                    <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
-                      {tab.icon}
-                    </span>
-                    <span className="truncate">{tab.label}</span>
+                    <div className="flex items-center gap-2.5 min-w-0 truncate">
+                      <span className="w-4 flex items-center justify-center text-[#5e5e5e] shrink-0">
+                        {tab.icon}
+                      </span>
+                      <span className="truncate">{tab.label}</span>
+                    </div>
+                    {isComingSoon && (
+                      <span className="ml-1 inline-flex items-center gap-1 rounded-full bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-semibold text-amber-700 border border-amber-200/80 shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-amber-500 animate-pulse" />
+                        Coming Soon
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -413,29 +585,54 @@ function SettingsContent() {
           </div>
 
           {/* Right Panel: Settings Content Area */}
-          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-4 lg:p-6 flex flex-col h-full min-h-0 overflow-y-auto">
+          <div className="flex-1 min-w-0 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] p-5 flex flex-col h-full min-h-0 overflow-hidden">
             {activeTab === "organization" && <OrganizationSettings />}
-            {activeTab === "queue" && <OrganizationQueueSettings />}
-            {/* {activeTab === "printers" && <OrganizationPrinters />} */}
             {activeTab === "features" && <OrganizationFeatures />}
             {activeTab === "staff" && <OrganizationEmployees />}
-            {activeTab === "waiters" && <OrganizationWaiters />}
+            {/* {activeTab === "waiters" && <OrganizationWaiters />} */}
             {activeTab === "orderProcesses" && <OrderProcessesView />}
             {activeTab === "payment" && <OrganizationPaymentModes />}
-            {activeTab === "tables" && <OrganizationTablesSettings />}
+            {activeTab === "tables" && (
+              isDineInActive ? (
+                <OrganizationTablesSettings />
+              ) : (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white rounded-xl border border-stone-200">
+                  <div className="w-12 h-12 rounded-full bg-stone-100 flex items-center justify-center text-2xl mb-3">🍽️</div>
+                  <h3 className="font-serif text-lg font-medium text-stone-900">Tables &amp; Layouts Disabled</h3>
+                  <p className="text-xs text-stone-500 max-w-sm mt-1 mb-4">
+                    Dine-In service mode is currently turned off in Settings &gt; Features &gt; Service Modes.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("features")}
+                    className="px-4 py-2 bg-black text-white text-xs font-semibold rounded-lg shadow-sm hover:bg-stone-800 transition cursor-pointer"
+                  >
+                    Go to Service Modes
+                  </button>
+                </div>
+              )
+            )}
+            {activeTab === "printers" && <OrganizationPrinters />}
+            {activeTab === "liveScreens" && <OrganizationLiveScreens />}
+            {activeTab === "onlineStore" && <OrganizationOnlineStore />}
             {activeTab === "digitalStore" && <OrganizationDigitalStore />}
+            {activeTab === "frontDisplay" && <OrganizationFrontDisplaySettings />}
             {activeTab === "branding" && <OrganizationBranding />}
+            {activeTab === "queue" && <OrganizationQueueSettings />}
             {activeTab !== "organization" &&
-              activeTab !== "queue" &&
-              // activeTab !== "printers" &&
               activeTab !== "features" &&
-              activeTab !== "orderProcesses" &&
               activeTab !== "staff" &&
-              activeTab !== "waiters" &&
+              // activeTab !== "waiters" &&
+              activeTab !== "orderProcesses" &&
               activeTab !== "payment" &&
               activeTab !== "tables" &&
+              activeTab !== "printers" &&
+              activeTab !== "liveScreens" &&
+              activeTab !== "onlineStore" &&
               activeTab !== "digitalStore" &&
-              activeTab !== "branding" && (
+              activeTab !== "frontDisplay" &&
+              activeTab !== "branding" &&
+              activeTab !== "queue" && (
                 <div className="py-12 text-center">
                   <div className="w-12 h-12 mx-auto mb-3 flex items-center justify-center text-[#141010] bg-[#f1edec] rounded-full border border-[#e7e5e4]">
                     {SETTINGS_TABS.find((t) => t.id === activeTab)?.icon}

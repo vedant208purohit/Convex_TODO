@@ -13,6 +13,7 @@ import { OrderProcessesHeader } from "./OrderProcessesHeader";
 import { WorkflowPreview } from "./WorkflowPreview";
 import { OrderProcessesTable } from "./OrderProcessesTable";
 import { OrderProcessDrawer } from "./OrderProcessDrawer";
+import { Toast, type ToastMessage } from "../Toast";
 
 export function OrderProcessesView() {
   // Live Convex Query
@@ -43,19 +44,17 @@ export function OrderProcessesView() {
     process: null,
   });
 
-  // Action / Feedback States
+  // Action / Feedback States (Matching Menu page Toast)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [togglingIds, setTogglingIds] = useState<Set<string>>(new Set());
-  const [feedback, setFeedback] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const showFeedback = (type: "success" | "error", message: string) => {
-    setFeedback({ type, message });
-    setTimeout(() => {
-      setFeedback(null);
-    }, 4000);
+    setToast({
+      id: String(Date.now()),
+      type,
+      message,
+    });
   };
 
   const handleOpenCreate = () => {
@@ -164,28 +163,9 @@ export function OrderProcessesView() {
   };
 
   return (
-    <div className="flex flex-col h-full overflow-hidden w-full bg-[#fdf8f7]">
-      {/* Feedback Toast Banner */}
-      {feedback && (
-        <div
-          role="status"
-          className={`fixed top-20 right-8 z-50 px-5 py-3 rounded-xl shadow-lg border text-sm font-medium transition-all animate-in fade-in slide-in-from-top-2 duration-200 flex items-center gap-3 ${
-            feedback.type === "success"
-              ? "bg-[#141010] text-[#ffffff] border-[#292524]"
-              : "bg-[#ba1a1a] text-[#ffffff] border-[#93000a]"
-          }`}
-        >
-          <span>{feedback.message}</span>
-          <button
-            type="button"
-            onClick={() => setFeedback(null)}
-            className="text-white/80 hover:text-white cursor-pointer"
-            aria-label="Dismiss feedback"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+    <div className="flex flex-col h-full overflow-hidden w-full bg-[#fdf8f7] relative">
+      {/* Standard Floating Toast Notification Component (Matching Menu Page) */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
 
       {/* 1. Fixed / Sticky Page Header */}
       <div className="shrink-0 bg-[#fdf8f7]">
@@ -196,7 +176,7 @@ export function OrderProcessesView() {
       </div>
 
       {/* 2. Scrollable Middle Content Area */}
-      <div className="flex-1 overflow-y-auto pt-6 space-y-8 pr-1 pb-16">
+      <div className="flex-1 overflow-y-auto pt-3 space-y-4 pr-1 pb-2">
         {/* Live Order Flow Preview */}
         <WorkflowPreview processes={processes} />
 

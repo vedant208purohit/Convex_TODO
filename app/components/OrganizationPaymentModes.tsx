@@ -4,6 +4,7 @@ import { useState, useMemo, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import { Toast, ToastMessage } from "./Toast";
 
 // ==========================================
 // PIXEL-PERFECT PREST POS SVG ICONS
@@ -120,12 +121,8 @@ export function OrganizationPaymentModes() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Toast Banner State
-  const [toast, setToast] = useState<{
-    type: "success" | "error";
-    text: string;
-    subtext?: string;
-  } | null>(null);
+  // Toast Notification State
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
   // Drawer Modal State (Add or Edit)
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -142,8 +139,8 @@ export function OrganizationPaymentModes() {
   const [deletingItem, setDeletingItem] = useState<PaymentModeDoc | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const showToast = (text: string, type: "success" | "error" = "success", subtext?: string) => {
-    setToast({ text, type, subtext });
+  const showToast = (message: string, type: "success" | "error" = "success", subtext?: string) => {
+    setToast({ id: String(Date.now()), type, message, subtext });
   };
 
   const closeToast = () => setToast(null);
@@ -310,46 +307,7 @@ export function OrganizationPaymentModes() {
 
   return (
     <div className="flex flex-col h-full overflow-hidden select-none font-sans">
-      {/* Subtle Toast Notification Hint Banner */}
-      {toast && (
-        <div
-          className={`flex items-center justify-between px-4 py-2.5 mb-3 rounded-lg border shadow-sm transition-all shrink-0 ${
-            toast.type === "success"
-              ? "bg-white border-[#eadfd6]"
-              : "bg-rose-50 border-rose-200 text-rose-800"
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            {toast.type === "success" ? (
-              <span className="flex h-2 w-2 relative">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-            ) : (
-              <AlertCircleIcon className="w-4 h-4 text-rose-600 shrink-0" />
-            )}
-            <p className="text-xs text-[#141010] font-medium">
-              <span className={`font-semibold ${toast.type === "success" ? "text-emerald-800" : "text-rose-800"}`}>
-                {toast.type === "success" ? "Changes synchronized:" : "Error:"}
-              </span>{" "}
-              {toast.text}
-            </p>
-          </div>
-          <div className="flex items-center gap-3">
-            {toast.subtext && (
-              <span className="text-[11px] text-[#5e5e5e] hidden sm:inline">{toast.subtext}</span>
-            )}
-            <button
-              type="button"
-              onClick={closeToast}
-              className="text-neutral-400 hover:text-[#141010] text-xs font-semibold px-1"
-              aria-label="Dismiss toast"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-      )}
+      <Toast toast={toast} onClose={closeToast} />
 
       {/* Page Title Bar (Fixed Header) */}
       <div className="shrink-0 flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-[#e7e5e4]/60">
@@ -375,7 +333,7 @@ export function OrganizationPaymentModes() {
       </div>
 
       {/* Main Scrollable Content Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto pt-4 pb-8 pr-2 space-y-6">
+      <div className="flex-1 min-h-0 overflow-y-auto pt-3 space-y-4 pr-1 pb-2">
         {/* Metric Summary Cards */}
         <section aria-label="Payment modes summary statistics" className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Metric 1: Active Methods */}

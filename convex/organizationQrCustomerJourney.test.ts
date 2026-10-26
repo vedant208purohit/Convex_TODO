@@ -76,7 +76,7 @@ describe("Subticket 02: QR Customer Journey & Scan/Cart Tracking Unit Tests", ()
     // Second scan passing same session ID
     const scan2 = await t.mutation(api.organizationQrCustomerJourney.recordScan, {
       qrId: qr.qrId,
-      sessionId: scan1.sessionId,
+      sessionId: scan1.sessionId!,
     });
 
     expect(scan2.sessionId).toBe(scan1.sessionId);
@@ -104,7 +104,7 @@ describe("Subticket 02: QR Customer Journey & Scan/Cart Tracking Unit Tests", ()
 
     // Add item to cart
     const cartRes = await t.mutation(api.organizationQrCustomerJourney.recordCartActivity, {
-      sessionId: scan.sessionId,
+      sessionId: scan.sessionId!,
       itemCount: 2,
     });
 

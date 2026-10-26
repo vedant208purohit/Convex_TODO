@@ -623,6 +623,57 @@ function validateOrganizationState(org: {
   }
 }
 
+// Helper: Format safe organization response with resolved asset URLs
+async function formatSafeOrgResponse(ctx: any, org: Doc<"organizations"> | null) {
+  if (!org || org.deletedAt !== undefined) return null;
+  const safeOrg = stripSecrets(org);
+  if (!safeOrg) return null;
+
+  let resolvedLogoUrl: string | null = null;
+  if (org.logoAssetId || org.logoStorageId) {
+    try {
+      const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+        assetId: org.logoAssetId,
+        storageId: org.logoStorageId,
+        organizationId: org._id,
+      });
+      if (storageOrR2Url) {
+        resolvedLogoUrl = storageOrR2Url;
+      }
+    } catch {
+      // Asset fallback
+    }
+  }
+
+  if (!resolvedLogoUrl && org.logoUrl && typeof org.logoUrl === "string") {
+    const trimmed = org.logoUrl.trim();
+    if (
+      (trimmed.startsWith("http://") || trimmed.startsWith("https://")) &&
+      !trimmed.startsWith("blob:")
+    ) {
+      resolvedLogoUrl = trimmed;
+    }
+  }
+
+  let resolvedAboutUsImageUrl = org.aboutUsImageUrl ?? null;
+  if (org.aboutUsImageStorageId) {
+    try {
+      const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
+      if (storageUrl) {
+        resolvedAboutUsImageUrl = storageUrl;
+      }
+    } catch {
+      // Storage fallback
+    }
+  }
+
+  return {
+    ...safeOrg,
+    logoUrl: resolvedLogoUrl,
+    aboutUsImageUrl: resolvedAboutUsImageUrl,
+  };
+}
+
 // ----------------------------------------------------
 // QUERIES
 // ----------------------------------------------------
@@ -634,8 +685,7 @@ export const get = query({
     const normalizedId = ctx.db.normalizeId("organizations", args.id);
     if (!normalizedId) return null;
     const org = await ctx.db.get(normalizedId);
-    if (!org || org.deletedAt !== undefined) return null;
-    return stripSecrets(org);
+    return await formatSafeOrgResponse(ctx, org);
   },
 });
 
@@ -648,8 +698,7 @@ export const getByLegacyId = query({
       .withIndex("by_legacy_id", (q) => q.eq("legacyId", args.legacyId))
       .first();
 
-    if (!org || org.deletedAt !== undefined) return null;
-    return stripSecrets(org);
+    return await formatSafeOrgResponse(ctx, org);
   },
 });
 
@@ -662,38 +711,68 @@ export const getBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", args.slug))
       .first();
 
-    if (!org || org.deletedAt !== undefined) return null;
-    return stripSecrets(org);
+    return await formatSafeOrgResponse(ctx, org);
   },
 });
 
 export const list = query({
   handler: async (ctx) => {
-    const orgs = await ctx.db.query("organizations").collect();
-    return Promise.all(
-      orgs
-        .filter((org) => org.deletedAt === undefined)
-        .map(async (org) => {
-          let resolvedAboutUsImageUrl = org.aboutUsImageUrl ?? null;
-          if (org.aboutUsImageStorageId) {
-            try {
-              const storageUrl = await ctx.storage.getUrl(org.aboutUsImageStorageId);
-              if (storageUrl) {
-                resolvedAboutUsImageUrl = storageUrl;
-              }
-            } catch {
-              // Storage fallback
-            }
-          }
-          const safeOrg = stripSecrets(org);
-          return safeOrg
-            ? {
-                ...safeOrg,
-                aboutUsImageUrl: resolvedAboutUsImageUrl,
-              }
-            : null;
-        })
-    ).then((res) => res.filter(Boolean));
+    const identity = await ctx.auth.getUserIdentity();
+    const allOrgs = await ctx.db.query("organizations").collect();
+    const activeOrgs = allOrgs.filter((org) => org.deletedAt === undefined);
+
+    if (!identity) {
+      return [];
+    }
+
+    // 1. Stores owned by this user
+    const ownedOrgIds = new Set(
+      activeOrgs
+        .filter(
+          (org) => org.ownerClerkId && org.ownerClerkId === identity.subject
+        )
+        .map((org) => org._id)
+    );
+
+    // 2. Active memberships in organizationUsers by userId (Clerk ID)
+    const userMemberships = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_user", (q) => q.eq("userId", identity.subject))
+      .collect();
+
+    // 3. Fallback active memberships by email
+    if (identity.email) {
+      const normEmail = identity.email.toLowerCase();
+      const allMembers = await ctx.db.query("organizationUsers").collect();
+      const matched = allMembers.filter(
+        (m) =>
+          m.email &&
+          m.email.toLowerCase() === normEmail &&
+          m.userId !== identity.subject
+      );
+      for (const m of matched) {
+        userMemberships.push(m);
+      }
+    }
+
+    const activeMemberships = userMemberships.filter(
+      (m) =>
+        m.deletedAt === undefined &&
+        m.status !== "inactive" &&
+        m.status !== "suspended"
+    );
+
+    const memberOrgIds = new Set(activeMemberships.map((m) => m.organizationId));
+
+    // Return only organizations the user owns or has an active membership in
+    const userOrgs = activeOrgs.filter(
+      (org) => ownedOrgIds.has(org._id) || memberOrgIds.has(org._id)
+    );
+
+    const formatted = await Promise.all(
+      userOrgs.map((org) => formatSafeOrgResponse(ctx, org))
+    );
+    return formatted.filter(Boolean);
   },
 });
 
@@ -962,12 +1041,12 @@ export const create = mutation({
       (args.country?.trim() ? getTimezoneForCountry(args.country) : "UTC");
 
     // Service Mode Defaults
-    const isDineIn = args.isDineIn ?? false;
+    const isDineIn = args.isDineIn ?? true;
     const isTakeAway = args.isTakeAway ?? true;
     const isDelivery = args.isDelivery ?? false;
 
     // Dine-In Prepaid / Postpaid Exclusivity
-    let dineinPrepaid = args.dineinPrepaid ?? false;
+    let dineinPrepaid = args.dineinPrepaid ?? (isDineIn ? true : false);
     let dineinPospaid = args.dineinPospaid ?? false;
     if (dineinPrepaid && dineinPospaid) {
       dineinPospaid = false;

@@ -9,10 +9,12 @@
  */
 
 import type * as assetResolver from "../assetResolver.js";
+import type * as chefPrepPreferences from "../chefPrepPreferences.js";
 import type * as customers from "../customers.js";
 import type * as deliveryProvider from "../deliveryProvider.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
 import type * as features from "../features.js";
+import type * as frontDisplay from "../frontDisplay.js";
 import type * as http from "../http.js";
 import type * as inventory from "../inventory.js";
 import type * as menu from "../menu.js";
@@ -51,12 +53,15 @@ import type * as providerPaymentTransfers from "../providerPaymentTransfers.js";
 import type * as r2 from "../r2.js";
 import type * as r2SignedUrl from "../r2SignedUrl.js";
 import type * as razorpay from "../razorpay.js";
+import type * as reports from "../reports.js";
+import type * as smsProvider from "../smsProvider.js";
 import type * as stations from "../stations.js";
 import type * as surveyAttempts from "../surveyAttempts.js";
 import type * as surveyQuestions from "../surveyQuestions.js";
 import type * as surveys from "../surveys.js";
 import type * as taxation from "../taxation.js";
 import type * as userAddresses from "../userAddresses.js";
+import type * as workstation from "../workstation.js";
 
 import type {
   ApiFromModules,
@@ -66,10 +71,12 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
+  chefPrepPreferences: typeof chefPrepPreferences;
   customers: typeof customers;
   deliveryProvider: typeof deliveryProvider;
   digitalStoreImages: typeof digitalStoreImages;
   features: typeof features;
+  frontDisplay: typeof frontDisplay;
   http: typeof http;
   inventory: typeof inventory;
   menu: typeof menu;
@@ -108,12 +115,15 @@ declare const fullApi: ApiFromModules<{
   r2: typeof r2;
   r2SignedUrl: typeof r2SignedUrl;
   razorpay: typeof razorpay;
+  reports: typeof reports;
+  smsProvider: typeof smsProvider;
   stations: typeof stations;
   surveyAttempts: typeof surveyAttempts;
   surveyQuestions: typeof surveyQuestions;
   surveys: typeof surveys;
   taxation: typeof taxation;
   userAddresses: typeof userAddresses;
+  workstation: typeof workstation;
 }>;
 
 /**

@@ -1,32 +1,12 @@
-import { NextRequest, NextResponse } from "next/server";
-import { auth, createClerkClient } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import crypto from "crypto";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Extracts userId from either Clerk cookie session (web) or Bearer token (mobile)
-async function resolveUserId(request: NextRequest): Promise<string | null> {
+export async function resolveStoreForAuthenticatedUser(request?: Request) {
   const { userId } = await auth();
-  if (userId) return userId;
-
-  const authHeader = request.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return null;
-
-  const token = authHeader.slice(7);
-  try {
-    const clerk = createClerkClient({
-      secretKey: process.env.CLERK_SECRET_KEY,
-    });
-    const payload = await clerk.verifyToken(token);
-    return payload.sub || null;
-  } catch {
-    return null;
-  }
-}
-
-async function resolveStoreForAuthenticatedUser(request: NextRequest) {
-  const userId = await resolveUserId(request);
 
   console.log("Bridge secret:", process.env.BRIDGE_SECRET);
 
@@ -39,6 +19,22 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
       },
       { status: 401 },
     );
+  }
+
+  let convexUrl: string | undefined;
+  let slug: string | undefined;
+  let organizationId: string | undefined;
+
+  if (request) {
+    try {
+      const url = new URL(request.url);
+      convexUrl = url.searchParams.get("convexUrl") || undefined;
+      slug = url.searchParams.get("slug") || url.searchParams.get("store") || undefined;
+      organizationId =
+        url.searchParams.get("organizationId") ||
+        url.searchParams.get("orgId") ||
+        undefined;
+    } catch {}
   }
 
   const bridgeSecret = process.env.BRIDGE_SECRET;
@@ -99,6 +95,13 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
     .update(`${userId}:${timestamp}`)
     .digest("hex");
 
+  const bridgePayload: Record<string, unknown> = {
+    defaultClerkId: userId,
+  };
+  if (convexUrl) bridgePayload.convexUrl = convexUrl;
+  if (slug) bridgePayload.slug = slug;
+  if (organizationId) bridgePayload.organizationId = organizationId;
+
   console.log("[BRIDGE_DEBUG] calling master bridge:", {
     url: bridgeUrl,
     method: "POST",
@@ -106,6 +109,8 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
     payload: {
       defaultClerkId_present: Boolean(userId),
       defaultClerkId_prefix: userId ? userId.substring(0, 8) + "..." : "none",
+      convexUrl_present: Boolean(convexUrl),
+      slug_present: Boolean(slug),
     },
   });
 
@@ -117,7 +122,8 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
         "x-bridge-signature": signature,
         "x-bridge-timestamp": timestamp.toString(),
       },
-      body: JSON.stringify({ defaultClerkId: userId }),
+      body: JSON.stringify(bridgePayload),
+      // Short cache lifetime / no-store to prevent stale deployment resolutions
       cache: "no-store",
     });
 
@@ -168,10 +174,10 @@ async function resolveStoreForAuthenticatedUser(request: NextRequest) {
   }
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request?: Request) {
   return resolveStoreForAuthenticatedUser(request);
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(request?: Request) {
   return resolveStoreForAuthenticatedUser(request);
 }

@@ -655,7 +655,10 @@ export function formatCurrencyAmount(
   const num = typeof amount === "number" ? amount : parseFloat(String(amount).replace(/[^0-9.-]+/g, ""));
   if (isNaN(num)) return "0.00";
 
-  const locale = getLocaleForCountry(countryCodeOrName);
+  // Use en-IN for India (lakhs/crores grouping) and en-US for all other international regions (EUR, USD, GBP, etc.)
+  // so decimal amounts always strictly format with standard '.' (e.g. 85.00) without breaking any existing currencies.
+  const isIndia = isIndiaCountry(countryCodeOrName || "");
+  const locale = isIndia ? "en-IN" : "en-US";
 
   try {
     return num.toLocaleString(locale, {

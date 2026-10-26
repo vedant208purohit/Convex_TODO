@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useClerk } from "@clerk/nextjs";
 import { ReactNode, useState, useEffect } from "react";
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 
 // ==========================================
@@ -22,7 +22,19 @@ function DashboardIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function WorkstationIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" />
+      <line x1="8" x2="16" y1="21" y2="21" />
+      <line x1="12" x2="12" y1="17" y2="21" />
+      <circle cx="12" cy="10" r="2" />
+    </svg>
+  );
+}
+
 function MenuIcon({ className = "w-4 h-4" }: { className?: string }) {
+
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2" />
@@ -105,9 +117,36 @@ function CaptainIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function QueueNavIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
 function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <rect width="5" height="5" x="3" y="3" rx="1" />
       <rect width="5" height="5" x="16" y="3" rx="1" />
       <rect width="5" height="5" x="3" y="16" rx="1" />
@@ -117,10 +156,68 @@ function QrCodesIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
+function CustomersNavIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function ReportsIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="18" y1="20" x2="18" y2="10" />
+      <line x1="12" y1="20" x2="12" y2="4" />
+      <line x1="6" y1="20" x2="6" y2="14" />
+    </svg>
+  );
+}
+
+function SurveysIcon({ className = "w-4 h-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+      <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+      <path d="m9 14 2 2 4-4" />
+    </svg>
+  );
+}
+
 type NavItem = {
   href: string;
   label: string;
   icon: ReactNode;
+  disabled?: boolean;
+  disabledTooltip?: string;
+  badge?: string;
 };
 
 const navItems: NavItem[] = [
@@ -128,6 +225,7 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: <DashboardIcon className="w-4 h-4" />,
+    badge: "Coming Soon",
   },
   {
     href: "/menu",
@@ -140,6 +238,16 @@ const navItems: NavItem[] = [
     icon: <OrdersIcon className="w-4 h-4" />,
   },
   {
+    href: "/workstation",
+    label: "Workstation",
+    icon: <WorkstationIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/kds",
+    label: "KDS",
+    icon: <KdsIcon className="w-4 h-4" />,
+  },
+  {
     href: "/cashier",
     label: "Cashier",
     icon: <CashierIcon className="w-4 h-4" />,
@@ -150,14 +258,29 @@ const navItems: NavItem[] = [
     icon: <CaptainIcon className="w-4 h-4" />,
   },
   {
+    href: "/queue",
+    label: "Queue",
+    icon: <QueueNavIcon className="w-4 h-4" />,
+  },
+  {
     href: "/inventory",
     label: "Inventory",
     icon: <InventoryIcon className="w-4 h-4" />,
   },
   {
-    href: "/kds",
-    label: "KDS",
-    icon: <KdsIcon className="w-4 h-4" />,
+    href: "/reports",
+    label: "Reports",
+    icon: <ReportsIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/customers",
+    label: "Customers",
+    icon: <CustomersNavIcon className="w-4 h-4" />,
+  },
+  {
+    href: "/surveys",
+    label: "Surveys",
+    icon: <SurveysIcon className="w-4 h-4" />,
   },
   {
     href: "/qr-codes",
@@ -176,6 +299,11 @@ const navItems: NavItem[] = [
   },
 ];
 
+const menuSubItems = [
+  { label: "Items & Categories", path: "/menu" },
+  { label: "Chef Prep Preferences", path: "/menu/chef-prep-preferences" },
+];
+
 const inventorySubItems = [
   { label: "Purchase order", tab: "purchaseOrders", path: "/inventory/purchase-orders" },
   { label: "Supplier", tab: "suppliers", path: "/inventory/suppliers" },
@@ -184,7 +312,15 @@ const inventorySubItems = [
   { label: "Item recipes", tab: "itemRecipes", path: "/inventory/item-recipes" },
 ];
 
-function NavLink({ href, label, icon }: NavItem) {
+function NavLink({
+  href,
+  label,
+  icon,
+  badge,
+  isCollapsed,
+  disabled,
+  disabledTooltip,
+}: NavItem & { isCollapsed?: boolean; disabled?: boolean; disabledTooltip?: string }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const active =
@@ -196,22 +332,87 @@ function NavLink({ href, label, icon }: NavItem) {
   const targetHref =
     href === "/inventory"
       ? "/inventory/purchase-orders"
-      : href === "/qr-codes" || href === "/settings"
-      ? href
-      : qs
-      ? `${href}?${qs}`
-      : href;
+      : href === "/menu"
+        ? "/menu"
+        : href === "/qr-codes" || href === "/settings"
+          ? href
+          : qs
+            ? `${href}?${qs}`
+            : href;
+
+  if (isCollapsed) {
+    return (
+      <div className="relative group flex items-center justify-center my-0.5">
+        {disabled ? (
+          <div
+            className="flex items-center justify-center w-12 h-12 mx-auto rounded-xl opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
+            title={disabledTooltip || "Disabled in settings"}
+          >
+            <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+          </div>
+        ) : (
+          <Link
+            href={targetHref}
+            className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${active
+              ? "bg-[#141010] text-white shadow-xs"
+              : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+              }`}
+          >
+            <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+          </Link>
+        )}
+        <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-none">
+          <div className="px-3 py-1.5 bg-[#141010] text-white text-xs font-medium rounded-xl shadow-lg whitespace-nowrap flex items-center gap-1.5">
+            <span>{label}</span>
+            {badge && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] rounded-full">
+                {badge}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (disabled) {
+    return (
+      <div
+        className="flex items-center gap-3 px-6 py-3 text-[15px] opacity-40 cursor-not-allowed text-[#8a7e75] select-none"
+        title={disabledTooltip || "Disabled in settings"}
+      >
+        <span className="w-5 text-center flex items-center justify-center shrink-0">{icon}</span>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-medium text-[15px] shrink-0">{label}</span>
+          {badge && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+              {badge}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <Link
       href={targetHref}
       className={`flex items-center gap-3 px-6 py-3 text-[15px] transition-colors cursor-pointer ${active
-          ? "text-[#141010] font-bold border-r-2 border-[#141010] bg-[#f1edec] opacity-100"
-          : "text-[#5e5e5e] hover:bg-[#f1edec]"
+        ? "text-[#141010] font-bold border-r-2 border-[#141010] bg-[#f1edec] opacity-100"
+        : "text-[#5e5e5e] hover:bg-[#f1edec]"
         }`}
     >
-      <span className="w-5 text-center flex items-center justify-center">{icon}</span>
-      <span className="font-medium text-[15px]">{label}</span>
+      <span className="w-5 text-center flex items-center justify-center shrink-0">{icon}</span>
+      <div className="flex items-center gap-1.5 min-w-0">
+        <span className="font-medium text-[15px] shrink-0">{label}</span>
+        {badge && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full shrink-0 whitespace-nowrap">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#f59e0b] shrink-0" />
+            {badge}
+          </span>
+        )}
+      </div>
     </Link>
   );
 }
@@ -227,10 +428,34 @@ export function PosShell({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const isMenuPage = pathname.startsWith("/menu");
   const isInventoryPage = pathname.startsWith("/inventory");
   const currentTab = searchParams.get("tab") || "purchaseOrders";
 
+  const [isMenuExpanded, setIsMenuExpanded] = useState(isMenuPage);
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pos_main_sidebar_collapsed") === "true";
+    }
+    return false;
+  });
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      if (typeof window !== "undefined") {
+        localStorage.setItem("pos_main_sidebar_collapsed", String(next));
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    if (isMenuPage) {
+      setIsMenuExpanded(true);
+    }
+  }, [isMenuPage]);
 
   useEffect(() => {
     if (isInventoryPage) {
@@ -238,39 +463,334 @@ export function PosShell({
     }
   }, [isInventoryPage]);
 
+  const { signOut } = useClerk();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const currentMembership = useQuery(
+    api.organizationUsers.getCurrentMembership,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
+  const acceptInvitationMutation = useMutation(api.organizationUsers.acceptInvitation);
+  const [isAccepting, setIsAccepting] = useState(false);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  const isDineInActive = activeOrg?.isDineIn !== false;
   const branchName = activeOrg?.name || "Flagship Main Store";
+
+  const isOwner = Boolean(
+    activeOrg?.ownerClerkId &&
+    currentMembership?.userId &&
+    currentMembership.userId === activeOrg.ownerClerkId
+  );
+  const isPendingInvitation = !isOwner && Boolean(
+    currentMembership && (
+      (currentMembership as any).status === "invited" ||
+      (!(currentMembership as any).status && !(currentMembership as any).userType?.includes("admin"))
+    )
+  );
+
+  const [hasTicket, setHasTicket] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const search = window.location.search;
+      if (search.includes("__clerk_ticket") || search.includes("__clerk_status=sign_in")) {
+        setHasTicket(true);
+      }
+    }
+  }, []);
+
+  // Only auto-sync invitation acceptance IF user came directly from email invitation ticket
+  useEffect(() => {
+    let isMounted = true;
+    if (isPendingInvitation && hasTicket && activeOrg?._id && !isAccepting && !acceptError) {
+      setIsAccepting(true);
+      acceptInvitationMutation({ organizationId: activeOrg._id })
+        .catch((err: any) => {
+          if (isMounted) {
+            console.error("Auto-sync invitation error:", err);
+            setAcceptError(err?.message || "Failed to sync invitation. Please try again.");
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsAccepting(false);
+          }
+        });
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [isPendingInvitation, hasTicket, activeOrg?._id, acceptError, isAccepting]);
+
+  if (organizations !== undefined && (organizations.length === 0 || currentMembership === null)) {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-stone-900">No Store Assigned</h2>
+          <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+            You do not have any assigned store or your access has been revoked. Please contact the store owner.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => signOut({ redirectUrl: "/sign-in" })}
+              className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (currentMembership && currentMembership.status === "inactive") {
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
+            <svg
+              className="h-6 w-6"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-semibold text-stone-900">Account Deactivated</h2>
+          <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+            Your staff account for {branchName} has been deactivated. Please contact your store administrator.
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={() => signOut({ redirectUrl: "/sign-in" })}
+              className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isPendingInvitation) {
+    if (hasTicket && !acceptError) {
+      return (
+        <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+          <div className="w-full max-w-md rounded-2xl border border-amber-100 bg-white p-8 shadow-sm text-center">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <svg className="h-7 w-7 animate-spin text-amber-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+              </svg>
+            </div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 mb-3">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              Invitation Verified
+            </span>
+            <h2 className="text-xl font-bold text-stone-900">
+              Welcome to {branchName}
+            </h2>
+            <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+              Activating your workspace and entering store...
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+        <div className="w-full max-w-md rounded-2xl border border-amber-200 bg-white p-8 shadow-sm text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+            <svg
+              className="h-7 w-7"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+              />
+            </svg>
+          </div>
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 mb-3">
+            <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+            Invitation Pending
+          </span>
+          <h2 className="text-xl font-bold text-stone-900">
+            Welcome to {branchName}
+          </h2>
+          <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+            You have been invited to join this store team. Please accept the invitation to access the point-of-sale system and start working.
+          </p>
+
+          <div className="mt-4 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+            {acceptError}
+          </div>
+
+          <div className="mt-6 flex flex-col gap-3">
+            <button
+              type="button"
+              disabled={isAccepting}
+              onClick={async () => {
+                if (!activeOrg) return;
+                setIsAccepting(true);
+                setAcceptError(null);
+                try {
+                  await acceptInvitationMutation({ organizationId: activeOrg._id });
+                } catch (err: any) {
+                  setAcceptError(
+                    err?.message || "Failed to accept invitation. Please try again."
+                  );
+                } finally {
+                  setIsAccepting(false);
+                }
+              }}
+              className="w-full inline-flex items-center justify-center rounded-xl bg-stone-900 py-3 text-sm font-semibold text-white shadow hover:bg-stone-800 disabled:opacity-50 transition-colors cursor-pointer"
+            >
+              {isAccepting ? "Activating account..." : "Accept Invitation & Enter Store"}
+            </button>
+            <button
+              type="button"
+              onClick={() => signOut({ redirectUrl: "/sign-in" })}
+              className="w-full rounded-xl border border-stone-200 bg-white py-2.5 text-xs font-medium text-stone-600 hover:bg-stone-50 transition-colors cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full overflow-hidden">
-        {/* Logo */}
-        <div className="px-6 py-6 border-b border-[#e7e5e4] flex items-center gap-4 shrink-0">
-          <div className="w-10 h-10 rounded-full bg-[#f1edec] flex items-center justify-center overflow-hidden border border-[#e7e5e4] shrink-0 font-serif font-bold text-[#141010]">
-            P
+      <aside
+        className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full transition-all duration-300 ease-in-out ${isCollapsed ? "w-20 overflow-visible z-40" : "w-64 overflow-hidden"
+          }`}
+      >
+        {/* Logo Header */}
+        <div
+          className={`px-4 py-5 border-b border-[#e7e5e4] flex items-center justify-between shrink-0 ${isCollapsed ? "flex-col gap-3 px-2 py-4" : "px-6 py-6"
+            }`}
+        >
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-10 h-10 rounded-full bg-[#f1edec] flex items-center justify-center overflow-hidden border border-[#e7e5e4] shrink-0 font-serif font-bold text-[#141010]">
+              P
+            </div>
+            {!isCollapsed && (
+              <div className="truncate">
+                <h1 className="font-garamond text-[24px] text-[#141010] font-normal leading-none">PREST</h1>
+                <p className="font-sans text-[10px] font-semibold text-[#5e5e5e] uppercase tracking-widest mt-1 truncate">
+                  Management Suite
+                </p>
+              </div>
+            )}
           </div>
-          <div>
-            <h1 className="font-garamond text-[24px] text-[#141010] font-normal leading-none">PREST</h1>
-            <p className="font-sans text-[10px] font-semibold text-[#5e5e5e] uppercase tracking-widest mt-1">
-              Management Suite
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className="p-1.5 rounded-lg bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer shrink-0"
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${isCollapsed ? "rotate-180" : ""
+                }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 flex flex-col gap-1">
+        <nav className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
           {navItems.map((item) => {
-            if (item.href === "/inventory") {
+            if (item.href === "/menu") {
+              if (isCollapsed) {
+                return (
+                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
+                    <Link
+                      href="/menu"
+                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${isMenuPage
+                        ? "bg-[#141010] text-white shadow-xs"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+                        }`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
+                    </Link>
+
+                    {/* Flyout Hover Menu Popover Card */}
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
+                      <div className="w-56 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
+                          Menu
+                        </div>
+                        {menuSubItems.map((sub) => {
+                          const isSubActive =
+                            sub.path === "/menu"
+                              ? pathname === "/menu" || (pathname.startsWith("/menu") && !pathname.startsWith("/menu/chef-prep-preferences"))
+                              : pathname === sub.path || pathname.startsWith(sub.path);
+                          return (
+                            <Link
+                              key={sub.path}
+                              href={sub.path}
+                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${isSubActive
+                                ? "bg-[#0c0a09] text-white font-medium shadow-xs"
+                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                                }`}
+                            >
+                              <span>{sub.label}</span>
+                              {isSubActive && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div key={item.href} className="flex flex-col px-3 my-0.5">
                   <button
                     type="button"
-                    onClick={() => setIsInventoryExpanded((prev) => !prev)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isInventoryPage
-                        ? "bg-[#f1edec] text-[#141010] font-bold"
-                        : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                    onClick={() => setIsMenuExpanded((prev) => !prev)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isMenuPage
+                      ? "bg-[#f1edec] text-[#141010] font-bold"
+                      : "text-[#5e5e5e] hover:bg-[#f1edec]"
                       }`}
                   >
                     <div className="flex items-center gap-3">
@@ -278,7 +798,108 @@ export function PosShell({
                       <span className="font-medium text-[15px]">{item.label}</span>
                     </div>
                     <svg
-                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${isInventoryExpanded ? "rotate-180" : ""
+                      className={`w-3.5 h-3.5 text-[#78716c] transition-transform duration-200 ${isMenuExpanded ? "rotate-180" : ""
+                        }`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {isMenuExpanded && (
+                    <div className="ml-5 pl-3 my-1.5 border-l border-[#e7e5e4] flex flex-col gap-1">
+                      {menuSubItems.map((sub) => {
+                        const isSubActive =
+                          sub.path === "/menu"
+                            ? pathname === "/menu" || (pathname.startsWith("/menu") && !pathname.startsWith("/menu/chef-prep-preferences"))
+                            : pathname === sub.path || pathname.startsWith(sub.path);
+                        return (
+                          <Link
+                            key={sub.path}
+                            href={sub.path}
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
+                              ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
+                              : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
+                              }`}
+                          >
+                            <span>{sub.label}</span>
+                            {isSubActive && (
+                              <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                            )}
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            }
+
+            if (item.href === "/inventory") {
+              if (isCollapsed) {
+                return (
+                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
+                    <Link
+                      href="/inventory/purchase-orders"
+                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${isInventoryPage
+                        ? "bg-[#141010] text-white shadow-xs"
+                        : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+                        }`}
+                    >
+                      <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
+                    </Link>
+
+                    {/* Flyout Hover Menu Popover Card */}
+                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
+                      <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
+                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
+                          <span>Inventory</span>
+                        </div>
+                        {inventorySubItems.map((sub) => {
+                          const isSubActive =
+                            pathname === sub.path ||
+                            (pathname === "/inventory" && currentTab === sub.tab) ||
+                            (pathname === "/inventory" && sub.tab === "purchaseOrders" && !searchParams.get("tab"));
+                          return (
+                            <Link
+                              key={sub.tab}
+                              href={sub.path}
+                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${isSubActive
+                                ? "bg-[#0c0a09] text-white font-medium shadow-xs"
+                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                                }`}
+                            >
+                              <span>{sub.label}</span>
+                              {isSubActive && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div key={item.href} className="flex flex-col px-3 my-0.5">
+                  <button
+                    type="button"
+                    onClick={() => setIsInventoryExpanded((prev) => !prev)}
+                    className={`w-full flex items-center justify-between gap-1.5 px-3 py-2.5 rounded-xl text-[15px] transition-colors cursor-pointer ${isInventoryPage
+                      ? "bg-[#f1edec] text-[#141010] font-bold"
+                      : "text-[#5e5e5e] hover:bg-[#f1edec]"
+                      }`}
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 text-left">
+                      <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
+                      <span className="font-medium text-[14px] shrink-0">{item.label}</span>
+                    </div>
+                    <svg
+                      className={`w-3.5 h-3.5 text-[#78716c] shrink-0 ml-1 transition-transform duration-200 ${isInventoryExpanded ? "rotate-180" : ""
                         }`}
                       fill="none"
                       stroke="currentColor"
@@ -300,8 +921,8 @@ export function PosShell({
                             key={sub.tab}
                             href={sub.path}
                             className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
-                                ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
-                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
+                              ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
+                              : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
                               }`}
                           >
                             <span>{sub.label}</span>
@@ -317,9 +938,48 @@ export function PosShell({
               );
             }
 
-            return <NavLink key={item.href} {...item} />;
+            const isCaptainDisabled = item.href === "/captain" && !isDineInActive;
+            return (
+              <NavLink
+                key={item.href}
+                {...item}
+                isCollapsed={isCollapsed}
+                disabled={isCaptainDisabled || item.disabled}
+                disabledTooltip={
+                  isCaptainDisabled
+                    ? "Dine-in & Captain POS is disabled in Settings > Features"
+                    : item.disabledTooltip
+                }
+              />
+            );
           })}
         </nav>
+
+        {/* Footer Toggle Bar */}
+        <div className="p-3 border-t border-[#e7e5e4] flex items-center justify-between shrink-0 bg-[#fdf8f7]">
+          {!isCollapsed && (
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-[#7a716b] px-2">
+              Sidebar View
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            className={`p-2 rounded-xl bg-[#f1edec] hover:bg-[#e7e5e4] text-[#141010] transition cursor-pointer ${isCollapsed ? "w-full flex justify-center" : ""
+              }`}
+            title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          >
+            <svg
+              className={`w-4 h-4 transition-transform duration-200 ${isCollapsed ? "rotate-180" : ""
+                }`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
       </aside>
 
       {/* Main Content Wrapper */}
@@ -362,7 +1022,7 @@ export function PosShell({
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 min-h-0 overflow-hidden flex flex-col">{children}</main>
+        <main className="flex-1 min-h-0 overflow-y-auto flex flex-col">{children}</main>
       </div>
     </div>
   );

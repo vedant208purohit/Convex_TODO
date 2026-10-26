@@ -14,13 +14,8 @@ export function OrderProcessesHeader({
   return (
     <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-4 border-b border-[#e7e5e4]">
       <div>
-        <nav aria-label="Breadcrumb" className="flex items-center space-x-2 text-[11px] uppercase tracking-widest text-[#5e5e5e] font-medium font-sans mb-1.5">
-          <span>SETTINGS</span>
-          <span className="text-[#b8b3b0]">/</span>
-          <span className="text-[#0c0a09] font-semibold">ORDER STATUS</span>
-        </nav>
         <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="font-garamond text-[30px] md:text-[32px] font-normal tracking-tight text-[#141010] leading-tight">
+          <h1 className="font-garamond text-[30px] font-normal tracking-tight text-[#141010] leading-none">
             Order Status
           </h1>
           <div className="bg-[#f0efed] px-3 py-1 rounded-full flex items-center gap-2 border border-[#e7e5e4]">

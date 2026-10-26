@@ -714,6 +714,9 @@ export const getOrganizationMenu = query({
       .filter((c) => c.published !== false)
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
+    const org = await ctx.db.get(args.organizationId);
+    const isPureVegOrg = org?.isVeg === true;
+
     const resultMenu: Array<any> = [];
     const searchQuery = args.search?.trim().toLowerCase();
 
@@ -734,6 +737,9 @@ export const getOrganizationMenu = query({
       for (const ci of activeCatItems) {
         const item = await ctx.db.get(ci.itemId);
         if (!item || item.deletedAt !== undefined || item.published === false || item.isAvailable === false) continue;
+
+        // Pure Vegetarian Restaurant filter (conservative: only strictly true is allowed)
+        if (isPureVegOrg && item.isVeg !== true) continue;
 
         // Apply attribute filters
         if (args.isVeg !== undefined && item.isVeg !== args.isVeg) continue;
@@ -795,6 +801,26 @@ export const getOrganizationMenu = query({
           .sort((a, b) => a.position - b.position);
 
         const serializedCustomizations: Array<any> = [];
+
+        // Fetch Chef Prep Preferences for Item
+        const prepJunctions = await ctx.db
+          .query("itemChefPrepPreferences")
+          .withIndex("by_item", (q) => q.eq("itemId", item._id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+
+        const serializedChefPrepPreferences: Array<any> = [];
+        for (const pj of prepJunctions) {
+          const pref = await ctx.db.get(pj.preferenceId);
+          if (pref && pref.deletedAt === undefined) {
+            serializedChefPrepPreferences.push({
+              id: pref._id,
+              _id: pref._id,
+              name: pref.name,
+            });
+          }
+        }
+        serializedChefPrepPreferences.sort((a, b) => a.name.localeCompare(b.name));
 
         for (const cust of activeCustomizations) {
           const custItems = await ctx.db
@@ -1062,7 +1088,11 @@ export const getOrganizationMenu = query({
             calories_per_serving: item.caloriesPerServing,
             items_item_types: resolvedItemTypes,
             tax_info: taxInfo,
+            chefPrepPreferences: serializedChefPrepPreferences,
+            chef_prep_preferences: serializedChefPrepPreferences,
           },
+          chefPrepPreferences: serializedChefPrepPreferences,
+          chef_prep_preferences: serializedChefPrepPreferences,
           customizations: serializedCustomizations,
           item_image_url: imageUrl,
           item_3d_image_url: threeDModelUrl,
@@ -1554,30 +1584,30 @@ export const updateItem = mutation({
     id: v.id("items"),
     name: v.optional(v.string()),
     price: v.optional(v.number()),
-    description: v.optional(v.string()),
+    description: v.optional(v.union(v.string(), v.null())),
     published: v.optional(v.boolean()),
     isAvailable: v.optional(v.boolean()),
     isGst: v.optional(v.boolean()),
-    taxGroupId: v.optional(v.id("taxGroups")),
+    taxGroupId: v.optional(v.union(v.id("taxGroups"), v.null())),
     taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     isVeg: v.optional(v.boolean()),
     isSpicy: v.optional(v.boolean()),
     showItemType: v.optional(v.boolean()),
     showQuantity: v.optional(v.boolean()),
-    quantity: v.optional(v.number()),
-    quantityUnit: v.optional(v.string()),
-    skuNumber: v.optional(v.string()),
+    quantity: v.optional(v.union(v.number(), v.null())),
+    quantityUnit: v.optional(v.union(v.string(), v.null())),
+    skuNumber: v.optional(v.union(v.string(), v.null())),
     markAsBestseller: v.optional(v.boolean()),
-    servingSize: v.optional(v.string()),
-    serving: v.optional(v.number()),
-    caloriesPerServing: v.optional(v.string()),
-    calorie: v.optional(v.string()),
-    protein: v.optional(v.string()),
-    carbs: v.optional(v.string()),
-    fat: v.optional(v.string()),
-    fiber: v.optional(v.string()),
-    sugar: v.optional(v.string()),
-    sodium: v.optional(v.string()),
+    servingSize: v.optional(v.union(v.string(), v.null())),
+    serving: v.optional(v.union(v.number(), v.null())),
+    caloriesPerServing: v.optional(v.union(v.string(), v.null())),
+    calorie: v.optional(v.union(v.string(), v.null())),
+    protein: v.optional(v.union(v.string(), v.null())),
+    carbs: v.optional(v.union(v.string(), v.null())),
+    fat: v.optional(v.union(v.string(), v.null())),
+    fiber: v.optional(v.union(v.string(), v.null())),
+    sugar: v.optional(v.union(v.string(), v.null())),
+    sodium: v.optional(v.union(v.string(), v.null())),
     showAllergenContents: v.optional(v.boolean()),
     allergens: v.optional(v.array(v.string())),
     nutrients: v.optional(
@@ -1601,24 +1631,51 @@ export const updateItem = mutation({
       )
     ),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
-    imageStorageId: v.optional(v.id("_storage")),
-    imageAssetId: v.optional(v.id("organization_assets")),
-    threeDModelStorageId: v.optional(v.id("_storage")),
-    threeDModelAssetId: v.optional(v.id("organization_assets")),
-    threeDModelIosStorageId: v.optional(v.id("_storage")),
-    threeDModelIosAssetId: v.optional(v.id("organization_assets")),
-    videoStorageId: v.optional(v.id("_storage")),
-    videoAssetId: v.optional(v.id("organization_assets")),
+    imageStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    imageAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
+    threeDModelStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    threeDModelAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
+    threeDModelIosStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    threeDModelIosAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
+    videoStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    videoAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const item = await ctx.db.get(id);
     if (!item || item.deletedAt !== undefined) throw new Error("Item not found");
 
-    await ctx.db.patch(id, {
-      ...updates,
+    const patch: any = {
       updatedAt: Date.now(),
-    });
+    };
+
+    for (const [key, val] of Object.entries(updates)) {
+      if (val === null) {
+        patch[key] = undefined;
+      } else if (val !== undefined) {
+        patch[key] = val;
+      }
+    }
+
+    // Explicitly unset storage references when asset IDs are cleared
+    if (args.imageAssetId === null) {
+      patch.imageAssetId = undefined;
+      patch.imageStorageId = undefined;
+    }
+    if (args.threeDModelAssetId === null) {
+      patch.threeDModelAssetId = undefined;
+      patch.threeDModelStorageId = undefined;
+    }
+    if (args.threeDModelIosAssetId === null) {
+      patch.threeDModelIosAssetId = undefined;
+      patch.threeDModelIosStorageId = undefined;
+    }
+    if (args.videoAssetId === null) {
+      patch.videoAssetId = undefined;
+      patch.videoStorageId = undefined;
+    }
+
+    await ctx.db.patch(id, patch);
     return await ctx.db.get(id);
   },
 });
@@ -1684,6 +1741,15 @@ export const deleteItem = mutation({
           }
           await ctx.db.patch(cust._id, { deletedAt: now });
         }
+        // Clean up Chef Prep Preference junctions
+        const prepJunctions = await ctx.db
+          .query("itemChefPrepPreferences")
+          .withIndex("by_item", (q) => q.eq("itemId", args.id))
+          .filter((q) => q.eq(q.field("deletedAt"), undefined))
+          .collect();
+        for (const pj of prepJunctions) {
+          await ctx.db.patch(pj._id, { deletedAt: now });
+        }
         await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
       }
     } else {
@@ -1723,6 +1789,15 @@ export const deleteItem = mutation({
           await ctx.db.patch(ci._id, { deletedAt: now });
         }
         await ctx.db.patch(cust._id, { deletedAt: now });
+      }
+      // Clean up Chef Prep Preference junctions
+      const prepJunctions = await ctx.db
+        .query("itemChefPrepPreferences")
+        .withIndex("by_item", (q) => q.eq("itemId", args.id))
+        .filter((q) => q.eq(q.field("deletedAt"), undefined))
+        .collect();
+      for (const pj of prepJunctions) {
+        await ctx.db.patch(pj._id, { deletedAt: now });
       }
       await ctx.db.patch(args.id, { deletedAt: now, updatedAt: now });
     }
@@ -1949,30 +2024,44 @@ export const updateCustomizationItem = mutation({
     id: v.id("customizationItems"),
     name: v.optional(v.string()),
     price: v.optional(v.number()),
-    description: v.optional(v.string()),
+    description: v.optional(v.union(v.string(), v.null())),
     isGst: v.optional(v.boolean()),
-    taxGroupId: v.optional(v.id("taxGroups")),
+    taxGroupId: v.optional(v.union(v.id("taxGroups"), v.null())),
     taxMode: v.optional(v.union(v.literal("inclusive"), v.literal("exclusive"))),
     isVeg: v.optional(v.boolean()),
-    dietaryType: v.optional(v.string()),
+    dietaryType: v.optional(v.union(v.string(), v.null())),
     showQuantity: v.optional(v.boolean()),
-    quantity: v.optional(v.number()),
-    quantityUnit: v.optional(v.string()),
+    quantity: v.optional(v.union(v.number(), v.null())),
+    quantityUnit: v.optional(v.union(v.string(), v.null())),
     showCalorie: v.optional(v.boolean()),
-    calorie: v.optional(v.string()),
-    calorieMetric: v.optional(v.string()),
+    calorie: v.optional(v.union(v.string(), v.null())),
+    calorieMetric: v.optional(v.union(v.string(), v.null())),
     isAvailable: v.optional(v.boolean()),
     position: v.optional(v.number()),
     itemTypeIds: v.optional(v.array(v.id("itemTypes"))),
-    imageStorageId: v.optional(v.id("_storage")),
-    imageAssetId: v.optional(v.id("organization_assets")),
+    imageStorageId: v.optional(v.union(v.id("_storage"), v.null())),
+    imageAssetId: v.optional(v.union(v.id("organization_assets"), v.null())),
   },
   handler: async (ctx, args) => {
     const { id, ...updates } = args;
     const existing = await ctx.db.get(id);
     if (!existing || existing.deletedAt !== undefined) throw new Error("Customization item not found");
 
-    await ctx.db.patch(id, updates);
+    const patch: any = { updatedAt: Date.now() };
+    for (const [key, val] of Object.entries(updates)) {
+      if (val === null) {
+        patch[key] = undefined;
+      } else if (val !== undefined) {
+        patch[key] = val;
+      }
+    }
+
+    if (args.imageAssetId === null) {
+      patch.imageAssetId = undefined;
+      patch.imageStorageId = undefined;
+    }
+
+    await ctx.db.patch(id, patch);
     return await ctx.db.get(id);
   },
 });

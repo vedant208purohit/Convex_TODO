@@ -15,6 +15,7 @@ describe("Postpaid Order Requests Domain Unit & Business Logic Tests", () => {
       name: "Postpaid Test Store",
       ownerClerkId: adminClerkId,
       isDineIn: true,
+      dineinPrepaid: false,
       dineinPospaid: true,
     });
 

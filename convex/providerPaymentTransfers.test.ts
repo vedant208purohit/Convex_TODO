@@ -26,6 +26,7 @@ describe("Provider Payment Transfers Domain Unit & Integration Tests", () => {
     // Configure linked account on organization
     await asAdmin.mutation(api.organizations.update, {
       id: orgId,
+      isDelivery: true,
       transferPercentage: 0.03, // 3% platform commission
       transferHoldTime: 18000,  // 5 hours
       paymentSplitting: {
