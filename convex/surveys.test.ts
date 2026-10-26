@@ -1980,6 +1980,63 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
     });
     expect(recheck?.review?.flaggedForMeeting).toBe(true);
   });
+
+  // ====================================================
+  // 9. GENUINE CUSTOMER DATA INTEGRITY
+  // ====================================================
+
+  test("23. Genuine review source and unrated item integrity", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+    const orderId = await createTestOrder(t, orgId);
+
+    // 1. Test genuine customer submission with custom source and unrated items
+    const surveyId = await admin.mutation(api.surveys.create, {
+      name: "Dine-In Feedback",
+      introduction: "How was your meal?",
+      afterSurveyContent: "Thank you!",
+      active: true,
+    });
+    const qOverall = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      questionText: "How was your overall experience?",
+      type: "numeric",
+      position: 1,
+      frequency: "once_per_order",
+      validationRules: { presence: true },
+    });
+
+    const attemptRes = await admin.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+      publicBaseUrl: "https://dev-pos-user.get-prest.com",
+    });
+    expect(attemptRes).not.toBeNull();
+    expect(attemptRes!.surveyQrUrl).toContain("https://dev-pos-user.get-prest.com/attempts/");
+
+    // Submit with explicit source
+    await admin.mutation(api.surveyAttempts.submit, {
+      attemptId: attemptRes!.attemptId,
+      source: "Submitted via Customer Website",
+      answers: [
+        {
+          questionId: qOverall,
+          numericValue: 4,
+          answerText: "4",
+        },
+      ],
+    });
+
+    // Query order review details
+    const reviewDetails = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+    expect(reviewDetails?.hasReview).toBe(true);
+    expect(reviewDetails?.review?.overallScore).toBe(4);
+    expect(reviewDetails?.review?.source).toBe("Submitted via Customer Website");
+    // Verify that server is not hardcoded to fake "Arjun K."
+    expect(reviewDetails?.order.serverName ?? null).toBeNull();
+    // Verify that unrated customer verbatim is null and not fake text
+    expect(reviewDetails?.review?.customerVerbatim ?? null).toBeNull();
+  });
 });
 
 

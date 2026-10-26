@@ -70,81 +70,12 @@ export default function OrderCustomerReviewPage() {
     orderId ? { orderId: orderId as Id<"orders"> } : "skip"
   );
 
-  // Mutations
-  const toggleFlagMutation = useMutation(api.surveyAttempts.toggleFlagForMeeting);
-
   // Local interaction states
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  // Toggle Kitchen Meeting Flag
-  const handleToggleFlag = async () => {
-    if (!reviewDetails?.review?.attemptId) {
-      showToast("Cannot flag until a review session is initiated.");
-      return;
-    }
-    try {
-      const res = await toggleFlagMutation({ attemptId: reviewDetails.review.attemptId });
-      showToast(
-        res.flaggedForMeeting
-          ? "Flagged for upcoming Kitchen Briefing & Chef Meeting!"
-          : "Kitchen Meeting flag removed."
-      );
-    } catch (err: any) {
-      showToast(err.message || "Failed to update meeting flag");
-    }
-  };
-
-  // Export Feedback JSON / CSV
-  const handleExportFeedback = () => {
-    try {
-      setIsExporting(true);
-      if (!reviewDetails) throw new Error("No review data available to export.");
-
-      const exportPayload = {
-        orderId: reviewDetails.order._id,
-        orderNumber: reviewDetails.order.orderNumber,
-        table: reviewDetails.order.tableNumber,
-        server: reviewDetails.order.serverName,
-        totalAmount: (reviewDetails.order.totalAmount / 100).toFixed(2),
-        paymentMode: reviewDetails.order.paymentMode,
-        hasReview: reviewDetails.hasReview,
-        overallScore: reviewDetails.review?.overallScore ?? "N/A",
-        customerVerbatim: reviewDetails.review?.customerVerbatim ?? "None",
-        sentimentTags: reviewDetails.review?.sentimentTags ?? [],
-        submittedAt: reviewDetails.review?.submittedAt
-          ? new Date(reviewDetails.review.submittedAt).toISOString()
-          : "Pending",
-        itemsEvaluated: reviewDetails.items.map((it) => ({
-          itemName: it.itemName,
-          quantity: it.quantity,
-          category: it.categoryName,
-          station: it.stationName,
-          score: it.customerScore ?? "Unrated",
-          critique: it.customerCritique ?? "None",
-          status: it.operationalStatus,
-        })),
-      };
-
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportPayload, null, 2));
-      const downloadAnchor = document.createElement("a");
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `feedback_order_${reviewDetails.order.orderNumber}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-
-      showToast(`Exported customer feedback for Order #${reviewDetails.order.orderNumber}`);
-    } catch (err: any) {
-      showToast(err.message || "Failed to export feedback");
-    } finally {
-      setIsExporting(false);
-    }
   };
 
   // LOADING STATE
@@ -193,7 +124,6 @@ export default function OrderCustomerReviewPage() {
   }
 
   const { order, review, items, benchmarks, hasReview } = reviewDetails;
-  const isFlagged = Boolean(review?.flaggedForMeeting);
 
   const formattedTotal = (order.totalAmount / 100).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
@@ -252,31 +182,6 @@ export default function OrderCustomerReviewPage() {
                 <span className="material-symbols-outlined text-[18px] text-[#5b5f64]">receipt</span>
                 <span>View Bill Receipt</span>
               </Link>
-
-              <button
-                type="button"
-                onClick={handleExportFeedback}
-                disabled={isExporting}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-[#E8E6E3] text-[#1A1A1A] hover:bg-[#FAF9F6] transition-colors text-xs font-semibold shadow-xs cursor-pointer disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[18px] text-[#5b5f64]">ios_share</span>
-                <span>{isExporting ? "Exporting..." : "Export Feedback"}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleToggleFlag}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold shadow-xs transition-colors cursor-pointer ${
-                  isFlagged
-                    ? "bg-[#e11d48] text-white hover:bg-rose-700"
-                    : "bg-black text-white hover:bg-stone-800"
-                }`}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {isFlagged ? "flag_circle" : "flag"}
-                </span>
-                <span>{isFlagged ? "Flagged for Meeting" : "Flag for Kitchen Meeting"}</span>
-              </button>
             </div>
           </div>
 
@@ -334,8 +239,8 @@ export default function OrderCustomerReviewPage() {
               <div className="flex items-center gap-2 flex-wrap pt-0.5">
                 {hasReview ? (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#E6F4EA] text-[#137333] text-[11px] font-semibold">
-                    <span className="material-symbols-outlined text-[14px]">qr_code_2</span>
-                    <span>Submitted via QR Code</span>
+                    <span className="material-symbols-outlined text-[14px]">language</span>
+                    <span>{review?.source || "Submitted via Customer Website"}</span>
                   </span>
                 ) : (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-stone-100 text-[#5b5f64] text-[11px] font-semibold">
@@ -346,7 +251,7 @@ export default function OrderCustomerReviewPage() {
 
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FAF9F6] border border-[#E8E6E3] text-[#1A1A1A] text-[11px] font-medium">
                   <span className="material-symbols-outlined text-[14px] text-[#5b5f64]">table_restaurant</span>
-                  <span>{order.orderType === "DineIn" ? `Dine-In • Table ${order.tableNumber}` : order.orderType}</span>
+                  <span>{order.tableNumber ? `Table ${order.tableNumber}` : order.orderType || "Order"}</span>
                 </span>
 
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#FAF9F6] text-[#5b5f64] text-[11px]">
@@ -808,58 +713,6 @@ export default function OrderCustomerReviewPage() {
                   })}
                 </tbody>
               </table>
-            </div>
-          </div>
-
-          {/* ==================================================== */}
-          {/* SECTION 4: BACKEND ARCHITECTURE & DATA SCHEMA NOTE */}
-          {/* ==================================================== */}
-          <div className="bg-white rounded-xl p-5 shadow-xs border border-[#E8E6E3]">
-            <div className="flex items-start gap-3">
-              <span className="p-2 rounded-lg bg-[#FAF9F6] border border-[#E8E6E3] text-black shrink-0 mt-0.5">
-                <span className="material-symbols-outlined text-[20px]">data_object</span>
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between flex-wrap gap-1">
-                  <h3 className="text-sm font-bold text-[#1A1A1A]">
-                    Backend Schema Mapping &amp; Data Persistence
-                  </h3>
-                  <span className="text-[10px] uppercase font-bold text-[#5b5f64] tracking-wider">
-                    Engineering Architecture Note
-                  </span>
-                </div>
-                <p className="text-xs text-[#5b5f64] mt-1">
-                  To maintain strict relational granularity between general hospitality metrics and dish execution, ratings on PREST POS are segregated into dual relational collections:
-                </p>
-
-                <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3 font-mono text-xs">
-                  <div className="bg-[#FAF9F6] border border-[#E8E6E3] p-3 rounded-lg">
-                    <span className="text-[11px] font-sans font-semibold text-black block mb-1">
-                      Entity: orderOverallReview (surveyAttempts)
-                    </span>
-                    <code className="text-[#5b5f64] block leading-relaxed text-[11px]">
-                      &#123;<br />
-                      &nbsp;&nbsp;orderId: &quot;{order._id}&quot;,<br />
-                      &nbsp;&nbsp;rating: {review?.overallScore ?? 5},<br />
-                      &nbsp;&nbsp;comment: &quot;{review?.customerVerbatim ? review.customerVerbatim.slice(0, 40) + "..." : "Awaiting review..."}&quot;,<br />
-                      &nbsp;&nbsp;channel: &quot;QR_PAYMENT_PAGE&quot;<br />
-                      &#125;
-                    </code>
-                  </div>
-
-                  <div className="bg-[#FAF9F6] border border-[#E8E6E3] p-3 rounded-lg">
-                    <span className="text-[11px] font-sans font-semibold text-black block mb-1">
-                      Entity: orderItemReviews[] (surveyAnswers)
-                    </span>
-                    <code className="text-[#5b5f64] block leading-relaxed text-[11px]">
-                      [<br />
-                      &nbsp;&nbsp;&#123; id: &quot;REV-ITM-01&quot;, orderId: &quot;{order._id}&quot;, itemName: &quot;{items[0]?.itemName || "Dish 1"}&quot;, rating: {items[0]?.customerScore ?? 5} &#125;,<br />
-                      &nbsp;&nbsp;&#123; id: &quot;REV-ITM-02&quot;, orderId: &quot;{order._id}&quot;, itemName: &quot;{items[1]?.itemName || "Dish 2"}&quot;, rating: {items[1]?.customerScore ?? 4} &#125;<br />
-                      ]
-                    </code>
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>

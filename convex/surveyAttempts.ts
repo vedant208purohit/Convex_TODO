@@ -4,9 +4,53 @@ import { Doc, Id } from "./_generated/dataModel";
 import { requireSurveyAdmin } from "./surveys";
 
 // ----------------------------------------------------
-// DATE FORMAT VALIDATION
+// DATE FORMAT VALIDATION & CANONICAL URL RESOLUTION
 // ----------------------------------------------------
 const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Canonical customer-facing base URL resolver.
+ * Ensures review URLs target the pos-user customer application
+ * across local, development, and production deployments.
+ */
+export function getCustomerFacingBaseUrl(overrideUrl?: string): string {
+  if (overrideUrl && typeof overrideUrl === "string") {
+    const trimmed = overrideUrl.trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      try {
+        const parsed = new URL(trimmed);
+        return `${parsed.protocol}//${parsed.host}`;
+      } catch {
+        // Fall back to configured environment URLs if malformed
+      }
+    }
+  }
+
+  const configured =
+    process.env.POS_USER_BASE_URL ||
+    process.env.FRONT_END_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.PUBLIC_URL;
+
+  if (configured && typeof configured === "string" && configured.trim()) {
+    const trimmed = configured.trim();
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      try {
+        const parsed = new URL(trimmed);
+        return `${parsed.protocol}//${parsed.host}`;
+      } catch {
+        return trimmed.replace(/\/+$/, "");
+      }
+    }
+    return trimmed.replace(/\/+$/, "");
+  }
+
+  // Development vs Production defaults
+  if (process.env.NODE_ENV === "development") {
+    return "http://localhost:3002";
+  }
+  return "https://dev-pos-user.get-prest.com";
+}
 
 // ----------------------------------------------------
 // ATTEMPT QUERIES & MUTATIONS
@@ -129,16 +173,10 @@ export const getOrCreateForOrder = mutation({
       )
       .first();
 
-    const baseUrl =
-      args.publicBaseUrl ||
-      process.env.FRONTEND_URL ||
-      process.env.PUBLIC_URL ||
-      "";
+    const baseUrl = getCustomerFacingBaseUrl(args.publicBaseUrl);
 
     if (existingAttempt) {
-      const surveyQrUrl = baseUrl
-        ? `${baseUrl.replace(/\/$/, "")}/attempts/${existingAttempt._id}`
-        : `/attempts/${existingAttempt._id}`;
+      const surveyQrUrl = `${baseUrl}/attempts/${existingAttempt._id}`;
 
       return {
         attemptId: existingAttempt._id,
@@ -164,9 +202,7 @@ export const getOrCreateForOrder = mutation({
       updatedAt: now,
     });
 
-    const surveyQrUrl = baseUrl
-      ? `${baseUrl.replace(/\/$/, "")}/attempts/${newAttemptId}`
-      : `/attempts/${newAttemptId}`;
+    const surveyQrUrl = `${baseUrl}/attempts/${newAttemptId}`;
 
     return {
       attemptId: newAttemptId,
@@ -512,6 +548,7 @@ export const saveDraftAnswers = mutation({
 export const submit = mutation({
   args: {
     attemptId: v.id("surveyAttempts"),
+    source: v.optional(v.string()),
     answers: v.array(
       v.object({
         questionId: v.id("surveyQuestions"),
@@ -741,6 +778,7 @@ export const submit = mutation({
     await ctx.db.patch(attempt._id, {
       published: true,
       submittedAt: now,
+      source: args.source || attempt.source || "Submitted via Customer Website",
       updatedAt: now,
     });
 
@@ -988,16 +1026,19 @@ export const getOrderReviewDetails = query({
     if (!order) return null;
 
     // 2. Resolve Table
-    let tableNumber = order.orderType === "DineIn" ? "14" : order.orderType;
+    let tableNumber: string | null = null;
     if (order.tableId) {
       const tableDoc = await ctx.db.get(order.tableId);
       if (tableDoc) {
-        tableNumber = (tableDoc as any).tableNumber || (tableDoc as any).name || tableNumber;
+        tableNumber = (tableDoc as any).tableNumber ? String((tableDoc as any).tableNumber) : (tableDoc as any).name || null;
       }
+    }
+    if (!tableNumber && order.orderType) {
+      tableNumber = order.orderType === "DineIn" ? null : order.orderType;
     }
 
     // 3. Resolve Server
-    let serverName = "Arjun K.";
+    let serverName: string | null = null;
     if (order.waiterUserId) {
       try {
         const userDoc = await ctx.db.get(order.waiterUserId as any);
@@ -1006,7 +1047,7 @@ export const getOrderReviewDetails = query({
             `${(userDoc as any).firstName || ""} ${(userDoc as any).lastName || ""}`.trim() ||
             (userDoc as any).name ||
             (userDoc as any).email ||
-            serverName;
+            null;
         }
       } catch {}
     }
@@ -1143,11 +1184,11 @@ export const getOrderReviewDetails = query({
           _id: order._id,
           orderNumber: order.orderNumber,
           orderType: order.orderType,
-          tableNumber,
-          serverName,
+          tableNumber: tableNumber ?? undefined,
+          serverName: serverName ?? undefined,
           totalAmount: order.totalAmount,
           orderStatusName: order.orderStatusName || "Completed & Settled",
-          paymentMode: order.paymentMode || "UPI Terminal #2",
+          paymentMode: order.paymentMode || undefined,
           createdAt: order.createdAt,
           attemptId: attempt?._id || null,
         },
@@ -1254,19 +1295,16 @@ export const getOrderReviewDetails = query({
       const ans = itemAnswerMap.get(it._id.toString()) || itemAnswerMap.get(it.itemName);
       let customerScore: number | null = null;
       let customerCritique: string | null = null;
-      let operationalStatus = "Standard Quality";
+      let operationalStatus = "Not rated";
 
       if (ans) {
         if (ans.numericValue !== undefined && ans.numericValue > 0) {
           customerScore = ans.numericValue;
           ratedItemsCount++;
         }
-        if (ans.answerText) {
-          customerCritique = ans.answerText;
+        if (ans.answerText && ans.answerText.trim().length > 0) {
+          customerCritique = ans.answerText.trim();
         }
-      } else if (overallScore !== null) {
-        customerScore = overallScore;
-        ratedItemsCount++;
       }
 
       if (customerScore !== null) {
@@ -1279,13 +1317,6 @@ export const getOrderReviewDetails = query({
         } else {
           operationalStatus = "Requires Chef Review";
         }
-      }
-
-      if (!customerCritique && customerScore !== null) {
-        if (customerScore >= 5) customerCritique = "Excellent taste and tender preparation!";
-        else if (customerScore === 4) customerCritique = "Good flavour, slightly cold on arrival";
-        else if (customerScore === 3) customerCritique = "Acceptable flavour, could be richer/creamier";
-        else customerCritique = "Requires adjustment in seasoning";
       }
 
       return {
@@ -1333,11 +1364,11 @@ export const getOrderReviewDetails = query({
         _id: order._id,
         orderNumber: order.orderNumber,
         orderType: order.orderType,
-        tableNumber,
-        serverName,
+        tableNumber: tableNumber ?? undefined,
+        serverName: serverName ?? undefined,
         totalAmount: order.totalAmount,
         orderStatusName: order.orderStatusName || "Completed & Settled",
-        paymentMode: order.paymentMode || "UPI Terminal #2",
+        paymentMode: order.paymentMode || undefined,
         createdAt: order.createdAt,
         attemptId: attempt._id,
       },
@@ -1346,13 +1377,11 @@ export const getOrderReviewDetails = query({
         reviewId,
         submittedAt: attempt.submittedAt || attempt.updatedAt,
         flaggedForMeeting: Boolean(attempt.flaggedForMeeting),
-        source: "Submitted via QR Code",
+        source: attempt.source || "Submitted via Customer Website",
         overallScore,
         maxScore: 5.0,
         overallRatingLabel,
-        customerVerbatim:
-          customerVerbatim ||
-          "The service was quick and the staff checked in politely. Really enjoyed the main courses.",
+        customerVerbatim: customerVerbatim || null,
         sentimentTags,
         itemsRatedCount: ratedItemsCount,
         totalItemsCount: enrichedItems.length,

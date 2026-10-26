@@ -12,7 +12,6 @@ import {
   formatCurrencyAmount,
   formatStoreDateTime,
 } from "@/lib/constants/countries";
-import { generateDefxReceiptPlainString } from "@/app/utils/defxReceiptFormatter";
 
 export default function OrderReceiptPreviewPage() {
   const router = useRouter();
@@ -33,7 +32,7 @@ export default function OrderReceiptPreviewPage() {
   const printers = useQuery(api.organizationPrinters.list, {});
   const activeSurvey = useQuery(api.surveys.getActive, {});
 
-  // 3. Mutations for survey attempt binding and printer settings
+  // 3. Mutations for survey attempt binding and QR toggle setting
   const getOrCreateAttempt = useMutation(api.surveyAttempts.getOrCreateForOrder);
   const updateOrg = useMutation(api.organizations.update);
 
@@ -44,15 +43,11 @@ export default function OrderReceiptPreviewPage() {
     published?: boolean;
   } | null>(null);
 
-  // Preferences toggles (synced with activeOrg)
+  // Standalone QR code setting (synced with activeOrg)
   const [includeReviewQr, setIncludeReviewQr] = useState<boolean>(true);
-  const [autoCutPaper, setAutoCutPaper] = useState<boolean>(true);
-  const [popCashDrawer, setPopCashDrawer] = useState<boolean>(false);
 
   // Interactive UI Modal States
   const [isSimulatorOpen, setIsSimulatorOpen] = useState(false);
-  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
-  const [emailInput, setEmailInput] = useState("");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Simulator Star Rating & Likes
@@ -64,12 +59,26 @@ export default function OrderReceiptPreviewPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Sync preference toggles from activeOrg
+  // Canonical public base URL for customer pos-user app
+  const posUserBaseUrl = useMemo(() => {
+    if (process.env.NEXT_PUBLIC_POS_USER_BASE_URL) {
+      return process.env.NEXT_PUBLIC_POS_USER_BASE_URL.replace(/\/$/, "");
+    }
+    if (process.env.NEXT_PUBLIC_FRONT_END_URL) {
+      return process.env.NEXT_PUBLIC_FRONT_END_URL.replace(/\/$/, "");
+    }
+    if (typeof window !== "undefined") {
+      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        return "http://localhost:3002";
+      }
+    }
+    return "https://dev-pos-user.get-prest.com";
+  }, []);
+
+  // Sync QR preference toggle from activeOrg
   useEffect(() => {
     if (activeOrg) {
       setIncludeReviewQr(activeOrg.showQrCode ?? true);
-      setAutoCutPaper(activeOrg.autoCutPaper ?? true);
-      setPopCashDrawer(activeOrg.popCashDrawer ?? false);
     }
   }, [activeOrg]);
 
@@ -78,7 +87,7 @@ export default function OrderReceiptPreviewPage() {
     if (orderId && activeSurvey && !attemptInfo) {
       getOrCreateAttempt({
         orderId,
-        publicBaseUrl: typeof window !== "undefined" ? window.location.origin : undefined,
+        publicBaseUrl: posUserBaseUrl,
       })
         .then((res) => {
           if (res) {
@@ -93,9 +102,9 @@ export default function OrderReceiptPreviewPage() {
           console.error("Failed to generate order survey attempt:", err);
         });
     }
-  }, [orderId, activeSurvey, attemptInfo, getOrCreateAttempt]);
+  }, [orderId, activeSurvey, attemptInfo, getOrCreateAttempt, posUserBaseUrl]);
 
-  // Toggle Handlers with backend persistence
+  // Standalone QR toggle handler with backend persistence
   const handleToggleQr = async (val: boolean) => {
     setIncludeReviewQr(val);
     if (activeOrg) {
@@ -104,30 +113,7 @@ export default function OrderReceiptPreviewPage() {
         showToast(val ? "Order Review QR enabled on receipts." : "Order Review QR disabled.");
       } catch (err) {
         console.error("Failed to update QR setting:", err);
-      }
-    }
-  };
-
-  const handleToggleAutoCut = async (val: boolean) => {
-    setAutoCutPaper(val);
-    if (activeOrg) {
-      try {
-        await updateOrg({ id: activeOrg._id, autoCutPaper: val });
-        showToast(val ? "Auto-cut paper enabled." : "Auto-cut paper disabled.");
-      } catch (err) {
-        console.error("Failed to update auto-cut setting:", err);
-      }
-    }
-  };
-
-  const handleToggleCashDrawer = async (val: boolean) => {
-    setPopCashDrawer(val);
-    if (activeOrg) {
-      try {
-        await updateOrg({ id: activeOrg._id, popCashDrawer: val });
-        showToast(val ? "Pop cash drawer enabled on print." : "Pop cash drawer disabled.");
-      } catch (err) {
-        console.error("Failed to update cash drawer setting:", err);
+        showToast("Failed to persist QR setting.");
       }
     }
   };
@@ -146,21 +132,19 @@ export default function OrderReceiptPreviewPage() {
     );
   }, [printers]);
 
-  // QR destination URL
+  // QR destination URL targeting pos-user customer application
   const feedbackUrl = useMemo(() => {
     if (attemptInfo?.surveyQrUrl) {
       if (attemptInfo.surveyQrUrl.startsWith("http")) {
         return attemptInfo.surveyQrUrl;
       }
-      if (typeof window !== "undefined") {
-        return `${window.location.origin}${attemptInfo.surveyQrUrl}`;
-      }
+      return `${posUserBaseUrl}${attemptInfo.surveyQrUrl.startsWith("/") ? "" : "/"}${attemptInfo.surveyQrUrl}`;
     }
-    if (typeof window !== "undefined" && attemptInfo?.attemptId) {
-      return `${window.location.origin}/attempts/${attemptInfo.attemptId}`;
+    if (attemptInfo?.attemptId) {
+      return `${posUserBaseUrl}/attempts/${attemptInfo.attemptId}`;
     }
     return "";
-  }, [attemptInfo]);
+  }, [attemptInfo, posUserBaseUrl]);
 
   const shortFeedbackDisplay = useMemo(() => {
     if (!feedbackUrl) return "prest.dine/review";
@@ -191,17 +175,6 @@ export default function OrderReceiptPreviewPage() {
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(url);
     showToast("QR Code SVG exported successfully.");
-  };
-
-  // E-Receipt handler
-  const handleSendEmail = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!emailInput || !emailInput.includes("@")) {
-      showToast("Please enter a valid guest email address.");
-      return;
-    }
-    setIsEmailModalOpen(false);
-    showToast(`E-Receipt with review link dispatched to ${emailInput}`);
   };
 
   // Loading Skeleton
@@ -250,16 +223,18 @@ export default function OrderReceiptPreviewPage() {
   }
 
   // Derived financial computations
+  const currencySymbol = activeOrg?.defaultCurrencySymbol || activeOrg?.defaultCurrency || "₹";
   const subTotalNum = (order.subTotal || 0) / 100;
   const taxTotalNum = (order.taxTotal || 0) / 100;
   const grandTotalNum = (order.totalAmount || 0) / 100;
   const cgst = (taxTotalNum / 2).toFixed(2);
   const sgst = (taxTotalNum / 2).toFixed(2);
 
-  const serverName = (order as any).waiter?.name || (order.waiterUserId ? "Staff Member" : "Arjun K.");
-  const cashierName = order.cashierUserId || "Mahendra S.";
+  const cashierName = (order as any).cashierUser?.name || order.cashierUserId || null;
   const formattedDateTimeStr = formatStoreDateTime(order.createdAt);
-  const tableDisplay = table?.number ? `Table ${table.number}` : order.orderType === "DineIn" ? "Table 14" : order.orderType;
+  const tableDisplay = table?.number
+    ? `Table ${table.number}`
+    : (table as any)?.name || (order.orderType === "DineIn" ? "Dine-In" : order.orderType || "Order");
 
   return (
     <PosShell title="Orders" subtitle="Bill & Receipt Preview">
@@ -304,7 +279,7 @@ export default function OrderReceiptPreviewPage() {
               </div>
 
               <p className="text-xs text-[#5b5f64]">
-                {tableDisplay} • {order.orderType} • Closed {formattedDateTimeStr} • Server: {serverName}
+                {tableDisplay} • {order.orderType} • Closed {formattedDateTimeStr}
               </p>
             </div>
 
@@ -318,19 +293,6 @@ export default function OrderReceiptPreviewPage() {
               >
                 <span className="material-symbols-outlined text-[18px]">print</span>
                 <span>Reprint Thermal Slip</span>
-              </button>
-
-              {/* Send E-Receipt */}
-              <button
-                type="button"
-                onClick={() => {
-                  setEmailInput(order.customerEmail || "guest.table@example.com");
-                  setIsEmailModalOpen(true);
-                }}
-                className="h-10 px-4 bg-white hover:bg-[#FAF9F6] text-[#1A1A1A] border border-[#E8E6E3] rounded-lg text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px] text-[#5b5f64]">send</span>
-                <span>Send E-Receipt</span>
               </button>
 
               {/* Customer Review Details */}
@@ -373,7 +335,10 @@ export default function OrderReceiptPreviewPage() {
             <div className="lg:col-span-7 flex flex-col items-center">
               <div className="w-full max-w-[430px] relative">
                 {/* Thermal Receipt Paper Effect */}
-                <div className="bg-white rounded-2xl shadow-md border border-[#E8E6E3] p-6 sm:p-7 text-[#1A1A1A] text-xs relative overflow-hidden transition-all duration-200">
+                <div
+                  id="printable-thermal-slip"
+                  className="bg-white rounded-2xl shadow-md border border-[#E8E6E3] p-6 sm:p-7 text-[#1A1A1A] text-xs relative overflow-hidden transition-all duration-200"
+                >
                   {/* Top Notch Decor */}
                   <div className="flex justify-between items-center pb-3 mb-2 border-b border-dashed border-[#E8E6E3]">
                     <div className="flex items-center gap-1.5">
@@ -406,7 +371,7 @@ export default function OrderReceiptPreviewPage() {
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] text-[#5b5f64] mb-3">
                     <div className="flex justify-between">
                       <span>Bill No:</span>
-                      <span className="font-bold text-[#1A1A1A]">B-{order.orderNumber.replace(/[^0-9]/g, "") || "9482"}</span>
+                      <span className="font-bold text-[#1A1A1A]">#{order.orderNumber}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Table:</span>
@@ -418,16 +383,20 @@ export default function OrderReceiptPreviewPage() {
                     </div>
                     <div className="flex justify-between">
                       <span>Covers:</span>
-                      <span className="font-bold text-[#1A1A1A]">{order.membersOnTable || 3} Guests</span>
+                      <span className="font-bold text-[#1A1A1A]">
+                        {order.membersOnTable ? `${order.membersOnTable} Guests` : "—"}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span>Date:</span>
                       <span className="font-bold text-[#1A1A1A]">{formattedDateTimeStr}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Cashier:</span>
-                      <span className="font-bold text-[#1A1A1A]">{cashierName}</span>
-                    </div>
+                    {cashierName && (
+                      <div className="flex justify-between">
+                        <span>Cashier:</span>
+                        <span className="font-bold text-[#1A1A1A]">{cashierName}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Items Table Header */}
@@ -455,10 +424,10 @@ export default function OrderReceiptPreviewPage() {
                         </div>
                         <span className="w-12 text-center text-[#1A1A1A] font-medium">{it.quantity}</span>
                         <span className="w-16 text-right text-[#5b5f64]">
-                          ₹{((it.itemPrice || 0) / 100).toFixed(2)}
+                          {currencySymbol}{((it.itemPrice || 0) / 100).toFixed(2)}
                         </span>
                         <span className="w-20 text-right font-bold text-[#1A1A1A]">
-                          ₹{((it.totalPrice || 0) / 100).toFixed(2)}
+                          {currencySymbol}{((it.totalPrice || 0) / 100).toFixed(2)}
                         </span>
                       </div>
                     ))}
@@ -471,15 +440,15 @@ export default function OrderReceiptPreviewPage() {
                   <div className="flex flex-col gap-1 py-1 text-xs">
                     <div className="flex justify-between text-[#5b5f64]">
                       <span>Subtotal ({items.length} items)</span>
-                      <span className="text-[#1A1A1A] font-semibold">₹{subTotalNum.toFixed(2)}</span>
+                      <span className="text-[#1A1A1A] font-semibold">{currencySymbol}{subTotalNum.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-[#5b5f64]">
                       <span>CGST @ 2.5%</span>
-                      <span className="text-[#1A1A1A]">₹{cgst}</span>
+                      <span className="text-[#1A1A1A]">{currencySymbol}{cgst}</span>
                     </div>
                     <div className="flex justify-between text-[#5b5f64]">
                       <span>SGST @ 2.5%</span>
-                      <span className="text-[#1A1A1A]">₹{sgst}</span>
+                      <span className="text-[#1A1A1A]">{currencySymbol}{sgst}</span>
                     </div>
 
                     {/* Grand Total Bar */}
@@ -488,7 +457,7 @@ export default function OrderReceiptPreviewPage() {
                         Grand Total
                       </span>
                       <span className="text-lg font-extrabold text-black">
-                        ₹{grandTotalNum.toFixed(2)}
+                        {currencySymbol}{grandTotalNum.toFixed(2)}
                       </span>
                     </div>
 
@@ -498,9 +467,11 @@ export default function OrderReceiptPreviewPage() {
                         <span className="material-symbols-outlined text-[16px] text-black">
                           {order.paymentMode === "Cash" ? "payments" : "credit_card"}
                         </span>
-                        <span>Paid via {order.paymentMode || "Card ending 4402"}</span>
+                        <span>Paid via {order.paymentMode || order.paymentStatus || "Settled"}</span>
                       </span>
-                      <span className="font-mono text-[#1A1A1A] font-semibold">TXN-8841-OK</span>
+                      {order.paymentStatus && (
+                        <span className="font-mono text-[#1A1A1A] font-semibold">{order.paymentStatus}</span>
+                      )}
                     </div>
                   </div>
 
@@ -508,7 +479,10 @@ export default function OrderReceiptPreviewPage() {
                   {/* DEDICATED REVIEW & SURVEY QR SECTION */}
                   {/* ================================================== */}
                   {includeReviewQr && (
-                    <div className="mt-5 pt-4 rounded-xl bg-[#FAF9F6] border border-[#E8E6E3] p-5 flex flex-col items-center text-center">
+                    <div
+                      id="receipt-feedback-card"
+                      className="mt-5 pt-4 rounded-xl bg-[#FAF9F6] border border-[#E8E6E3] p-5 flex flex-col items-center text-center"
+                    >
                       <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white border border-[#E8E6E3] shadow-2xs mb-2">
                         <span className="material-symbols-outlined text-[15px] text-black">stars</span>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-black">
@@ -524,7 +498,10 @@ export default function OrderReceiptPreviewPage() {
                       </p>
 
                       {/* Precision Scalable QR Code Graphic */}
-                      <div className="my-3 p-3 bg-white rounded-xl border border-[#E8E6E3] shadow-2xs flex flex-col items-center">
+                      <div
+                        id="receipt-feedback-qr-box"
+                        className="my-3 p-3 bg-white rounded-xl border border-[#E8E6E3] shadow-2xs flex flex-col items-center"
+                      >
                         {feedbackUrl ? (
                           <QRCodeSVG
                             id="order-feedback-qr-svg"
@@ -542,29 +519,28 @@ export default function OrderReceiptPreviewPage() {
                         )}
                       </div>
 
-                      <div className="flex items-center gap-1 text-xs font-bold text-black">
-                        <span className="text-[#5b5f64] font-normal">Or review at:</span>
+                      <div className="flex flex-col items-center justify-center gap-0.5 text-xs font-bold text-black w-full max-w-full px-2 text-center mt-1">
+                        <span className="text-[#5b5f64] font-normal text-[11px]">Or review at:</span>
                         <a
                           href={feedbackUrl || "#"}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="tracking-tight underline underline-offset-2 hover:text-stone-700"
+                          className="tracking-tight underline underline-offset-2 hover:text-stone-700 break-all text-[11px] leading-tight text-center max-w-full"
                         >
                           {shortFeedbackDisplay}
                         </a>
                       </div>
 
-                      <p className="text-[10px] text-[#5b5f64] mt-1">
-                        Token ID: <span className="font-mono font-semibold text-[#1A1A1A]">
-                          {attemptInfo?.attemptId ? `${attemptInfo.attemptId.slice(-8)}-tbl14` : "9f8a-ord4829-tbl14"}
-                        </span>{" "}
-                        • 1-Click Verification
-                      </p>
+                      {attemptInfo?.attemptId && (
+                        <p className="text-[10px] text-[#5b5f64] mt-1">
+                          Session Ref: <span className="font-mono font-semibold text-[#1A1A1A]">{attemptInfo.attemptId.slice(-8)}</span> • 1-Click Verification
+                        </p>
+                      )}
                     </div>
                   )}
 
                   {/* Bottom Receipt Footer */}
-                  <div className="text-center mt-5 pt-2 text-[#5b5f64] text-[11px]">
+                  <div id="receipt-footer" className="text-center mt-5 pt-2 text-[#5b5f64] text-[11px]">
                     <p className="font-semibold text-black">Thank you for dining with PREST!</p>
                     <p className="mt-0.5 text-[10px]">Please retain this bill for invoice &amp; loyalty credits.</p>
                     <div className="mt-3 flex justify-center items-center gap-1.5 text-[9px] text-[#747878] tracking-widest uppercase">
@@ -679,90 +655,26 @@ export default function OrderReceiptPreviewPage() {
                 </div>
               </div>
 
-              {/* Card 2: Thermal Printer Setup & Hardware Options */}
-              <div className="bg-white rounded-2xl p-6 border border-[#E8E6E3] shadow-xs flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-[#FAF9F6] border border-[#E8E6E3] flex items-center justify-center text-black">
-                      <span className="material-symbols-outlined text-[20px]">tune</span>
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold text-black">Printer &amp; Slip Preferences</h2>
-                      <p className="text-[11px] text-[#5b5f64]">Terminal hardware output format</p>
-                    </div>
+              {/* Standalone Control: Include Order Review QR Code */}
+              <div className="bg-white rounded-2xl p-6 border border-[#E8E6E3] shadow-xs flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-[#FAF9F6] border border-[#E8E6E3] flex items-center justify-center text-black">
+                    <span className="material-symbols-outlined text-[20px]">qr_code_2</span>
                   </div>
-                  <span className="text-xs font-semibold text-[#5b5f64]">Station 01</span>
-                </div>
-
-                {/* Assigned Hardware */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-[#5b5f64]">Assigned Hardware</label>
-                  <div className="flex items-center justify-between bg-[#FAF9F6] border border-[#E8E6E3] px-3.5 py-2.5 rounded-xl">
-                    <div className="flex items-center gap-2.5">
-                      <span className="material-symbols-outlined text-black text-[20px]">print</span>
-                      <span className="text-xs font-bold text-black">
-                        {cashierPrinter ? `${cashierPrinter.printerType} (${cashierPrinter.printerUrl})` : "Epson TM-T88VI (Cash Counter 01)"}
-                      </span>
-                    </div>
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-white border border-[#E8E6E3] text-black font-bold">
-                      Online • 0.04s
-                    </span>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-black">Include Order Review QR Code</span>
+                    <span className="text-[11px] text-[#5b5f64]">Prints dynamic customer feedback QR on receipts</span>
                   </div>
                 </div>
-
-                {/* Toggles */}
-                <div className="flex flex-col gap-3 pt-1 text-xs">
-                  {/* Include Review QR Toggle */}
-                  <div className="flex items-center justify-between py-1">
-                    <div className="flex flex-col">
-                      <span className="text-black font-semibold">Include Order Review QR Code</span>
-                      <span className="text-[11px] text-[#5b5f64]">Encodes dynamic item feedback trigger</span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={includeReviewQr}
-                        onChange={(e) => handleToggleQr(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                    </label>
-                  </div>
-
-                  {/* Auto-Cut Paper Toggle */}
-                  <div className="flex items-center justify-between py-1">
-                    <div className="flex flex-col">
-                      <span className="text-black font-semibold">Auto-Cut Paper After Print</span>
-                      <span className="text-[11px] text-[#5b5f64]">Full precision guillotine slice</span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={autoCutPaper}
-                        onChange={(e) => handleToggleAutoCut(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                    </label>
-                  </div>
-
-                  {/* Pop Cash Drawer Toggle */}
-                  <div className="flex items-center justify-between py-1">
-                    <div className="flex flex-col">
-                      <span className="text-black font-semibold">Pop Cash Drawer on Print</span>
-                      <span className="text-[11px] text-[#5b5f64]">Trigger 24V pulse RJ12 port</span>
-                    </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={popCashDrawer}
-                        onChange={(e) => handleToggleCashDrawer(e.target.checked)}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
-                    </label>
-                  </div>
-                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={includeReviewQr}
+                    onChange={(e) => handleToggleQr(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-stone-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-black"></div>
+                </label>
               </div>
 
               {/* Card 3: Item-Level Survey Questions Ready */}
@@ -789,12 +701,6 @@ export default function OrderReceiptPreviewPage() {
                       </span>
                     );
                   })}
-                  <span className="px-3 py-1.5 rounded-lg bg-[#FAF9F6] border border-[#E8E6E3] text-xs font-semibold text-black flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-[15px] text-[#5b5f64]">
-                      person_heart
-                    </span>
-                    <span>Server: {serverName} (Courtesy)</span>
-                  </span>
                 </div>
               </div>
             </div>
@@ -928,107 +834,80 @@ export default function OrderReceiptPreviewPage() {
       )}
 
       {/* ==================================================== */}
-      {/* SEND E-RECEIPT MODAL */}
-      {/* ==================================================== */}
-      {isEmailModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 border border-[#E8E6E3]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold text-black">Dispatch E-Receipt</h3>
-              <button
-                type="button"
-                onClick={() => setIsEmailModalOpen(false)}
-                className="text-[#5b5f64] hover:text-black cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[20px]">close</span>
-              </button>
-            </div>
-            <p className="text-xs text-[#5b5f64] mb-4 leading-relaxed">
-              Send an electronic receipt for Order #{order.orderNumber} including itemized breakdown and customer feedback link.
-            </p>
-            <form onSubmit={handleSendEmail} className="flex flex-col gap-4">
-              <div>
-                <label className="text-xs font-semibold text-[#5b5f64]">Guest Email Address</label>
-                <input
-                  type="email"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="guest@example.com"
-                  className="w-full h-10 px-3 bg-[#FAF9F6] border border-[#D6D3CD] rounded-lg text-xs text-black focus:outline-none focus:border-black mt-1"
-                  required
-                />
-              </div>
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsEmailModalOpen(false)}
-                  className="px-4 py-2 border border-[#E8E6E3] rounded-lg text-xs font-semibold text-[#5b5f64] hover:bg-[#FAF9F6]"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-black hover:bg-stone-800 text-white rounded-lg text-xs font-semibold"
-                >
-                  Dispatch Receipt
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ==================================================== */}
-      {/* DEDICATED PRINTABLE THERMAL RECEIPT STYLES & ELEMENT */}
+      {/* DEDICATED PRINTABLE THERMAL RECEIPT STYLES */}
       {/* ==================================================== */}
       <style jsx global>{`
         @media print {
+          @page {
+            margin: 0;
+            size: auto;
+          }
+          html, body, #__next, main, div {
+            overflow: visible !important;
+            height: auto !important;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           body * {
             visibility: hidden !important;
           }
-          #printable-order-receipt,
-          #printable-order-receipt * {
+          #printable-thermal-slip,
+          #printable-thermal-slip * {
             visibility: visible !important;
           }
-          #printable-order-receipt {
+          #printable-thermal-slip {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
             width: 80mm !important;
+            max-width: 80mm !important;
             margin: 0 !important;
-            padding: 5mm !important;
+            padding: 3mm 4mm !important;
             background: #ffffff !important;
             color: #000000 !important;
-            font-family: monospace !important;
-            font-size: 11px !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            overflow: visible !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          #receipt-feedback-card {
+            margin-top: 3mm !important;
+            padding: 2.5mm 2mm !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          #receipt-feedback-qr-box {
+            margin: 2mm 0 !important;
+            padding: 1.5mm !important;
+          }
+          #receipt-feedback-qr-box svg,
+          #order-feedback-qr-svg {
+            width: 90px !important;
+            height: 90px !important;
+          }
+          #receipt-footer {
+            margin-top: 2.5mm !important;
+            padding-top: 1mm !important;
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          #printable-thermal-slip a {
+            text-decoration: underline !important;
+            color: #000000 !important;
+          }
+          #printable-thermal-slip svg {
+            display: block !important;
+            margin: 0 auto !important;
           }
         }
       `}</style>
-
-      <div id="printable-order-receipt" className="hidden">
-        <pre className="whitespace-pre-wrap font-mono text-[11px] leading-tight text-black">
-          {generateDefxReceiptPlainString(
-            {
-              ...order,
-              items: items.map((it: any) => ({
-                itemName: it.itemName,
-                quantity: it.quantity,
-                itemPrice: it.itemPrice,
-                totalPrice: it.totalPrice,
-              })),
-            },
-            activeOrg,
-            48
-          )}
-          {includeReviewQr && feedbackUrl && (
-            `\n------------------------------------------------\n` +
-            `             CUSTOMER FEEDBACK\n` +
-            `      How was your experience today?\n` +
-            `Review at: ${shortFeedbackDisplay}\n` +
-            `------------------------------------------------\n`
-          )}
-        </pre>
-      </div>
     </PosShell>
   );
 }

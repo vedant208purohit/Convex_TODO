@@ -12,6 +12,7 @@ import {
   validateInventoryAvailabilityForItems,
   checkInventoryAvailabilityForItems,
 } from "./inventory";
+import { getCustomerFacingBaseUrl } from "./surveyAttempts";
 
 // ==========================================
 // ORDER ACTIVITY DURATION & LIFECYCLE HELPER
@@ -1321,13 +1322,8 @@ export const getOrderDetails = query({
         .first();
 
       if (attempt) {
-        const baseUrl =
-          process.env.FRONTEND_URL ||
-          process.env.PUBLIC_URL ||
-          "";
-        surveyQrUrl = baseUrl
-          ? `${baseUrl.replace(/\/$/, "")}/attempts/${attempt._id}`
-          : `/attempts/${attempt._id}`;
+        const baseUrl = getCustomerFacingBaseUrl();
+        surveyQrUrl = `${baseUrl}/attempts/${attempt._id}`;
       }
     }
 
@@ -2729,5 +2725,5 @@ export const listOrderActivities = query({
       .sort((a, b) => a.position - b.position || a.createdAt - b.createdAt);
   },
 });
-
 export { advanceOrderLifecycle } from "./workstation";
+

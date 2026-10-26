@@ -1597,6 +1597,7 @@ postpaidOrderRequests: defineTable({
     published: v.boolean(),
     submittedAt: v.optional(v.number()),
     flaggedForMeeting: v.optional(v.boolean()),
+    source: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
