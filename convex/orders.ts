@@ -466,6 +466,9 @@ export const createOrder = mutation({
       args.orderSource === "Prest-Online" ||
       args.orderSource === "ONLINE"
     ) {
+      if (org.onlineStore === false) {
+        throw new Error("This restaurant is currently not accepting online orders.");
+      }
       if (args.orderType === "DineIn" && org.isDineIn === false) {
         throw new Error("Dine In service is currently disabled for this store.");
       }

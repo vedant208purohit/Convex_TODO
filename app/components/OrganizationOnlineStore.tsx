@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Toast, type ToastMessage } from "./Toast";
+import { getCanonicalStorefrontUrl } from "../../lib/storefrontUrl";
 
 // ==========================================
 // UTILITY HELPERS & COLOR PRESETS
@@ -118,23 +119,55 @@ export function OrganizationOnlineStore() {
     if (org.secondaryColor && isValidHex(org.secondaryColor)) {
       setSecondaryColor(org.secondaryColor);
     }
+    let matchingPreset: string | undefined;
+    if (org.theme && PRESET_PALETTES[org.theme]) {
+      matchingPreset = org.theme;
+    } else {
+      matchingPreset = Object.keys(PRESET_PALETTES).find(
+        (key) =>
+          PRESET_PALETTES[key].primary.toUpperCase() === (org.primaryColor || "").toUpperCase() &&
+          PRESET_PALETTES[key].secondary.toUpperCase() === (org.secondaryColor || "").toUpperCase()
+      );
+    }
+    if (matchingPreset) {
+      setSelectedPreset(matchingPreset);
+      const p = PRESET_PALETTES[matchingPreset];
+      setCanvasBg(p.bg);
+      setCardBg(p.card);
+      setHeadingInk(p.text);
+    } else {
+      setSelectedPreset("custom");
+    }
   }, [org]);
 
-  // Public URL
+  // Canonical Storefront URL
   const storeSlug = org?.slug || "spicegarden";
-  const publicStoreUrl = `https://${storeSlug}.get-prest.com`;
+  const publicStoreUrl = useMemo(() => {
+    return getCanonicalStorefrontUrl({ slug: storeSlug });
+  }, [storeSlug]);
+
+  const displayStoreDomain = useMemo(() => {
+    try {
+      const parsed = new URL(publicStoreUrl);
+      return parsed.host + (parsed.pathname !== "/" ? parsed.pathname : "");
+    } catch {
+      return `${storeSlug}.get-prest.com`;
+    }
+  }, [publicStoreUrl, storeSlug]);
 
   const isDirty = useMemo(() => {
     if (!org) return false;
     const initialOnlineStore = org.onlineStore ?? true;
     const initialPrimary = org.primaryColor || DEFAULT_PRIMARY;
     const initialSecondary = org.secondaryColor || DEFAULT_SECONDARY;
+    const initialTheme = org.theme || "bistro";
     return (
       onlineStore !== initialOnlineStore ||
       primaryColor.toUpperCase() !== initialPrimary.toUpperCase() ||
-      secondaryColor.toUpperCase() !== initialSecondary.toUpperCase()
+      secondaryColor.toUpperCase() !== initialSecondary.toUpperCase() ||
+      (selectedPreset && selectedPreset !== initialTheme)
     );
-  }, [org, onlineStore, primaryColor, secondaryColor]);
+  }, [org, onlineStore, primaryColor, secondaryColor, selectedPreset]);
 
   const showToast = (
     message: string,
@@ -171,12 +204,13 @@ export function OrganizationOnlineStore() {
 
     setIsSaving(true);
     try {
+      const resolvedTheme = selectedPreset && selectedPreset !== "custom" ? selectedPreset : (org.theme || "custom");
       await updateOrg({
         id: org._id,
         onlineStore,
         primaryColor: primaryColor.trim().toUpperCase(),
         secondaryColor: secondaryColor.trim().toUpperCase(),
-        theme: "theme1",
+        theme: resolvedTheme,
       });
       showToast("Store configuration saved successfully!", "success", "Live storefront branding updated in real-time.");
     } catch (err: any) {
@@ -304,7 +338,7 @@ export function OrganizationOnlineStore() {
             >
               <span className="material-symbols-outlined text-[15px] text-[#645d58] shrink-0">link</span>
               <span className="text-[#1e1b19] select-all font-medium whitespace-nowrap">
-                <span className="hidden 2xl:inline font-mono">{storeSlug}.get-prest.com</span>
+                <span className="hidden 2xl:inline font-mono">{displayStoreDomain}</span>
                 <span className="2xl:hidden font-medium">Live Store</span>
               </span>
               <button
@@ -2536,13 +2570,17 @@ export function OrganizationOnlineStore() {
                     <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xs">
                       <span className="material-symbols-outlined text-[20px] text-[#1e1b19]">moped</span>
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] text-xs font-bold">Active</span>
+                    {org?.isDelivery ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] text-xs font-bold">Active</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-600 text-xs font-bold">Disabled</span>
+                    )}
                   </div>
                   <h4 className="text-sm font-bold text-[#1e1b19]">Doorstep Delivery</h4>
                   <p className="text-xs text-[#645d58] mt-1">Average delivery time: 35 minutes. Geofence radius: 7.5 km.</p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-[#e9e1dd] text-[11px] text-[#645d58] font-mono">
-                  Min Order: ₹200 • Base Fee: ₹25
+                  Status: {org?.isDelivery ? "Accepting Orders" : "Channel Turned Off"}
                 </div>
               </div>
 
@@ -2553,13 +2591,17 @@ export function OrganizationOnlineStore() {
                     <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xs">
                       <span className="material-symbols-outlined text-[20px] text-[#1e1b19]">shopping_bag</span>
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] text-xs font-bold">Active</span>
+                    {org?.isTakeAway ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] text-xs font-bold">Active</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-600 text-xs font-bold">Disabled</span>
+                    )}
                   </div>
                   <h4 className="text-sm font-bold text-[#1e1b19]">Curbside Takeaway</h4>
-                  <p className="text-xs text-[#645d58] mt-1">Ready in 15-20 minutes. Free packing. SMS pickup notifications enabled.</p>
+                  <p className="text-xs text-[#645d58] mt-1">Ready in 15-20 minutes. Free packing. Direct counter pickup.</p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-[#e9e1dd] text-[11px] text-[#645d58] font-mono">
-                  Zero Delivery Charge
+                  Status: {org?.isTakeAway ? "Accepting Pickups" : "Channel Turned Off"}
                 </div>
               </div>
 
@@ -2570,13 +2612,17 @@ export function OrganizationOnlineStore() {
                     <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center shadow-xs">
                       <span className="material-symbols-outlined text-[20px] text-[#1e1b19]">restaurant</span>
                     </div>
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] text-xs font-bold">Active</span>
+                    {org?.isDineIn ? (
+                      <span className="px-2.5 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] text-xs font-bold">Active</span>
+                    ) : (
+                      <span className="px-2.5 py-0.5 rounded-full bg-stone-200 text-stone-600 text-xs font-bold">Disabled</span>
+                    )}
                   </div>
                   <h4 className="text-sm font-bold text-[#1e1b19]">Dine-In Table QR</h4>
-                  <p className="text-xs text-[#645d58] mt-1">18 tables connected. Direct kitchen ticket firing to station KDS 1.</p>
+                  <p className="text-xs text-[#645d58] mt-1">Direct kitchen ticket firing to station KDS terminal.</p>
                 </div>
                 <div className="mt-4 pt-3 border-t border-[#e9e1dd] text-[11px] text-[#645d58] font-mono">
-                  Waiter Paging: Enabled
+                  Status: {org?.isDineIn ? "Table Ordering Active" : "Channel Turned Off"}
                 </div>
               </div>
             </div>
@@ -2630,12 +2676,24 @@ export function OrganizationOnlineStore() {
                       <span className="material-symbols-outlined text-[16px]">moped</span>
                       <span>Delivery</span>
                     </td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Enabled</td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Enabled</td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Enabled</td>
-                    <td className="py-3.5 px-4 text-[#645d58]">— N/A</td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.deliveryOnlinePayment ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.deliveryOnlinePayment ? "✓ Enabled" : "— Disabled"}
+                    </td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.deliveryOnlinePayment ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.deliveryOnlinePayment ? "✓ Enabled" : "— Disabled"}
+                    </td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.deliveryCashOnDelivery ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.deliveryCashOnDelivery ? "✓ Enabled" : "— Disabled"}
+                    </td>
+                    <td className="py-3.5 px-4 text-[#8a7e75]">— N/A</td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className="px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] font-bold text-[10px]">Active</span>
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                        org?.isDelivery && (org?.deliveryOnlinePayment || org?.deliveryCashOnDelivery)
+                          ? "bg-[#e8f5e9] text-[#1b5e20]"
+                          : "bg-stone-100 text-stone-600"
+                      }`}>
+                        {org?.isDelivery && (org?.deliveryOnlinePayment || org?.deliveryCashOnDelivery) ? "Active" : "Disabled"}
+                      </span>
                     </td>
                   </tr>
                   <tr>
@@ -2643,12 +2701,24 @@ export function OrganizationOnlineStore() {
                       <span className="material-symbols-outlined text-[16px]">shopping_bag</span>
                       <span>Curbside Takeaway</span>
                     </td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Enabled</td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Enabled</td>
-                    <td className="py-3.5 px-4 text-[#645d58]">— N/A</td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Pay on Pickup</td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.takeAwayOnlinePayment ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.takeAwayOnlinePayment ? "✓ Enabled" : "— Disabled"}
+                    </td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.takeAwayOnlinePayment ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.takeAwayOnlinePayment ? "✓ Enabled" : "— Disabled"}
+                    </td>
+                    <td className="py-3.5 px-4 text-[#8a7e75]">— N/A</td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.takeAwayCashPayment ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.takeAwayCashPayment ? "✓ Pay on Pickup" : "— Disabled"}
+                    </td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className="px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] font-bold text-[10px]">Active</span>
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                        org?.isTakeAway && (org?.takeAwayOnlinePayment || org?.takeAwayCashPayment)
+                          ? "bg-[#e8f5e9] text-[#1b5e20]"
+                          : "bg-stone-100 text-stone-600"
+                      }`}>
+                        {org?.isTakeAway && (org?.takeAwayOnlinePayment || org?.takeAwayCashPayment) ? "Active" : "Disabled"}
+                      </span>
                     </td>
                   </tr>
                   <tr>
@@ -2656,12 +2726,24 @@ export function OrganizationOnlineStore() {
                       <span className="material-symbols-outlined text-[16px]">restaurant</span>
                       <span>Table QR Dine-In</span>
                     </td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Scan &amp; Pay</td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Table Link</td>
-                    <td className="py-3.5 px-4 text-[#645d58]">— N/A</td>
-                    <td className="py-3.5 px-4 text-[#2e7d32] font-semibold">✓ Pay at Register</td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.dineinPrepaid ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.dineinPrepaid ? "✓ Scan & Pay" : "— Disabled"}
+                    </td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.dineinPrepaid ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.dineinPrepaid ? "✓ Table Link" : "— Disabled"}
+                    </td>
+                    <td className="py-3.5 px-4 text-[#8a7e75]">— N/A</td>
+                    <td className={`py-3.5 px-4 font-semibold ${org?.dineinPospaid ? "text-[#2e7d32]" : "text-[#8a7e75]"}`}>
+                      {org?.dineinPospaid ? "✓ Pay at Register" : "— Disabled"}
+                    </td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className="px-2 py-0.5 rounded-full bg-[#e8f5e9] text-[#1b5e20] font-bold text-[10px]">Active</span>
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                        org?.isDineIn && (org?.dineinPrepaid || org?.dineinPospaid)
+                          ? "bg-[#e8f5e9] text-[#1b5e20]"
+                          : "bg-stone-100 text-stone-600"
+                      }`}>
+                        {org?.isDineIn && (org?.dineinPrepaid || org?.dineinPospaid) ? "Active" : "Disabled"}
+                      </span>
                     </td>
                   </tr>
                 </tbody>

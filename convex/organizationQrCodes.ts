@@ -478,6 +478,7 @@ export const resolveCustomerSession = query({
             valid: false,
             error: "This QR code is currently inactive. Ordering is temporarily paused.",
             errorCode: "QR_INACTIVE" as const,
+            isQrInactive: true,
             organization: activeOrg
               ? {
                   _id: activeOrg._id,
@@ -490,6 +491,10 @@ export const resolveCustomerSession = query({
                   isDelivery: activeOrg.isDelivery ?? true,
                   defaultCurrencySymbol: activeOrg.defaultCurrencySymbol ?? "₹",
                   defaultCurrency: activeOrg.defaultCurrency ?? "INR",
+                  onlineStore: activeOrg.onlineStore ?? true,
+                  primaryColor: activeOrg.primaryColor?.trim(),
+                  secondaryColor: activeOrg.secondaryColor?.trim(),
+                  theme: activeOrg.theme?.trim() || "bistro",
                 }
               : undefined,
           };
@@ -663,6 +668,10 @@ export const resolveCustomerSession = query({
       deliveryOnlinePayment: activeOrg.deliveryOnlinePayment ?? false,
       defaultCurrencySymbol: activeOrg.defaultCurrencySymbol ?? "₹",
       defaultCurrency: activeOrg.defaultCurrency ?? "INR",
+      onlineStore: activeOrg.onlineStore ?? true,
+      primaryColor: activeOrg.primaryColor?.trim(),
+      secondaryColor: activeOrg.secondaryColor?.trim(),
+      theme: activeOrg.theme?.trim() || "bistro",
     };
 
     // 3. Resolve Layout Name
