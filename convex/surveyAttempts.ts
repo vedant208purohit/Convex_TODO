@@ -2,6 +2,7 @@ import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireSurveyAdmin } from "./surveys";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 // ----------------------------------------------------
 // DATE FORMAT VALIDATION & CANONICAL URL RESOLUTION
@@ -336,13 +337,42 @@ export const getForRespondent = query({
             organizationId = org._id;
             storeName = org.name;
             storeSlug = org.slug;
-            storeLogoUrl = org.logoUrl;
             currencySymbol = org.defaultCurrencySymbol;
             country = org.country;
             timezone = org.organizationTimeZone;
             primaryColor = org.primaryColor;
             secondaryColor = org.secondaryColor;
             theme = org.theme;
+
+            if (org.logoAssetId || org.logoStorageId) {
+              try {
+                const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+                  assetId: org.logoAssetId,
+                  storageId: org.logoStorageId,
+                  organizationId: org._id,
+                });
+                if (storageOrR2Url) {
+                  storeLogoUrl = storageOrR2Url;
+                }
+              } catch {}
+            }
+            if (!storeLogoUrl && (org as any).logoImageStorageId) {
+              try {
+                const storageUrl = await ctx.storage.getUrl((org as any).logoImageStorageId);
+                if (storageUrl) {
+                  storeLogoUrl = storageUrl;
+                }
+              } catch {}
+            }
+            if (!storeLogoUrl && org.logoUrl && typeof org.logoUrl === "string") {
+              const trimmed = org.logoUrl.trim();
+              if (
+                (trimmed.startsWith("http://") || trimmed.startsWith("https://")) &&
+                !trimmed.startsWith("blob:")
+              ) {
+                storeLogoUrl = trimmed;
+              }
+            }
           }
         }
 
