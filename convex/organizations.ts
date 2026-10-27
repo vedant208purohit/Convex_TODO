@@ -1415,6 +1415,8 @@ export const update = mutation({
     receiptPrintCount: v.optional(v.number()),
     menuBasedPrintToken: v.optional(v.boolean()),
     showQrCode: v.optional(v.boolean()),
+    autoCutPaper: v.optional(v.boolean()),
+    popCashDrawer: v.optional(v.boolean()),
 
     // Branding
     primaryColor: v.optional(v.string()),

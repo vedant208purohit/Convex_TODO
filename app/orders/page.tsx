@@ -2288,75 +2288,87 @@ export default function OrdersPage() {
                       Order Actions
                     </h3>
 
-                    {/* 2-Column Action Grid */}
-                    <div className="grid grid-cols-2 gap-2.5 mb-5">
+                    {/* Responsive Balanced Action Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-5">
                       {/* Edit Order */}
                       <button
                         type="button"
                         onClick={() => setIsEditOrderOpen(true)}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
-                        <EditIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">
+                        <EditIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                        <span className="!text-white text-white font-semibold text-xs truncate">
                           Edit Order
                         </span>
                       </button>
 
-                      {/* Cancel Order */}
                       {(() => {
                         const hasPayment = Boolean(
                           order?.paymentStatus === "Paid" ||
                           (order?.netPaid && order.netPaid > 0) ||
                           (order?.totalCredit && order.totalCredit > 0) ||
-                          (order?.payments && order.payments.length > 0),
+                          (order?.payments && order.payments.length > 0)
                         );
                         return (
                           <button
                             type="button"
-                            onClick={() =>
-                              !hasPayment && setIsDeleteDialogOpen(true)
-                            }
+                            onClick={() => !hasPayment && setIsDeleteDialogOpen(true)}
                             disabled={hasPayment}
-                            title={
-                              hasPayment
-                                ? "Cannot cancel an order with completed payments. Issue a refund first."
-                                : undefined
-                            }
+                            title={hasPayment ? "Cannot cancel an order with completed payments. Issue a refund first." : undefined}
                             style={{
-                              backgroundColor: hasPayment
-                                ? "#292524"
-                                : "#1c1917",
-                              color: "#ffffff",
+                              backgroundColor: hasPayment ? "#292524" : "#1c1917",
+                              color: "#ffffff"
                             }}
-                            className={`flex items-center justify-center gap-2 px-3 py-2.5 !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs ${
+                            className={`flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs text-center ${
                               hasPayment
                                 ? "opacity-40 cursor-not-allowed select-none bg-[#292524]"
                                 : "bg-[#1c1917] hover:bg-black cursor-pointer hover:opacity-95"
                             }`}
                           >
-                            <TrashIcon className="w-3.5 h-3.5 !text-white text-white" />
-                            <span className="!text-white text-white font-semibold text-xs">
+                            <TrashIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                            <span className="!text-white text-white font-semibold text-xs truncate">
                               Cancel Order
                             </span>
                           </button>
                         );
                       })()}
 
-                      {/* Print Receipt */}
+                      {/* Bill & Receipt Preview */}
                       <button
                         type="button"
-                        disabled
-                        title="Print Thermal Receipt (Coming Soon)"
+                        onClick={() => {
+                          if (order) {
+                            router.push(`/orders/${order._id}/receipt`);
+                          }
+                        }}
+                        disabled={!order}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="relative flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] !text-white text-white text-xs font-semibold rounded-lg opacity-40 cursor-not-allowed select-none shadow-xs"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
-                        <PrintIcon className="w-3.5 h-3.5 !text-white text-white shrink-0" />
-                        <span className="!text-white text-white font-semibold text-xs whitespace-nowrap">
-                          Print Receipt
+                        <PrintIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                        <span className="!text-white text-white font-semibold text-xs truncate">
+                          Receipt Preview &amp; QR
                         </span>
-                        <span className="absolute -top-2 -right-1 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider bg-amber-400 text-stone-900 border border-amber-300 rounded-full shadow-xs whitespace-nowrap leading-none pointer-events-none">
-                          Coming Soon
+                      </button>
+
+                      {/* Customer Review Details */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (order) {
+                            router.push(`/orders/${order._id}/review`);
+                          }
+                        }}
+                        disabled={!order}
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                      >
+                        <span className="material-symbols-outlined text-[18px] shrink-0 !text-white text-white">
+                          rate_review
+                        </span>
+                        <span className="!text-white text-white font-semibold text-xs truncate">
+                          Review Details &amp; Ratings
                         </span>
                       </button>
 
@@ -2365,10 +2377,10 @@ export default function OrdersPage() {
                         type="button"
                         onClick={handleDownloadPDF}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
-                        <DownloadIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">
+                        <DownloadIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                        <span className="!text-white text-white font-semibold text-xs truncate">
                           Download PDF
                         </span>
                       </button>
@@ -2381,23 +2393,23 @@ export default function OrdersPage() {
                           setDrawerTab("pay");
                         }}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
-                        <CreditCardIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">
+                        <CreditCardIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                        <span className="!text-white text-white font-semibold text-xs truncate">
                           Add Payment
                         </span>
                       </button>
 
-                      {/* Order Timeline */}
+                      {/* Order Timeline (Spans full width for balanced grid) */}
                       <button
                         type="button"
                         onClick={() => setDrawerTab("timeline")}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
-                        <TimelineIcon className="w-3.5 h-3.5 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs">
+                        <TimelineIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                        <span className="!text-white text-white font-semibold text-xs truncate">
                           Order Timeline
                         </span>
                       </button>

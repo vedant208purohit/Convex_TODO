@@ -37,6 +37,14 @@ export const create = mutation({
         lessThanOrEqualTo: v.optional(v.number()),
       })
     ),
+    ratingDisplayMode: v.optional(
+      v.union(v.literal("stars"), v.literal("numeric"))
+    ),
+    lowLabel: v.optional(v.string()),
+    highLabel: v.optional(v.string()),
+    frequency: v.optional(
+      v.union(v.literal("once_per_order"), v.literal("per_order_item"))
+    ),
     legacyId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
@@ -82,6 +90,10 @@ export const create = mutation({
       position,
       answerOptions: cleanedOptions && cleanedOptions.length > 0 ? cleanedOptions : undefined,
       validationRules: args.validationRules,
+      ratingDisplayMode: args.ratingDisplayMode,
+      lowLabel: args.lowLabel?.trim() || undefined,
+      highLabel: args.highLabel?.trim() || undefined,
+      frequency: args.frequency || "once_per_order",
       legacyId: args.legacyId,
       createdAt: now,
       updatedAt: now,
@@ -110,6 +122,14 @@ export const update = mutation({
         greaterThanOrEqualTo: v.optional(v.number()),
         lessThanOrEqualTo: v.optional(v.number()),
       })
+    ),
+    ratingDisplayMode: v.optional(
+      v.union(v.literal("stars"), v.literal("numeric"))
+    ),
+    lowLabel: v.optional(v.string()),
+    highLabel: v.optional(v.string()),
+    frequency: v.optional(
+      v.union(v.literal("once_per_order"), v.literal("per_order_item"))
     ),
     type: v.optional(
       v.union(
@@ -161,6 +181,18 @@ export const update = mutation({
     }
     if (args.validationRules !== undefined) {
       patchData.validationRules = args.validationRules;
+    }
+    if (args.ratingDisplayMode !== undefined) {
+      patchData.ratingDisplayMode = args.ratingDisplayMode;
+    }
+    if (args.lowLabel !== undefined) {
+      patchData.lowLabel = args.lowLabel.trim() || undefined;
+    }
+    if (args.highLabel !== undefined) {
+      patchData.highLabel = args.highLabel.trim() || undefined;
+    }
+    if (args.frequency !== undefined) {
+      patchData.frequency = args.frequency;
     }
 
     await ctx.db.patch(question._id, patchData);
@@ -232,6 +264,10 @@ export const copy = mutation({
       position: maxPos + 1,
       answerOptions: sourceQuestion.answerOptions ? [...sourceQuestion.answerOptions] : undefined,
       validationRules: sourceQuestion.validationRules ? { ...sourceQuestion.validationRules } : undefined,
+      ratingDisplayMode: sourceQuestion.ratingDisplayMode,
+      lowLabel: sourceQuestion.lowLabel,
+      highLabel: sourceQuestion.highLabel,
+      frequency: sourceQuestion.frequency,
       createdAt: now,
       updatedAt: now,
     });
