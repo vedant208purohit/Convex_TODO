@@ -317,6 +317,10 @@ export const getForRespondent = query({
     let currencySymbol: string | undefined = undefined;
     let country: string | undefined = undefined;
     let timezone: string | undefined = undefined;
+    let organizationId: string | undefined = undefined;
+    let primaryColor: string | undefined = undefined;
+    let secondaryColor: string | undefined = undefined;
+    let theme: string | undefined = undefined;
 
     if (attempt.orderId) {
       const order = await ctx.db.get(attempt.orderId);
@@ -329,12 +333,16 @@ export const getForRespondent = query({
         if (order.organizationId) {
           const org = await ctx.db.get(order.organizationId);
           if (org) {
+            organizationId = org._id;
             storeName = org.name;
             storeSlug = org.slug;
             storeLogoUrl = org.logoUrl;
             currencySymbol = org.defaultCurrencySymbol;
             country = org.country;
             timezone = org.organizationTimeZone;
+            primaryColor = org.primaryColor;
+            secondaryColor = org.secondaryColor;
+            theme = org.theme;
           }
         }
 
@@ -402,6 +410,23 @@ export const getForRespondent = query({
       }
     }
 
+    if (!organizationId) {
+      const activeOrgs = await ctx.db.query("organizations").collect();
+      const defaultOrg = activeOrgs.find((o) => o.deletedAt === undefined) || activeOrgs[0];
+      if (defaultOrg) {
+        organizationId = defaultOrg._id;
+        if (!storeName) storeName = defaultOrg.name;
+        if (!storeSlug) storeSlug = defaultOrg.slug;
+        if (!storeLogoUrl) storeLogoUrl = defaultOrg.logoUrl;
+        if (!currencySymbol) currencySymbol = defaultOrg.defaultCurrencySymbol;
+        if (!country) country = defaultOrg.country;
+        if (!timezone) timezone = defaultOrg.organizationTimeZone;
+        primaryColor = defaultOrg.primaryColor;
+        secondaryColor = defaultOrg.secondaryColor;
+        theme = defaultOrg.theme;
+      }
+    }
+
     return {
       attemptId: attempt._id,
       surveyId: survey._id,
@@ -423,6 +448,10 @@ export const getForRespondent = query({
       currencySymbol,
       country,
       timezone,
+      organizationId,
+      primaryColor,
+      secondaryColor,
+      theme,
       itemCount,
       orderItems,
       questions: questions
