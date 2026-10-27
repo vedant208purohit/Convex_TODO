@@ -117,16 +117,6 @@ function CaptainIcon({ className = "w-4 h-4" }: { className?: string }) {
   );
 }
 
-function SurveysNavIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-      <path d="M14 2v6h6" />
-      <path d="m9 15 2 2 4-4" />
-    </svg>
-  );
-}
-
 function QueueNavIcon({ className = "w-4 h-4" }: { className?: string }) {
   return (
     <svg
@@ -280,11 +270,6 @@ const navItems: NavItem[] = [
     icon: <CaptainIcon className="w-4 h-4" />,
   },
   {
-    href: "/surveys",
-    label: "Surveys",
-    icon: <SurveysNavIcon className="w-4 h-4" />,
-  },
-  {
     href: "/queue",
     label: "Queue",
     icon: <QueueNavIcon className="w-4 h-4" />,
@@ -353,10 +338,169 @@ const marketplaceSubItems: {
 }[] = [
   { label: "Explore Products", tab: "explore", path: "/marketplace?tab=explore" },
   { label: "Installed Products", tab: "installed", path: "/marketplace?tab=installed" },
-  { label: "Categories", tab: "categories", path: "/marketplace?tab=categories", disabled: true, badge: "Coming Soon" },
-  { label: "Subscriptions & Purchases", tab: "purchases", path: "/marketplace?tab=purchases" },
+  { label: "Subscriptions", tab: "purchases", path: "/marketplace?tab=purchases" },
   { label: "Wallet", tab: "wallet", path: "/marketplace/wallet" },
 ];
+
+type CollapsedNavFlyoutSubItem = {
+  label: string;
+  path: string;
+  tab?: string;
+  disabled?: boolean;
+  badge?: string;
+};
+
+function CollapsedNavFlyout({
+  href,
+  active,
+  icon,
+  title,
+  subItems,
+  isSubActive,
+  widthClass = "w-60",
+}: {
+  href: string;
+  active: boolean;
+  icon: ReactNode;
+  title: string;
+  subItems: CollapsedNavFlyoutSubItem[];
+  isSubActive: (sub: CollapsedNavFlyoutSubItem) => boolean;
+  widthClass?: string;
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [positionStyle, setPositionStyle] = useState<{ top?: number; bottom?: number }>({});
+  const triggerRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const calculatePosition = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const approxHeight = subItems.length * 40 + 52;
+    const spaceBelow = window.innerHeight - rect.top;
+
+    if (spaceBelow < approxHeight + 20) {
+      const bottom = Math.max(12, window.innerHeight - rect.bottom);
+      setPositionStyle({ bottom });
+    } else {
+      const top = Math.max(12, rect.top);
+      setPositionStyle({ top });
+    }
+  };
+
+  const handleMouseEnter = () => {
+    if (closeTimerRef.current) {
+      clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    calculatePosition();
+    setIsOpen(true);
+  };
+
+  const handleMouseLeave = () => {
+    closeTimerRef.current = setTimeout(() => {
+      setIsOpen(false);
+    }, 150);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onScrollOrResize = () => {
+      calculatePosition();
+    };
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={triggerRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className="relative group flex items-center justify-center my-0.5"
+    >
+      <Link
+        href={href}
+        className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${
+          active
+            ? "bg-[#141010] text-white shadow-xs"
+            : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
+        }`}
+      >
+        <span className="w-5 h-5 flex items-center justify-center">{icon}</span>
+      </Link>
+
+      {isOpen && (
+        <div
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          style={{
+            position: "fixed",
+            left: "84px",
+            ...(positionStyle.bottom !== undefined
+              ? { bottom: `${positionStyle.bottom}px` }
+              : { top: `${positionStyle.top ?? 12}px` }),
+          }}
+          className="z-[9999] pointer-events-auto transition-opacity duration-150"
+        >
+          {/* Bridge element to allow smooth mouse transit across the gap */}
+          <div className="absolute -left-3 top-0 bottom-0 w-3 pointer-events-auto" />
+
+          <div
+            className={`${widthClass} bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs`}
+          >
+            <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
+              <span>{title}</span>
+            </div>
+            {subItems.map((sub) => {
+              const activeItem = isSubActive(sub);
+              if (sub.disabled) {
+                return (
+                  <div
+                    key={sub.tab || sub.path}
+                    className="flex items-center justify-between px-3 py-2 text-xs rounded-xl opacity-60 cursor-not-allowed select-none text-[#78716c]"
+                    title="Coming Soon"
+                  >
+                    <span>{sub.label}</span>
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full">
+                      {sub.badge || "Coming Soon"}
+                    </span>
+                  </div>
+                );
+              }
+              return (
+                <Link
+                  key={sub.tab || sub.path}
+                  href={sub.path}
+                  onClick={() => setIsOpen(false)}
+                  className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${
+                    activeItem
+                      ? "bg-[#0c0a09] text-white font-medium shadow-xs"
+                      : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
+                  }`}
+                >
+                  <span>{sub.label}</span>
+                  {activeItem && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
+                  )}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function NavLink({
   href,
@@ -829,47 +973,20 @@ export function PosShell({
             if (item.href === "/menu") {
               if (isCollapsed) {
                 return (
-                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
-                    <Link
-                      href="/menu"
-                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${isMenuPage
-                        ? "bg-[#141010] text-white shadow-xs"
-                        : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
-                        }`}
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
-                    </Link>
-
-                    {/* Flyout Hover Menu Popover Card */}
-                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
-                      <div className="w-56 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
-                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
-                          Menu
-                        </div>
-                        {menuSubItems.map((sub) => {
-                          const isSubActive =
-                            sub.path === "/menu"
-                              ? pathname === "/menu" || (pathname.startsWith("/menu") && !pathname.startsWith("/menu/chef-prep-preferences"))
-                              : pathname === sub.path || pathname.startsWith(sub.path);
-                          return (
-                            <Link
-                              key={sub.path}
-                              href={sub.path}
-                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${isSubActive
-                                ? "bg-[#0c0a09] text-white font-medium shadow-xs"
-                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
-                                }`}
-                            >
-                              <span>{sub.label}</span>
-                              {isSubActive && (
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
-                              )}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
+                  <CollapsedNavFlyout
+                    key={item.href}
+                    href="/menu"
+                    active={isMenuPage}
+                    icon={item.icon}
+                    title="Menu"
+                    widthClass="w-56"
+                    subItems={menuSubItems}
+                    isSubActive={(sub) =>
+                      sub.path === "/menu"
+                        ? pathname === "/menu" || (pathname.startsWith("/menu") && !pathname.startsWith("/menu/chef-prep-preferences"))
+                        : pathname === sub.path || pathname.startsWith(sub.path)
+                    }
+                  />
                 );
               }
 
@@ -930,47 +1047,20 @@ export function PosShell({
             if (item.href === "/inventory") {
               if (isCollapsed) {
                 return (
-                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
-                    <Link
-                      href="/inventory/purchase-orders"
-                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${isInventoryPage
-                        ? "bg-[#141010] text-white shadow-xs"
-                        : "text-[#5e5e5e] hover:bg-[#f1edec] hover:text-[#141010]"
-                        }`}
-                    >
-                      <span className="w-5 h-5 flex items-center justify-center">{item.icon}</span>
-                    </Link>
-
-                    {/* Flyout Hover Menu Popover Card */}
-                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
-                      <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
-                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
-                          <span>Inventory</span>
-                        </div>
-                        {inventorySubItems.map((sub) => {
-                          const isSubActive =
-                            pathname === sub.path ||
-                            (pathname === "/inventory" && currentTab === sub.tab) ||
-                            (pathname === "/inventory" && sub.tab === "purchaseOrders" && !searchParams.get("tab"));
-                          return (
-                            <Link
-                              key={sub.tab}
-                              href={sub.path}
-                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${isSubActive
-                                ? "bg-[#0c0a09] text-white font-medium shadow-xs"
-                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
-                                }`}
-                            >
-                              <span>{sub.label}</span>
-                              {isSubActive && (
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
-                              )}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
+                  <CollapsedNavFlyout
+                    key={item.href}
+                    href="/inventory/purchase-orders"
+                    active={isInventoryPage}
+                    icon={item.icon}
+                    title="Inventory"
+                    widthClass="w-60"
+                    subItems={inventorySubItems}
+                    isSubActive={(sub) =>
+                      pathname === sub.path ||
+                      (pathname === "/inventory" && currentTab === sub.tab) ||
+                      (pathname === "/inventory" && sub.tab === "purchaseOrders" && !searchParams.get("tab"))
+                    }
+                  />
                 );
               }
 
@@ -1032,65 +1122,24 @@ export function PosShell({
               const currentMarketplaceTab = searchParams.get("tab") || "explore";
               if (isCollapsed) {
                 return (
-                  <div key={item.href} className="relative group flex items-center justify-center my-0.5">
-                    <Link
-                      href="/marketplace?tab=explore"
-                      className={`flex items-center justify-center w-12 h-12 mx-auto rounded-xl transition-all cursor-pointer ${isMarketplacePage
-                        ? "bg-[#141010] text-white shadow-xs"
-                        : "text-[#5e5e5e] hover:bg-[#f1edec]"
-                        }`}
-                      title={item.label}
-                    >
-                      <span className="w-5 flex items-center justify-center shrink-0">{item.icon}</span>
-                    </Link>
-
-                    {/* Flyout Hover Menu Popover Card */}
-                    <div className="fixed left-[76px] z-[9999] hidden group-hover:block transition-all pointer-events-auto">
-                      <div className="w-60 bg-[#ffffff] border border-[#e7e5e4] rounded-2xl shadow-xl p-2 flex flex-col gap-1 text-xs">
-                        <div className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#78716c] border-b border-[#f1edec] mb-0.5">
-                          <span>Marketplace</span>
-                        </div>
-                        {marketplaceSubItems.map((sub) => {
-                          const isSubActive = pathname.startsWith("/marketplace/wallet")
-                            ? sub.tab === "wallet"
-                            : pathname === "/marketplace/checkout"
-                            ? sub.tab === "explore"
-                            : pathname === "/marketplace"
-                            ? (searchParams.get("tab") || "explore") === sub.tab
-                            : false;
-                          if (sub.disabled) {
-                            return (
-                              <div
-                                key={sub.tab}
-                                className="flex items-center justify-between px-3 py-2 text-xs rounded-xl opacity-60 cursor-not-allowed select-none text-[#78716c]"
-                                title="Coming Soon"
-                              >
-                                <span>{sub.label}</span>
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full">
-                                  {sub.badge || "Coming Soon"}
-                                </span>
-                              </div>
-                            );
-                          }
-                          return (
-                            <Link
-                              key={sub.tab}
-                              href={sub.path}
-                              className={`flex items-center justify-between px-3 py-2 text-xs transition-all rounded-xl cursor-pointer ${isSubActive
-                                ? "bg-[#0c0a09] text-white font-medium shadow-xs"
-                                : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] font-normal"
-                                }`}
-                            >
-                              <span>{sub.label}</span>
-                              {isSubActive && (
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
-                              )}
-                            </Link>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
+                  <CollapsedNavFlyout
+                    key={item.href}
+                    href="/marketplace?tab=explore"
+                    active={isMarketplacePage}
+                    icon={item.icon}
+                    title="Marketplace"
+                    widthClass="w-60"
+                    subItems={marketplaceSubItems}
+                    isSubActive={(sub) =>
+                      pathname.startsWith("/marketplace/wallet")
+                        ? sub.tab === "wallet"
+                        : pathname === "/marketplace/checkout"
+                        ? sub.tab === "explore"
+                        : pathname === "/marketplace"
+                        ? (searchParams.get("tab") || "explore") === sub.tab
+                        : false
+                    }
+                  />
                 );
               }
 
@@ -1149,12 +1198,12 @@ export function PosShell({
                             key={sub.tab}
                             href={sub.path}
                             ref={isSubActive ? activeMarketplaceSubRef : null}
-                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer ${isSubActive
+                            className={`flex items-center justify-between px-3.5 py-2 text-xs transition-all cursor-pointer whitespace-nowrap ${isSubActive
                               ? "bg-[#0c0a09] text-white font-medium rounded-full shadow-xs"
                               : "text-[#5e5e5e] hover:text-[#141010] hover:bg-[#f1edec] rounded-lg font-normal"
                               }`}
                           >
-                            <span>{sub.label}</span>
+                            <span className="truncate">{sub.label}</span>
                             {isSubActive && (
                               <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0 ml-2" />
                             )}
