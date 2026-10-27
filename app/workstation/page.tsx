@@ -2,10 +2,15 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import {
+  generateWorkstationRunnerSlipPlainString,
+  printThermalReceiptDocument,
+} from "../utils/defxReceiptFormatter";
 
 type OrderTypeFilter = "all" | "dine-in" | "takeaway" | "delivery";
 
@@ -16,6 +21,109 @@ export default function WorkstationPage() {
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
 
+  // Printers Context (Matching defx-pos-frontend Workstation printers)
+  const printers = useQuery(api.organizationPrinters.list, {});
+  const [isPrintingSlip, setIsPrintingSlip] = useState(false);
+  const [printerStatus, setPrinterStatus] = useState<
+    "disconnected" | "connected" | "checking"
+  >("disconnected");
+
+  const workstationPrinter = useMemo(() => {
+    if (!printers || printers.length === 0) return null;
+    return (
+      printers.find((p) => p.printerUseFor === "WorkStation") ||
+      printers.find((p) => p.printerUseFor === "Cashier") ||
+      printers[0]
+    );
+  }, [printers]);
+
+  // Monitor connection to the workstation printer
+  useEffect(() => {
+    let isMounted = true;
+    if (printers === undefined) return;
+    if (!printers || printers.length === 0 || !workstationPrinter) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    if (!workstationPrinter.printerUrl) {
+      setPrinterStatus("disconnected");
+      return;
+    }
+
+    const checkPrinterConnection = async () => {
+      // 1. Bluetooth check
+      if (workstationPrinter.printerType === "Bluetooth" || workstationPrinter.printerPort === "BT") {
+        if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
+          try {
+            const available = await (navigator as any).bluetooth.getAvailability?.();
+            if (available === false) {
+              if (isMounted) setPrinterStatus("disconnected");
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      // 2. USB WebUSB check
+      if (workstationPrinter.printerType === "Usb" || workstationPrinter.printerPort === "USB") {
+        if (typeof navigator !== "undefined" && "usb" in navigator) {
+          try {
+            const devices = await (navigator as any).usb.getDevices();
+            if (devices && devices.length > 0) {
+              if (isMounted) setPrinterStatus("connected");
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      // 3. Hardware check via /api/printers/test-connection
+      try {
+        const res = await fetch("/api/printers/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            printerUrl: workstationPrinter.printerUrl,
+            printerPort: workstationPrinter.printerPort || (workstationPrinter.printerType === "Bluetooth" ? "BT" : workstationPrinter.printerType === "Usb" ? "USB" : "9100"),
+            printerType: workstationPrinter.printerType,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (isMounted) {
+          setPrinterStatus(data.online ? "connected" : "disconnected");
+        }
+      } catch {
+        if (isMounted) setPrinterStatus("disconnected");
+      }
+    };
+
+    checkPrinterConnection();
+
+    // Event listeners for instant Bluetooth and USB state changes
+    const bt = typeof navigator !== "undefined" && "bluetooth" in navigator ? (navigator as any).bluetooth : null;
+    const handleBtAvailability = () => { if (isMounted) checkPrinterConnection(); };
+    if (bt?.addEventListener) bt.addEventListener("availabilitychanged", handleBtAvailability);
+
+    const usb = typeof navigator !== "undefined" && "usb" in navigator ? (navigator as any).usb : null;
+    const handleUsbChange = () => { if (isMounted) checkPrinterConnection(); };
+    if (usb?.addEventListener) {
+      usb.addEventListener("connect", handleUsbChange);
+      usb.addEventListener("disconnect", handleUsbChange);
+    }
+
+    const interval = setInterval(checkPrinterConnection, 10000);
+    return () => {
+      isMounted = false;
+      if (bt?.removeEventListener) bt.removeEventListener("availabilitychanged", handleBtAvailability);
+      if (usb?.removeEventListener) {
+        usb.removeEventListener("connect", handleUsbChange);
+        usb.removeEventListener("disconnect", handleUsbChange);
+      }
+      clearInterval(interval);
+    };
+  }, [printers, workstationPrinter]);
+
   // 2. Active Tab & Filters
   const [activeFilter, setActiveFilter] = useState<OrderTypeFilter>("all");
   const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
@@ -24,6 +132,8 @@ export default function WorkstationPage() {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+  const seenOrderIdsRef = useRef<Set<string>>(new Set());
+  const printedOrderIdsRef = useRef<Set<string>>(new Set());
 
   // 4. Live Clock Effect
   const [currentTimeStr, setCurrentTimeStr] = useState<string>("");
@@ -103,6 +213,67 @@ export default function WorkstationPage() {
       setActionInProgressId(null);
     }
   };
+
+  // Handle Printing Food Runner / Plate Assembly Slip
+  const handlePrintRunnerSlip = useCallback(
+    async (order: any, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      if (!order) return;
+      setIsPrintingSlip(true);
+      try {
+        const slipStr = generateWorkstationRunnerSlipPlainString(
+          order,
+          activeOrg,
+          48,
+        );
+        const targetPrinter =
+          workstationPrinter ||
+          printers?.find((p) => p.printerUseFor === "Station") ||
+          printers?.[0];
+
+        await printThermalReceiptDocument(
+          slipStr,
+          `Runner Slip ${order.orderNumber || ""}`,
+          targetPrinter
+            ? {
+                printerType: targetPrinter.printerType,
+                printerUrl: targetPrinter.printerUrl,
+                printerPort: targetPrinter.printerPort,
+                stationId: targetPrinter.stationId,
+              }
+            : undefined,
+        );
+        showToast(`Runner slip sent to printer for order ${order.orderNumber}`);
+      } catch (err) {
+        console.error("Runner slip print error:", err);
+        showToast("Failed to print runner slip", "error");
+      } finally {
+        setIsPrintingSlip(false);
+      }
+    },
+    [activeOrg, workstationPrinter, printers, showToast],
+  );
+
+  // Auto-print runner slip when a newly arrived order appears in workstation (matching old POS defx-pos-frontend)
+  useEffect(() => {
+    if (!workstationData?.orders) return;
+    const currentOrderIds = new Set(workstationData.orders.map((o) => o._id));
+
+    if (seenOrderIdsRef.current.size > 0 && workstationPrinter) {
+      const newOrders = workstationData.orders.filter(
+        (o) =>
+          !seenOrderIdsRef.current.has(o._id) &&
+          !printedOrderIdsRef.current.has(o._id)
+      );
+
+      for (const order of newOrders) {
+        printedOrderIdsRef.current.add(order._id);
+        handlePrintRunnerSlip(order);
+      }
+    }
+
+    seenOrderIdsRef.current = currentOrderIds;
+  }, [workstationData?.orders, workstationPrinter, handlePrintRunnerSlip]);
 
   // Close filter dropdown on click outside
   useEffect(() => {
@@ -269,6 +440,41 @@ export default function WorkstationPage() {
                 </div>
               )}
             </div>
+
+            {/* WorkStation Printer Status Indicator (Matching defx-pos-frontend) */}
+            <Link
+              href="/settings?tab=printers"
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                printerStatus === "connected"
+                  ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                  : printerStatus === "checking"
+                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                    : "bg-white text-stone-600 border-[#e9e1dd] hover:bg-[#faf2ee]"
+              }`}
+              title={
+                workstationPrinter
+                  ? `WorkStation Printer: ${workstationPrinter.printerTitle || workstationPrinter.printerType} (${printerStatus})`
+                  : "No printer configured. Click to configure in Settings."
+              }
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  printerStatus === "connected"
+                    ? "bg-emerald-500 animate-pulse"
+                    : printerStatus === "checking"
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-stone-400"
+                }`}
+              />
+              <span className="hidden sm:inline">Runner Printer</span>
+              <span className="text-[10px] uppercase font-bold opacity-75">
+                {printerStatus === "connected"
+                  ? "Ready"
+                  : printerStatus === "checking"
+                    ? "..."
+                    : "Offline"}
+              </span>
+            </Link>
 
             {/* Refresh Queue Button */}
             <button
@@ -510,9 +716,22 @@ export default function WorkstationPage() {
                         )}
                       </div>
 
-                      {/* Action Button */}
-                      {order.nextActionLabel && (
-                        <div>
+                      {/* Action Button & Print Slip */}
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={isPrintingSlip}
+                          onClick={(e) => handlePrintRunnerSlip(order, e)}
+                          title="Print Runner Assembly Slip"
+                          className="w-7 h-7 rounded-full bg-stone-100 hover:bg-stone-200 text-stone-700 flex items-center justify-center transition-all cursor-pointer shadow-2xs active:scale-95"
+                        >
+                          <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
+                            <path d="M6 14h12v8H6z" />
+                          </svg>
+                        </button>
+
+                        {order.nextActionLabel && (
                           <button
                             type="button"
                             disabled={isItemActionPending}
@@ -525,8 +744,8 @@ export default function WorkstationPage() {
                           >
                             {isItemActionPending ? "SAVING..." : order.nextActionLabel}
                           </button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   </div>
                 );
@@ -736,26 +955,42 @@ export default function WorkstationPage() {
                 </span>
               </div>
 
-              {selectedOrder.nextActionLabel && (
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  disabled={actionInProgressId === selectedOrder._id}
-                  onClick={(e) => handleAdvanceOrder(e, selectedOrder)}
-                  className={`px-6 py-2.5 rounded-full text-xs font-medium tracking-wide shadow-xs active:scale-95 transition-all cursor-pointer ${
-                    selectedOrder.statusKey === "READY"
-                      ? "bg-amber-900 text-white hover:bg-amber-950"
-                      : "bg-[#0c0a09] text-white hover:bg-neutral-800"
-                  } ${
-                    actionInProgressId === selectedOrder._id
-                      ? "opacity-60 cursor-not-allowed"
-                      : ""
-                  }`}
+                  disabled={isPrintingSlip}
+                  onClick={(e) => handlePrintRunnerSlip(selectedOrder, e)}
+                  title="Print Food Runner & Plate Assembly Checklist Slip"
+                  className="px-4 py-2.5 rounded-full border border-stone-300 bg-white hover:bg-stone-50 text-stone-900 text-xs font-medium tracking-wide shadow-xs active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  {actionInProgressId === selectedOrder._id
-                    ? "SAVING..."
-                    : selectedOrder.nextActionLabel}
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2" />
+                    <path d="M6 14h12v8H6z" />
+                  </svg>
+                  <span>{isPrintingSlip ? "Printing..." : "Print Runner Slip"}</span>
                 </button>
-              )}
+
+                {selectedOrder.nextActionLabel && (
+                  <button
+                    type="button"
+                    disabled={actionInProgressId === selectedOrder._id}
+                    onClick={(e) => handleAdvanceOrder(e, selectedOrder)}
+                    className={`px-6 py-2.5 rounded-full text-xs font-medium tracking-wide shadow-xs active:scale-95 transition-all cursor-pointer ${
+                      selectedOrder.statusKey === "READY"
+                        ? "bg-amber-900 text-white hover:bg-amber-950"
+                        : "bg-[#0c0a09] text-white hover:bg-neutral-800"
+                    } ${
+                      actionInProgressId === selectedOrder._id
+                        ? "opacity-60 cursor-not-allowed"
+                        : ""
+                    }`}
+                  >
+                    {actionInProgressId === selectedOrder._id
+                      ? "SAVING..."
+                      : selectedOrder.nextActionLabel}
+                  </button>
+                )}
+              </div>
             </div>
           </aside>
         </div>

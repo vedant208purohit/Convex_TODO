@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Toast, ToastMessage } from "./Toast";
+import {
+  generateDefxKotPlainString,
+  KotOrder,
+} from "../utils/defxReceiptFormatter";
 
 // ==========================================
 // PIXEL-PERFECT SWITCH / TOGGLE COMPONENT
@@ -289,7 +293,7 @@ function TimingScheduleDisplay({ timings }: { timings: any }) {
   );
 }
 
-type TabType = "general" | "serviceModes" | "cashier";
+type TabType = "general" | "serviceModes" | "cashier" | "kds";
 
 export function OrganizationFeatures() {
   const [activeTab, setActiveTab] = useState<TabType>("general");
@@ -325,12 +329,17 @@ export function OrganizationFeatures() {
   const scheduleConfig = useQuery(api.organizationSchedulePickups.get, {});
   const updateScheduleConfig = useMutation(api.organizationSchedulePickups.update);
 
-  // Auto-initialize feature flag defaults if none exist
+  // Auto-initialize feature flag defaults if none exist or if missing KDS defaults
   useEffect(() => {
-    if (featuresList !== undefined && featuresList.length === 0 && org?._id) {
-      initializeDefaults({ organizationId: org._id }).catch((err) => {
-        console.error("Failed to initialize feature defaults:", err);
-      });
+    if (featuresList !== undefined && org?._id) {
+      const hasMissingKds = KDS_FEATURES_CONFIG.some(
+        (cfg) => !featuresList.some((f) => f.featureKey === cfg.key)
+      );
+      if (featuresList.length === 0 || hasMissingKds) {
+        initializeDefaults({ organizationId: org._id }).catch((err) => {
+          console.error("Failed to initialize feature defaults:", err);
+        });
+      }
     }
   }, [featuresList, org?._id, initializeDefaults]);
 
@@ -356,10 +365,19 @@ export function OrganizationFeatures() {
     return featuresList?.find((f) => f.featureKey === key)?.active ?? false;
   }).length;
 
-  // Helper function to get feature flag by key
+  // Helper function to get feature flag by key with proper default fallback
   const getFeatureFlag = (key: string) => {
-    return featuresList?.find((f) => f.featureKey === key)?.active ?? false;
+    const found = featuresList?.find((f) => f.featureKey === key);
+    if (found !== undefined) return found.active;
+    const kdsDef = KDS_FEATURES_CONFIG.find((f) => f.key === key);
+    if (kdsDef !== undefined) return kdsDef.defaultActive;
+    return false;
   };
+
+  // Count active KDS printing flags
+  const activeKdsFlagsCount = KDS_FEATURES_CONFIG.filter((cfg) => {
+    return getFeatureFlag(cfg.key);
+  }).length;
 
   // Helper handler for feature flag toggle
   const handleFeatureToggle = async (featureKey: string, currentActive: boolean) => {
@@ -473,6 +491,8 @@ export function OrganizationFeatures() {
               <span>{activeCashierFlagsCount} of 6 Flags Active</span>
             ) : activeTab === "serviceModes" ? (
               <span>{activeModesCount} of 5 Modes Active</span>
+            ) : activeTab === "kds" ? (
+              <span>{activeKdsFlagsCount} of {KDS_FEATURES_CONFIG.length} Flags Active</span>
             ) : (
               <span>Store Features Active</span>
             )}
@@ -519,6 +539,19 @@ export function OrganizationFeatures() {
             <span>Cashier</span>
             {activeTab === "cashier" && <span className="w-1.5 h-1.5 rounded-full bg-[#0c0a09]" />}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("kds")}
+            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 ${
+              activeTab === "kds"
+                ? "text-[#141010] border-b-2 border-[#0c0a09] font-semibold"
+                : "text-[#5e5e5e] hover:text-[#141010]"
+            }`}
+          >
+            <span>Kitchen & KDS</span>
+            {activeTab === "kds" && <span className="w-1.5 h-1.5 rounded-full bg-[#0c0a09]" />}
+          </button>
         </div>
       </div>
 
@@ -546,6 +579,12 @@ export function OrganizationFeatures() {
         )}
         {activeTab === "cashier" && (
           <CashierSection
+            getFeatureFlag={getFeatureFlag}
+            handleFeatureToggle={handleFeatureToggle}
+          />
+        )}
+        {activeTab === "kds" && (
+          <KdsPrintingSection
             getFeatureFlag={getFeatureFlag}
             handleFeatureToggle={handleFeatureToggle}
           />
@@ -1653,6 +1692,392 @@ function CashierSection({ getFeatureFlag, handleFeatureToggle }: CashierSectionP
                 </div>
               );
             })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 4. KITCHEN & KDS PRINTING SECTION
+// ==========================================
+
+export interface KdsFeatureConfigItem {
+  key: string;
+  title: string;
+  category: "Ticket Header & Identification" | "Items & Preparation" | "Automation & Hardware";
+  description: string;
+  defaultActive: boolean;
+}
+
+export const KDS_FEATURES_CONFIG: KdsFeatureConfigItem[] = [
+  // 1. Ticket Header & Details
+  {
+    key: "kds_print_waiter_name",
+    title: "Show Waiter / Server Name",
+    category: "Ticket Header & Identification",
+    description: "Display the server who took the order on the printed KOT so line cooks know who to call.",
+    defaultActive: true,
+  },
+  {
+    key: "kds_print_guest_count",
+    title: "Show Guest Count (Pax)",
+    category: "Ticket Header & Identification",
+    description: "Print the number of seated guests to assist line cooks with bread portions and meal timing.",
+    defaultActive: false,
+  },
+  {
+    key: "kds_print_customer_info",
+    title: "Show Customer Name & Phone",
+    category: "Ticket Header & Identification",
+    description: "Include customer contact details on takeaway and delivery kitchen tickets for packaging verification.",
+    defaultActive: false,
+  },
+  {
+    key: "kds_print_order_type",
+    title: "Highlight Order Type Badge",
+    category: "Ticket Header & Identification",
+    description: "Print high-contrast tags ([DINE-IN], [TAKEAWAY], [DELIVERY]) to immediately orient the kitchen line.",
+    defaultActive: true,
+  },
+  {
+    key: "kds_print_timestamp",
+    title: "Show Fired Time & Seconds",
+    category: "Ticket Header & Identification",
+    description: "Include exact timestamp (HH:MM:SS) so expeditor and kitchen management can monitor ticket age and prep lead times.",
+    defaultActive: true,
+  },
+
+  // 2. Items & Preparation
+  {
+    key: "kds_print_item_modifiers",
+    title: "Show Item Modifiers & Variants",
+    category: "Items & Preparation",
+    description: "Print indented item modifiers (e.g. Extra Spicy, Less Oil, Jain) beneath each dish description.",
+    defaultActive: true,
+  },
+  {
+    key: "kds_print_special_notes",
+    title: "Show Custom Cooking Notes",
+    category: "Items & Preparation",
+    description: "Print custom kitchen instructions and chef preparation requests entered by the waiter or guest.",
+    defaultActive: true,
+  },
+  {
+    key: "kds_print_show_prices",
+    title: "Print Prices on KOT",
+    category: "Items & Preparation",
+    description: "Include individual item prices and subtotal on the ticket (turned OFF by default for standard restaurant KOTs).",
+    defaultActive: false,
+  },
+  {
+    key: "kds_print_combo_breakdown",
+    title: "Expand Combo / Meal Components",
+    category: "Items & Preparation",
+    description: "Print individual combo components indented under the parent combo package for assembly cooks.",
+    defaultActive: true,
+  },
+
+  // 3. Automation & Hardware
+  {
+    key: "kds_auto_print_on_fire",
+    title: "Auto-Print KOT on Order Fired",
+    category: "Automation & Hardware",
+    description: "Automatically dispatch and print KOT ticket to physical kitchen printer when an order arrives on KDS.",
+    defaultActive: false,
+  },
+];
+
+interface KdsPrintingSectionProps {
+  getFeatureFlag: (key: string) => boolean;
+  handleFeatureToggle: (key: string, currentActive: boolean) => void;
+}
+
+function KdsPrintingSection({ getFeatureFlag, handleFeatureToggle }: KdsPrintingSectionProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [showLivePreview, setShowLivePreview] = useState(true);
+
+  const categories = [
+    "All",
+    "Ticket Header & Identification",
+    "Items & Preparation",
+    "Automation & Hardware",
+  ];
+
+  const filteredFeatures = KDS_FEATURES_CONFIG.filter((item) => {
+    const matchesCategory =
+      selectedCategory === "All" || item.category === selectedCategory;
+    if (!matchesCategory) return false;
+
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      item.title.toLowerCase().includes(q) ||
+      item.key.toLowerCase().includes(q) ||
+      item.description.toLowerCase().includes(q)
+    );
+  });
+
+  // Sample order for Live KOT Thermal Preview
+  const sampleKotOrder: KotOrder = useMemo(
+    () => ({
+      orderNumber: "ORD#1042",
+      tokenNumber: "18",
+      kotNumber: "KOT-02",
+      orderType: "Dine In",
+      table: {
+        number: "T-04",
+        name: "Table 4",
+        sectionName: "AC Hall",
+      },
+      serverName: "Rahul Sharma",
+      waiterName: "Rahul Sharma",
+      guestCount: 4,
+      customerName: "Priya Sharma",
+      customerPhone: "+91 98765 11223",
+      stationName: "Main Kitchen",
+      createdAt: new Date(),
+      firedAt: new Date(),
+      specialNotes: "Severe peanut & tree nut allergy",
+      allergies: ["Peanuts / Tree Nuts"],
+      items: [
+        {
+          itemName: "Paneer Tikka Butter Masala",
+          quantity: 2,
+          itemPrice: 32000,
+          display_item_price: "Rs.320.00",
+          courseName: "Main Course",
+          categoryName: "Curries",
+          customizations: [
+            { optionName: "Extra Spicy", groupName: "Spice Level" },
+            { optionName: "Less Oil", groupName: "Oil" },
+          ],
+          notes: "Cook gravy thick, green chutney on side",
+          allergies: [],
+        },
+        {
+          itemName: "Butter Naan",
+          quantity: 4,
+          itemPrice: 5500,
+          display_item_price: "Rs.55.00",
+          courseName: "Breads",
+          categoryName: "Tandoor",
+        },
+        {
+          itemName: "Executive Veg Thali Combo",
+          quantity: 1,
+          itemPrice: 35000,
+          display_item_price: "Rs.350.00",
+          courseName: "Combos",
+          subItems: [
+            { name: "Dal Makhani (Small)", quantity: 1 },
+            { name: "Paneer Sabzi (Small)", quantity: 1 },
+            { name: "Jeera Rice", quantity: 1 },
+          ],
+        },
+      ],
+    }),
+    [],
+  );
+
+  const previewKotString = useMemo(() => {
+    return generateDefxKotPlainString(sampleKotOrder, getFeatureFlag, 44);
+  }, [sampleKotOrder, getFeatureFlag]);
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner & Control Bar */}
+      <div className="bg-white border border-[#e7e5e4] rounded-lg shadow-sm overflow-hidden">
+        <div className="p-6 border-b border-[#e7e5e4] bg-[#fdf8f7]/95 backdrop-blur-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="max-w-xl">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base font-semibold text-[#141010]">
+                Kitchen & KDS Printing Customization
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                ESC/POS Ready
+              </span>
+            </div>
+            <p className="text-xs text-[#5e5e5e] mt-1 leading-relaxed">
+              Configure exactly which operational details appear on physical kitchen tickets (KOT) and station screens. Only enabled options are printed on the receipt.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            {/* Search Input */}
+            <div className="relative min-w-[220px] sm:w-64">
+              <SearchIcon className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5e5e5e]" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search KDS printing options..."
+                className="w-full pl-10 pr-4 py-2 bg-white border border-[#e7e5e4] rounded-md text-xs text-[#141010] placeholder:text-[#5e5e5e] focus:outline-none focus:border-[#0c0a09] transition-colors"
+              />
+            </div>
+
+            {/* Toggle Live Preview Button */}
+            <button
+              type="button"
+              onClick={() => setShowLivePreview(!showLivePreview)}
+              className={`px-3.5 py-2 rounded-lg text-xs font-semibold cursor-pointer border transition-all flex items-center gap-2 shadow-xs select-none ${
+                showLivePreview
+                  ? "bg-[#1c1917] text-white border-[#1c1917] hover:bg-[#292524]"
+                  : "bg-white text-[#1c1917] border-[#d6d3d1] hover:bg-[#faf8f6] hover:border-[#a8a29e]"
+              }`}
+              style={{
+                backgroundColor: showLivePreview ? "#1c1917" : "#ffffff",
+                color: showLivePreview ? "#ffffff" : "#1c1917",
+              }}
+            >
+              {showLivePreview ? (
+                <svg
+                  className="w-4 h-4 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  style={{ color: "#ffffff" }}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.772M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-4 h-4 shrink-0 text-[#78716c]"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+                  />
+                </svg>
+              )}
+              <span style={{ color: showLivePreview ? "#ffffff" : "#1c1917" }}>
+                {showLivePreview ? "Hide Ticket Preview" : "Show Ticket Preview"}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* Category Pills Navigation */}
+        <div className="px-6 py-3 bg-[#faf8f6] border-b border-[#e7e5e4] flex items-center gap-2 overflow-x-auto">
+          {categories.map((cat) => {
+            const isSelected = selectedCategory === cat;
+            const count =
+              cat === "All"
+                ? KDS_FEATURES_CONFIG.length
+                : KDS_FEATURES_CONFIG.filter((i) => i.category === cat).length;
+            return (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1 rounded-full text-xs font-medium cursor-pointer transition-all shrink-0 ${
+                  isSelected
+                    ? "bg-[#141010] text-white shadow-sm"
+                    : "bg-white text-[#5e5e5e] border border-[#e7e5e4] hover:text-[#141010] hover:bg-stone-50"
+                }`}
+              >
+                <span>{cat}</span>
+                <span
+                  className={`ml-1.5 text-[10px] px-1.5 py-0.2 rounded-full ${
+                    isSelected ? "bg-white/20 text-white" : "bg-stone-100 text-[#5e5e5e]"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Main Grid: Feature Rows with Optional Live Thermal Ticket Preview */}
+        <div className={`grid ${showLivePreview ? "grid-cols-1 xl:grid-cols-12 gap-0" : "grid-cols-1"}`}>
+          {/* Feature Flags List */}
+          <div className={`${showLivePreview ? "xl:col-span-7 border-r border-[#e7e5e4]" : "col-span-12"} divide-y divide-[#e7e5e4]/60`}>
+            {filteredFeatures.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[#5e5e5e]">
+                No KDS printing features matching "{searchQuery}"
+              </div>
+            ) : (
+              filteredFeatures.map((item) => {
+                const active = getFeatureFlag(item.key);
+                return (
+                  <div
+                    key={item.key}
+                    className="p-5 hover:bg-neutral-50/60 transition-colors flex items-start justify-between gap-5"
+                  >
+                    <div className="flex-1 pr-3">
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <span className="text-sm font-semibold text-[#141010] font-sans">
+                          {item.title}
+                        </span>
+                        <span className="px-2 py-0.5 bg-[#f1edec] text-[#5e5e5e] rounded text-[10px] tracking-wider font-mono">
+                          {item.key}
+                        </span>
+                        <span className="px-2 py-0.5 bg-stone-100 text-[#78716c] rounded text-[10px] font-medium">
+                          {item.category}
+                        </span>
+                      </div>
+                      <p className="text-xs text-[#5e5e5e] leading-relaxed max-w-xl">
+                        {item.description}
+                      </p>
+                    </div>
+                    <div className="pt-0.5">
+                      <Switch
+                        checked={active}
+                        onChange={() => handleFeatureToggle(item.key, active)}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Live Thermal Receipt Monospace Preview */}
+          {showLivePreview && (
+            <div className="xl:col-span-5 p-6 bg-[#f7f5f3] flex flex-col items-center justify-start overflow-y-auto max-h-[850px]">
+              <div className="w-full max-w-sm">
+                <div className="flex items-center justify-between mb-3 text-xs text-[#5e5e5e]">
+                  <span className="font-semibold text-[#141010] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    Live 80mm / 44-col Thermal Output
+                  </span>
+                  <span className="font-mono text-[10px] text-[#78716c]">ESC/POS Simulation</span>
+                </div>
+
+                {/* Thermal Ticket Paper Card */}
+                <div className="bg-white border border-[#d6d3d1] shadow-md rounded-t-md p-5 font-mono text-[11px] leading-[1.3] text-[#1c1917] whitespace-pre select-text overflow-x-auto relative">
+                  {/* Serrated tear line at top */}
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-repeat-x border-b border-dashed border-[#a8a29e]" />
+                  {previewKotString}
+                  {/* Serrated tear blade bottom border */}
+                  <div className="mt-4 pt-2 border-t border-dashed border-[#a8a29e] text-center text-[10px] text-[#a8a29e]">
+                    --- [ AUTO CUT BLADE ] ---
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-[#78716c] text-center mt-3 leading-relaxed">
+                  Toggle any option on the left to watch this live kitchen ticket adapt in real time!
+                </p>
+              </div>
+            </div>
           )}
         </div>
       </div>

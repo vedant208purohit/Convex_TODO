@@ -5,6 +5,12 @@ import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
+import {
+  generateDefxKotPlainString,
+  generateWorkstationRunnerSlipPlainString,
+  KotOrder,
+  printThermalReceiptDocument,
+} from "../utils/defxReceiptFormatter";
 
 interface CartLineItem {
   itemId: Id<"items">;
@@ -168,6 +174,14 @@ export default function CaptainPage() {
   );
   const taxComponents = useQuery(
     api.taxation.listTaxComponents,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
+  const printers = useQuery(
+    api.organizationPrinters.list,
+    activeOrg ? {} : "skip"
+  );
+  const orgFeatures = useQuery(
+    api.organizationFeatures.list,
     activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
 
@@ -1138,6 +1152,57 @@ export default function CaptainPage() {
           return;
         }
 
+        // Fire Add-on KOT to Station printer
+        const stationPrinter =
+          printers?.find((p) => p.printerUseFor === "Station") ||
+          printers?.find((p) => p.printerUseFor === "All") ||
+          printers?.[0];
+
+        const getFlag = (k: string) =>
+          orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;
+
+        if (stationPrinter) {
+          try {
+            const kotAddonOrder: KotOrder = {
+              orderNumber: activeOrder.orderNumber || String(activeOrder._id).slice(-4).toUpperCase(),
+              tokenNumber: activeOrder.tokenNumber,
+              orderType: activeOrder.orderType || "DineIn",
+              table: { number: selectedTable.tableNumber || selectedTable.name },
+              serverName: selectedWaiter.name || "Captain",
+              waiterName: selectedWaiter.name || "Captain",
+              stationName: "Kitchen",
+              createdAt: Date.now(),
+              firedAt: Date.now(),
+              specialNotes: "ADD-ON / KOT #2",
+              items: runningCart.map((ci) => ({
+                itemName: ci.name,
+                quantity: ci.quantity,
+                itemPrice: ci.price,
+                customizations: (ci.customizationOptions || ci.customizations || []).map((c: any) => ({
+                  optionName: c.name || c.optionName,
+                })),
+                notes: (ci.prepPreferences || [])
+                  .map((p: any) => (typeof p === "string" ? p : p.name))
+                  .join(", ") || undefined,
+              })),
+            };
+
+            const kotStr = generateDefxKotPlainString(kotAddonOrder, getFlag, 48);
+            printThermalReceiptDocument(
+              kotStr,
+              `KOT Add-on - Token #${activeOrder.tokenNumber || ""}`,
+              {
+                printerType: stationPrinter.printerType,
+                printerUrl: stationPrinter.printerUrl,
+                printerPort: stationPrinter.printerPort,
+                stationId: stationPrinter.stationId,
+              }
+            ).catch((e) => console.warn("Captain Add-on KOT print failed:", e));
+          } catch (kotErr) {
+            console.warn("Failed generating Captain Add-on KOT:", kotErr);
+          }
+        }
+
         showToast("✅ KOT #2 Sent to Kitchen Printer");
       } else {
         if (!orgId) {
@@ -1175,6 +1240,108 @@ export default function CaptainPage() {
           showToast((res as any).error);
           setIsPlacingCart(false);
           return;
+        }
+
+        // 1. AUTO-PRINT KDS TICKET (Format 2) TO STATION PRINTER
+        const stationPrinter =
+          printers?.find((p) => p.printerUseFor === "Station") ||
+          printers?.find((p) => p.printerUseFor === "All") ||
+          printers?.[0];
+
+        const workstationPrinter =
+          printers?.find((p) => p.printerUseFor === "WorkStation") ||
+          printers?.find((p) => p.printerUseFor === "All");
+
+        const getFlag = (k: string) =>
+          orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;
+
+        if (stationPrinter) {
+          try {
+            const kotOrder: KotOrder = {
+              orderNumber: res.orderNumber || String(res.orderId).slice(-4).toUpperCase(),
+              tokenNumber: res.tokenNumber,
+              orderType: "DineIn",
+              table: { number: selectedTable.tableNumber || selectedTable.name },
+              serverName: selectedWaiter.name || "Captain",
+              waiterName: selectedWaiter.name || "Captain",
+              guestCount: customerCount,
+              customerPhone: resolvedPhone,
+              stationName: "Kitchen",
+              createdAt: Date.now(),
+              firedAt: Date.now(),
+              items: runningCart.map((ci) => ({
+                itemName: ci.name,
+                quantity: ci.quantity,
+                itemPrice: ci.price,
+                customizations: (ci.customizationOptions || ci.customizations || []).map((c: any) => ({
+                  optionName: c.name || c.optionName,
+                })),
+                notes: (ci.prepPreferences || [])
+                  .map((p: any) => (typeof p === "string" ? p : p.name))
+                  .join(", ") || undefined,
+              })),
+            };
+
+            const kotStr = generateDefxKotPlainString(kotOrder, getFlag, 48);
+            printThermalReceiptDocument(
+              kotStr,
+              `KOT - Token #${res.tokenNumber || ""}`,
+              {
+                printerType: stationPrinter.printerType,
+                printerUrl: stationPrinter.printerUrl,
+                printerPort: stationPrinter.printerPort,
+                stationId: stationPrinter.stationId,
+              }
+            ).catch((e) => console.warn("Captain KOT print failed:", e));
+          } catch (kotErr) {
+            console.warn("Failed generating Captain KOT:", kotErr);
+          }
+        }
+
+        // 2. AUTO-PRINT WORKSTATION SLIP (Format 3) TO WORKSTATION PRINTER
+        if (workstationPrinter) {
+          try {
+            const runnerOrder = {
+              orderNumber: res.orderNumber || String(res.orderId).slice(-4).toUpperCase(),
+              tokenNumber: res.tokenNumber,
+              orderType: "DineIn",
+              table: { number: selectedTable.tableNumber || selectedTable.name },
+              tableName: selectedTable.tableNumber || selectedTable.name,
+              waiterName: selectedWaiter.name || "Captain",
+              serverName: selectedWaiter.name || "Captain",
+              createdAt: Date.now(),
+              items: runningCart.map((ci) => ({
+                itemName: ci.name,
+                name: ci.name,
+                quantity: ci.quantity,
+                customizations: ci.customizationOptions || ci.customizations,
+                notes: (ci.prepPreferences || [])
+                  .map((p: any) => (typeof p === "string" ? p : p.name))
+                  .join(", ") || undefined,
+              })),
+            };
+
+            const slipStr = generateWorkstationRunnerSlipPlainString(
+              runnerOrder,
+              activeOrg,
+              48
+            );
+
+            setTimeout(() => {
+              printThermalReceiptDocument(
+                slipStr,
+                `Runner Slip - Token #${res.tokenNumber || ""}`,
+                {
+                  printerType: workstationPrinter.printerType,
+                  printerUrl: workstationPrinter.printerUrl,
+                  printerPort: workstationPrinter.printerPort,
+                  stationId: workstationPrinter.stationId,
+                }
+              ).catch((e) => console.warn("Captain Runner slip print failed:", e));
+            }, 800);
+          } catch (slipErr) {
+            console.warn("Failed generating Captain Runner slip:", slipErr);
+          }
         }
 
         showToast("✅ Order Created & KOT #1 Dispatched");

@@ -329,28 +329,34 @@ export function openReceiptPdfInNewTab({ order, org }: OrderReceiptData) {
 
   summaryY += 5;
 
-  // Tax Breakdown (if components available or total tax > 0)
-  const taxComponents = order?.taxInfoSnapshot?.components;
-  if (Array.isArray(taxComponents) && taxComponents.length > 0) {
-    for (const comp of taxComponents) {
-      const compRate = comp.rate ? ` (${comp.rate}%)` : "";
-      const compAmount = comp.amount !== undefined ? parseAmount(comp.amount) : (subTotalNum * (comp.rate || 0)) / 100;
+  // Tax Breakdown (ONLY for exclusive taxes charged on top, matching order receipt)
+  const derivedExclusiveNum = Math.max(0, grandTotalNum - subTotalNum + discountNum - deliveryNum);
+  if (derivedExclusiveNum > 0) {
+    const taxComponents = order?.taxInfoSnapshot?.components;
+    if (Array.isArray(taxComponents) && taxComponents.length > 0) {
+      const totalRate = taxComponents.reduce((acc: number, c: any) => acc + (Number(c.rate) || 0), 0);
+      for (const comp of taxComponents) {
+        const compRate = comp.rate ? ` (${comp.rate}%)` : "";
+        const compShare = totalRate > 0 ? (Number(comp.rate) || 0) / totalRate : 1 / taxComponents.length;
+        const compAmount = comp.amount !== undefined ? parseAmount(comp.amount) : derivedExclusiveNum * compShare;
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(90, 90, 90);
+        doc.text(`${comp.name || "Tax"}${compRate}:`, summaryBoxX, summaryY);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(20, 16, 16);
+        doc.text(`${currencySymbol} ${compAmount.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+        summaryY += 5;
+      }
+    } else {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(90, 90, 90);
-      doc.text(`${comp.name || "GST"}${compRate}:`, summaryBoxX, summaryY);
+      const taxName = order?.taxInfoSnapshot?.tax_name || "Tax";
+      doc.text(`${taxName}:`, summaryBoxX, summaryY);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(20, 16, 16);
-      doc.text(`${currencySymbol} ${compAmount.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
+      doc.text(`${currencySymbol} ${derivedExclusiveNum.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
       summaryY += 5;
     }
-  } else if (taxTotalNum > 0) {
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(90, 90, 90);
-    doc.text("GST (Tax Total):", summaryBoxX, summaryY);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(20, 16, 16);
-    doc.text(`${currencySymbol} ${taxTotalNum.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
-    summaryY += 5;
   }
 
   // Delivery Charge (if any)

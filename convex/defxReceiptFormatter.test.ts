@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { generateDefxReceiptPlainString } from "../app/utils/defxReceiptFormatter";
+import {
+  generateDefxReceiptPlainString,
+  generateWorkstationRunnerSlipPlainString,
+} from "../app/utils/defxReceiptFormatter";
 
 describe("defxReceiptFormatter", () => {
   const sampleOrg = {
@@ -108,5 +111,80 @@ describe("defxReceiptFormatter", () => {
       expect(line.length).toBeLessThanOrEqual(48);
     }
     expect(receipt).toContain("VERY LONG RESTAURANT");
+  });
+
+  it("should NOT print an extra tax line when taxes are inclusive, matching order receipt format", () => {
+    const inclusiveOrder = {
+      ...sampleOrder,
+      display_sub_total: "120.00",
+      display_tax_total: "6.00",
+      display_total_amount: "120.00", // Tax is included inside subtotal 120.00
+      totalAmount: 12000,
+      subTotal: 12000,
+      taxTotal: 600,
+      taxInfoSnapshot: {
+        tax_mode: "inclusive",
+        tax_amount: "6.00",
+        components: [],
+      },
+    };
+
+    const receipt = generateDefxReceiptPlainString(inclusiveOrder, sampleOrg, 48);
+
+    // It should have Sub Total and Grand Total matching 120.00
+    expect(receipt).toMatch(/Sub Total\s+Rs\.\s*120\.00/);
+    expect(receipt).toMatch(/Grand Total\s+Rs\.\s*120\.00/);
+    // It should NOT contain an extra tax addition line like "+Rs. 6.00"
+    expect(receipt).not.toContain("+Rs. 6.00");
+    expect(receipt).not.toContain("+Rs.6.00");
+    // It indicates taxes are inclusive
+    expect(receipt).toContain("(Inclusive of all taxes)");
+  });
+
+  it("should generate a clean food runner assembly slip for workstation", () => {
+    const runnerOrder = {
+      orderNumber: "ORD-1082",
+      tokenNumber: "02",
+      orderType: "DineIn",
+      destinationDetails: "Table 04",
+      customerName: "Rahul Verma",
+      waiterName: "Ramesh",
+      createdAt: new Date("2026-09-11T18:11:00").getTime(),
+      specialNotes: "Serve piping hot directly upon dispatch.",
+      items: [
+        {
+          name: "Vadapav (Copy)",
+          qty: 2,
+          isReady: true,
+          spec: "Extra chutney",
+        },
+        {
+          name: "Cheese Dabeli",
+          qty: 1,
+          isReady: false,
+        },
+      ],
+    };
+
+    const slip = generateWorkstationRunnerSlipPlainString(runnerOrder, sampleOrg, 48);
+    expect(slip).toBeDefined();
+
+    const lines = slip.split("\n");
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(48);
+    }
+
+    expect(slip).toContain("RUNNER / ASSEMBLY SLIP");
+    expect(slip).toContain("TOKEN: #02");
+    expect(slip).toContain("TABLE: Table 04");
+    expect(slip).toContain("TYPE: DINEIN");
+    expect(slip).toContain("ORD: ORD-1082");
+    expect(slip).toContain("SERVER: Ramesh");
+    expect(slip).toContain("PLATE ASSEMBLY CHECKLIST");
+    expect(slip).toContain("[READY] 2x Vadapav (Copy)");
+    expect(slip).toContain("[ ] 1x Cheese Dabeli");
+    expect(slip).toContain("CHEF NOTES:");
+    expect(slip).toContain("Serve piping hot directly upon dispatch.");
+    expect(slip).toContain("VERIFY ALL ITEMS BEFORE DISPATCH");
   });
 });

@@ -1345,8 +1345,24 @@ export default function OrdersPage() {
 
     showToast("Printing thermal receipt...");
 
+    const targetPrinter =
+      printers?.find((p) => p.printerUseFor === "Cashier") ||
+      printers?.find((p) => p.printerUseFor === "Station") ||
+      printers?.[0];
+
     const receiptStr = generateDefxReceiptPlainString(order, activeOrg, 48);
-    await printThermalReceiptDocument(receiptStr, `Receipt ${order.orderNumber || ""}`);
+    await printThermalReceiptDocument(
+      receiptStr,
+      `Receipt ${order.orderNumber || ""}`,
+      targetPrinter
+        ? {
+            printerType: targetPrinter.printerType,
+            printerUrl: targetPrinter.printerUrl,
+            printerPort: targetPrinter.printerPort,
+            stationId: targetPrinter.stationId,
+          }
+        : undefined,
+    );
   };
 
   // Download PDF Receipt (Opens real PDF in native Chrome/Edge PDF viewer)
@@ -2489,17 +2505,21 @@ export default function OrdersPage() {
                 background: #ffffff !important;
                 color: #000000 !important;
                 display: block !important;
-                font-family: "Courier New", Courier, monospace !important;
-                font-size: 11px !important;
+                font-family: Consolas, "Lucida Console", "Liberation Mono", Monaco, "Courier New", monospace !important;
+                font-size: 10px !important;
                 font-weight: 500 !important;
                 line-height: 1.25 !important;
                 white-space: pre !important;
-                letter-spacing: 0 !important;
+                letter-spacing: -0.15px !important;
                 word-break: normal !important;
                 z-index: 999999 !important;
                 box-shadow: none !important;
               }
               #printable-order-receipt pre {
+                font-family: inherit !important;
+                font-size: inherit !important;
+                font-weight: inherit !important;
+                letter-spacing: inherit !important;
                 padding-bottom: 25mm !important;
               }
             }

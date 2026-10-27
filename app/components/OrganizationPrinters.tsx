@@ -6,8 +6,10 @@ import { api } from "../../convex/_generated/api";
 import { Id, Doc } from "../../convex/_generated/dataModel";
 import {
   generateDefxReceiptPlainString,
+  generateDefxKotPlainString,
   printThermalReceiptDocument,
 } from "../utils/defxReceiptFormatter";
+import { Toast, type ToastMessage, type ToastType } from "./Toast";
 
 type PrinterType = "Lan" | "Bluetooth" | "Usb";
 type PrinterUseFor = "Cashier" | "Station" | "WorkStation";
@@ -62,12 +64,23 @@ export function OrganizationPrinters() {
   const [printerToDelete, setPrinterToDelete] = useState<Doc<"organizationPrinters"> | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Global Toast / Feedback
-  const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  // Standard Menu Toast Notification State (Top Right)
+  const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  const showFeedback = (message: string, type: "success" | "error" = "success") => {
-    setFeedback({ type, message });
-    setTimeout(() => setFeedback(null), 4500);
+  const showToast = (
+    message: string,
+    type: ToastType = "success",
+    subtext?: string
+  ) => {
+    setToast({ message, type, subtext });
+  };
+
+  const showFeedback = (
+    message: string,
+    type: "success" | "error" = "success",
+    subtext?: string
+  ) => {
+    showToast(message, type, subtext);
   };
 
   // ----------------------------------------------------
@@ -78,34 +91,96 @@ export function OrganizationPrinters() {
     const id = printer._id;
     setConnectionMap((prev) => ({ ...prev, [id]: { status: "testing" } }));
 
-    if (printer.printerType === "Usb") {
+    // 1. BLUETOOTH PRINTER: Browser Check + Local Machine Hardware Probe
+    if (printer.printerType === "Bluetooth" || printer.printerPort === "BT") {
+      if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
+        try {
+          const isAvailable = await (navigator as any).bluetooth.getAvailability?.();
+          if (isAvailable === false) {
+            setConnectionMap((prev) => ({
+              ...prev,
+              [id]: {
+                status: "offline",
+                error: "Bluetooth is turned OFF in computer settings.",
+              },
+            }));
+            return;
+          }
+        } catch {}
+      }
+
+      try {
+        const res = await fetch("/api/printers/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            printerUrl: printer.printerUrl,
+            printerPort: printer.printerPort || "BT",
+            printerType: "Bluetooth",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        setConnectionMap((prev) => ({
+          ...prev,
+          [id]: {
+            status: data.online ? "online" : "offline",
+            latencyMs: data.latencyMs,
+            error: data.error,
+          },
+        }));
+      } catch (err: any) {
+        setConnectionMap((prev) => ({
+          ...prev,
+          [id]: { status: "offline", error: err?.message || "Bluetooth printer unreachable." },
+        }));
+      }
+      return;
+    }
+
+    // 2. USB PRINTER: WebUSB Check + Windows Hardware Check
+    if (printer.printerType === "Usb" || printer.printerPort === "USB") {
       if (typeof navigator !== "undefined" && "usb" in navigator) {
         try {
           const devices = await (navigator as any).usb.getDevices();
-          const matched = devices.length > 0;
-          setConnectionMap((prev) => ({
-            ...prev,
-            [id]: {
-              status: matched ? "online" : "offline",
-              latencyMs: matched ? 1 : undefined,
-              error: matched ? undefined : "No paired USB thermal printer detected. Plug in cable and scan device.",
-            },
-          }));
-          return;
-        } catch {
-          // Fall through
-        }
+          if (devices && devices.length > 0) {
+            setConnectionMap((prev) => ({
+              ...prev,
+              [id]: { status: "online", latencyMs: 1 },
+            }));
+            return;
+          }
+        } catch {}
       }
-      setConnectionMap((prev) => ({ ...prev, [id]: { status: "online", latencyMs: 1 } }));
+
+      try {
+        const res = await fetch("/api/printers/test-connection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            printerUrl: printer.printerUrl,
+            printerPort: printer.printerPort || "USB",
+            printerType: "Usb",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        setConnectionMap((prev) => ({
+          ...prev,
+          [id]: {
+            status: data.online ? "online" : "offline",
+            latencyMs: data.latencyMs,
+            error: data.error,
+          },
+        }));
+      } catch (err: any) {
+        setConnectionMap((prev) => ({
+          ...prev,
+          [id]: { status: "offline", error: err?.message || "USB printer unreachable." },
+        }));
+      }
       return;
     }
 
-    if (printer.printerType === "Bluetooth") {
-      setConnectionMap((prev) => ({ ...prev, [id]: { status: "online", latencyMs: 5 } }));
-      return;
-    }
-
-    // LAN Socket Ping via API route
+    // 3. LAN PRINTER: TCP Socket Ping via API route (Port 9100)
     try {
       const res = await fetch("/api/printers/test-connection", {
         method: "POST",
@@ -134,22 +209,125 @@ export function OrganizationPrinters() {
     }
   }, []);
 
-  // Probe all configured printers on load
+  // Live Auto-Probing + Event Listeners for Bluetooth toggles and USB hot-plugging
   useEffect(() => {
-    if (printers && printers.length > 0) {
+    if (!printers || printers.length === 0) return;
+
+    const probeAll = () => {
       for (const p of printers) {
-        if (!connectionMap[p._id]) {
-          testConnection(p);
-        }
+        testConnection(p);
       }
+    };
+
+    // Initial probe
+    probeAll();
+
+    // 1. Instant Bluetooth toggle listener (detects when user turns off/on Bluetooth)
+    const bt = typeof navigator !== "undefined" && "bluetooth" in navigator
+      ? (navigator as any).bluetooth
+      : null;
+
+    const handleBtAvailability = () => {
+      probeAll();
+    };
+
+    if (bt && bt.addEventListener) {
+      bt.addEventListener("availabilitychanged", handleBtAvailability);
     }
+
+    // 2. Instant USB plug / unplug listener
+    const usb = typeof navigator !== "undefined" && "usb" in navigator
+      ? (navigator as any).usb
+      : null;
+
+    const handleUsbChange = () => {
+      probeAll();
+    };
+
+    if (usb && usb.addEventListener) {
+      usb.addEventListener("connect", handleUsbChange);
+      usb.addEventListener("disconnect", handleUsbChange);
+    }
+
+    // 3. Periodic hardware heartbeat (every 8 seconds) to catch power switches and cable status
+    const interval = setInterval(probeAll, 8000);
+
+    return () => {
+      if (bt && bt.removeEventListener) {
+        bt.removeEventListener("availabilitychanged", handleBtAvailability);
+      }
+      if (usb && usb.removeEventListener) {
+        usb.removeEventListener("connect", handleUsbChange);
+        usb.removeEventListener("disconnect", handleUsbChange);
+      }
+      clearInterval(interval);
+    };
   }, [printers, testConnection]);
+
+  const featuresList = useQuery(api.organizationFeatures.list, {});
 
   // ----------------------------------------------------
   // DEMO PRINT HANDLER
   // ----------------------------------------------------
 
   const handleDemoPrint = async (printer: Doc<"organizationPrinters">) => {
+    // If testing a Kitchen Station printer, print a dedicated KOT thermal ticket with active KDS feature flags
+    if (printer.printerUseFor === "Station") {
+      const getFlag = (k: string) => featuresList?.find((f) => f.featureKey === k)?.active ?? false;
+      const kotStr = generateDefxKotPlainString(
+        {
+          orderNumber: "DEMO-KOT",
+          tokenNumber: "18",
+          kotNumber: "KOT-01",
+          orderType: "Dine In",
+          table: { number: "T-04", sectionName: "AC Hall" },
+          serverName: "Rahul Sharma",
+          waiterName: "Rahul Sharma",
+          stationName: printer.stationId || "Station",
+          guestCount: 4,
+          customerName: "Priya Sharma",
+          customerPhone: "+91 98765 11223",
+          createdAt: Date.now(),
+          firedAt: Date.now(),
+          specialNotes: "Severe nut allergy test",
+          allergies: ["Peanuts / Tree Nuts"],
+          items: [
+            {
+              itemName: `Self-Test: ${printer.printerType} (${printer.printerUrl})`,
+              quantity: 1,
+              itemPrice: 0,
+              display_item_price: "Rs.0.00",
+              courseName: "Diagnostics",
+              customizations: [
+                { optionName: `Port: ${printer.printerPort || "9100"}`, groupName: "Interface" },
+                { optionName: "Paper: 80mm ESC/POS", groupName: "Hardware" },
+              ],
+              notes: "Thermal printhead & cutter test successful",
+            },
+          ],
+        },
+        getFlag,
+        48
+      );
+
+      const printed = await printThermalReceiptDocument(
+        kotStr,
+        `Station KOT Self-Test - ${printer.printerUrl}`,
+        {
+          printerType: printer.printerType,
+          printerUrl: printer.printerUrl,
+          printerPort: printer.printerPort,
+          stationId: printer.stationId,
+        }
+      );
+      if (printed) {
+        showFeedback(`KOT Test ticket sent to ${printer.printerUrl}!`);
+      } else {
+        showFeedback(`KOT Print triggered for ${printer.printerUrl}`);
+      }
+      return;
+    }
+
     const testOrder = {
       orderNumber: "DEMO-001",
       tokenNumber: "01",
@@ -189,7 +367,21 @@ export function OrganizationPrinters() {
     };
 
     const receiptStr = generateDefxReceiptPlainString(testOrder, activeOrg || undefined, 48);
-    await printThermalReceiptDocument(receiptStr, `Printer Self-Test - ${printer.printerUseFor}`);
+    const printed = await printThermalReceiptDocument(
+      receiptStr,
+      `Printer Self-Test - ${printer.printerUseFor}`,
+      {
+        printerType: printer.printerType,
+        printerUrl: printer.printerUrl,
+        printerPort: printer.printerPort,
+        stationId: printer.stationId,
+      }
+    );
+    if (printed) {
+      showFeedback(`Test receipt successfully sent to ${printer.printerUrl}!`);
+    } else {
+      showFeedback(`Print triggered for ${printer.printerUrl}`);
+    }
   };
 
   // ----------------------------------------------------
@@ -197,6 +389,16 @@ export function OrganizationPrinters() {
   // ----------------------------------------------------
 
   const handleScanUsb = async (section: PrinterUseFor) => {
+    // 1. Guard against duplicate printer assignment for this role
+    const existing = printers?.find((p) => p.printerUseFor === section);
+    if (existing) {
+      showFeedback(
+        `Hey! ${section} printer is already taken (${existing.printerType}: ${existing.printerUrl}). Please delete the existing printer first before connecting a new one.`,
+        "error"
+      );
+      return;
+    }
+
     if (typeof navigator === "undefined" || !("usb" in navigator)) {
       showFeedback("WebUSB is not supported in this browser. Please use Chrome or Edge.", "error");
       return;
@@ -216,12 +418,28 @@ export function OrganizationPrinters() {
       }
     } catch (err: any) {
       if (err.name !== "NotFoundError") {
-        showFeedback(err.message || "Failed to connect USB device.", "error");
+        const msg = err.message || "Failed to connect USB device.";
+        showFeedback(
+          msg.includes("already taken")
+            ? `Hey! ${section} printer is already taken. Please delete the existing printer first before connecting a new one.`
+            : msg,
+          "error"
+        );
       }
     }
   };
 
   const handleScanBluetooth = async (section: PrinterUseFor) => {
+    // 1. Guard against duplicate printer assignment for this role
+    const existing = printers?.find((p) => p.printerUseFor === section);
+    if (existing) {
+      showFeedback(
+        `Hey! ${section} printer is already taken (${existing.printerType}: ${existing.printerUrl}). Please delete the existing printer first before connecting a new one.`,
+        "error"
+      );
+      return;
+    }
+
     if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
       showFeedback("WebBluetooth is not supported in this browser. Please use Chrome or Edge over HTTPS.", "error");
       return;
@@ -230,6 +448,12 @@ export function OrganizationPrinters() {
     try {
       const device = await (navigator as any).bluetooth.requestDevice({
         acceptAllDevices: true,
+        optionalServices: [
+          "000018f0-0000-1000-8000-00805f9b34fb", // Standard POS print service (defx-pos-frontend)
+          "0000ffe0-0000-1000-8000-00805f9b34fb", // Common HM-10 Bluetooth UART
+          "49535343-fe7d-4ae5-8fa9-9fafd205e455", // ISSC transparent UART (POS-80/58 standard)
+          "e7810a71-73ae-499d-8c15-faa9aef0c3f2", // Xprinter / Rongta BLE service
+        ],
       });
       if (device) {
         const deviceName = device.name || `BT-POS-${device.id.slice(0, 8)}`;
@@ -243,7 +467,23 @@ export function OrganizationPrinters() {
       }
     } catch (err: any) {
       if (err.name !== "NotFoundError") {
-        showFeedback(err.message || "Failed to scan Bluetooth device.", "error");
+        const msg = err.message || "Failed to scan Bluetooth device.";
+        if (
+          msg.toLowerCase().includes("adapter not available") ||
+          msg.toLowerCase().includes("bluetooth is not powered")
+        ) {
+          showFeedback(
+            "Bluetooth adapter is off. Please turn ON Bluetooth in your Windows laptop settings.",
+            "error",
+          );
+        } else if (msg.includes("already taken")) {
+          showFeedback(
+            `Hey! ${section} printer is already taken. Please delete the existing printer first before connecting a new one.`,
+            "error",
+          );
+        } else {
+          showFeedback(msg, "error");
+        }
       }
     }
   };
@@ -254,6 +494,17 @@ export function OrganizationPrinters() {
 
   const openLanModal = (section: PrinterUseFor, printer?: Doc<"organizationPrinters">) => {
     setFormError(null);
+    if (!printer) {
+      const existing = printers?.find((p) => p.printerUseFor === section);
+      if (existing) {
+        showFeedback(
+          `Hey! ${section} printer is already taken (${existing.printerType}: ${existing.printerUrl}). Please delete the existing printer first before adding a new one.`,
+          "error"
+        );
+        return;
+      }
+    }
+
     if (printer) {
       setLanModal({
         isOpen: true,
@@ -284,6 +535,16 @@ export function OrganizationPrinters() {
   const handleSaveLanPrinter = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+
+    if (lanModal.type === "create") {
+      const existing = printers?.find((p) => p.printerUseFor === lanModal.section);
+      if (existing) {
+        setFormError(
+          `Hey! ${lanModal.section} printer is already taken (${existing.printerType}: ${existing.printerUrl}). Please delete the existing printer first before adding a new one.`
+        );
+        return;
+      }
+    }
 
     if (!formData.printerUrl.trim()) {
       setFormError("Printer URL / IP Address cannot be blank.");
@@ -321,7 +582,14 @@ export function OrganizationPrinters() {
 
       setLanModal((prev) => ({ ...prev, isOpen: false }));
     } catch (err: any) {
-      setFormError(err?.message || "Failed to save LAN printer.");
+      const msg = err?.message || "Failed to save LAN printer.";
+      if (msg.includes("already taken")) {
+        setFormError(
+          `Hey! ${lanModal.section} printer is already taken. Please delete the existing printer first before adding a new one.`
+        );
+      } else {
+        setFormError(msg);
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -384,27 +652,6 @@ export function OrganizationPrinters() {
           </div>
         </div>
 
-        {/* Global Feedback Banner */}
-        {feedback && (
-          <div
-            className={`flex items-center justify-between rounded-xl px-4 py-3 text-xs font-medium shadow-xs transition-all animate-in fade-in duration-150 ${
-              feedback.type === "success"
-                ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                : "bg-rose-50 text-rose-800 border border-rose-200"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm">{feedback.type === "success" ? "✓" : "⚠️"}</span>
-              <span>{feedback.message}</span>
-            </div>
-            <button
-              onClick={() => setFeedback(null)}
-              className="text-stone-400 hover:text-stone-700 cursor-pointer ml-3"
-            >
-              ✕
-            </button>
-          </div>
-        )}
 
         {/* Main Printer Cards Container */}
         <div className="space-y-4">
@@ -660,6 +907,9 @@ export function OrganizationPrinters() {
             </div>
           </div>
         )}
+
+        {/* Standard Menu Toast Notification - Top Right */}
+        <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
     </div>
   );
@@ -756,6 +1006,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
             </span>
           </div>
 
+
           {/* 1. Bluetooth Printers */}
           <div className="space-y-3 rounded-xl border border-stone-200/80 bg-white p-4">
             <div className="flex items-center justify-between">
@@ -770,7 +1021,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
               <button
                 type="button"
                 onClick={onScanBluetooth}
-                className="px-4 py-1.5 rounded-full bg-[#219653] hover:bg-[#1b7e45] text-white text-xs font-medium transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-full bg-[#141010] hover:bg-black text-white text-xs font-medium transition shadow-xs cursor-pointer flex items-center gap-1.5"
               >
                 <span>📡</span>
                 <span>Scan Bluetooth</span>
@@ -784,7 +1035,6 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
                     key={p._id}
                     printer={p}
                     connection={connectionMap[p._id]}
-                    onTestConnection={() => onTestConnection(p)}
                     onDemoPrint={() => onDemoPrint(p)}
                     onDelete={() => onDeletePrinter(p)}
                   />
@@ -811,7 +1061,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
               <button
                 type="button"
                 onClick={onScanUsb}
-                className="px-4 py-1.5 rounded-full bg-[#219653] hover:bg-[#1b7e45] text-white text-xs font-medium transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-full bg-[#141010] hover:bg-black text-white text-xs font-medium transition shadow-xs cursor-pointer flex items-center gap-1.5"
               >
                 <span>🔌</span>
                 <span>Scan USB</span>
@@ -825,7 +1075,6 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
                     key={p._id}
                     printer={p}
                     connection={connectionMap[p._id]}
-                    onTestConnection={() => onTestConnection(p)}
                     onDemoPrint={() => onDemoPrint(p)}
                     onDelete={() => onDeletePrinter(p)}
                   />
@@ -852,7 +1101,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
               <button
                 type="button"
                 onClick={() => onOpenLanModal()}
-                className="px-4 py-1.5 rounded-full bg-[#219653] hover:bg-[#1b7e45] text-white text-xs font-medium transition shadow-xs cursor-pointer flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-full bg-[#141010] hover:bg-black text-white text-xs font-medium transition shadow-xs cursor-pointer flex items-center gap-1.5"
               >
                 <span className="text-sm font-bold leading-none">+</span>
                 <span>Add LAN Printer</span>
@@ -866,7 +1115,6 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
                     key={p._id}
                     printer={p}
                     connection={connectionMap[p._id]}
-                    onTestConnection={() => onTestConnection(p)}
                     onDemoPrint={() => onDemoPrint(p)}
                     onEdit={() => onOpenLanModal(p)}
                     onDelete={() => onDeletePrinter(p)}
@@ -892,7 +1140,6 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
 interface PrinterItemCardProps {
   printer: Doc<"organizationPrinters">;
   connection?: ConnectionState;
-  onTestConnection: () => void;
   onDemoPrint: () => void;
   onEdit?: () => void;
   onDelete: () => void;
@@ -901,7 +1148,6 @@ interface PrinterItemCardProps {
 function PrinterItemCard({
   printer,
   connection,
-  onTestConnection,
   onDemoPrint,
   onEdit,
   onDelete,
@@ -974,16 +1220,6 @@ function PrinterItemCard({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 self-end sm:self-center">
-        {/* Re-Ping Button */}
-        <button
-          type="button"
-          onClick={onTestConnection}
-          disabled={isTesting}
-          title="Test network ping"
-          className="px-2.5 py-1 text-[11px] font-medium text-stone-600 hover:text-black border border-stone-200 rounded-lg bg-white hover:bg-stone-50 transition cursor-pointer disabled:opacity-50"
-        >
-          {isTesting ? "Ping..." : "Ping"}
-        </button>
 
         {/* LAN Edit Icon */}
         {printer.printerType === "Lan" && onEdit && (
