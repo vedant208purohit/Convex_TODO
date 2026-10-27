@@ -119,24 +119,8 @@ export function OrganizationOnlineStore() {
     if (org.secondaryColor && isValidHex(org.secondaryColor)) {
       setSecondaryColor(org.secondaryColor);
     }
-    let matchingPreset: string | undefined;
-    if (org.theme && PRESET_PALETTES[org.theme]) {
-      matchingPreset = org.theme;
-    } else {
-      matchingPreset = Object.keys(PRESET_PALETTES).find(
-        (key) =>
-          PRESET_PALETTES[key].primary.toUpperCase() === (org.primaryColor || "").toUpperCase() &&
-          PRESET_PALETTES[key].secondary.toUpperCase() === (org.secondaryColor || "").toUpperCase()
-      );
-    }
-    if (matchingPreset) {
-      setSelectedPreset(matchingPreset);
-      const p = PRESET_PALETTES[matchingPreset];
-      setCanvasBg(p.bg);
-      setCardBg(p.card);
-      setHeadingInk(p.text);
-    } else {
-      setSelectedPreset("custom");
+    if (org.theme) {
+      setSelectedPreset(org.theme);
     }
   }, [org]);
 
@@ -204,7 +188,15 @@ export function OrganizationOnlineStore() {
 
     setIsSaving(true);
     try {
-      const resolvedTheme = selectedPreset && selectedPreset !== "custom" ? selectedPreset : (org.theme || "custom");
+      const matchingPresetKey = Object.keys(PRESET_PALETTES).find(
+        (key) =>
+          PRESET_PALETTES[key].primary.toUpperCase() === primaryColor.trim().toUpperCase() &&
+          PRESET_PALETTES[key].secondary.toUpperCase() === secondaryColor.trim().toUpperCase()
+      );
+      const resolvedTheme = selectedPreset && selectedPreset !== "custom"
+        ? selectedPreset
+        : (matchingPresetKey || "custom");
+
       await updateOrg({
         id: org._id,
         onlineStore,
@@ -366,9 +358,8 @@ export function OrganizationOnlineStore() {
             <button
               type="button"
               onClick={triggerSyncAnimation}
-              className={`p-1.5 rounded-full bg-[#ffffff] text-[#645d58] hover:text-[#1e1b19] hover:bg-[#faf2ee] transition-all flex items-center justify-center shadow-xs border border-[#e9e1dd] cursor-pointer shrink-0 ${
-                syncSpinning ? "rotate-180 duration-500" : ""
-              }`}
+              className={`p-1.5 rounded-full bg-[#ffffff] text-[#645d58] hover:text-[#1e1b19] hover:bg-[#faf2ee] transition-all flex items-center justify-center shadow-xs border border-[#e9e1dd] cursor-pointer shrink-0 ${syncSpinning ? "rotate-180 duration-500" : ""
+                }`}
               title="Sync Storefront State"
             >
               <span className="material-symbols-outlined text-[17px]">sync</span>
@@ -379,11 +370,10 @@ export function OrganizationOnlineStore() {
               type="button"
               onClick={handleSave}
               disabled={isSaving || !isDirty}
-              className={`px-3.5 sm:px-4 py-1.5 rounded-full font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap ${
-                isDirty
+              className={`px-3.5 sm:px-4 py-1.5 rounded-full font-semibold text-xs transition-all shadow-sm flex items-center justify-center gap-1.5 shrink-0 whitespace-nowrap ${isDirty
                   ? "bg-[#000000] text-white hover:bg-[#33302d] cursor-pointer"
                   : "bg-[#e9e1dd] text-[#645d58] cursor-not-allowed opacity-80"
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-[16px]">cloud_done</span>
               <span>
@@ -884,9 +874,8 @@ export function OrganizationOnlineStore() {
                           if (onlineStore) setShowOfflineModal(true);
                           else setOnlineStore(true);
                         }}
-                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition ${
-                          onlineStore ? "bg-[#e8f5e9] text-[#1b5e20]" : "bg-amber-100 text-amber-800"
-                        }`}
+                        className={`px-2.5 py-0.5 rounded-full text-xs font-semibold cursor-pointer transition ${onlineStore ? "bg-[#e8f5e9] text-[#1b5e20]" : "bg-amber-100 text-amber-800"
+                          }`}
                       >
                         {onlineStore ? "Enabled" : "Paused"}
                       </button>
@@ -1069,11 +1058,10 @@ export function OrganizationOnlineStore() {
                       <button
                         type="button"
                         onClick={() => setDeviceMode("mobile")}
-                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all shadow-xs cursor-pointer whitespace-nowrap ${
-                          deviceMode === "mobile"
+                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all shadow-xs cursor-pointer whitespace-nowrap ${deviceMode === "mobile"
                             ? "bg-[#000000] text-white"
                             : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#faf2ee]"
-                        }`}
+                          }`}
                       >
                         <span className="material-symbols-outlined text-[15px]">smartphone</span>
                         <span>Mobile <span className="opacity-70 text-[11px]">(390px)</span></span>
@@ -1081,11 +1069,10 @@ export function OrganizationOnlineStore() {
                       <button
                         type="button"
                         onClick={() => setDeviceMode("tablet")}
-                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          deviceMode === "tablet"
+                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${deviceMode === "tablet"
                             ? "bg-[#000000] text-white"
                             : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#faf2ee]"
-                        }`}
+                          }`}
                       >
                         <span className="material-symbols-outlined text-[15px]">tablet</span>
                         <span>Tablet <span className="opacity-70 text-[11px]">(640px)</span></span>
@@ -1093,11 +1080,10 @@ export function OrganizationOnlineStore() {
                       <button
                         type="button"
                         onClick={() => setDeviceMode("desktop")}
-                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
-                          deviceMode === "desktop"
+                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${deviceMode === "desktop"
                             ? "bg-[#000000] text-white"
                             : "text-[#645d58] hover:text-[#1e1b19] hover:bg-[#faf2ee]"
-                        }`}
+                          }`}
                       >
                         <span className="material-symbols-outlined text-[15px]">desktop_windows</span>
                         <span>Desktop <span className="opacity-70 text-[11px]">(820px)</span></span>
@@ -1203,9 +1189,8 @@ export function OrganizationOnlineStore() {
                               <button
                                 type="button"
                                 onClick={() => setDietaryFilter(dietaryFilter === "veg" ? "all" : "veg")}
-                                className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold transition-all shadow-xs shrink-0 ${
-                                  dietaryFilter === "veg" ? "bg-[#1b5e20] text-white" : "bg-[#f4ece8] text-[#1e1b19]"
-                                }`}
+                                className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold transition-all shadow-xs shrink-0 ${dietaryFilter === "veg" ? "bg-[#1b5e20] text-white" : "bg-[#f4ece8] text-[#1e1b19]"
+                                  }`}
                               >
                                 <span className="w-2 h-2 rounded-xs bg-[#4caf50]" />
                                 <span>Veg Only</span>
@@ -1213,9 +1198,8 @@ export function OrganizationOnlineStore() {
                               <button
                                 type="button"
                                 onClick={() => setDietaryFilter(dietaryFilter === "nonveg" ? "all" : "nonveg")}
-                                className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold transition-all shrink-0 ${
-                                  dietaryFilter === "nonveg" ? "bg-[#ba1a1a] text-white" : "bg-[#f4ece8] text-[#1e1b19]"
-                                }`}
+                                className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold transition-all shrink-0 ${dietaryFilter === "nonveg" ? "bg-[#ba1a1a] text-white" : "bg-[#f4ece8] text-[#1e1b19]"
+                                  }`}
                               >
                                 <span className="w-2 h-2 rounded-xs bg-[#e53935]" />
                                 <span>Non-Veg</span>
@@ -1465,9 +1449,8 @@ export function OrganizationOnlineStore() {
                               <div className="space-y-1.5">
                                 <div
                                   onClick={() => setModifierPortion("regular")}
-                                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer ${
-                                    modifierPortion === "regular" ? "border-black bg-white shadow-xs" : "border-[#e9e1dd] bg-[#faf2ee]"
-                                  }`}
+                                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer ${modifierPortion === "regular" ? "border-black bg-white shadow-xs" : "border-[#e9e1dd] bg-[#faf2ee]"
+                                    }`}
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="material-symbols-outlined text-[16px] text-[#2e7d32]">
@@ -1479,9 +1462,8 @@ export function OrganizationOnlineStore() {
                                 </div>
                                 <div
                                   onClick={() => setModifierPortion("large")}
-                                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer ${
-                                    modifierPortion === "large" ? "border-black bg-white shadow-xs" : "border-[#e9e1dd] bg-[#faf2ee]"
-                                  }`}
+                                  className={`p-2.5 rounded-xl border flex items-center justify-between cursor-pointer ${modifierPortion === "large" ? "border-black bg-white shadow-xs" : "border-[#e9e1dd] bg-[#faf2ee]"
+                                    }`}
                                 >
                                   <div className="flex items-center gap-2">
                                     <span className="material-symbols-outlined text-[16px] text-[#645d58]">
@@ -1505,9 +1487,8 @@ export function OrganizationOnlineStore() {
                                     key={lvl}
                                     type="button"
                                     onClick={() => setModifierSpice(lvl)}
-                                    className={`py-2 rounded-xl text-center text-[10px] font-bold transition shadow-xs ${
-                                      modifierSpice === lvl ? "bg-[#1e1b19] text-white" : "bg-[#f4ece8] text-[#1e1b19]"
-                                    }`}
+                                    className={`py-2 rounded-xl text-center text-[10px] font-bold transition shadow-xs ${modifierSpice === lvl ? "bg-[#1e1b19] text-white" : "bg-[#f4ece8] text-[#1e1b19]"
+                                      }`}
                                   >
                                     {lvl === "mild" ? "Mild 🟢" : lvl === "medium" ? "Medium 🌶️" : "Bistro Hot 🔥"}
                                   </button>
@@ -1889,11 +1870,10 @@ export function OrganizationOnlineStore() {
                       key={key}
                       type="button"
                       onClick={() => handlePresetSelect(key)}
-                      className={`text-left p-3 rounded-xl transition-all flex flex-col justify-between cursor-pointer border flex-1 min-w-[130px] sm:min-w-[135px] ${
-                        selectedPreset === key
+                      className={`text-left p-3 rounded-xl transition-all flex flex-col justify-between cursor-pointer border flex-1 min-w-[130px] sm:min-w-[135px] ${selectedPreset === key
                           ? "bg-white border-2 border-black shadow-xs"
                           : "bg-[#f4ece8] border-transparent hover:bg-white hover:border-[#e9e1dd]"
-                      }`}
+                        }`}
                     >
                       <div className="flex items-center justify-between mb-2.5">
                         <div className="flex items-center gap-1">
@@ -2286,11 +2266,10 @@ export function OrganizationOnlineStore() {
                     type="button"
                     onClick={handleSave}
                     disabled={isSaving || !isDirty}
-                    className={`px-5 py-2 rounded-full text-xs font-bold transition shadow-sm ${
-                      isDirty
+                    className={`px-5 py-2 rounded-full text-xs font-bold transition shadow-sm ${isDirty
                         ? "bg-[#000000] text-white hover:bg-[#33302d] cursor-pointer"
                         : "bg-[#e9e1dd] text-[#645d58] cursor-not-allowed"
-                    }`}
+                      }`}
                   >
                     {isSaving ? "Saving..." : "Update Storefront"}
                   </button>
@@ -2551,11 +2530,10 @@ export function OrganizationOnlineStore() {
                     showToast("Storefront is now online", "success", "Your store is live and accepting customer orders.");
                   }
                 }}
-                className={`w-full sm:w-auto px-5 py-2 rounded-full font-bold text-xs transition shadow-xs cursor-pointer ${
-                  onlineStore
+                className={`w-full sm:w-auto px-5 py-2 rounded-full font-bold text-xs transition shadow-xs cursor-pointer ${onlineStore
                     ? "bg-[#ba1a1a] text-white hover:bg-red-700"
                     : "bg-[#1b5e20] text-white hover:bg-green-800"
-                }`}
+                  }`}
               >
                 {onlineStore ? "Pause Storefront" : "Turn Store Online"}
               </button>
@@ -2687,11 +2665,10 @@ export function OrganizationOnlineStore() {
                     </td>
                     <td className="py-3.5 px-4 text-[#8a7e75]">— N/A</td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        org?.isDelivery && (org?.deliveryOnlinePayment || org?.deliveryCashOnDelivery)
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${org?.isDelivery && (org?.deliveryOnlinePayment || org?.deliveryCashOnDelivery)
                           ? "bg-[#e8f5e9] text-[#1b5e20]"
                           : "bg-stone-100 text-stone-600"
-                      }`}>
+                        }`}>
                         {org?.isDelivery && (org?.deliveryOnlinePayment || org?.deliveryCashOnDelivery) ? "Active" : "Disabled"}
                       </span>
                     </td>
@@ -2712,11 +2689,10 @@ export function OrganizationOnlineStore() {
                       {org?.takeAwayCashPayment ? "✓ Pay on Pickup" : "— Disabled"}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        org?.isTakeAway && (org?.takeAwayOnlinePayment || org?.takeAwayCashPayment)
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${org?.isTakeAway && (org?.takeAwayOnlinePayment || org?.takeAwayCashPayment)
                           ? "bg-[#e8f5e9] text-[#1b5e20]"
                           : "bg-stone-100 text-stone-600"
-                      }`}>
+                        }`}>
                         {org?.isTakeAway && (org?.takeAwayOnlinePayment || org?.takeAwayCashPayment) ? "Active" : "Disabled"}
                       </span>
                     </td>
@@ -2737,11 +2713,10 @@ export function OrganizationOnlineStore() {
                       {org?.dineinPospaid ? "✓ Pay at Register" : "— Disabled"}
                     </td>
                     <td className="py-3.5 px-4 text-right">
-                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
-                        org?.isDineIn && (org?.dineinPrepaid || org?.dineinPospaid)
+                      <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${org?.isDineIn && (org?.dineinPrepaid || org?.dineinPospaid)
                           ? "bg-[#e8f5e9] text-[#1b5e20]"
                           : "bg-stone-100 text-stone-600"
-                      }`}>
+                        }`}>
                         {org?.isDineIn && (org?.dineinPrepaid || org?.dineinPospaid) ? "Active" : "Disabled"}
                       </span>
                     </td>
