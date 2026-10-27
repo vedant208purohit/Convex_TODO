@@ -1325,8 +1325,13 @@ export const getOrderDetails = query({
         .first();
 
       if (attempt) {
+        const org = order.organizationId
+          ? await ctx.db.get(order.organizationId)
+          : await ctx.db.query("organizations").first();
+        const storeSlug = org?.slug;
+        const querySuffix = storeSlug ? `?store=${encodeURIComponent(storeSlug)}` : "";
         const baseUrl = getCustomerFacingBaseUrl();
-        surveyQrUrl = `${baseUrl}/attempts/${attempt._id}`;
+        surveyQrUrl = `${baseUrl}/attempts/${attempt._id}${querySuffix}`;
       }
     }
 

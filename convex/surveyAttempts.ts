@@ -174,10 +174,16 @@ export const getOrCreateForOrder = mutation({
       )
       .first();
 
+    const org = order.organizationId
+      ? await ctx.db.get(order.organizationId)
+      : await ctx.db.query("organizations").first();
+    const storeSlug = org?.slug;
+    const querySuffix = storeSlug ? `?store=${encodeURIComponent(storeSlug)}` : "";
+
     const baseUrl = getCustomerFacingBaseUrl(args.publicBaseUrl);
 
     if (existingAttempt) {
-      const surveyQrUrl = `${baseUrl}/attempts/${existingAttempt._id}`;
+      const surveyQrUrl = `${baseUrl}/attempts/${existingAttempt._id}${querySuffix}`;
 
       return {
         attemptId: existingAttempt._id,
@@ -203,7 +209,7 @@ export const getOrCreateForOrder = mutation({
       updatedAt: now,
     });
 
-    const surveyQrUrl = `${baseUrl}/attempts/${newAttemptId}`;
+    const surveyQrUrl = `${baseUrl}/attempts/${newAttemptId}${querySuffix}`;
 
     return {
       attemptId: newAttemptId,
