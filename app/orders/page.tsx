@@ -2366,34 +2366,17 @@ export default function OrdersPage() {
                         );
                       })()}
 
-                      {/* Bill & Receipt Preview */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (order) {
-                            router.push(`/orders/${order._id}/receipt`);
-                          }
-                        }}
-                        disabled={!order}
-                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
-                      >
-                        <PrintIcon className="w-4 h-4 shrink-0 !text-white text-white" />
-                        <span className="!text-white text-white font-semibold text-xs truncate">
-                          Receipt Preview &amp; QR
-                        </span>
-                      </button>
-
-                      {/* Customer Review Details */}
+                      {/* Print Thermal Receipt */}
                       <button
                         type="button"
                         onClick={handlePrintReceipt}
                         title="Print Thermal Receipt"
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
-                        <span className="material-symbols-outlined text-[18px] shrink-0 !text-white text-white">
-                          rate_review
+                        <PrintIcon className="w-4 h-4 shrink-0 !text-white text-white" />
+                        <span className="!text-white text-white font-semibold text-xs truncate">
+                          Print Receipt
                         </span>
                       </button>
 
@@ -2426,12 +2409,12 @@ export default function OrdersPage() {
                         </span>
                       </button>
 
-                      {/* Order Timeline (Spans full width for balanced grid) */}
+                      {/* Order Timeline */}
                       <button
                         type="button"
                         onClick={() => setDrawerTab("timeline")}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
                         <TimelineIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                         <span className="!text-white text-white font-semibold text-xs truncate">

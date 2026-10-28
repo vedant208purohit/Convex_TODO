@@ -1,78 +1,238 @@
 # Master POS Thermal Printing Architecture & Specifications
 
-This document defines the comprehensive printing architecture, workflows, hardware routing, legacy `defx-pos-frontend` parity mappings, and exact thermal printout formats (58mm / 80mm) across the entire POS application.
+This document defines the comprehensive printing architecture, workflows, hardware connection methods, transport layers, legacy `defx-pos-frontend` parity mappings, and exact thermal printout formats (58mm / 80mm) across the entire POS application.
 
 ---
 
-## 1. System Printing Topology
+## 1. System Printing Architecture
+
+The system is built for **silent, high-speed, driver-independent thermal printing** supporting standard **80mm (48-column)** and **58mm (32-column)** ESC/POS thermal printers.
 
 ```
-                              ┌────────────────────────────────────────┐
-                              │       STORE PRINTER CONTROLLER         │
-                              └──────────────────┬─────────────────────┘
-                                                 │
-         ┌─────────────────────────┬─────────────┴─────────────┬─────────────────────────┐
-         ▼                         ▼                           ▼                         ▼
-┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐      ┌──────────────────┐
-│  CASHIER COUNTER │      │  KITCHEN & BARS  │      │ RUNNER / PACKING │      │  HOST & REPORTS  │
-│  (Tax Invoices & │      │   (Cooking KOTs  │      │  (Bag Stickers & │      │   (Queue Slips   │
-│   Settlements)   │      │   & Prep Tickets)│      │   Token Slips)   │      │   & Z-Reports)   │
-└──────────────────┘      └──────────────────┘      └──────────────────┘      └──────────────────┘
+                              ┌──────────────────────────────────────────────┐
+                              │           CONVEX REALTIME DATABASE           │
+                              │           (api.orders.listLiveOrders)        │
+                              └──────────────────────┬───────────────────────┘
+                                                     │
+                                                     ▼
+                              ┌──────────────────────────────────────────────┐
+                              │            POS-DEFAULT TERMINAL              │
+                              │        (GlobalOrderAutoPrinter Provider)     │
+                              └──────────────────────┬───────────────────────┘
+                                                     │
+                                                     ▼
+                              ┌──────────────────────────────────────────────┐
+                              │           NEXT.JS PRINT CONTROLLER           │
+                              │         (/api/printers/print-direct)         │
+                              └──────┬───────────────┼───────────────┬───────┘
+                                     │               │               │
+                 ┌───────────────────┘               │               └───────────────────┐
+                 ▼                                   ▼                                   ▼
+      ┌─────────────────────┐             ┌─────────────────────┐             ┌─────────────────────┐
+      │     LAN / TCP       │             │       USB RAW       │             │   BLUETOOTH / COM   │
+      │  Port 9100 Socket   │             │   Win32 Spooler     │             │     Serial COM8     │
+      │  (Kitchen / KDS)    │             │   (Workstation /    │             │   (Mobile Printers  │
+      │                     │             │    Cashier Desk)    │             │   & Kitchen KOT)    │
+      └─────────────────────┘             └─────────────────────┘             └─────────────────────┘
 ```
 
 ---
 
-## 2. Where Does Each Order Print?
+## 2. Printer Types, Connection Protocols & How to Test
 
-### Case A: Order Placed from Cashier Counter
-* **Cashier Printer:** Prints the **Customer Tax Invoice / Bill** upon payment settlement (or customer token slip for takeaway).
-* **KDS Station Printer:** Fires the **KOT (Kitchen Order Ticket)** directly to the kitchen line cooks so they can start preparing the food immediately.
+### A. LAN / Network Thermal Printers (Ethernet / Wi-Fi)
 
-### Case B: Order Placed by User from Website / Table QR Code
-* **KDS Station Printer:** Instantly receives the order and prints the **KOT cooking ticket** with the Table # or Online Delivery/Takeaway tag.
-* **Cashier Printer:** Receives the live notification on the cashier screen (prints customer bill when accepted/settled).
+#### How It Works:
+* LAN printers communicate directly over raw **TCP socket Port 9100** (JetDirect standard).
+* **Zero Windows drivers required**: Byte buffers (`ESC/POS`) are streamed directly over the local network via Node.js `net.Socket`.
+* Millisecond latency; ideal for kitchen printers located far from the POS terminal.
 
-### Case C: Order Placed by Captain (from Handheld Device at Table)
-* **KDS Station Printer:** Fires the **KOT ticket** to the specific kitchen station (e.g. Bar, Tandoor, Main Kitchen).
-* **Cashier Printer:** Does not print a final bill yet because guests are still eating. (Only prints the bill later when guests ask for the check and settle).
+#### How to Connect:
+1. Connect the printer to your router or network switch using an Ethernet cable (or connect via printer Wi-Fi).
+2. **Find the Printer's IP Address**:
+   * Turn the printer **OFF**.
+   * Hold the **FEED** button and turn the printer **ON**.
+   * Release FEED after 3 seconds. It will print a self-test slip showing its IP (e.g. `192.168.1.150`).
+3. Open **Settings > Printers** (`/settings?tab=printers`) in the POS:
+   * **Printer Type**: Select `LAN / Network`.
+   * **IP / URL**: Enter the printer IP (e.g. `192.168.1.150`).
+   * **Port**: Enter `9100` (default standard thermal port).
+   * **Role**: Choose `Station` (Kitchen), `WorkStation`, or `Cashier`.
+4. Click **"Save Changes"**.
 
----
+#### How to Test LAN:
+* **In POS UI**: Click **"Test Connection"** (pings TCP socket) or **"Test Print"** (prints a test receipt).
+* **Via API / PowerShell**:
+  ```powershell
+  $body = @{
+      receiptStr = "LAN PRINTER TEST SUCCESS`n`n`n"
+      printerType = "Lan"
+      printerUrl = "192.168.1.150"
+      printerPort = "9100"
+  } | ConvertTo-Json
 
-## 3. In the KDS: Does It Print Automatically If the Printer Is Connected?
-
-**YES!** Here is how the automatic printing works:
-
-```
-┌──────────────────────────────────────────────┐
-│  New Order Placed                            │
-│  (Cashier / Table QR / Captain Handheld)     │
-└──────────────────────┬───────────────────────┘
-                       │
-                       ▼ (Real-time reactive Convex / WebSocket sync)
-┌──────────────────────────────────────────────┐
-│  KDS Screen Receives Order                   │
-│  Checks: Is Station Printer connected        │
-│  via Bluetooth (WebBluetooth) or USB?        │
-└──────────────────────┬───────────────────────┘
-                       │
-            ┌──────────┴──────────┐
-            ▼                     ▼
-        [ YES ]                [ NO ]
-            │                     │
-            ▼                     ▼
-Auto-prints KOT silently       Shows order on KDS screen;
-over WebBluetooth to the       Chef can tap "Reprint KOT"
-thermal station printer.       button once printer is ready.
-```
-
-### Technical Workflow:
-1. **Zero Browser Dialogs (Silent Auto-Print):** When the printer is connected via **Bluetooth** (WebBluetooth GATT service) or **USB** (WebUSB), the browser communicates directly with the printer hardware. It does **not** open a standard browser print dialog.
-2. **Auto-Trigger on Order Arrival:** When a new order arrives on the KDS screen (`!order.is_printed`), the system immediately sends the binary ESC/POS KOT data to the connected Bluetooth printer and marks the ticket as printed.
-3. **Manual Reprint Backup:** Every order card on the KDS includes a manual **"Reprint KOT"** button in case paper runs out or the chef needs another physical ticket.
+  Invoke-RestMethod -Uri "http://localhost:3000/api/printers/print-direct" -Method Post -Body $body -ContentType "application/json"
+  ```
 
 ---
 
-## 4. Customer Receipt vs. Kitchen Order Ticket (KOT)
+### B. USB Thermal Printers
+
+#### How It Works:
+* Connected via USB cable directly to the POS computer.
+* Uses the **Win32 RAW Spooler API** (`winspool.Drv` `OpenPrinter` + `WritePrinter` in `RAW` mode).
+* **Zero browser dialogs**: Bypasses the Chrome/Edge print preview dialog completely and prints instantly.
+
+#### How to Connect:
+1. Plug the printer USB cable into the computer.
+2. In Windows **Settings > Printers & Scanners**, check the installed printer name (default is usually `POS-80-USB` or `printer-80`).
+3. In POS **Settings > Printers** (`/settings?tab=printers`):
+   * **Printer Type**: Select `USB`.
+   * **Printer Name / Identifier**: Enter `POS-80-USB` (or `printer-80`).
+   * **Port**: Enter `USB`.
+4. Click **"Save Changes"**.
+
+#### How to Test USB:
+* Click **"Test Print"** in Settings.
+* PowerShell direct test:
+  ```powershell
+  $body = @{
+      receiptStr = "DIRECT USB TEST`n`n`n"
+      printerType = "Usb"
+      printerUrl = "POS-80-USB"
+      printerPort = "USB"
+  } | ConvertTo-Json
+
+  Invoke-RestMethod -Uri "http://localhost:3000/api/printers/print-direct" -Method Post -Body $body -ContentType "application/json"
+  ```
+
+---
+
+### C. Bluetooth Thermal Printers
+
+#### How It Works:
+* Pairs wirelessly to the POS computer or mobile tablet.
+* Communicates via Windows Outgoing Virtual COM Port (e.g. `COM8` at 9600 baud) or WebBluetooth in browser.
+
+#### How to Connect:
+1. Turn on the Bluetooth printer.
+2. In Windows **Bluetooth & Devices**, click **Add device** and pair with the printer (PIN is typically `0000` or `1234`).
+3. Under **More Bluetooth settings > COM Ports**, check the Outgoing COM port (e.g. `COM8`).
+4. In POS **Settings > Printers**:
+   * **Printer Type**: Select `Bluetooth`.
+   * **Printer Name**: Enter `Printer001`.
+   * **Port**: Enter `BT` (or `COM8`).
+5. Click **"Save Changes"**.
+
+---
+
+## 3. Printer Roles & Routing (`printerUseFor`)
+
+Each printer in the database is tagged with its operational role:
+
+| Role Tag in DB | Typical Hardware | Primary Location | Tickets Assigned |
+| :--- | :--- | :--- | :--- |
+| **`Station`** | LAN or Bluetooth | Kitchen Line / Bar / Chef Counter | **Kitchen Order Ticket (KOT)** |
+| **`WorkStation`** | USB (POS-80-USB) | Food Prep / Assembly Counter | **Food Runner / Assembly Slip** |
+| **`Cashier`** | USB (POS-80-USB) | Billing & Cashier Desk | **Customer Tax Invoice & Receipts** |
+
+---
+
+## 4. Module Features & Printing Workflows
+
+### 1. KDS (Kitchen Display System — `/kds`)
+* **Purpose**: Kitchen production terminal for station chefs and line cooks.
+* **Auto-Printing**: When orders are placed (Cashier, Captain, or QR), incoming cooking tickets auto-print silently to the `Station` printer.
+* **Printed Ticket**: **Kitchen Order Ticket (KOT)**
+  * Organization header & station name.
+  * Order Number & Token Number (`#07`).
+  * Order Type (`DineIn`, `TakeAway`, `Delivery`).
+  * Table number & Server name (`Online QR` or `Captain`).
+  * Items with quantities (`[1] SAMOSA`).
+  * Customizations & Modifiers (`[MOD]: Extra Cheese`).
+  * Chef Preparation Preferences (`Spicy`, `Less Oil`, `No Onion`).
+  * Kitchen Special Notes & Allergy Warnings (`*** ALLERGY: PEANUT ***`).
+* **Clean UI**: Manual print buttons on ticket cards are removed to prevent accidental duplicate printing.
+
+---
+
+### 2. Workstation (Food Runner & Assembly — `/workstation`)
+* **Purpose**: Assembly counter where dishes from multiple kitchen stations meet before being delivered to guests.
+* **Auto-Printing**: Automatically dispatches a runner slip when any new order arrives (with an 800ms non-blocking stagger).
+* **Printed Ticket**: **Food Runner / Plate Assembly Slip**
+  * Store Name banner.
+  * Header: `FOOD RUNNER / ASSEMBLY SLIP`.
+  * Token number & Table number.
+  * Order time & Server attribution.
+  * Section: `PLATE ASSEMBLY CHECKLIST` with verification brackets:
+    ```
+    ------------------------------------------------
+               PLATE ASSEMBLY CHECKLIST
+    ------------------------------------------------
+    [ ]  1x Vadapav
+         --> [MOD]: Extra Cheese
+    [ ]  1x Samosa
+    ------------------------------------------------
+    ```
+  * Special instructions & allergy callouts.
+* **Manual Print**: Workstation tickets can also be re-printed on demand from the card menu.
+
+---
+
+### 3. Online Storefront & Customer QR (`pos-user`)
+* **Purpose**: Dine-in table ordering, takeaway, or delivery placed from customer smartphones.
+* **Auto-Printing Flow**:
+  1. Customer scans QR and taps "Order" / "Pay" in `pos-user`.
+  2. Order is created in Convex (`orderSource: "PREST-QR"`).
+  3. The POS terminal's **`GlobalOrderAutoPrinter`** detects the incoming order instantly:
+     * **Kitchen KOT** $\rightarrow$ Auto-prints on `Station` printer (`Printer001`).
+     * **Food Runner Slip** $\rightarrow$ Auto-prints on `Workstation` printer (`POS-80-USB`).
+     * **Customer Invoice** $\rightarrow$ **Held** (does not auto-print, preventing wasted paper while guests are still eating).
+  4. POS displays a notification toast: `🖨️ Auto-printed KOT & Runner Slip for Online QR Order (#07)`.
+
+---
+
+### 4. Orders Section (`/orders` & `/orders/[id]`)
+* **Purpose**: Store management dashboard for viewing, searching, and managing past and active orders.
+* **On-Demand Printing in Order Drawer**:
+  * Action buttons in the order drawer remain completely clean and user-controlled.
+  * Clicking the receipt button prints the **Customer Tax Invoice** to the `Cashier` printer on demand.
+  * Bypasses browser print preview, sending raw ESC/POS directly to the thermal printer.
+
+---
+
+### 5. Cashier Desk (`/cashier`)
+* **Purpose**: Walk-in customer POS counter.
+* **Order Settlement**:
+  * Tendering cash, split, UPI QR, or card payments.
+  * Customer receipt generation upon checkout.
+  * Automatically dispatches KOT ticket to kitchen and Runner Slip to assembly for cashier orders.
+
+---
+
+### 6. Captain (Handheld Waiter App — `/captain`)
+* **Purpose**: Waiters taking orders table-side on tablets or mobile phones.
+* **Printing Flow**:
+  * Waiter selects items for a table and taps "Fire to Kitchen".
+  * KOT is instantly routed to the relevant station printer (e.g. Bar printer for drinks, Kitchen printer for food).
+  * Labeled with `SERVER: Captain (Waiter Name)`.
+  * Invoice is generated only when the guest asks for the bill at the end of their meal.
+
+---
+
+## 5. Collision Prevention & Stagger Timing
+
+When a single order triggers multiple tickets to the **same physical printer** (e.g., if both Workstation Runner Slip and Cashier Receipt share `POS-80-USB`):
+
+* **KOT**: Dispatched immediately ($t = 0\text{ms}$).
+* **Runner Slip**: Staggered by **800ms**.
+* **Cashier Receipt** (when triggered): Staggered by **1600ms**.
+
+This prevents Windows spooler lock contention, job drops, and cut-command overlap.
+
+---
+
+## 6. Customer Receipt vs. Kitchen Order Ticket (KOT)
 
 In restaurant and POS engineering, a **Customer Receipt** and a **Kitchen Order Ticket (KOT)** serve two fundamentally different audiences:
 
@@ -86,7 +246,7 @@ In restaurant and POS engineering, a **Customer Receipt** and a **Kitchen Order 
 
 ---
 
-## 3. Legacy `defx-pos-frontend` Traceability Matrix
+## 7. Legacy `defx-pos-frontend` Traceability Matrix
 
 Every printing point previously implemented in `defx-pos-frontend` is mapped below to its active location in `pos-default`:
 
@@ -102,7 +262,7 @@ Every printing point previously implemented in `defx-pos-frontend` is mapped bel
 
 ---
 
-## 4. Master Catalog of All 14 Printing Use Cases
+## 8. Master Catalog of All 14 Printing Use Cases
 
 ### Category 1: Front-of-House / Cashier Operations
 
@@ -230,7 +390,7 @@ Every printing point previously implemented in `defx-pos-frontend` is mapped bel
 
 ---
 
-## 5. Exact Thermal Printout Formats (ASCII Mockups)
+## 9. Exact Thermal Printout Formats (ASCII Mockups)
 
 ### Format 1: Customer Tax Invoice (80mm / 48 Column)
 
@@ -258,83 +418,81 @@ Fresh Lime Soda (Sweet)  1        90.00    90.00
 ------------------------------------------------
 Sub Total                                 520.00
 Discount (10% FESTIVE)                    -52.00
+Net Taxable Amount                        468.00
 CGST (2.5%)                                11.70
 SGST (2.5%)                                11.70
-------------------------------------------------
-TOTAL AMOUNT (INR)                     Rs.491.40
-ROUND OFF                                  -0.40
-------------------------------------------------
-NET PAYABLE                            Rs.491.00
-------------------------------------------------
-PAYMENT DETAILS:
-Payment Mode: UPI / Google Pay (Ref: 981248102)
-Amount Paid: Rs.491.00
-------------------------------------------------
-Customer: Priya Sharma (+91 98765 11223)
+Round Off                                  +0.60
 ================================================
-Scan QR below to rate your experience:
+TOTAL AMOUNT PAYABLE                    ₹ 492.00
+================================================
+Payment Mode: UPI (Ref: 4291882103)             
+Paid Amount:                             ₹ 492.00
+Change Due:                                ₹ 0.00
+------------------------------------------------
+GST Breakdown:
+Rate       Taxable Amt      CGST       SGST
+5.0%            468.00     11.70      11.70
+------------------------------------------------
+Scan to rate your dining experience:
 [    QR CODE    ]
-https://defx.menu/survey/1042
-================================================
-     Thank you for ordering and stay safe...    
+Thank you for dining with us! Visit again.
 ================================================
 ```
 
 ---
 
-### Format 2: Bill Estimate / Pre-Check (80mm / 48 Column)
+### Format 2: Bill Estimate / Pre-Check Bill (Proforma)
 
 ```
 ================================================
                  THE BISTRO RESTAURANT          
-================================================
-           *** BILL ESTIMATE / PRE-CHECK ***    
-               (THIS IS NOT A TAX INVOICE)      
 ------------------------------------------------
+             *** BILL ESTIMATE ***              
+         (NOT A TAX INVOICE - PRE-CHECK)        
+================================================
 Date: 26/10/2026 18:15:00   Table: T-04         
-Order #: ORD#1042           Token: #18          
-Server: Rahul               Guests: 3           
+Order #: ORD#1042           Waiter: Rahul       
 ------------------------------------------------
-Items                   Qty   Net Price    Value
+Items                        Qty          Amount
 ------------------------------------------------
-Paneer Tikka Butter Masala
-                         1       320.00   320.00
-Butter Naan              2        55.00   110.00
-Fresh Lime Soda (Sweet)  1        90.00    90.00
+Paneer Tikka Butter Masala     1          320.00
+Butter Naan                    2          110.00
+Fresh Lime Soda (Sweet)        1           90.00
 ------------------------------------------------
-Estimated Sub Total                       520.00
-Estimated Taxes (5% GST)                   23.40
-------------------------------------------------
-ESTIMATED TOTAL                        Rs.543.40
+Sub Total                                 520.00
+Estimated Taxes (5% GST)                   26.00
 ================================================
-Please verify your bill items above.
-Payment can be made via Cash, Card, or UPI.
+ESTIMATED TOTAL                         ₹ 546.00
+================================================
+Please present this slip at cashier or call your
+server to process payment (Cash / Card / UPI).
 ================================================
 ```
 
 ---
 
-### Format 3: Kitchen Order Ticket (KOT / Station Ticket)
+### Format 3: Kitchen Order Ticket (KOT #1 - High Visibility)
 
 ```
 ================================================
-              KITCHEN ORDER TICKET (KOT)        
+                KITCHEN ORDER TICKET            
 ================================================
-STATION: TANDOOR                   KOT #: KOT-02
-DATE: 26/10/2026                  TIME: 18:05:12
-ORDER TYPE: DINE-IN              WAITER: Rahul  
+KOT #: KOT#1-1042           STATION: MAIN KITCHEN
+DATE: 26/10/2026 18:02:11   WAITER: Rahul       
 ------------------------------------------------
-TABLE: T-04                       TOKEN: #18    
-================================================
-QTY   ITEM DESCRIPTION                          
+████████████████████████████████████████████████
+█  TABLE: T-04                  TOKEN: #18     █
+████████████████████████████████████████████████
+ORDER TYPE: DINE-IN (First Fire)
 ------------------------------------------------
+QTY   ITEM NAME & MODIFIERS                     
+------------------------------------------------
+[1]   PANEER TIKKA BUTTER MASALA                
+      --> PREP: Extra Spicy                     
+      --> PREP: Less Butter                     
 [2]   BUTTER NAAN                               
-[1]   PANEER TIKKA                              
-      --> [MOD]: Extra Spicy                    
-      --> [NOTE]: Crispy, green chutney on side 
-[1]   TANDOORI ROTI (BUTTER)                    
-================================================
-SPECIAL NOTE: GUEST HAS SEVERE NUT ALLERGY      
+------------------------------------------------
+NOTES: Guest has mild lactose sensitivity.      
 ================================================
 ```
 
@@ -344,9 +502,9 @@ SPECIAL NOTE: GUEST HAS SEVERE NUT ALLERGY
 
 ```
 ************************************************
-          *** CANCELLED / VOID KOT ***          
+            *** KOT ITEM CANCELLED ***          
 ************************************************
-STATION: TANDOOR                   TIME: 18:12:44
+TIME: 26/10/2026 18:07:33   STATION: MAIN KITCHEN
 TABLE: T-04                       TOKEN: #18    
 ORDER #: ORD#1042                WAITER: Rahul  
 ------------------------------------------------
