@@ -64,21 +64,76 @@ export const list = query({
 
     const surveys = await ctx.db.query("surveys").collect();
 
-    // Enrich each survey with question count
+    // Enrich each survey with question count and published reviews count
     const enriched = await Promise.all(
       surveys.map(async (survey) => {
         const questions = await ctx.db
           .query("surveyQuestions")
           .withIndex("by_survey_id", (q) => q.eq("surveyId", survey._id))
           .collect();
+
+        const publishedAttempts = await ctx.db
+          .query("surveyAttempts")
+          .withIndex("by_survey_published", (q) =>
+            q.eq("surveyId", survey._id).eq("published", true)
+          )
+          .collect();
+
         return {
           ...survey,
           questionsCount: questions.length,
+          reviewsCount: publishedAttempts.length,
+          publishedAttemptsCount: publishedAttempts.length,
         };
       })
     );
 
     return enriched.sort((a, b) => a.createdAt - b.createdAt);
+  },
+});
+
+/**
+ * Returns store-wide total count of verified submitted/published survey responses.
+ */
+export const getTotalReviews = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSurveyAdmin(ctx);
+
+    const publishedAttempts = await ctx.db
+      .query("surveyAttempts")
+      .filter((q) => q.eq(q.field("published"), true))
+      .collect();
+
+    return {
+      totalReviews: publishedAttempts.length,
+    };
+  },
+});
+
+/**
+ * Returns store-wide summary metrics for the Surveys Dashboard.
+ */
+export const getDashboardMetrics = query({
+  args: {},
+  handler: async (ctx) => {
+    await requireSurveyAdmin(ctx);
+
+    const surveys = await ctx.db.query("surveys").collect();
+    const activeSurveys = surveys.filter((s) => s.active);
+
+    const publishedAttempts = await ctx.db
+      .query("surveyAttempts")
+      .filter((q) => q.eq(q.field("published"), true))
+      .collect();
+
+    return {
+      totalSurveys: surveys.length,
+      activeSurveysCount: activeSurveys.length,
+      activeSurveyId: activeSurveys[0]?._id ?? null,
+      activeSurveyName: activeSurveys[0]?.name ?? null,
+      totalReviews: publishedAttempts.length,
+    };
   },
 });
 
@@ -102,9 +157,23 @@ export const get = query({
       .withIndex("by_survey_position", (q) => q.eq("surveyId", survey._id))
       .collect();
 
+    // Check if each question already has live answers (locks question type)
+    const questionsWithStatus = await Promise.all(
+      questions.map(async (q) => {
+        const hasAnswers = await ctx.db
+          .query("surveyAnswers")
+          .withIndex("by_question_id", (ans) => ans.eq("questionId", q._id))
+          .first();
+        return {
+          ...q,
+          hasResponses: Boolean(hasAnswers),
+        };
+      })
+    );
+
     return {
       ...survey,
-      questions: questions.sort((a, b) => a.position - b.position),
+      questions: questionsWithStatus.sort((a, b) => a.position - b.position),
     };
   },
 });
@@ -296,6 +365,41 @@ export const update = mutation({
 });
 
 /**
+ * Atomically activates a survey for the store and deactivates all other surveys.
+ * Enforces the Single-Active Survey Invariant.
+ */
+export const activate = mutation({
+  args: {
+    id: v.id("surveys"),
+  },
+  handler: async (ctx, args) => {
+    await requireSurveyAdmin(ctx);
+
+    const survey = await ctx.db.get(args.id);
+    if (!survey) {
+      throw new Error("Survey not found");
+    }
+
+    const now = Date.now();
+
+    // Atomically deactivate all other active surveys in the store
+    const otherActive = await ctx.db
+      .query("surveys")
+      .withIndex("by_active", (q) => q.eq("active", true))
+      .collect();
+
+    for (const s of otherActive) {
+      if (s._id !== survey._id) {
+        await ctx.db.patch(s._id, { active: false, updatedAt: now });
+      }
+    }
+
+    await ctx.db.patch(survey._id, { active: true, updatedAt: now });
+    return { success: true };
+  },
+});
+
+/**
  * Hard-deletes a survey and cascades to all its questions, attempts, and answers.
  */
 export const remove = mutation({
@@ -366,8 +470,10 @@ export const getResults = query({
 
     const questions = await ctx.db
       .query("surveyQuestions")
-      .withIndex("by_survey_position", (q) => q.eq("surveyId", survey._id))
+      .withIndex("by_survey_id", (q) => q.eq("surveyId", survey._id))
       .collect();
+
+    questions.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
 
     // Fetch published attempts for this survey
     let attemptsQuery = await ctx.db
@@ -394,111 +500,240 @@ export const getResults = query({
     }
 
     const publishedAttemptIds = new Set(attemptsQuery.map((a) => a._id));
+    const attemptMap = new Map(attemptsQuery.map((a) => [a._id, a]));
 
-    // For each question, extract and aggregate answers across the filtered published attempts
-    const questionResults = await Promise.all(
+    // Batch resolve orders and tables for enriched response attribution
+    const orderIds = Array.from(
+      new Set(attemptsQuery.map((a) => a.orderId).filter(Boolean))
+    ) as Id<"orders">[];
+    const orderDocs = await Promise.all(orderIds.map((id) => ctx.db.get(id)));
+    const orderMap = new Map(orderDocs.filter(Boolean).map((o) => [o!._id, o!]));
+
+    const tableIds = Array.from(
+      new Set(
+        orderDocs
+          .filter(Boolean)
+          .map((o) => o!.tableId)
+          .filter(Boolean)
+      )
+    ) as Id<"organizationTables">[];
+    const tableDocs = await Promise.all(tableIds.map((id) => ctx.db.get(id)));
+    const tableMap = new Map(tableDocs.filter(Boolean).map((t) => [t!._id, t!]));
+
+    // Query all answers for this survey's questions across the filtered attempts
+    const allQuestionAnswers = await Promise.all(
       questions.map(async (question) => {
         const answers = await ctx.db
           .query("surveyAnswers")
           .withIndex("by_question_id", (q) => q.eq("questionId", question._id))
           .collect();
-
-        const filteredAnswers = answers.filter((a) => publishedAttemptIds.has(a.attemptId));
-
-        switch (question.type) {
-          case "checkbox":
-          case "radio":
-          case "select": {
-            const counts: Record<string, number> = {};
-            // Initialize count for configured options
-            if (question.answerOptions) {
-              for (const opt of question.answerOptions) {
-                counts[opt] = 0;
-              }
-            }
-
-            for (const a of filteredAnswers) {
-              if (Array.isArray(a.selectedOptions) && a.selectedOptions.length > 0) {
-                for (const opt of a.selectedOptions) {
-                  counts[opt] = (counts[opt] || 0) + 1;
-                }
-              } else if (a.answerText) {
-                counts[a.answerText] = (counts[a.answerText] || 0) + 1;
-              }
-            }
-
-            return {
-              questionId: question._id,
-              type: question.type,
-              questionText: question.questionText,
-              position: question.position,
-              totalResponses: filteredAnswers.length,
-              optionCounts: counts,
-            };
-          }
-
-          case "numeric": {
-            const distribution: Record<number, number> = {};
-            let sum = 0;
-            let numericCount = 0;
-
-            for (const a of filteredAnswers) {
-              const val =
-                a.numericValue !== undefined
-                  ? a.numericValue
-                  : a.answerText !== undefined && !isNaN(Number(a.answerText))
-                    ? Number(a.answerText)
-                    : null;
-
-              if (val !== null) {
-                distribution[val] = (distribution[val] || 0) + 1;
-                sum += val;
-                numericCount++;
-              }
-            }
-
-            const average = numericCount > 0 ? Number((sum / numericCount).toFixed(2)) : 0;
-
-            return {
-              questionId: question._id,
-              type: question.type,
-              questionText: question.questionText,
-              position: question.position,
-              totalResponses: numericCount,
-              averageRating: average,
-              distribution,
-            };
-          }
-
-          case "short":
-          case "long":
-          case "date":
-          default: {
-            const textResponses = filteredAnswers
-              .filter((a) => a.answerText && a.answerText.trim().length > 0)
-              .map((a) => ({
-                attemptId: a.attemptId,
-                answerText: a.answerText!,
-                submittedAt: a.updatedAt,
-              }));
-
-            return {
-              questionId: question._id,
-              type: question.type,
-              questionText: question.questionText,
-              position: question.position,
-              totalResponses: textResponses.length,
-              responses: textResponses,
-            };
-          }
-        }
+        return {
+          question,
+          answers: answers.filter((a) => publishedAttemptIds.has(a.attemptId)),
+        };
       })
     );
+
+    // Build ratings map by attemptId for rating badges on written feedback
+    const ratingsByAttempt = new Map<string, Array<{ label: string; score: number }>>();
+    for (const { question, answers } of allQuestionAnswers) {
+      if (question.type === "numeric") {
+        const label = question.questionText.toLowerCase().includes("speed")
+          ? "Speed"
+          : question.questionText.toLowerCase().includes("overall")
+            ? "Overall"
+            : question.questionText.length > 15
+              ? question.questionText.slice(0, 15)
+              : question.questionText;
+
+        for (const a of answers) {
+          const val =
+            a.numericValue !== undefined
+              ? a.numericValue
+              : a.answerText !== undefined && !isNaN(Number(a.answerText))
+                ? Number(a.answerText)
+                : null;
+          if (val !== null) {
+            const list = ratingsByAttempt.get(a.attemptId) || [];
+            list.push({ label, score: val });
+            ratingsByAttempt.set(a.attemptId, list);
+          }
+        }
+      }
+    }
+
+    // Aggregate results for each question
+    const questionResults = allQuestionAnswers.map(({ question, answers: filteredAnswers }) => {
+      switch (question.type) {
+        case "checkbox":
+        case "radio":
+        case "select": {
+          const counts: Record<string, number> = {};
+          if (question.answerOptions) {
+            for (const opt of question.answerOptions) {
+              counts[opt] = 0;
+            }
+          }
+
+          let totalSelections = 0;
+          for (const a of filteredAnswers) {
+            if (Array.isArray(a.selectedOptions) && a.selectedOptions.length > 0) {
+              for (const opt of a.selectedOptions) {
+                counts[opt] = (counts[opt] || 0) + 1;
+                totalSelections++;
+              }
+            } else if (a.answerText) {
+              counts[a.answerText] = (counts[a.answerText] || 0) + 1;
+              totalSelections++;
+            }
+          }
+
+          return {
+            questionId: question._id,
+            type: question.type,
+            questionText: question.questionText,
+            position: question.position,
+            validationRules: question.validationRules,
+            answerOptions: question.answerOptions,
+            frequency: question.frequency,
+            totalResponses: filteredAnswers.length,
+            totalSelections,
+            optionCounts: counts,
+          };
+        }
+
+        case "numeric": {
+          const distribution: Record<number, number> = {};
+          let sum = 0;
+          let numericCount = 0;
+
+          for (const a of filteredAnswers) {
+            const val =
+              a.numericValue !== undefined
+                ? a.numericValue
+                : a.answerText !== undefined && !isNaN(Number(a.answerText))
+                  ? Number(a.answerText)
+                  : null;
+
+            if (val !== null) {
+              distribution[val] = (distribution[val] || 0) + 1;
+              sum += val;
+              numericCount++;
+            }
+          }
+
+          const average = numericCount > 0 ? Number((sum / numericCount).toFixed(2)) : 0;
+
+          return {
+            questionId: question._id,
+            type: question.type,
+            questionText: question.questionText,
+            position: question.position,
+            validationRules: question.validationRules,
+            ratingDisplayMode: question.ratingDisplayMode,
+            lowLabel: question.lowLabel,
+            highLabel: question.highLabel,
+            frequency: question.frequency,
+            totalResponses: numericCount,
+            averageRating: average,
+            distribution,
+          };
+        }
+
+        case "short":
+        case "long":
+        case "date":
+        default: {
+          const textResponses = filteredAnswers
+            .filter((a) => a.answerText && a.answerText.trim().length > 0)
+            .map((a) => {
+              const attempt = attemptMap.get(a.attemptId);
+              const order = attempt?.orderId ? orderMap.get(attempt.orderId) : undefined;
+              const table = order?.tableId ? tableMap.get(order.tableId) : undefined;
+
+              let tableNumber: string | undefined = table ? `Table ${table.tableNumber}` : undefined;
+              let serviceMode: string | undefined = undefined;
+              if (order?.orderType) {
+                if (order.orderType === "DineIn") serviceMode = "Dinner Service";
+                else if (order.orderType === "TakeAway") serviceMode = "Takeaway";
+                else if (order.orderType === "Delivery") serviceMode = "Delivery";
+                else serviceMode = `${order.orderType} Service`;
+              }
+
+              return {
+                attemptId: a.attemptId,
+                answerText: a.answerText!,
+                submittedAt: attempt?.submittedAt ?? a.updatedAt,
+                tableNumber,
+                orderNumber: order?.orderNumber,
+                serviceMode,
+                ratingBadges: ratingsByAttempt.get(a.attemptId) || [],
+              };
+            });
+
+          const responseRate =
+            attemptsQuery.length > 0
+              ? Number(((textResponses.length / attemptsQuery.length) * 100).toFixed(1))
+              : 0;
+
+          return {
+            questionId: question._id,
+            type: question.type,
+            questionText: question.questionText,
+            position: question.position,
+            validationRules: question.validationRules,
+            frequency: question.frequency,
+            totalResponses: textResponses.length,
+            responseRate,
+            responses: textResponses,
+          };
+        }
+      }
+    });
+
+    // Derive overall rating from the first numeric question
+    let overallRating: {
+      questionId: Id<"surveyQuestions">;
+      questionText: string;
+      average: number;
+      scaleMin: number;
+      scaleMax: number;
+      totalResponses: number;
+    } | null = null;
+
+    const primaryNumericQ = questions.find((q) => q.type === "numeric");
+    if (primaryNumericQ) {
+      const qr = questionResults.find((r) => r.questionId === primaryNumericQ._id);
+      if (qr && "averageRating" in qr) {
+        overallRating = {
+          questionId: primaryNumericQ._id,
+          questionText: primaryNumericQ.questionText,
+          average: (qr as any).averageRating,
+          scaleMin: primaryNumericQ.validationRules?.greaterThanOrEqualTo ?? 1,
+          scaleMax: primaryNumericQ.validationRules?.lessThanOrEqualTo ?? 5,
+          totalResponses: (qr as any).totalResponses,
+        };
+      }
+    }
+
+    const allAttempts = await ctx.db
+      .query("surveyAttempts")
+      .withIndex("by_survey_id", (q) => q.eq("surveyId", survey._id))
+      .collect();
+
+    const completionRate =
+      allAttempts.length > 0
+        ? Math.round((attemptsQuery.length / allAttempts.length) * 100)
+        : 100;
 
     return {
       surveyId: survey._id,
       surveyName: survey.name,
+      active: survey.active,
       totalPublishedAttempts: attemptsQuery.length,
+      totalAttempts: allAttempts.length,
+      completionRate,
+      overallRating,
       questions: questionResults.sort((a, b) => a.position - b.position),
     };
   },
