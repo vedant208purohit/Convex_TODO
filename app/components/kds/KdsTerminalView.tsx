@@ -209,12 +209,9 @@ export function KdsTerminalView({
 
     const currentOrderIds = new Set(stationOrdersData.orders.map((t) => t.order._id));
     if (seenOrderIdsRef.current.size > 0) {
-      const newTickets: typeof stationOrdersData.orders = [];
-      for (const t of stationOrdersData.orders) {
-        if (!seenOrderIdsRef.current.has(t.order._id)) {
-          newTickets.push(t);
-        }
-      }
+      const newTickets = stationOrdersData.orders.filter(
+        (t) => !seenOrderIdsRef.current.has(t.order._id)
+      );
       if (newTickets.length > 0) {
         playChime();
 
@@ -938,23 +935,6 @@ export function KdsTerminalView({
                               {/* Timer / Ready Badge & Print KOT */}
                               <div className="flex flex-col items-end gap-1.5 shrink-0">
                                 <div className="flex items-center gap-1.5">
-                                  <button
-                                    type="button"
-                                    title="Print Kitchen Ticket (KOT)"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePrintKot(ticket);
-                                    }}
-                                    className="px-2.5 py-1 rounded-full border border-stone-200 bg-white hover:bg-stone-100 text-stone-700 hover:text-black font-semibold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shadow-xs active:scale-95"
-                                  >
-                                    <svg className="w-3.5 h-3.5 text-stone-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                      <polyline points="6 9 6 2 18 2 18 9" />
-                                      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                                      <rect x="6" y="14" width="12" height="8" />
-                                    </svg>
-                                    <span>Print KOT</span>
-                                  </button>
-
                                   <div
                                     className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-xs font-bold shrink-0 ${elapsed.colorClass}`}
                                   >

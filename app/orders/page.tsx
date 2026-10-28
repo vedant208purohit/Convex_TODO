@@ -657,10 +657,13 @@ export default function OrdersPage() {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+
+    const handleFocus = () => { if (isMounted) checkStatus(); };
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [printers]);
 
@@ -1334,13 +1337,7 @@ export default function OrdersPage() {
     }
 
     if (printerStatus === "checking") {
-      showToast("Checking printer connection... Please try again in a moment.");
-      return;
-    }
-
-    if (printerStatus !== "connected") {
-      showToast("Printer not connected. Please connect a printer first in Settings > Printers.");
-      return;
+      // Allow attempt while checking
     }
 
     showToast("Printing thermal receipt...");

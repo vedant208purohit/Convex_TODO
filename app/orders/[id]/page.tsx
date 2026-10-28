@@ -481,10 +481,13 @@ export default function OrderDetailsDynamicPage() {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+
+    const handleFocus = () => { if (isMounted) checkStatus(); };
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [printers]);
 

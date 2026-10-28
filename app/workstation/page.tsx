@@ -112,7 +112,10 @@ export default function WorkstationPage() {
       usb.addEventListener("disconnect", handleUsbChange);
     }
 
-    const interval = setInterval(checkPrinterConnection, 10000);
+    // Refresh state when window/tab is focused
+    const handleFocus = () => { if (isMounted) checkPrinterConnection(); };
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       isMounted = false;
       if (bt?.removeEventListener) bt.removeEventListener("availabilitychanged", handleBtAvailability);
@@ -120,7 +123,7 @@ export default function WorkstationPage() {
         usb.removeEventListener("connect", handleUsbChange);
         usb.removeEventListener("disconnect", handleUsbChange);
       }
-      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [printers, workstationPrinter]);
 
@@ -453,7 +456,7 @@ export default function WorkstationPage() {
               }`}
               title={
                 workstationPrinter
-                  ? `WorkStation Printer: ${workstationPrinter.printerTitle || workstationPrinter.printerType} (${printerStatus})`
+                  ? `WorkStation Printer: ${workstationPrinter.printerUrl || workstationPrinter.printerType} (${printerStatus})`
                   : "No printer configured. Click to configure in Settings."
               }
             >

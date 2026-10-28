@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import net from "net";
 import { exec } from "child_process";
 
+// In-memory cache for recent connection test results (5 seconds TTL) to prevent OS process thrashing
+const connectionCache = new Map<string, { result: { online: boolean; latencyMs?: number; error?: string }; expiresAt: number }>();
+
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}));
@@ -12,6 +15,12 @@ export async function POST(req: Request) {
         { online: false, error: "Printer address or name is required." },
         { status: 400 }
       );
+    }
+
+    const cacheKey = `${printerType}_${printerUrl}_${printerPort}`;
+    const cached = connectionCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiresAt) {
+      return NextResponse.json(cached.result, { status: 200 });
     }
 
     const host = printerUrl.trim().replace(/^https?:\/\//i, "").split(":")[0];
@@ -72,6 +81,7 @@ export async function POST(req: Request) {
         }
       );
 
+      connectionCache.set(cacheKey, { result: isConnected, expiresAt: Date.now() + 5000 });
       return NextResponse.json(isConnected, { status: 200 });
     }
 
@@ -80,21 +90,21 @@ export async function POST(req: Request) {
       if (process.platform === "win32") {
         const cleanName = printerUrl.replace(/['"\\]/g, "").trim();
         const psCheck = `
-          $dev = Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -like '*${cleanName}*' -or $_.FriendlyName -like '*Printer*' };
-          $radio = Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue | Where-Object { $_.FriendlyName -like '*Wireless*' -or $_.FriendlyName -like '*Intel*' -or $_.FriendlyName -like '*Radio*' };
-          $radioOk = ($radio | Where-Object { $_.Status -eq 'OK' -and $_.Present -eq $true }) -ne $null;
-          $devOk = ($dev | Where-Object { $_.Status -eq 'OK' -and $_.Present -eq $true }) -ne $null;
-          if ($devOk -and $radioOk) {
+          $dev = Get-PnpDevice -FriendlyName '*${cleanName}*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' -and $_.Present -eq $true };
+          if ($dev) {
             Write-Output "ONLINE"
-          } elseif (-not $radioOk) {
-            Write-Output "RADIO_OFF"
           } else {
-            Write-Output "DEV_OFFLINE"
+            $radio = Get-PnpDevice -FriendlyName '*Bluetooth*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' -and $_.Present -eq $true };
+            if (-not $radio) {
+              Write-Output "RADIO_OFF"
+            } else {
+              Write-Output "DEV_OFFLINE"
+            }
           }
         `.replace(/\r?\n/g, " ");
 
         const res = await new Promise<{ online: boolean; latencyMs?: number; error?: string }>((resolve) => {
-          exec(`powershell -NoProfile -Command "${psCheck}"`, { timeout: 3500 }, (err, stdout) => {
+          exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCheck}"`, { timeout: 8000 }, (err, stdout) => {
             if (err) {
               resolve({ online: false, error: "Bluetooth query failed: " + err.message });
               return;
@@ -110,10 +120,13 @@ export async function POST(req: Request) {
           });
         });
 
+        connectionCache.set(cacheKey, { result: res, expiresAt: Date.now() + 5000 });
         return NextResponse.json(res, { status: 200 });
       }
 
-      return NextResponse.json({ online: true, latencyMs: 5 }, { status: 200 });
+      const defaultBt = { online: true, latencyMs: 5 };
+      connectionCache.set(cacheKey, { result: defaultBt, expiresAt: Date.now() + 5000 });
+      return NextResponse.json(defaultBt, { status: 200 });
     }
 
     // 3. USB PRINTER: Hardware check on Windows
@@ -121,8 +134,8 @@ export async function POST(req: Request) {
       if (process.platform === "win32") {
         const cleanName = printerUrl.replace(/['"\\]/g, "").trim();
         const psCheck = `
-          $usbDev = Get-PnpDevice -Class USB -ErrorAction SilentlyContinue | Where-Object { ($_.FriendlyName -like '*Print*' -or $_.FriendlyName -like '*${cleanName}*') -and $_.Status -eq 'OK' -and $_.Present -eq $true };
-          $winPrinter = Get-Printer -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '*${cleanName}*' -or $_.PortName -like 'USB*' };
+          $usbDev = Get-PnpDevice -FriendlyName '*${cleanName}*' -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'OK' -and $_.Present -eq $true };
+          $winPrinter = Get-Printer -Name '*${cleanName}*' -ErrorAction SilentlyContinue;
           if ($usbDev -or $winPrinter) {
             Write-Output "ONLINE"
           } else {
@@ -131,7 +144,7 @@ export async function POST(req: Request) {
         `.replace(/\r?\n/g, " ");
 
         const res = await new Promise<{ online: boolean; latencyMs?: number; error?: string }>((resolve) => {
-          exec(`powershell -NoProfile -Command "${psCheck}"`, { timeout: 3500 }, (err, stdout) => {
+          exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${psCheck}"`, { timeout: 8000 }, (err, stdout) => {
             if (err) {
               resolve({ online: false, error: "USB query failed: " + err.message });
               return;
@@ -145,13 +158,18 @@ export async function POST(req: Request) {
           });
         });
 
+        connectionCache.set(cacheKey, { result: res, expiresAt: Date.now() + 5000 });
         return NextResponse.json(res, { status: 200 });
       }
 
-      return NextResponse.json({ online: true, latencyMs: 1 }, { status: 200 });
+      const defaultUsb = { online: true, latencyMs: 1 };
+      connectionCache.set(cacheKey, { result: defaultUsb, expiresAt: Date.now() + 5000 });
+      return NextResponse.json(defaultUsb, { status: 200 });
     }
 
-    return NextResponse.json({ online: true }, { status: 200 });
+    const defaultOk = { online: true };
+    connectionCache.set(cacheKey, { result: defaultOk, expiresAt: Date.now() + 5000 });
+    return NextResponse.json(defaultOk, { status: 200 });
   } catch (error: any) {
     return NextResponse.json(
       { online: false, error: error.message || "Internal server error." },

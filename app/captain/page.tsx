@@ -1155,7 +1155,6 @@ export default function CaptainPage() {
         // Fire Add-on KOT to Station printer
         const stationPrinter =
           printers?.find((p) => p.printerUseFor === "Station") ||
-          printers?.find((p) => p.printerUseFor === "All") ||
           printers?.[0];
 
         const getFlag = (k: string) =>
@@ -1245,12 +1244,10 @@ export default function CaptainPage() {
         // 1. AUTO-PRINT KDS TICKET (Format 2) TO STATION PRINTER
         const stationPrinter =
           printers?.find((p) => p.printerUseFor === "Station") ||
-          printers?.find((p) => p.printerUseFor === "All") ||
           printers?.[0];
 
         const workstationPrinter =
-          printers?.find((p) => p.printerUseFor === "WorkStation") ||
-          printers?.find((p) => p.printerUseFor === "All");
+          printers?.find((p) => p.printerUseFor === "WorkStation");
 
         const getFlag = (k: string) =>
           orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;

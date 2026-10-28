@@ -87,9 +87,16 @@ export function OrganizationPrinters() {
   // LIVE SOCKET & DEVICE PING
   // ----------------------------------------------------
 
-  const testConnection = useCallback(async (printer: Doc<"organizationPrinters">) => {
+  const testConnection = useCallback(async (printer: Doc<"organizationPrinters">, isSilent = false) => {
     const id = printer._id;
-    setConnectionMap((prev) => ({ ...prev, [id]: { status: "testing" } }));
+    if (!isSilent) {
+      setConnectionMap((prev) => {
+        if (prev[id]?.status === "online" || prev[id]?.status === "offline") {
+          return prev; // Retain current status quietly during background checks
+        }
+        return { ...prev, [id]: { status: "testing" } };
+      });
+    }
 
     // 1. BLUETOOTH PRINTER: Browser Check + Local Machine Hardware Probe
     if (printer.printerType === "Bluetooth" || printer.printerPort === "BT") {
@@ -213,14 +220,14 @@ export function OrganizationPrinters() {
   useEffect(() => {
     if (!printers || printers.length === 0) return;
 
-    const probeAll = () => {
+    const probeAll = (isSilent = true) => {
       for (const p of printers) {
-        testConnection(p);
+        testConnection(p, isSilent);
       }
     };
 
-    // Initial probe
-    probeAll();
+    // Initial probe on mount
+    probeAll(false);
 
     // 1. Instant Bluetooth toggle listener (detects when user turns off/on Bluetooth)
     const bt = typeof navigator !== "undefined" && "bluetooth" in navigator
@@ -228,7 +235,7 @@ export function OrganizationPrinters() {
       : null;
 
     const handleBtAvailability = () => {
-      probeAll();
+      probeAll(true);
     };
 
     if (bt && bt.addEventListener) {
@@ -241,7 +248,7 @@ export function OrganizationPrinters() {
       : null;
 
     const handleUsbChange = () => {
-      probeAll();
+      probeAll(true);
     };
 
     if (usb && usb.addEventListener) {
@@ -249,8 +256,11 @@ export function OrganizationPrinters() {
       usb.addEventListener("disconnect", handleUsbChange);
     }
 
-    // 3. Periodic hardware heartbeat (every 8 seconds) to catch power switches and cable status
-    const interval = setInterval(probeAll, 8000);
+    // 3. Tab / Window Focus listener: Only refresh state when operator returns to this window
+    const handleFocus = () => {
+      probeAll(true);
+    };
+    window.addEventListener("focus", handleFocus);
 
     return () => {
       if (bt && bt.removeEventListener) {
@@ -260,7 +270,7 @@ export function OrganizationPrinters() {
         usb.removeEventListener("connect", handleUsbChange);
         usb.removeEventListener("disconnect", handleUsbChange);
       }
-      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [printers, testConnection]);
 
@@ -1035,6 +1045,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
                     key={p._id}
                     printer={p}
                     connection={connectionMap[p._id]}
+                    onTestConnection={() => onTestConnection(p)}
                     onDemoPrint={() => onDemoPrint(p)}
                     onDelete={() => onDeletePrinter(p)}
                   />
@@ -1075,6 +1086,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
                     key={p._id}
                     printer={p}
                     connection={connectionMap[p._id]}
+                    onTestConnection={() => onTestConnection(p)}
                     onDemoPrint={() => onDemoPrint(p)}
                     onDelete={() => onDeletePrinter(p)}
                   />
@@ -1115,6 +1127,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
                     key={p._id}
                     printer={p}
                     connection={connectionMap[p._id]}
+                    onTestConnection={() => onTestConnection(p)}
                     onDemoPrint={() => onDemoPrint(p)}
                     onEdit={() => onOpenLanModal(p)}
                     onDelete={() => onDeletePrinter(p)}
@@ -1140,6 +1153,7 @@ function PrinterSectionCard(props: PrinterSectionCardProps) {
 interface PrinterItemCardProps {
   printer: Doc<"organizationPrinters">;
   connection?: ConnectionState;
+  onTestConnection: () => void;
   onDemoPrint: () => void;
   onEdit?: () => void;
   onDelete: () => void;
@@ -1148,6 +1162,7 @@ interface PrinterItemCardProps {
 function PrinterItemCard({
   printer,
   connection,
+  onTestConnection,
   onDemoPrint,
   onEdit,
   onDelete,
@@ -1220,6 +1235,29 @@ function PrinterItemCard({
 
       {/* Action Buttons */}
       <div className="flex items-center gap-2 self-end sm:self-center">
+        {/* Test Connection Button */}
+        <button
+          type="button"
+          onClick={onTestConnection}
+          disabled={isTesting}
+          title="Test Connection"
+          className="px-2.5 py-1 text-xs font-medium text-stone-700 hover:text-black border border-stone-300 rounded-lg bg-white hover:bg-stone-50 transition cursor-pointer disabled:opacity-50 flex items-center gap-1 shadow-2xs"
+        >
+          {isTesting ? (
+            <>
+              <svg className="w-3 h-3 animate-spin text-amber-600" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+              <span>Testing...</span>
+            </>
+          ) : (
+            <>
+              <span>⚡</span>
+              <span>Test</span>
+            </>
+          )}
+        </button>
 
         {/* LAN Edit Icon */}
         {printer.printerType === "Lan" && onEdit && (

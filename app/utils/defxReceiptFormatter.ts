@@ -56,7 +56,13 @@ export interface ReceiptOrder {
   };
 }
 
-import { getCurrencyForCountry } from "../../lib/constants/countries";
+import {
+  getCurrencyForCountry,
+  getPhoneCodeForCountry,
+  formatStoreDate,
+  formatStoreTime,
+  formatPhoneNumberWithCountryCode,
+} from "../../lib/constants/countries";
 
 export interface ReceiptOrganization {
   name?: string;
@@ -74,6 +80,7 @@ export interface ReceiptOrganization {
   country?: string;
   defaultCurrency?: string;
   defaultCurrencySymbol?: string;
+  organizationTimeZone?: string;
 }
 
 const DEFAULT_LINE_WIDTH = 48; // Standard 80mm (3-inch) thermal printer grid
@@ -226,8 +233,11 @@ export function generateDefxReceiptPlainString(
     }
   }
 
+  const defaultPhoneDialCode = getPhoneCodeForCountry(org?.country || "IN");
+
   if (org?.phone) {
-    lines.push(twoColRow("Contact no:", org.phone, width));
+    const formattedOrgPhone = formatPhoneNumberWithCountryCode(org.phone, defaultPhoneDialCode);
+    lines.push(twoColRow("Contact no:", formattedOrgPhone, width));
   }
   if (org?.email) {
     lines.push(twoColRow("Email:", org.email, width));
@@ -246,7 +256,8 @@ export function generateDefxReceiptPlainString(
     lines.push(divider("-", width));
     lines.push(center("CUSTOMER DETAILS", width));
     if (order.customerPhone) {
-      lines.push(twoColRow("Phone No:", order.customerPhone, width));
+      const formattedCustPhone = formatPhoneNumberWithCountryCode(String(order.customerPhone), defaultPhoneDialCode);
+      lines.push(twoColRow("Phone No:", formattedCustPhone, width));
     }
     if (order.customerName) {
       lines.push(twoColRow("Name:", order.customerName, width));
@@ -282,17 +293,18 @@ export function generateDefxReceiptPlainString(
   const billNum = order.orderNumber || "ORD-0000";
   lines.push(`Bill #: ${billNum}`);
 
-  // Date & Time
-  const createdDate = order.createdAt ? new Date(order.createdAt) : new Date();
-  const day = String(createdDate.getDate()).padStart(2, "0");
-  const month = String(createdDate.getMonth() + 1).padStart(2, "0");
-  const year = createdDate.getFullYear();
-  const formattedDate = `${day}/${month}/${year}`;
-  const formattedTime = createdDate.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  // Date & Time (Centrally formatted according to store country & timezone)
+  const orderTimestamp = order.createdAt || Date.now();
+  const formattedDate = formatStoreDate(
+    orderTimestamp,
+    org?.country,
+    org?.organizationTimeZone,
+  );
+  const formattedTime = formatStoreTime(
+    orderTimestamp,
+    org?.country,
+    org?.organizationTimeZone,
+  );
 
   lines.push(
     twoColRow(`Date: ${formattedDate}`, `Time: ${formattedTime}`, width),
@@ -768,13 +780,14 @@ export interface ThermalPrintOptions {
   printerUrl?: string;
   printerPort?: string;
   stationId?: string;
+  silent?: boolean;
 }
 
 /**
  * Triggers thermal receipt printing safely.
  * 1. Attempts direct hardware print via /api/printers/print-direct (silent, instant, supports Bluetooth COM, Windows Spooler, LAN).
  * 2. Attempts direct WebUSB transfer if connected.
- * 3. Falls back to invisible iframe browser print dialog.
+ * 3. Falls back to invisible iframe browser print dialog (unless silent is true).
  */
 export async function printThermalReceiptDocument(
   receiptStr: string,
@@ -783,13 +796,8 @@ export async function printThermalReceiptDocument(
 ): Promise<boolean> {
   if (typeof window === "undefined") return false;
 
-  // 1. Direct hardware socket printing ONLY for raw LAN socket or Bluetooth COM8 serial
-  // (PowerShell Out-Printer for USB is bypassed because it forces 10 CPI text mode with 16-col line wraps)
-  const isDirectLanOrBt =
-    options?.printerType === "Lan" ||
-    (options?.printerType === "Bluetooth" && options?.printerPort === "BT");
-
-  if (isDirectLanOrBt) {
+  // 1. Direct hardware printing for LAN sockets, Bluetooth COM8, and Windows USB RAW Spooler (silent direct printing)
+  if (options?.printerType) {
     try {
       const res = await fetch("/api/printers/print-direct", {
         method: "POST",
@@ -797,8 +805,8 @@ export async function printThermalReceiptDocument(
         body: JSON.stringify({
           receiptStr,
           printerType: options.printerType,
-          printerUrl: options.printerUrl || "Printer001",
-          printerPort: options.printerPort || "BT",
+          printerUrl: options.printerUrl || (options.printerType === "Usb" ? "POS-80-USB" : "Printer001"),
+          printerPort: options.printerPort || (options.printerType === "Usb" ? "USB" : "BT"),
         }),
       });
       if (res.ok) {
@@ -839,6 +847,11 @@ export async function printThermalReceiptDocument(
         e,
       );
     }
+  }
+
+  // If silent mode was requested (e.g. background auto-printing), do NOT pop up browser print dialog!
+  if (options?.silent) {
+    return false;
   }
 
   // 3. Stable Browser Print Dialog via hidden iframe (restores the exact morning 80mm Courier New formatting)
@@ -1000,12 +1013,11 @@ export function generateWorkstationRunnerSlipPlainString(
     lines.push(`TOKEN: ${tokenFormatted}`);
   }
 
-  const now = order.createdAt ? new Date(order.createdAt) : new Date();
-  const timeStr = now.toLocaleTimeString("en-IN", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: true,
-  });
+  const timeStr = formatStoreTime(
+    order.createdAt || Date.now(),
+    org?.country,
+    org?.organizationTimeZone,
+  );
 
   if (order.orderNumber) {
     lines.push(twoColRow(`ORD: ${order.orderNumber}`, `TIME: ${timeStr}`, printWidth));

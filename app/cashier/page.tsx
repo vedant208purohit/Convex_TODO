@@ -420,12 +420,10 @@ function CashierPosContent() {
 
     const stationPrinter =
       printers?.find((p) => p.printerUseFor === "Station") ||
-      printers?.find((p) => p.printerUseFor === "All") ||
       printers?.[0];
 
     const workstationPrinter =
-      printers?.find((p) => p.printerUseFor === "WorkStation") ||
-      printers?.find((p) => p.printerUseFor === "All");
+      printers?.find((p) => p.printerUseFor === "WorkStation");
 
     const getFlag = (k: string) =>
       orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;
@@ -2434,8 +2432,7 @@ function CashierPosContent() {
       // AUTO-PRINT WORKSTATION / RUNNER SLIP:
       // When an order is placed, dispatch the Runner / Assembly slip to the Workstation printer!
       const workstationPrinter =
-        printers?.find((p) => p.printerUseFor === "WorkStation") ||
-        printers?.find((p) => p.printerUseFor === "All");
+        printers?.find((p) => p.printerUseFor === "WorkStation");
 
       if (workstationPrinter) {
         try {
