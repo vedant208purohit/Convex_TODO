@@ -1,8 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { PosShell } from "../PosShell";
+import { OrderDateRangePicker, getPresetDateRange } from "../OrderDateRangePicker";
+import { generateWalletLedgerPdf } from "@/app/utils/generateWalletLedgerPdf";
+import { Toast, type ToastMessage } from "../Toast";
 
 export interface Transaction {
   id: string;
@@ -130,17 +133,27 @@ export function MarketplaceWalletView({
     "all" | "topup" | "purchase" | "subscription" | "refund"
   >("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [dateRange, setDateRange] = useState(() => {
+    const preset = "Last 30 Days";
+    const { start, end } = getPresetDateRange(preset);
+    return { startDate: start, endDate: end, preset };
+  });
   const [isAddMoneyModalOpen, setIsAddMoneyModalOpen] = useState(false);
   const [isAutoTopupModalOpen, setIsAutoTopupModalOpen] = useState(false);
   const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
   const [customAmount, setCustomAmount] = useState<string>("5000");
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [imgError, setImgError] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement | null>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
+  const showToast = (
+    message: string,
+    type: "success" | "error" | "info" | "warning" = "success",
+    subtext?: string
+  ) => {
+    setToast({ message, type, subtext });
   };
 
   const handleAddMoney = (amt: number) => {
@@ -148,10 +161,13 @@ export function MarketplaceWalletView({
     setBalance(updated);
     if (onBalanceChange) onBalanceChange(updated);
     setIsAddMoneyModalOpen(false);
-    showToast(`₹${amt.toLocaleString("en-IN")} credited to your PREST Escrow Wallet.`);
+    showToast(`₹${amt.toLocaleString("en-IN")} added to wallet`);
   };
 
   const filteredTransactions = useMemo(() => {
+    const startTime = dateRange.startDate.getTime();
+    const endTime = dateRange.endDate.getTime();
+
     return INITIAL_TRANSACTIONS.filter((tx) => {
       const matchesType =
         filterType === "all" ? true : tx.type === filterType;
@@ -160,9 +176,13 @@ export function MarketplaceWalletView({
         tx.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
         tx.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (tx.detail && tx.detail.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesType && matchesSearch;
+
+      const txTime = new Date(tx.dateTime).getTime();
+      const matchesDate = txTime >= startTime && txTime <= endTime;
+
+      return matchesType && matchesSearch && matchesDate;
     });
-  }, [filterType, searchQuery]);
+  }, [filterType, searchQuery, dateRange]);
 
   const ITEMS_PER_PAGE = 5;
   const totalItems = filteredTransactions.length;
@@ -174,71 +194,187 @@ export function MarketplaceWalletView({
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filterType, searchQuery]);
+  }, [filterType, searchQuery, dateRange]);
+
+  // Close download menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (
+        downloadMenuRef.current &&
+        !downloadMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsDownloadMenuOpen(false);
+      }
+    };
+
+    if (isDownloadMenuOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [isDownloadMenuOpen]);
+
+  // CSV Export Handler (Frontend-based Blob download)
+  const handleDownloadCsv = () => {
+    setIsDownloadMenuOpen(false);
+    if (filteredTransactions.length === 0) {
+      showToast("No transactions found", "info");
+      return;
+    }
+
+    const escapeCsv = (val: unknown): string => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      "Date & Time",
+      "Transaction ID",
+      "Description",
+      "Detail",
+      "Type",
+      "Amount (INR)",
+      "Status",
+    ];
+
+    const rows = filteredTransactions.map((tx) =>
+      [
+        escapeCsv(tx.dateTime),
+        escapeCsv(tx.code),
+        escapeCsv(tx.description),
+        escapeCsv(tx.detail || ""),
+        escapeCsv(tx.typeLabel),
+        escapeCsv(tx.amount),
+        escapeCsv(tx.statusLabel),
+      ].join(",")
+    );
+
+    let totalDeposited = 0;
+    let totalDisbursed = 0;
+    filteredTransactions.forEach((tx) => {
+      if (tx.amount > 0) totalDeposited += tx.amount;
+      else totalDisbursed += Math.abs(tx.amount);
+    });
+
+    const summaryRows = [
+      "",
+      [escapeCsv("--- STATEMENT SUMMARY ---"), "", "", "", "", "", ""].join(","),
+      [escapeCsv("Available Balance"), "", "", "", "", escapeCsv(balance), ""].join(","),
+      [escapeCsv("Total Deposited (Period)"), "", "", "", "", escapeCsv(totalDeposited), ""].join(","),
+      [escapeCsv("Total Disbursed (Period)"), "", "", "", "", escapeCsv(-totalDisbursed), ""].join(","),
+      [escapeCsv("Total Records"), "", "", "", "", escapeCsv(filteredTransactions.length), ""].join(","),
+      [escapeCsv("Escrow ID"), escapeCsv("PRST-WLT-88219 (RBI Compliant)"), "", "", "", "", ""].join(","),
+    ];
+
+    const csvContent =
+      headers.map(escapeCsv).join(",") +
+      "\r\n" +
+      rows.join("\r\n") +
+      "\r\n" +
+      summaryRows.join("\r\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], {
+      type: "text/csv;charset=utf-8;",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateFormatted = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.setAttribute("download", `PREST_Wallet_Ledger_${dateFormatted}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+
+    showToast("CSV downloaded");
+  };
+
+  // PDF Export Handler (Frontend jsPDF statement download)
+  const handleDownloadPdf = () => {
+    setIsDownloadMenuOpen(false);
+    if (filteredTransactions.length === 0) {
+      showToast("No transactions found", "info");
+      return;
+    }
+
+    try {
+      generateWalletLedgerPdf({
+        transactions: filteredTransactions,
+        balance,
+        dateRange,
+        escrowId: "PRST-WLT-88219",
+        storeName: "Mahendra Suthar",
+      });
+      showToast("PDF downloaded");
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+      showToast("Failed to download PDF", "error");
+    }
+  };
 
   const walletContent = (
-    <div className="p-6 lg:p-8 flex flex-col gap-6 w-full">
+    <div className="p-3.5 sm:p-5 md:p-6 lg:p-7 xl:p-8 flex flex-col gap-4 sm:gap-6 w-full max-w-[1920px] mx-auto">
       {/* Breadcrumb Navigation */}
-      <div className="flex items-center gap-1.5 text-stone-500 text-xs font-medium">
-        <Link href="/marketplace" className="hover:text-stone-900 transition-colors">
+      <div className="flex items-center gap-1.5 text-[#5e5e5e] text-[11px] sm:text-xs font-medium">
+        <Link href="/marketplace" className="hover:text-[#0c0a09] transition-colors">
           Marketplace
         </Link>
-        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-        <span className="text-stone-900 font-semibold">Wallet</span>
+        <span className="material-symbols-outlined text-[13px] sm:text-[14px]">chevron_right</span>
+        <span className="text-[#0c0a09] font-semibold">Wallet</span>
       </div>
 
       {/* 1. HERO SECTION: Luxurious, Cohesive Fintech-Grade Container */}
-      <div className="relative w-full rounded-3xl bg-gradient-to-br from-[#FAF7F2] via-[#FAF3EC] to-[#F4ECE4] border border-[#E8E5DF] p-6 sm:p-8 md:p-10 shadow-[0_4px_24px_rgba(0,0,0,0.03)] overflow-hidden">
-        {/* Subtle decorative ambient gold warmth */}
-        <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-[#F5B942]/10 blur-3xl pointer-events-none" />
-        <div className="absolute -left-20 -bottom-20 w-80 h-80 rounded-full bg-[#E5D7C7]/25 blur-2xl pointer-events-none" />
+      <div className="relative w-full rounded-2xl sm:rounded-3xl bg-gradient-to-br from-[#faf8f5] via-[#fdf8f7] to-[#faf8f5] border border-[#e7e5e4] p-4 sm:p-6 md:p-8 lg:p-10 shadow-[0_4px_24px_rgba(0,0,0,0.03)]">
+        {/* Subtle decorative ambient gold warmth isolated in an overflow-hidden wrapper */}
+        <div className="absolute inset-0 rounded-2xl sm:rounded-3xl overflow-hidden pointer-events-none">
+          <div className="absolute -right-24 -top-24 w-96 h-96 rounded-full bg-[#F5B942]/10 blur-3xl pointer-events-none" />
+          <div className="absolute -left-20 -bottom-20 w-80 h-80 rounded-full bg-[#E5D7C7]/25 blur-2xl pointer-events-none" />
+        </div>
 
-        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+        <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 lg:gap-8 xl:gap-12 items-center">
           {/* LEFT SIDE OF HERO */}
-          <div className="lg:col-span-7 flex flex-col gap-5">
+          <div className="lg:col-span-8 xl:col-span-7 flex flex-col gap-4 sm:gap-5">
             {/* Badge & Context */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#FAF0E2] border border-[#E8D4B8] text-[#7A4B00] shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-[#D97706] animate-pulse" />
-                <span className="text-[11px] tracking-wider font-semibold uppercase">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+              <div className="inline-flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-full bg-[#FAF0E2] border border-[#E8D4B8] text-[#7A4B00] shadow-2xs">
+                <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#D97706] animate-pulse" />
+                <span className="text-[10px] sm:text-[11px] tracking-wider font-semibold uppercase">
                   Marketplace Billing Wallet
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-xs text-stone-600">
-                <span className="font-semibold text-stone-900">The Grand Bistro HQ</span>
-                <span className="text-[#D0C4BE] font-bold">•</span>
-                <span className="font-mono text-xs text-stone-500">
-                  Escrow ID: PRST-WLT-88219
-                </span>
+              <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#5e5e5e] flex-wrap">
+                <span className="font-semibold text-[#0c0a09]">The Grand Bistro HQ</span>
               </div>
             </div>
 
             {/* Main Balance Display */}
-            <div className="flex flex-col gap-2 pt-1">
-              <span className="text-xs uppercase tracking-widest text-stone-500 font-semibold">
+            <div className="flex flex-col gap-1.5 sm:gap-2 pt-1">
+              <span className="text-[10.5px] sm:text-xs uppercase tracking-widest text-[#5e5e5e] font-semibold">
                 Available Balance
               </span>
-              <div className="flex items-baseline gap-3">
-                <h1 className="font-garamond text-5xl sm:text-6xl md:text-[4.25rem] leading-none text-[#181818] tracking-tight font-normal">
+              <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
+                <h1 className="font-garamond text-3xl xs:text-4xl sm:text-5xl md:text-6xl lg:text-[4rem] leading-none text-[#0c0a09] tracking-tight font-normal break-words">
                   ₹{balance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                 </h1>
-                <span className="text-xs font-bold text-stone-500 tracking-widest uppercase">
+                <span className="text-xs font-bold text-[#5e5e5e] tracking-widest uppercase">
                   INR
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-stone-600 max-w-xl leading-relaxed mt-1">
+              <p className="text-xs sm:text-sm text-[#5e5e5e] max-w-xl leading-relaxed mt-1">
                 Ready to use for instant app purchases, automated POS syncs, and recurring subscriptions with zero gateway surcharges.
               </p>
             </div>
 
             {/* Immediate High-Visibility Actions Row */}
-            <div className="pt-2 flex flex-wrap items-center gap-3 md:gap-4">
+            <div className="pt-2 flex flex-wrap items-center gap-2 sm:gap-2.5 md:gap-3">
               {/* Primary CTA */}
               <Link
                 href="/marketplace/wallet/add"
-                className="bg-[#171717] hover:bg-black text-white px-7 py-3 rounded-full font-medium shadow-md transition-all hover:scale-[1.02] active:scale-[0.99] flex items-center gap-2.5 text-sm sm:text-base cursor-pointer"
+                className="w-full sm:w-auto bg-[#0c0a09] hover:bg-[#262626] text-white px-4 sm:px-5 lg:px-6 py-2.5 sm:py-3 rounded-lg font-medium shadow-md transition-all hover:scale-[1.02] active:scale-[0.99] flex items-center justify-center gap-2 text-xs sm:text-sm md:text-base cursor-pointer whitespace-nowrap"
               >
-                <span className="w-5 h-5 rounded-full bg-[#F5B942] text-[#181818] flex items-center justify-center font-bold text-sm leading-none">
+                <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-[#F5B942] text-[#0c0a09] flex items-center justify-center font-bold text-xs sm:text-sm leading-none">
                   +
                 </span>
                 <span>Add Money</span>
@@ -248,106 +384,157 @@ export function MarketplaceWalletView({
               <button
                 type="button"
                 onClick={() => setIsAutoTopupModalOpen(true)}
-                className="border border-[#D0C4BE] text-[#1e1b19] px-5 py-3 rounded-full font-medium hover:bg-black/5 transition-colors text-xs sm:text-sm flex items-center gap-2 cursor-pointer bg-white/50 backdrop-blur-xs"
+                className="w-full sm:w-auto border border-[#e7e5e4] text-[#0c0a09] px-3.5 sm:px-4 lg:px-4.5 py-2.5 sm:py-3 rounded-lg font-medium hover:bg-[#f1edec] transition-colors text-xs sm:text-sm flex items-center justify-center gap-2 cursor-pointer bg-white/80 backdrop-blur-xs whitespace-nowrap"
               >
-                <span className="material-symbols-outlined text-[18px] text-stone-600">tune</span>
+                <span className="material-symbols-outlined text-[16px] sm:text-[18px] text-[#5e5e5e]">tune</span>
                 <span>{autoTopupEnabled ? "Auto-Topup Active" : "Configure Auto-Topup"}</span>
               </button>
 
-              {/* Tertiary Action */}
-              <button
-                type="button"
-                onClick={() =>
-                  showToast("Ledger statement export generated. Download starting (CSV)...")
-                }
-                className="text-stone-600 hover:text-stone-900 px-4 py-3 rounded-full font-medium transition-colors text-xs sm:text-sm flex items-center gap-1.5 hover:bg-black/5 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-[18px]">file_download</span>
-                <span>Download Ledger (CSV/PDF)</span>
-              </button>
+              {/* Tertiary Action: Download Ledger (CSV/PDF) Dropdown */}
+              <div className="relative w-full sm:w-auto z-30 shrink-0" ref={downloadMenuRef}>
+                <button
+                  type="button"
+                  onClick={() => setIsDownloadMenuOpen((prev) => !prev)}
+                  className="w-full sm:w-auto text-[#5e5e5e] hover:text-[#0c0a09] px-2.5 sm:px-3 py-2 sm:py-3 rounded-lg font-medium transition-colors text-xs sm:text-sm flex items-center justify-center gap-1.5 hover:bg-[#f1edec] cursor-pointer bg-white/60 sm:bg-transparent whitespace-nowrap"
+                  aria-haspopup="true"
+                  aria-expanded={isDownloadMenuOpen}
+                >
+                  <span className="material-symbols-outlined text-[16px] sm:text-[18px]">file_download</span>
+                  <span>Download Ledger (CSV/PDF)</span>
+                  <span
+                    className={`material-symbols-outlined text-[16px] text-[#78716c] transition-transform duration-200 ${
+                      isDownloadMenuOpen ? "rotate-180" : ""
+                    }`}
+                  >
+                    expand_more
+                  </span>
+                </button>
+
+                {/* Dropdown Menu */}
+                {isDownloadMenuOpen && (
+                  <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-full sm:w-72 bg-white border border-[#e7e5e4] rounded-xl shadow-xl p-1.5 z-50">
+                    <div className="px-3 py-2 border-b border-[#f1edec] mb-1">
+                      <p className="text-[10px] uppercase font-bold text-[#78716c] tracking-wider">
+                        Export Ledger Statement
+                      </p>
+                      <p className="text-[11px] text-[#a8a29e]">
+                        {filteredTransactions.length} transaction{filteredTransactions.length === 1 ? "" : "s"} selected
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadPdf}
+                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[#faf8f5] transition-colors flex items-center gap-3 text-xs text-[#0c0a09] font-medium cursor-pointer group"
+                    >
+                      <span className="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-xs text-[#0c0a09]">Download PDF</span>
+                        <span className="text-[11px] text-[#78716c]">Official verified escrow statement</span>
+                      </div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleDownloadCsv}
+                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-[#faf8f5] transition-colors flex items-center gap-3 text-xs text-[#0c0a09] font-medium cursor-pointer group"
+                    >
+                      <span className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
+                        <span className="material-symbols-outlined text-[18px]">table_view</span>
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-xs text-[#0c0a09]">Download CSV</span>
+                        <span className="text-[11px] text-[#78716c]">Spreadsheet for Excel & Sheets</span>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* RIGHT SIDE OF HERO: 3D Wallet Illustration + Verification Pill */}
-          <div className="lg:col-span-5 flex flex-col items-center justify-center relative">
-            <div className="relative flex items-center justify-center w-full max-w-[360px]">
+          <div className="lg:col-span-4 xl:col-span-5 flex flex-col items-center justify-center relative">
+            <div className="relative flex items-center justify-center w-full max-w-[280px] sm:max-w-[340px]">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt="PREST Wallet Illustration"
-                className="w-[280px] sm:w-[320px] h-auto object-contain drop-shadow-xl transition-transform duration-500 hover:scale-105"
+                className="w-[180px] xs:w-[220px] sm:w-[260px] md:w-[300px] h-auto object-contain drop-shadow-xl transition-transform duration-500 hover:scale-105"
                 src="/images/prest-wallet.svg"
               />
             </div>
 
             {/* Floating Status Pill Overlay */}
-            <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-[#E8E5DF] shadow-xs text-xs text-stone-900">
-              <span className="w-2 h-2 rounded-full bg-emerald-600" />
+            <div className="mt-2.5 sm:mt-3 inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1 sm:py-1.5 rounded-full bg-white/90 backdrop-blur-md border border-[#e7e5e4] shadow-xs text-[11px] sm:text-xs text-[#0c0a09] flex-wrap justify-center">
+              <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-emerald-600" />
               <span className="font-semibold text-emerald-800">✓ Active &amp; Verified Escrow</span>
-              <span className="text-[#D0C4BE]">•</span>
-              <span className="text-stone-500 font-medium">RBI Compliant</span>
+              <span className="text-[#D0C4BE] hidden xs:inline">•</span>
+              <span className="text-[#5e5e5e] font-medium">RBI Compliant</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* 2. REFINED SECONDARY METRICS: Crisp typography & subtle separators */}
-      <div className="rounded-2xl bg-[#faf2ee]/70 border border-[#E8E5DF]/80 px-6 py-6 md:py-7">
-        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#E8E5DF]/80 gap-6 md:gap-0">
+      <div className="rounded-xl sm:rounded-2xl bg-[#faf8f5] border border-[#e7e5e4] p-4 sm:p-6 md:py-7">
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-[#e7e5e4] gap-5 md:gap-0">
           {/* Metric 1: Total Deposited */}
-          <div className="flex flex-col gap-1.5 md:pr-8">
-            <div className="flex items-center justify-between text-stone-500">
-              <span className="text-[11px] uppercase tracking-wider font-semibold">
+          <div className="flex flex-col gap-1.5 md:pr-6 lg:pr-8">
+            <div className="flex items-center justify-between text-[#5e5e5e]">
+              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold">
                 Total Deposited
               </span>
-              <span className="material-symbols-outlined text-[18px]">arrow_downward_alt</span>
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">arrow_downward_alt</span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-garamond text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="font-garamond text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
                 ₹45,000.00
               </span>
-              <span className="text-xs text-stone-500 font-medium">(6 deposits)</span>
+              <span className="text-[11px] sm:text-xs text-[#5e5e5e] font-medium">(6 deposits)</span>
             </div>
-            <p className="text-xs text-stone-600 flex items-center gap-1.5 pt-0.5">
-              <span className="material-symbols-outlined text-[14px] text-stone-400">history</span>
+            <p className="text-[11px] sm:text-xs text-[#5e5e5e] flex items-center gap-1.5 pt-0.5">
+              <span className="material-symbols-outlined text-[13px] sm:text-[14px] text-stone-400">history</span>
               <span>Last deposit on Oct 20, 2026</span>
             </p>
           </div>
 
           {/* Metric 2: Total Disbursed */}
-          <div className="flex flex-col gap-1.5 pt-6 md:pt-0 md:px-8">
-            <div className="flex items-center justify-between text-stone-500">
-              <span className="text-[11px] uppercase tracking-wider font-semibold">
+          <div className="flex flex-col gap-1.5 pt-5 md:pt-0 md:px-6 lg:px-8">
+            <div className="flex items-center justify-between text-[#5e5e5e]">
+              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold">
                 Total Disbursed
               </span>
-              <span className="material-symbols-outlined text-[18px]">arrow_outward</span>
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">arrow_outward</span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-garamond text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="font-garamond text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
                 ₹30,500.00
               </span>
-              <span className="text-xs text-stone-500 font-medium">(3 purchases · 12 cycles)</span>
+              <span className="text-[11px] sm:text-xs text-[#5e5e5e] font-medium">(3 purchases · 12 cycles)</span>
             </div>
-            <p className="text-xs text-stone-600 flex items-center gap-1.5 pt-0.5">
-              <span className="material-symbols-outlined text-[14px] text-stone-400">receipt</span>
+            <p className="text-[11px] sm:text-xs text-[#5e5e5e] flex items-center gap-1.5 pt-0.5">
+              <span className="material-symbols-outlined text-[13px] sm:text-[14px] text-stone-400">receipt</span>
               <span>SaaS licenses &amp; micro-fees</span>
             </p>
           </div>
 
           {/* Metric 3: Monthly Burn Rate */}
-          <div className="flex flex-col gap-1.5 pt-6 md:pt-0 md:pl-8">
-            <div className="flex items-center justify-between text-stone-500">
-              <span className="text-[11px] uppercase tracking-wider font-semibold">
+          <div className="flex flex-col gap-1.5 pt-5 md:pt-0 md:pl-6 lg:pl-8">
+            <div className="flex items-center justify-between text-[#5e5e5e]">
+              <span className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold">
                 Monthly Burn Rate
               </span>
-              <span className="material-symbols-outlined text-[18px]">donut_large</span>
+              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">donut_large</span>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="font-garamond text-2xl sm:text-3xl font-bold text-stone-900 tracking-tight">
-                ₹2,198.00 <span className="text-sm font-normal text-stone-500">/ mo</span>
+            <div className="flex items-baseline gap-2 flex-wrap">
+              <span className="font-garamond text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
+                ₹2,198.00 <span className="text-xs sm:text-sm font-normal text-[#5e5e5e]">/ mo</span>
               </span>
             </div>
-            <p className="text-xs text-stone-600 pt-0.5">
-              <strong className="text-stone-900 font-semibold">4 Active Subscriptions</strong> • Next billing Nov 01, 2026 •{" "}
+            <p className="text-[11px] sm:text-xs text-[#5e5e5e] pt-0.5 flex-wrap">
+              <strong className="text-[#0c0a09] font-semibold">4 Active Subscriptions</strong> • Next billing Nov 01, 2026 •{" "}
               <span className="text-emerald-800 font-semibold">6.5 mos runway</span>
             </p>
           </div>
@@ -355,95 +542,62 @@ export function MarketplaceWalletView({
       </div>
 
       {/* 3. RECENT TRANSACTIONS LEDGER */}
-      <div className="flex flex-col bg-white rounded-2xl border border-[#E8E5DF] shadow-xs overflow-hidden">
+      <div className="flex flex-col bg-white rounded-xl sm:rounded-2xl border border-[#e7e5e4] shadow-xs relative z-30">
         {/* Table Filter Bar */}
-        <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-[#faf2ee]/60 border-b border-[#E8E5DF]/70">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 flex-1">
+        <div className="p-3.5 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4 bg-[#faf8f5] border-b border-[#e7e5e4] rounded-t-xl sm:rounded-t-2xl">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 flex-1 min-w-0">
             {/* Search input */}
-            <div className="relative flex items-center min-w-[240px] max-w-sm">
+            <div className="relative flex items-center w-full sm:min-w-[220px] sm:max-w-xs shrink-0">
               <span className="material-symbols-outlined absolute left-3 text-stone-400 text-[18px] pointer-events-none">
                 search
               </span>
               <input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 rounded-xl bg-white border border-[#E8E5DF] text-stone-900 placeholder:text-stone-400 text-xs outline-none focus:ring-1 focus:ring-stone-900 transition-all shadow-2xs"
-                placeholder="Search by Transaction ID or App..."
+                className="w-full pl-9 pr-3 py-2 rounded-lg bg-white border border-[#e7e5e4] text-[#0c0a09] placeholder:text-[#a8a29e] text-xs outline-none focus:ring-1 focus:ring-[#0c0a09] transition-all shadow-2xs font-sans"
+                placeholder="Search Transaction ID or App..."
                 type="text"
               />
             </div>
 
-            {/* Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none">
-              <button
-                type="button"
-                onClick={() => setFilterType("all")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  filterType === "all"
-                    ? "bg-[#171717] text-white shadow-xs"
-                    : "bg-[#ede7e4] text-stone-700 hover:bg-[#e4dcd7]"
-                }`}
-              >
-                All Types
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("topup")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  filterType === "topup"
-                    ? "bg-[#171717] text-white shadow-xs"
-                    : "bg-[#ede7e4] text-stone-700 hover:bg-[#e4dcd7]"
-                }`}
-              >
-                Top-ups
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("purchase")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  filterType === "purchase"
-                    ? "bg-[#171717] text-white shadow-xs"
-                    : "bg-[#ede7e4] text-stone-700 hover:bg-[#e4dcd7]"
-                }`}
-              >
-                Purchases
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("subscription")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  filterType === "subscription"
-                    ? "bg-[#171717] text-white shadow-xs"
-                    : "bg-[#ede7e4] text-stone-700 hover:bg-[#e4dcd7]"
-                }`}
-              >
-                Subscriptions
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("refund")}
-                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
-                  filterType === "refund"
-                    ? "bg-[#171717] text-white shadow-xs"
-                    : "bg-[#ede7e4] text-stone-700 hover:bg-[#e4dcd7]"
-                }`}
-              >
-                Refunds
-              </button>
+            {/* Filter Pills with touch scrolling */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-x">
+              {[
+                { label: "All Types", val: "all" },
+                { label: "Top-ups", val: "topup" },
+                { label: "Purchases", val: "purchase" },
+                { label: "Subscriptions", val: "subscription" },
+                { label: "Refunds", val: "refund" },
+              ].map((pill) => (
+                <button
+                  key={pill.val}
+                  type="button"
+                  onClick={() => setFilterType(pill.val as any)}
+                  className={`px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    filterType === pill.val
+                      ? "bg-[#0c0a09] text-white shadow-xs"
+                      : "bg-[#fdf8f7] text-[#5e5e5e] hover:bg-[#f1edec] border border-[#e7e5e4]"
+                  }`}
+                >
+                  {pill.label}
+                </button>
+              ))}
             </div>
           </div>
 
-          {/* Date Range Filter */}
-          <div className="flex items-center gap-2 self-start lg:self-auto">
-            <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-[#E8E5DF] shadow-2xs text-stone-800 text-xs font-medium cursor-pointer hover:bg-stone-50 transition-colors">
-              <span className="material-symbols-outlined text-[16px] text-stone-500">calendar_today</span>
-              <span>Last 30 Days</span>
-              <span className="material-symbols-outlined text-[16px] text-stone-500">arrow_drop_down</span>
-            </div>
+          {/* Date Range Filter (OrderDateRangePicker matching Menu & Reports) */}
+          <div className="flex items-center gap-2 self-start lg:self-auto shrink-0">
+            <OrderDateRangePicker
+              startDate={dateRange.startDate}
+              endDate={dateRange.endDate}
+              preset={dateRange.preset}
+              onChange={(newRange) => {
+                setDateRange(newRange);
+                setCurrentPage(1);
+              }}
+              countryCode="IN"
+              align="right"
+            />
           </div>
         </div>
 
@@ -451,61 +605,61 @@ export function MarketplaceWalletView({
         <div className="overflow-x-auto w-full">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-[#faf2ee]/70 border-b border-[#E8E5DF] text-[10px] uppercase tracking-wider text-stone-500 font-semibold">
-                <th className="py-3 px-6">Date &amp; Time</th>
-                <th className="py-3 px-4">Transaction ID</th>
-                <th className="py-3 px-4">Description</th>
-                <th className="py-3 px-4">Type</th>
-                <th className="py-3 px-4 text-right">Amount</th>
-                <th className="py-3 px-4 text-center">Status</th>
-                <th className="py-3 px-6 text-right">Actions</th>
+              <tr className="bg-[#faf8f5] border-b border-[#e7e5e4] text-[10px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
+                <th className="py-3 px-4 sm:px-6">Date &amp; Time</th>
+                <th className="py-3 px-3 sm:px-4">Transaction ID</th>
+                <th className="py-3 px-3 sm:px-4">Description</th>
+                <th className="py-3 px-3 sm:px-4">Type</th>
+                <th className="py-3 px-3 sm:px-4 text-right">Amount</th>
+                <th className="py-3 px-3 sm:px-4 text-center">Status</th>
+                <th className="py-3 px-4 sm:px-6 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-[#E8E5DF]/60 text-stone-800">
+            <tbody className="divide-y divide-[#e7e5e4] text-[#0c0a09]">
               {filteredTransactions.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-stone-500 text-xs">
+                  <td colSpan={7} className="py-8 text-center text-[#5e5e5e] text-xs">
                     No transactions found matching your search and filter criteria.
                   </td>
                 </tr>
               ) : (
                 paginatedTransactions.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-[#faf2ee]/40 transition-colors">
-                    <td className="py-3.5 px-6 whitespace-nowrap font-medium text-stone-900">
+                  <tr key={tx.id} className="hover:bg-[#faf8f5] transition-colors">
+                    <td className="py-3.5 px-4 sm:px-6 whitespace-nowrap font-medium text-[#0c0a09]">
                       {tx.dateTime}
                     </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span className="font-mono text-xs text-stone-600 bg-[#ede7e4] px-2 py-0.5 rounded border border-stone-300/40 font-semibold">
+                    <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
+                      <span className="font-mono text-xs text-[#5e5e5e] bg-[#fdf8f7] px-2 py-0.5 rounded border border-[#e7e5e4] font-semibold">
                         {tx.code}
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 font-medium text-stone-900">
+                    <td className="py-3.5 px-3 sm:px-4 font-medium text-[#0c0a09]">
                       {tx.description}{" "}
                       {tx.detail && (
-                        <span className="text-stone-500 font-normal">{tx.detail}</span>
+                        <span className="text-[#5e5e5e] font-normal">{tx.detail}</span>
                       )}
                     </td>
-                    <td className="py-3.5 px-4 whitespace-nowrap">
+                    <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
                       <span
                         className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
                           tx.type === "topup"
-                            ? "bg-[#ede7e4] text-stone-800"
+                            ? "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
                             : tx.type === "subscription"
-                            ? "bg-[#FAF0E2] text-[#7A4B00]"
-                            : "bg-stone-200/80 text-stone-800"
+                            ? "bg-amber-50 text-amber-900 border border-amber-200"
+                            : "bg-[#fdf8f7] text-[#5e5e5e] border border-[#e7e5e4]"
                         }`}
                       >
                         {tx.typeLabel}
                       </span>
                     </td>
                     <td
-                      className={`py-3.5 px-4 text-right whitespace-nowrap font-mono font-bold ${
-                        tx.amount > 0 ? "text-emerald-700" : "text-[#181818]"
+                      className={`py-3.5 px-3 sm:px-4 text-right whitespace-nowrap font-mono font-bold ${
+                        tx.amount > 0 ? "text-emerald-700" : "text-[#0c0a09]"
                       }`}
                     >
                       {tx.amount > 0 ? `+₹${tx.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : `-₹${Math.abs(tx.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`}
                     </td>
-                    <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                    <td className="py-3.5 px-3 sm:px-4 text-center whitespace-nowrap">
                       {tx.status === "confirmed" ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[11px] font-semibold border border-emerald-200/50">
                           <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
@@ -518,13 +672,13 @@ export function MarketplaceWalletView({
                         </span>
                       )}
                     </td>
-                    <td className="py-3.5 px-6 text-right whitespace-nowrap">
+                    <td className="py-3.5 px-4 sm:px-6 text-right whitespace-nowrap">
                       <button
                         type="button"
                         onClick={() =>
-                          showToast(`${tx.actionText} loaded for ${tx.code}.`)
+                          showToast(`${tx.actionText} opened`)
                         }
-                        className="text-xs text-stone-900 hover:underline font-semibold cursor-pointer"
+                        className="text-xs text-[#0c0a09] hover:underline font-semibold cursor-pointer"
                       >
                         {tx.actionText}
                       </button>
@@ -537,21 +691,21 @@ export function MarketplaceWalletView({
         </div>
 
         {/* Table Footer / Pagination */}
-        <div className="p-4 sm:p-5 bg-[#faf2ee]/60 border-t border-[#E8E5DF] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-stone-600">
+        <div className="p-3.5 sm:p-5 bg-[#faf8f5] border-t border-[#e7e5e4] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#5e5e5e] rounded-b-xl sm:rounded-b-2xl">
           <span>
             Showing{" "}
-            <strong className="text-stone-900 font-semibold">
+            <strong className="text-[#0c0a09] font-semibold">
               {totalItems === 0 ? 0 : `${startIndex + 1}–${endIndex}`}
             </strong>{" "}
             of{" "}
-            <strong className="text-stone-900 font-semibold">{totalItems}</strong> transactions
+            <strong className="text-[#0c0a09] font-semibold">{totalItems}</strong> transactions
           </span>
           <div className="flex items-center gap-1">
             <button
               type="button"
               disabled={activePage <= 1}
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-[#E8E5DF] text-stone-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-50 cursor-pointer"
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-[#e7e5e4] text-[#5e5e5e] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#f1edec] cursor-pointer"
               title="Previous Page"
             >
               <span className="material-symbols-outlined text-[16px]">chevron_left</span>
@@ -565,8 +719,8 @@ export function MarketplaceWalletView({
                   onClick={() => setCurrentPage(pageNum)}
                   className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold transition-all cursor-pointer ${
                     isActive
-                      ? "bg-[#171717] text-white shadow-xs"
-                      : "bg-white border border-[#E8E5DF] hover:bg-stone-50 text-stone-800"
+                      ? "bg-[#0c0a09] text-white shadow-xs"
+                      : "bg-white border border-[#e7e5e4] hover:bg-[#f1edec] text-[#0c0a09]"
                   }`}
                 >
                   {pageNum}
@@ -577,7 +731,7 @@ export function MarketplaceWalletView({
               type="button"
               disabled={activePage >= totalPages}
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-[#E8E5DF] text-stone-600 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-50 cursor-pointer"
+              className="w-8 h-8 rounded-lg flex items-center justify-center bg-white border border-[#e7e5e4] text-[#5e5e5e] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#f1edec] cursor-pointer"
               title="Next Page"
             >
               <span className="material-symbols-outlined text-[16px]">chevron_right</span>
@@ -587,15 +741,15 @@ export function MarketplaceWalletView({
       </div>
 
       {/* 4. Institutional Notice & Escrow Guarantee */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-[#faf2ee] border border-[#E8E5DF] flex items-start gap-4 text-stone-600">
-        <span className="material-symbols-outlined text-stone-500 text-[24px] shrink-0 mt-0.5">
+      <div className="p-4 sm:p-6 rounded-xl sm:rounded-2xl bg-[#faf8f5] border border-[#e7e5e4] flex items-start gap-3 sm:gap-4 text-[#5e5e5e]">
+        <span className="material-symbols-outlined text-[#5e5e5e] text-[20px] sm:text-[24px] shrink-0 mt-0.5">
           verified_user
         </span>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-stone-900 font-bold uppercase tracking-wider">
+        <div className="flex flex-col gap-1 min-w-0">
+          <span className="text-[11px] sm:text-xs text-[#0c0a09] font-bold uppercase tracking-wider">
             PREST Marketplace Ledger Guarantee
           </span>
-          <p className="text-xs leading-relaxed text-stone-600">
+          <p className="text-xs leading-relaxed text-[#5e5e5e]">
             This is your restaurant organization&apos;s dedicated Marketplace Billing Wallet. It is separated from POS table settlement accounts and protected by Reserve Bank escrow compliance guidelines. Funds deposited here are strictly utilized for procurement of software licenses, plugin integrations, and third-party SaaS services hosted on the PREST ecosystem.
           </p>
         </div>
@@ -604,46 +758,46 @@ export function MarketplaceWalletView({
       {/* Quick Add Money Modal Dialog */}
       {isAddMoneyModalOpen && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           onClick={() => setIsAddMoneyModalOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-stone-200 flex flex-col gap-5"
+            className="w-full max-w-md bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-[#e7e5e4] flex flex-col gap-4 sm:gap-5 my-auto max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div className="flex items-center justify-between pb-3 border-b border-[#e7e5e4]">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-[#FAF0E2] text-[#7A4B00] flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-[#FAF0E2] text-[#7A4B00] flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[20px]">add_card</span>
                 </div>
                 <div>
-                  <h3 className="font-garamond text-xl font-bold text-stone-900">Add Wallet Balance</h3>
-                  <p className="text-xs text-stone-500">Instant UPI & Net Banking deposit</p>
+                  <h3 className="font-garamond text-lg sm:text-xl font-bold text-[#0c0a09]">Add Wallet Balance</h3>
+                  <p className="text-[11px] sm:text-xs text-[#5e5e5e]">Instant UPI &amp; Net Banking deposit</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAddMoneyModalOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5e5e5e] hover:text-[#0c0a09] hover:bg-[#f1edec] cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <span className="text-xs font-semibold text-stone-700 uppercase tracking-wider">
+            <div className="flex flex-col gap-2.5 sm:gap-3">
+              <span className="text-[11px] sm:text-xs font-semibold text-[#0c0a09] uppercase tracking-wider">
                 Select Deposit Amount (INR)
               </span>
-              <div className="grid grid-cols-3 gap-2.5">
+              <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
                 {[2000, 5000, 10000].map((amt) => (
                   <button
                     key={amt}
                     type="button"
                     onClick={() => setCustomAmount(amt.toString())}
-                    className={`py-3 px-2 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer ${
+                    className={`py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-mono font-bold border transition-all cursor-pointer ${
                       customAmount === amt.toString()
-                        ? "bg-[#171717] text-white border-black shadow-xs"
-                        : "bg-stone-50 border-stone-200 text-stone-800 hover:border-stone-400"
+                        ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-xs"
+                        : "bg-[#fdf8f7] border-[#e7e5e4] text-[#0c0a09] hover:bg-[#f1edec]"
                     }`}
                   >
                     +₹{amt.toLocaleString("en-IN")}
@@ -651,25 +805,25 @@ export function MarketplaceWalletView({
                 ))}
               </div>
 
-              <div className="relative mt-2">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500 font-mono text-sm font-semibold">
+              <div className="relative mt-1 sm:mt-2">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#5e5e5e] font-mono text-sm font-semibold">
                   ₹
                 </span>
                 <input
                   type="number"
                   value={customAmount}
                   onChange={(e) => setCustomAmount(e.target.value)}
-                  className="w-full pl-8 pr-4 py-2.5 rounded-xl border border-stone-300 text-stone-900 text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-stone-900"
+                  className="w-full pl-8 pr-4 py-2 sm:py-2.5 rounded-lg border border-[#e7e5e4] text-[#0c0a09] text-xs sm:text-sm font-mono font-bold outline-none focus:ring-1 focus:ring-[#0c0a09]"
                   placeholder="Custom amount"
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex flex-col xs:flex-row items-center gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => handleAddMoney(Number(customAmount) || 5000)}
-                className="flex-1 py-3 px-5 rounded-full bg-[#171717] hover:bg-black text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                className="w-full xs:flex-1 py-2.5 sm:py-3 px-4 sm:px-5 rounded-lg bg-[#0c0a09] hover:bg-[#262626] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 <span>Authorize Deposit</span>
                 <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -677,7 +831,7 @@ export function MarketplaceWalletView({
               <button
                 type="button"
                 onClick={() => setIsAddMoneyModalOpen(false)}
-                className="py-3 px-4 rounded-full border border-stone-300 text-stone-700 text-xs font-medium hover:bg-stone-50 cursor-pointer"
+                className="w-full xs:w-auto py-2.5 sm:py-3 px-4 rounded-lg border border-[#e7e5e4] text-[#0c0a09] text-xs font-medium hover:bg-[#f1edec] cursor-pointer text-center"
               >
                 Cancel
               </button>
@@ -689,43 +843,43 @@ export function MarketplaceWalletView({
       {/* Auto-Topup Modal Dialog */}
       {isAutoTopupModalOpen && (
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-black/50 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
           onClick={() => setIsAutoTopupModalOpen(false)}
         >
           <div
-            className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl border border-stone-200 flex flex-col gap-5"
+            className="w-full max-w-md bg-white rounded-2xl sm:rounded-3xl p-5 sm:p-6 shadow-2xl border border-[#e7e5e4] flex flex-col gap-4 sm:gap-5 my-auto max-h-[92vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between pb-3 border-b border-stone-100">
+            <div className="flex items-center justify-between pb-3 border-b border-[#e7e5e4]">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-stone-100 text-stone-800 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4] flex items-center justify-center shrink-0">
                   <span className="material-symbols-outlined text-[20px]">tune</span>
                 </div>
                 <div>
-                  <h3 className="font-garamond text-xl font-bold text-stone-900">Configure Auto-Topup</h3>
-                  <p className="text-xs text-stone-500">Maintain uninterrupted subscription runs</p>
+                  <h3 className="font-garamond text-lg sm:text-xl font-bold text-[#0c0a09]">Configure Auto-Topup</h3>
+                  <p className="text-[11px] sm:text-xs text-[#5e5e5e]">Maintain uninterrupted subscription runs</p>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsAutoTopupModalOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-stone-400 hover:text-stone-700 hover:bg-stone-100"
+                className="w-8 h-8 rounded-full flex items-center justify-center text-[#5e5e5e] hover:text-[#0c0a09] hover:bg-[#f1edec] cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
 
-            <div className="flex flex-col gap-4 text-xs text-stone-600">
-              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-stone-50 border border-stone-200">
+            <div className="flex flex-col gap-3.5 sm:gap-4 text-xs text-[#5e5e5e]">
+              <div className="flex items-center justify-between p-3 sm:p-3.5 rounded-xl sm:rounded-2xl bg-[#fdf8f7] border border-[#e7e5e4] gap-3">
                 <div className="flex flex-col">
-                  <span className="font-semibold text-stone-900">Auto-Recharge Trigger</span>
-                  <span className="text-[11px] text-stone-500">When balance drops below ₹1,500</span>
+                  <span className="font-semibold text-[#0c0a09] text-xs sm:text-sm">Auto-Recharge Trigger</span>
+                  <span className="text-[11px] text-[#5e5e5e]">When balance drops below ₹1,500</span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setAutoTopupEnabled(!autoTopupEnabled)}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer ${
-                    autoTopupEnabled ? "bg-[#171717]" : "bg-stone-300"
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
+                    autoTopupEnabled ? "bg-[#0c0a09]" : "bg-stone-300"
                   }`}
                 >
                   <div
@@ -736,30 +890,30 @@ export function MarketplaceWalletView({
                 </button>
               </div>
 
-              <p className="text-[11px] leading-relaxed text-stone-500">
+              <p className="text-[11px] leading-relaxed text-[#5e5e5e]">
                 Auto-recharge utilizes your verified Mandate (HDFC Corporate Account ****4920) to maintain sufficient funds for recurring WhatsApp &amp; Cloud Backup subscriptions.
               </p>
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex flex-col xs:flex-row items-center gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => {
                   setIsAutoTopupModalOpen(false);
                   showToast(
                     autoTopupEnabled
-                      ? "Auto-Topup rule enabled successfully."
-                      : "Auto-Topup rule disabled."
+                      ? "Auto-Topup enabled"
+                      : "Auto-Topup disabled"
                   );
                 }}
-                className="flex-1 py-3 px-5 rounded-full bg-[#171717] hover:bg-black text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                className="w-full xs:flex-1 py-2.5 sm:py-3 px-4 sm:px-5 rounded-lg bg-[#0c0a09] hover:bg-[#262626] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 Save Settings
               </button>
               <button
                 type="button"
                 onClick={() => setIsAutoTopupModalOpen(false)}
-                className="py-3 px-4 rounded-full border border-stone-300 text-stone-700 text-xs font-medium hover:bg-stone-50 cursor-pointer"
+                className="w-full xs:w-auto py-2.5 sm:py-3 px-4 rounded-lg border border-[#e7e5e4] text-[#0c0a09] text-xs font-medium hover:bg-[#f1edec] cursor-pointer text-center"
               >
                 Close
               </button>
@@ -768,19 +922,8 @@ export function MarketplaceWalletView({
         </div>
       )}
 
-      {/* Toast Notification */}
-      <div
-        className={`fixed bottom-6 right-6 z-50 transform transition-all duration-300 ease-out ${
-          toastMessage ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
-        }`}
-      >
-        <div className="bg-[#141010] text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 max-w-md border border-stone-700">
-          <span className="material-symbols-outlined text-[20px] text-[#ffb68e] shrink-0">
-            check_circle
-          </span>
-          <span className="text-xs font-medium leading-relaxed">{toastMessage}</span>
-        </div>
-      </div>
+      {/* Standard Menu Toast Notification Component */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 

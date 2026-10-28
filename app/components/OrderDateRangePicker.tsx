@@ -438,83 +438,135 @@ export function OrderDateRangePicker({
         </button>
       )}
 
-      {/* Date Range Popover */}
+      {/* Date Range Popover / Mobile Modal Sheet */}
       {isOpen && (
         <div
-          className={`absolute ${
-            align === "right"
-              ? "right-0 sm:right-0"
-              : "left-0 sm:left-0"
-          } top-full mt-2.5 bg-white border border-[#d1d5db] rounded-lg shadow-2xl z-50 overflow-visible font-sans`}
-          style={{ maxWidth: "calc(100vw - 2rem)" }}
+          className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-0 sm:bg-transparent sm:backdrop-blur-none sm:static"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsOpen(false);
+            }
+          }}
         >
-          {/* Top pointer notch arrow */}
           <div
-            className={`absolute ${
-              align === "right" ? "right-8" : "left-8"
-            } -top-1.5 w-3 h-3 bg-white border-t border-l border-[#d1d5db] rotate-45 z-10`}
-          />
+            className={`relative bg-white border border-[#d1d5db] rounded-2xl sm:rounded-lg shadow-2xl z-50 font-sans w-full max-w-[340px] sm:max-w-none sm:w-auto sm:absolute ${
+              align === "right" ? "sm:right-0" : "sm:left-0"
+            } sm:top-full sm:mt-2.5 overflow-hidden sm:overflow-visible`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top pointer notch arrow on desktop only */}
+            <div
+              className={`hidden sm:block absolute ${
+                align === "right" ? "right-8" : "left-8"
+              } -top-1.5 w-3 h-3 bg-white border-t border-l border-[#d1d5db] rotate-45 z-10`}
+            />
 
-          {/* Main section: Presets list + Dual calendar */}
-          <div className="flex flex-col sm:flex-row overflow-x-auto">
-            {/* Left Sidebar Presets */}
-            <div className="w-full sm:w-36 border-b sm:border-b-0 sm:border-r border-[#e5e7eb] py-2 flex flex-row sm:flex-col bg-white shrink-0 overflow-x-auto sm:overflow-visible">
-              {DATE_RANGE_OPTIONS.map((p) => {
-                const isSelected = draftPreset === p;
-                return (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => handlePresetClick(p)}
-                    className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer whitespace-nowrap ${
-                      isSelected
-                        ? "bg-[#0085d4] text-white font-medium"
-                        : "text-stone-800 hover:bg-stone-100 font-normal"
-                    }`}
-                  >
-                    {p}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Right Dual Calendar side-by-side */}
-            <div className="p-4 flex flex-col md:flex-row gap-6 bg-white shrink-0">
-              {renderMonthCalendar(
-                viewMonth.getFullYear(),
-                viewMonth.getMonth(),
-                true,
-                false,
-              )}
-              {renderMonthCalendar(
-                nextViewMonth.getFullYear(),
-                nextViewMonth.getMonth(),
-                false,
-                true,
-              )}
-            </div>
-          </div>
-
-          {/* Bottom Footer Bar */}
-          <div className="border-t border-[#e5e7eb] px-4 py-2.5 bg-white flex flex-col sm:flex-row items-center justify-between gap-2.5">
-            <div className="text-xs font-medium text-stone-700 tracking-tight">
-              {formattedDraftText}
-            </div>
-            <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+            {/* Mobile Modal Title Bar */}
+            <div className="sm:hidden flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-stone-50">
+              <span className="text-xs font-semibold uppercase tracking-wider text-stone-700">
+                Select Date Range
+              </span>
               <button
                 type="button"
                 onClick={handleCancel}
-                className="px-4 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md transition-colors cursor-pointer"
+                className="w-7 h-7 flex items-center justify-center rounded-full text-stone-400 hover:text-stone-700 hover:bg-stone-200 text-xs cursor-pointer"
               >
-                Cancel
+                ✕
               </button>
-              <button
-                type="button"
-                onClick={handleApply}
-                className="px-5 py-1.5 text-xs font-semibold text-white bg-[#0c0a09] hover:bg-[#262626] rounded-md transition-colors cursor-pointer"
-              >
-                Apply
-              </button>
+            </div>
+
+            {/* Main section: Presets list + Dual calendar */}
+            <div className="flex flex-col sm:flex-row">
+              {/* Mobile Presets: horizontal scrollable pills */}
+              <div className="sm:hidden flex items-center gap-1.5 p-2.5 overflow-x-auto border-b border-[#e5e7eb] bg-[#faf8f5] scrollbar-none touch-pan-x">
+                {DATE_RANGE_OPTIONS.map((p) => {
+                  const isSelected = draftPreset === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => handlePresetClick(p)}
+                      className={`px-3 py-1.5 rounded-full text-xs shrink-0 whitespace-nowrap transition-colors cursor-pointer ${
+                        isSelected
+                          ? "bg-[#0c0a09] text-white font-medium shadow-2xs"
+                          : "bg-white text-stone-700 border border-stone-200 hover:bg-stone-50 font-normal"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Presets: Left Sidebar */}
+              <div className="hidden sm:flex w-36 border-r border-[#e5e7eb] py-2 flex-col bg-white shrink-0">
+                {DATE_RANGE_OPTIONS.map((p) => {
+                  const isSelected = draftPreset === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => handlePresetClick(p)}
+                      className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer whitespace-nowrap ${
+                        isSelected
+                          ? "bg-[#0085d4] text-white font-medium"
+                          : "text-stone-800 hover:bg-stone-100 font-normal"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Mobile: 1 centered month calendar with both < and > navigation */}
+              <div className="p-3 sm:hidden flex justify-center bg-white w-full">
+                {renderMonthCalendar(
+                  viewMonth.getFullYear(),
+                  viewMonth.getMonth(),
+                  true,
+                  true,
+                )}
+              </div>
+
+              {/* Desktop (sm and up): Dual side-by-side months */}
+              <div className="hidden sm:flex p-4 flex-row gap-6 bg-white shrink-0">
+                {renderMonthCalendar(
+                  viewMonth.getFullYear(),
+                  viewMonth.getMonth(),
+                  true,
+                  false,
+                )}
+                {renderMonthCalendar(
+                  nextViewMonth.getFullYear(),
+                  nextViewMonth.getMonth(),
+                  false,
+                  true,
+                )}
+              </div>
+            </div>
+
+            {/* Bottom Footer Bar */}
+            <div className="border-t border-[#e5e7eb] px-4 py-2.5 bg-white flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="text-xs font-medium text-stone-700 tracking-tight text-center sm:text-left">
+                {formattedDraftText}
+              </div>
+              <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="flex-1 sm:flex-initial px-4 py-1.5 text-xs font-semibold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-md transition-colors cursor-pointer text-center"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApply}
+                  className="flex-1 sm:flex-initial px-5 py-1.5 text-xs font-semibold text-white bg-[#0c0a09] hover:bg-[#262626] rounded-md transition-colors cursor-pointer text-center"
+                >
+                  Apply
+                </button>
+              </div>
             </div>
           </div>
         </div>
