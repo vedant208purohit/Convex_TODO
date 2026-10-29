@@ -186,6 +186,7 @@ export function KdsTerminalView({
             printerUrl: stationPrinter?.printerUrl,
             printerPort: stationPrinter?.printerPort,
             stationId: stationPrinter?.stationId,
+            silent: isAuto,
           }
         );
 

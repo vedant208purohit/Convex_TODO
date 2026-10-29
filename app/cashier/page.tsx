@@ -235,6 +235,11 @@ function CashierPosContent() {
     return feat ? feat.active : false;
   }, [orgFeatures]);
 
+  const skipPaymentOnCashierCard = useMemo(() => {
+    const feat = orgFeatures?.find((f) => f.featureKey === "skip_payment_on_cashier_card");
+    return feat ? feat.active : false;
+  }, [orgFeatures]);
+
   const isDineInActive = Boolean(activeOrg?.isDineIn);
   const isTakeAwayActive = Boolean(activeOrg?.isTakeAway ?? true);
   const isDeliveryActive = Boolean(activeOrg?.isDelivery);
@@ -483,6 +488,7 @@ function CashierPosContent() {
                   printerUrl: stationPrinter.printerUrl,
                   printerPort: stationPrinter.printerPort,
                   stationId: stationPrinter.stationId,
+                  silent: true,
                 }
               ).catch((e) => console.warn("Auto-print Captain KOT failed:", e));
             } catch (kotErr) {
@@ -531,6 +537,7 @@ function CashierPosContent() {
                     printerUrl: workstationPrinter.printerUrl,
                     printerPort: workstationPrinter.printerPort,
                     stationId: workstationPrinter.stationId,
+                    silent: true,
                   }
                 ).catch((e) => console.warn("Auto-print Captain Runner slip failed:", e));
               }, 800);
@@ -585,6 +592,7 @@ function CashierPosContent() {
                 printerUrl: stationPrinter.printerUrl,
                 printerPort: stationPrinter.printerPort,
                 stationId: stationPrinter.stationId,
+                silent: true,
               }
             ).catch((e) => console.warn("Auto-print Add-on KOT failed:", e));
           } catch (kotErr) {
@@ -1501,8 +1509,11 @@ function CashierPosContent() {
               (!ci.customizations || ci.customizations.length === 0),
           );
           if (existingIndex > -1) {
-            const updatedItems = [...cart.items];
-            updatedItems[existingIndex].quantity += quantityToAdd;
+            const updatedItems = cart.items.map((ci, idx) =>
+              idx === existingIndex
+                ? { ...ci, quantity: ci.quantity + quantityToAdd }
+                : ci,
+            );
             return { ...cart, items: updatedItems };
           } else {
             const types =
@@ -1741,8 +1752,11 @@ function CashierPosContent() {
         );
 
         if (existingIndex > -1) {
-          const updatedItems = [...cart.items];
-          updatedItems[existingIndex].quantity += customizationQty;
+          const updatedItems = cart.items.map((ci, idx) =>
+            idx === existingIndex
+              ? { ...ci, quantity: ci.quantity + customizationQty }
+              : ci,
+          );
           return { ...cart, items: updatedItems };
         } else {
           return { ...cart, items: [...cart.items, newItem] };
@@ -2105,70 +2119,74 @@ function CashierPosContent() {
   // ORDER SUBMISSION & PAYMENT FLOW
   // ==========================================
 
-  const handleCompleteOrder = useCallback(async () => {
-    if (!activeOrg) return;
-    if (activeCart.items.length === 0) {
-      showToast("Cannot place order with an empty cart");
-      return;
-    }
+  const handleCompleteOrder = useCallback(
+    async (isPostpaid?: boolean | React.MouseEvent) => {
+      const isPostpaidOrder = isPostpaid === true;
+      if (!activeOrg) return;
+      if (activeCart.items.length === 0) {
+        showToast("Cannot place order with an empty cart");
+        return;
+      }
 
-    const lowerMode = selectedPaymentMode.toLowerCase();
-    if (lowerMode.includes("cash")) {
-      const cashStr =
-        tenderCashGiven.trim() || (totalPayablePaise / 100).toFixed(2);
-      const given = parseFloat(cashStr);
-      const required = totalPayablePaise / 100;
-      if (isNaN(given) || given <= 0) {
-        showToast("Please enter a valid cash tendered amount.");
-        return;
+      const lowerMode = selectedPaymentMode.toLowerCase();
+      if (!isPostpaidOrder) {
+        if (lowerMode.includes("cash")) {
+          const cashStr =
+            tenderCashGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+          const given = parseFloat(cashStr);
+          const required = totalPayablePaise / 100;
+          if (isNaN(given) || given <= 0) {
+            showToast("Please enter a valid cash tendered amount.");
+            return;
+          }
+          if (Math.round(given * 100) < totalPayablePaise) {
+            showToast(
+              `Insufficient cash tendered (${taxCalculation.currencySymbol}${given.toFixed(2)}). Total payable is ${taxCalculation.currencySymbol}${required.toFixed(2)}.`,
+            );
+            return;
+          }
+        } else if (lowerMode.includes("card")) {
+          const cardStr =
+            tenderCardGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+          const given = parseFloat(cardStr);
+          if (isNaN(given) || given <= 0) {
+            showToast("Please enter a valid card charge amount.");
+            return;
+          }
+        } else if (lowerMode.includes("upi") || lowerMode.includes("qr")) {
+          const upiStr =
+            tenderUpiGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+          const given = parseFloat(upiStr);
+          if (isNaN(given) || given <= 0) {
+            showToast("Please enter a valid UPI amount.");
+            return;
+          }
+        } else if (lowerMode.includes("split")) {
+          const p1 = parseFloat(splitPart1Amount.trim() || "0");
+          const p2 = parseFloat(splitPart2Amount.trim() || "0");
+          if (isNaN(p1) || p1 <= 0 || isNaN(p2) || p2 <= 0) {
+            showToast("Both split payment amounts must be greater than zero.");
+            return;
+          }
+          const totalSplitPaise = Math.round((p1 + p2) * 100);
+          if (totalSplitPaise !== totalPayablePaise) {
+            showToast(
+              `Split amounts total (${taxCalculation.currencySymbol}${(totalSplitPaise / 100).toFixed(2)}) must equal payable total (${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}).`,
+            );
+            return;
+          }
+        } else {
+          const customStr =
+            customTenderGiven.trim() || (totalPayablePaise / 100).toFixed(2);
+          const given = parseFloat(customStr);
+          if (isNaN(given) || given <= 0) {
+            showToast(`Please enter a valid amount for ${selectedPaymentMode}.`);
+            return;
+          }
+        }
       }
-      if (Math.round(given * 100) < totalPayablePaise) {
-        showToast(
-          `Insufficient cash tendered (${taxCalculation.currencySymbol}${given.toFixed(2)}). Total payable is ${taxCalculation.currencySymbol}${required.toFixed(2)}.`,
-        );
-        return;
-      }
-    } else if (lowerMode.includes("card")) {
-      const cardStr =
-        tenderCardGiven.trim() || (totalPayablePaise / 100).toFixed(2);
-      const given = parseFloat(cardStr);
-      if (isNaN(given) || given <= 0) {
-        showToast("Please enter a valid card charge amount.");
-        return;
-      }
-    } else if (lowerMode.includes("upi") || lowerMode.includes("qr")) {
-      const upiStr =
-        tenderUpiGiven.trim() || (totalPayablePaise / 100).toFixed(2);
-      const given = parseFloat(upiStr);
-      if (isNaN(given) || given <= 0) {
-        showToast("Please enter a valid UPI amount.");
-        return;
-      }
-    } else if (lowerMode.includes("split")) {
-      const p1 = parseFloat(splitPart1Amount.trim() || "0");
-      const p2 = parseFloat(splitPart2Amount.trim() || "0");
-      if (isNaN(p1) || p1 <= 0 || isNaN(p2) || p2 <= 0) {
-        showToast("Both split payment amounts must be greater than zero.");
-        return;
-      }
-      const totalSplitPaise = Math.round((p1 + p2) * 100);
-      if (totalSplitPaise !== totalPayablePaise) {
-        showToast(
-          `Split amounts total (${taxCalculation.currencySymbol}${(totalSplitPaise / 100).toFixed(2)}) must equal payable total (${taxCalculation.currencySymbol}${(totalPayablePaise / 100).toFixed(2)}).`,
-        );
-        return;
-      }
-    } else {
-      const customStr =
-        customTenderGiven.trim() || (totalPayablePaise / 100).toFixed(2);
-      const given = parseFloat(customStr);
-      if (isNaN(given) || given <= 0) {
-        showToast(`Please enter a valid amount for ${selectedPaymentMode}.`);
-        return;
-      }
-    }
 
-    try {
+      try {
       setIsProcessingOrder(true);
 
       const itemsPayload = activeCart.items.map((ci) => ({
@@ -2216,6 +2234,7 @@ function CashierPosContent() {
       }
 
       if (
+        !isPostpaidOrder &&
         customTenderRef.trim() &&
         !lowerMode.includes("cash") &&
         !lowerMode.includes("card") &&
@@ -2297,7 +2316,8 @@ function CashierPosContent() {
             : undefined,
         specialNotes: resolvedNotes || undefined,
         orderSource: "Prest-Cashier",
-        paymentMode: selectedPaymentMode,
+        paymentMode: isPostpaidOrder ? "Pending" : selectedPaymentMode,
+        paymentStatus: isPostpaidOrder ? ("Pending" as const) : ("Paid" as const),
         items: itemsPayload,
       });
 
@@ -2339,8 +2359,8 @@ function CashierPosContent() {
         customerName: resolvedCustomerName,
         customerPhone: resolvedCustomerPhone,
         customerEmail: activeCart.customerEmail || undefined,
-        paymentMode: selectedPaymentMode,
-        paymentStatus: "Paid",
+        paymentMode: isPostpaidOrder ? "Pending" : selectedPaymentMode,
+        paymentStatus: isPostpaidOrder ? "Pending" : "Paid",
         tableName: tableObj?.tableNumber,
         table: tableObj ? { number: tableObj.tableNumber } : undefined,
         subTotal: cartSubtotalPaise,
@@ -2422,6 +2442,7 @@ function CashierPosContent() {
               printerUrl: stationPrinter.printerUrl,
               printerPort: stationPrinter.printerPort,
               stationId: stationPrinter.stationId,
+              silent: true,
             }
           ).catch((e) => console.warn("Auto-print KOT failed:", e));
         } catch (printKotErr) {
@@ -2474,6 +2495,7 @@ function CashierPosContent() {
                 printerUrl: workstationPrinter.printerUrl,
                 printerPort: workstationPrinter.printerPort,
                 stationId: workstationPrinter.stationId,
+                silent: true,
               },
             ).catch((e) => console.warn("Auto-print Workstation slip failed:", e));
           }, 800);
@@ -2494,7 +2516,11 @@ function CashierPosContent() {
       setSplitPart1Amount("");
       setSplitPart2Amount("");
       goToStep(1);
-      showToast(`Order ${res.orderNumber} created successfully!`);
+      showToast(
+        isPostpaidOrder
+          ? `Order ${res.orderNumber} placed (Pay Later)!`
+          : `Order ${res.orderNumber} created successfully!`
+      );
     } catch (err: any) {
       const msg = err.data || err.message;
       const cleanMsg = typeof msg === "string" ? msg.replace(/^[\s\S]*(?:Server Error|Uncaught Error:)\s*/, "").trim() : "Failed to create order";
@@ -2525,6 +2551,10 @@ function CashierPosContent() {
     taxCalculation,
     orgFeatures,
     printers,
+    skipPhoneNumberRequired,
+    showTableOnCashierCard,
+    showWaiterOnCashierCard,
+    showMemberNumberOnCashierCard,
     goToStep,
     handleClearCart,
   ]);
@@ -2542,13 +2572,38 @@ function CashierPosContent() {
         showToast("Please add items to cart before proceeding");
       }
     } else if (currentStep === 2) {
-      goToStep(3);
+      const digits = (activeCart?.customerPhone || "").replace(/\D/g, "");
+      if (!skipPhoneNumberRequired && !digits) {
+        showToast("Please enter customer phone number");
+        return;
+      }
+      if (digits) {
+        const isIndia = isIndiaCountry(activeCart?.customerCountryCode || defaultOrgCountryCode);
+        if (isIndia && digits.length !== 10) {
+          showToast("Please enter a valid 10-digit mobile number");
+          return;
+        }
+        if (!isIndia && (digits.length < 7 || digits.length > 15)) {
+          showToast("Please enter a valid mobile number (7-15 digits)");
+          return;
+        }
+      }
+      if (skipPaymentOnCashierCard) {
+        handleCompleteOrder(true);
+      } else {
+        goToStep(3);
+      }
     } else if (currentStep === 3) {
       handleCompleteOrder();
     }
   }, [
     currentStep,
     activeCart.items.length,
+    activeCart.customerPhone,
+    activeCart.customerCountryCode,
+    defaultOrgCountryCode,
+    skipPhoneNumberRequired,
+    skipPaymentOnCashierCard,
     completedOrderData,
     handleCompleteOrder,
     handleResetToNewOrder,
@@ -2729,43 +2784,51 @@ function CashierPosContent() {
             ) : (
               <span className="w-1.5 h-1.5 rounded-full border border-stone-400" />
             )}
-            <span>02 Order Details</span>
+            <span>
+              {skipPaymentOnCashierCard
+                ? "02 Order & Fire (Pay Later)"
+                : "02 Order Details"}
+            </span>
           </button>
 
-          <svg
-            className="w-3 h-3 text-stone-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              d="M9 5l7 7-7 7"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-            />
-          </svg>
+          {(!skipPaymentOnCashierCard || currentStep === 3) && (
+            <>
+              <svg
+                className="w-3 h-3 text-stone-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M9 5l7 7-7 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                />
+              </svg>
 
-          {/* Step 3 */}
-          <button
-            type="button"
-            onClick={() => {
-              if (activeCart.items.length > 0) goToStep(3);
-              else showToast("Add items to cart first");
-            }}
-            className={`flex items-center space-x-1.5 px-3.5 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
-              currentStep === 3
-                ? "bg-stone-950 text-white shadow-sm"
-                : "text-stone-400 hover:text-stone-600"
-            }`}
-          >
-            {currentStep === 3 ? (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            ) : (
-              <span className="w-1.5 h-1.5 rounded-full border border-stone-400" />
-            )}
-            <span>03 Payment</span>
-          </button>
+              {/* Step 3 */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (activeCart.items.length > 0) goToStep(3);
+                  else showToast("Add items to cart first");
+                }}
+                className={`flex items-center space-x-1.5 px-3.5 py-1 rounded-full text-xs font-medium transition cursor-pointer ${
+                  currentStep === 3
+                    ? "bg-stone-950 text-white shadow-sm"
+                    : "text-stone-400 hover:text-stone-600"
+                }`}
+              >
+                {currentStep === 3 ? (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                ) : (
+                  <span className="w-1.5 h-1.5 rounded-full border border-stone-400" />
+                )}
+                <span>03 Payment</span>
+              </button>
+            </>
+          )}
         </nav>
 
         {/* Right: Cashier / Terminal Info */}
@@ -3531,7 +3594,16 @@ function CashierPosContent() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleCatalogItemClick(entry, 1)}
+                            onClick={() => {
+                              if (currentCartQty > 0) {
+                                handleUpdateItemQuantity(
+                                  it._id || it.id,
+                                  currentCartQty + 1,
+                                );
+                              } else {
+                                handleCatalogItemClick(entry, 1);
+                              }
+                            }}
                             className="w-6 h-6 flex items-center justify-center text-sm font-medium text-[#141010] hover:bg-neutral-100 rounded-r border-l border-[#141010]/30 cursor-pointer"
                           >
                             +
@@ -5259,7 +5331,7 @@ function CashierPosContent() {
               <div className="flex items-center space-x-6">
                 <div className="text-right">
                   <span className="block text-[10px] font-bold uppercase tracking-wider text-stone-400">
-                    Total to Collect
+                    {skipPaymentOnCashierCard ? "Order Total" : "Total to Collect"}
                   </span>
                   <span className="font-serif text-2xl font-bold text-stone-950 tracking-tight leading-tight">
                     {taxCalculation.currencySymbol}
@@ -5267,7 +5339,36 @@ function CashierPosContent() {
                   </span>
                 </div>
 
+                {skipPaymentOnCashierCard && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const digits = (activeCart?.customerPhone || "").replace(/\D/g, "");
+                      if (!skipPhoneNumberRequired && !digits) {
+                        showToast("Please enter customer phone number");
+                        return;
+                      }
+                      if (digits) {
+                        const isIndia = isIndiaCountry(activeCart?.customerCountryCode || defaultOrgCountryCode);
+                        if (isIndia && digits.length !== 10) {
+                          showToast("Please enter a valid 10-digit mobile number");
+                          return;
+                        }
+                        if (!isIndia && (digits.length < 7 || digits.length > 15)) {
+                          showToast("Please enter a valid mobile number (7-15 digits)");
+                          return;
+                        }
+                      }
+                      goToStep(3);
+                    }}
+                    className="text-xs font-semibold text-stone-500 hover:text-stone-900 underline underline-offset-4 transition cursor-pointer"
+                  >
+                    Collect payment now →
+                  </button>
+                )}
+
                 <button
+                  disabled={isProcessingOrder}
                   onClick={() => {
                     const digits = (activeCart?.customerPhone || "").replace(/\D/g, "");
                     if (!skipPhoneNumberRequired && !digits) {
@@ -5285,12 +5386,22 @@ function CashierPosContent() {
                         return;
                       }
                     }
-                    goToStep(3);
+                    if (skipPaymentOnCashierCard) {
+                      handleCompleteOrder(true);
+                    } else {
+                      goToStep(3);
+                    }
                   }}
-                  className="inline-flex items-center px-7 py-3 rounded-full bg-stone-950 text-white text-xs font-semibold hover:bg-stone-850 transition shadow-md group cursor-pointer"
+                  className="inline-flex items-center px-7 py-3 rounded-full bg-stone-950 text-white text-xs font-semibold hover:bg-stone-850 transition shadow-md group cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   type="button"
                 >
-                  <span>Continue to Payment</span>
+                  <span>
+                    {isProcessingOrder
+                      ? "Placing Order..."
+                      : skipPaymentOnCashierCard
+                        ? "Place Order (Pay Later)"
+                        : "Continue to Payment"}
+                  </span>
                   <span className="ml-2 text-[10px] bg-white/20 text-white px-1.5 py-0.5 rounded font-mono font-medium">
                     F5
                   </span>
@@ -5301,7 +5412,11 @@ function CashierPosContent() {
                     viewBox="0 0 24 24"
                   >
                     <path
-                      d="M14 5l7 7m0 0l-7 7m7-7H3"
+                      d={
+                        skipPaymentOnCashierCard
+                          ? "M5 13l4 4L19 7"
+                          : "M14 5l7 7m0 0l-7 7m7-7H3"
+                      }
                       strokeLinecap="round"
                       strokeLinejoin="round"
                       strokeWidth="2"
@@ -6577,7 +6692,7 @@ function CashierPosContent() {
                         isNaN(parseFloat(customTenderGiven)) ||
                         parseFloat(customTenderGiven) <= 0))
                   }
-                  onClick={handleCompleteOrder}
+                  onClick={() => handleCompleteOrder()}
                   className={`inline-flex items-center justify-center space-x-2.5 px-7 py-3 rounded-full text-white text-sm font-semibold shadow-md transition transform active:scale-98 ${
                     isProcessingOrder ||
                     (selectedPaymentMode.toLowerCase().includes("cash") &&
@@ -6659,13 +6774,21 @@ function CashierPosContent() {
       {completedOrderData && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-6 text-center animate-scaleUp font-sans">
-            <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
-              ✓
+            <div
+              className={`w-14 h-14 ${
+                completedOrderData.paymentStatus === "Pending"
+                  ? "bg-amber-100 text-amber-700"
+                  : "bg-emerald-100 text-emerald-600"
+              } rounded-full flex items-center justify-center mx-auto text-2xl font-bold`}
+            >
+              {completedOrderData.paymentStatus === "Pending" ? "⏳" : "✓"}
             </div>
 
             <div>
               <h3 className="text-xl font-bold font-serif text-[#141010]">
-                Order Settled &amp; Confirmed!
+                {completedOrderData.paymentStatus === "Pending"
+                  ? "Order Placed (Post-Paid)!"
+                  : "Order Settled & Confirmed!"}
               </h3>
               <p className="text-xs text-[#7a716b] mt-1">
                 {completedOrderData.orderNumber} • Token{" "}
@@ -6675,7 +6798,11 @@ function CashierPosContent() {
 
             <div className="p-4 bg-[#fdf8f7] rounded-xl border border-[#e7e5e4] text-left text-xs space-y-2">
               <div className="flex justify-between">
-                <span className="text-[#7a716b]">Total Paid:</span>
+                <span className="text-[#7a716b]">
+                  {completedOrderData.paymentStatus === "Pending"
+                    ? "Amount Payable:"
+                    : "Total Paid:"}
+                </span>
                 <span className="font-bold text-[#141010]">
                   {taxCalculation.currencySymbol}
                   {formatCurrencyAmount(
@@ -6687,10 +6814,16 @@ function CashierPosContent() {
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#7a716b]">Payment Mode:</span>
-                <span className="font-semibold text-[#141010]">
-                  {completedOrderData.paymentMode}
-                </span>
+                <span className="text-[#7a716b]">Payment Status:</span>
+                {completedOrderData.paymentStatus === "Pending" ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                    Pending (Pay Later)
+                  </span>
+                ) : (
+                  <span className="font-semibold text-[#141010]">
+                    {completedOrderData.paymentMode}
+                  </span>
+                )}
               </div>
               <div className="flex justify-between">
                 <span className="text-[#7a716b]">Invoice / Token:</span>
