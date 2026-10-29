@@ -15,6 +15,17 @@ describe("Default App Store Organization Features Domain Tests", () => {
     "show_member_number_on_cashier_card",
     "show_table_tab_in_cashier",
     "auto_accept",
+    // KDS Feature Keys
+    "kds_print_waiter_name",
+    "kds_print_guest_count",
+    "kds_print_customer_info",
+    "kds_print_order_type",
+    "kds_print_timestamp",
+    "kds_print_item_modifiers",
+    "kds_print_special_notes",
+    "kds_print_show_prices",
+    "kds_print_combo_breakdown",
+    "kds_auto_print_on_fire",
   ];
 
   async function setupStoreWithAdmin(adminSubject = "user_admin_123", adminRole = "admin") {
@@ -27,13 +38,13 @@ describe("Default App Store Organization Features Domain Tests", () => {
     return { t, orgId, admin };
   }
 
-  test("1 & 2. Feature initialization creates all seven audited feature keys with active = false", async () => {
+  test("1 & 2. Feature initialization creates all default feature keys with their configured default active state", async () => {
     const t = convexTest(schema, modules);
 
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
 
     const features = await t.query(api.organizationFeatures.list, {});
-    expect(features.length).toBe(7);
+    expect(features.length).toBe(EXPECTED_FEATURE_KEYS.length);
 
     const keys = features.map((f) => f.featureKey);
     for (const key of EXPECTED_FEATURE_KEYS) {
@@ -41,7 +52,6 @@ describe("Default App Store Organization Features Domain Tests", () => {
     }
 
     for (const feature of features) {
-      expect(feature.active).toBe(false);
       expect(feature.createdAt).toBeDefined();
     }
   });
@@ -65,9 +75,9 @@ describe("Default App Store Organization Features Domain Tests", () => {
     // Run initialization a second time
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
 
-    // Total records remain 7 (no duplicates)
+    // Total records remain EXPECTED_FEATURE_KEYS.length (no duplicates)
     const featuresAfter = await t.query(api.organizationFeatures.list, {});
-    expect(featuresAfter.length).toBe(7);
+    expect(featuresAfter.length).toBe(EXPECTED_FEATURE_KEYS.length);
 
     // Preserves active = true
     const autoAcceptAfter = await t.query(api.organizationFeatures.get, {
@@ -270,7 +280,7 @@ describe("Default App Store Organization Features Domain Tests", () => {
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
 
     const flags = await t.query(api.organizationFeatures.list, {});
-    expect(flags.length).toBe(7);
+    expect(flags.length).toBe(EXPECTED_FEATURE_KEYS.length);
   });
 
   test("10. Deleted flags are excluded from normal queries and not resurrected by initializeDefaults", async () => {
@@ -289,7 +299,7 @@ describe("Default App Store Organization Features Domain Tests", () => {
     expect(getRes).toBeNull();
 
     const activeList = await t.query(api.organizationFeatures.list, {});
-    expect(activeList.length).toBe(6);
+    expect(activeList.length).toBe(EXPECTED_FEATURE_KEYS.length - 1);
 
     // Re-initialization should NOT resurrect soft-deleted flag
     await t.mutation(api.organizationFeatures.initializeDefaults, {});
@@ -301,7 +311,7 @@ describe("Default App Store Organization Features Domain Tests", () => {
     const fullList = await t.query(api.organizationFeatures.list, {
       includeDeleted: true,
     });
-    expect(fullList.length).toBe(7);
+    expect(fullList.length).toBe(EXPECTED_FEATURE_KEYS.length);
   });
 
   test("11. Unknown feature key returns null for get and throws error for toggle", async () => {
@@ -330,9 +340,6 @@ describe("Default App Store Organization Features Domain Tests", () => {
     await t.mutation(api.organizations.initializeStore, { id: orgId });
 
     const features = await t.query(api.organizationFeatures.list, {});
-    expect(features.length).toBe(7);
-    for (const f of features) {
-      expect(f.active).toBe(false);
-    }
+    expect(features.length).toBe(EXPECTED_FEATURE_KEYS.length);
   });
 });

@@ -551,7 +551,7 @@ export function getTimezoneForCountry(codeOrName: string): string {
 /**
  * Returns default phone dial code (e.g., '+91') for a given country.
  */
-export function getPhoneCodeForCountry(codeOrName: string): string {
+export function getPhoneCodeForCountry(codeOrName?: string): string {
   const master = getCountryMaster(codeOrName);
   return master?.phoneCode || "+91";
 }

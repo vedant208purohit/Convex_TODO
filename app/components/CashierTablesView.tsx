@@ -2253,7 +2253,7 @@ export default function CashierTablesView(props?: any) {
                         ))
                       ) : (
                         <div className="flex items-center justify-between text-stone-600 text-[11px]">
-                          <span>Taxes & Charges (GST)</span>
+                          <span>Taxes & Charges</span>
                           <span className="font-mono text-stone-900 font-medium">
                             {currencySymbol}{formatCurrencyAmount(exclusiveTaxAmount, activeOrg?.country)}
                           </span>
@@ -2325,7 +2325,7 @@ export default function CashierTablesView(props?: any) {
                         ))
                       ) : (
                         <div className="flex items-center justify-between text-stone-600 text-[11px]">
-                          <span>Taxes & Charges (GST)</span>
+                          <span>Taxes & Charges</span>
                           <span className="font-mono text-stone-900 font-medium">
                             {currencySymbol}{formatCurrencyAmount(exclusiveTaxAmount, activeOrg?.country)}
                           </span>

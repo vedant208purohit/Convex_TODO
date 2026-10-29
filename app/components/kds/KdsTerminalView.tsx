@@ -5,6 +5,11 @@ import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
+import {
+  generateDefxKotPlainString,
+  printThermalReceiptDocument,
+  KotOrder,
+} from "../../utils/defxReceiptFormatter";
 
 interface KdsTerminalViewProps {
   stationId: Id<"stations">;
@@ -35,6 +40,10 @@ export function KdsTerminalView({
     published: true,
   });
 
+  // Active Store Feature Flags & Hardware Printers
+  const orgFeatures = useQuery(api.organizationFeatures.list, {});
+  const orgPrinters = useQuery(api.organizationPrinters.list, {});
+
   // 2. Mutations
   const startPreparingMutation = useMutation(api.stations.startPreparingStationTicket);
   const toggleItemReadyMutation = useMutation(api.stations.toggleStationOrderItemReady);
@@ -53,6 +62,7 @@ export function KdsTerminalView({
   // Audio Context reference for chime
   const audioCtxRef = useRef<AudioContext | null>(null);
   const seenOrderIdsRef = useRef<Set<string>>(new Set());
+  const printedOrderIdsRef = useRef<Set<string>>(new Set());
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // 4. Live Clock & Elapsed Timer Tick (1-second interval)
@@ -107,34 +117,115 @@ export function KdsTerminalView({
     }
   }, [audioEnabled]);
 
-  // Trigger chime when a new ticket enters the station
-  useEffect(() => {
-    if (!stationOrdersData?.orders) return;
-
-    const currentOrderIds = new Set(stationOrdersData.orders.map((t) => t.order._id));
-    if (seenOrderIdsRef.current.size > 0) {
-      let hasNewOrder = false;
-      for (const id of currentOrderIds) {
-        if (!seenOrderIdsRef.current.has(id)) {
-          hasNewOrder = true;
-          break;
-        }
-      }
-      if (hasNewOrder) {
-        playChime();
-      }
-    }
-    seenOrderIdsRef.current = currentOrderIds;
-  }, [stationOrdersData?.orders, playChime]);
-
   // Toast helper
-  const showToast = (message: string, icon = "check_circle") => {
+  const showToast = useCallback((message: string, icon = "check_circle") => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ message, icon });
     toastTimeoutRef.current = setTimeout(() => {
       setToast(null);
     }, 2800);
-  };
+  }, []);
+
+  // Print KOT thermal ticket handler
+  const handlePrintKot = useCallback(
+    async (ticket: any, isAuto = false) => {
+      if (!ticket?.order) return;
+      const orderId = String(ticket.order._id || ticket.order.orderId || "");
+      if (isAuto && orderId && printedOrderIdsRef.current.has(orderId)) {
+        return; // Prevent duplicate printing of the same order
+      }
+      if (orderId) {
+        printedOrderIdsRef.current.add(orderId);
+      }
+      try {
+        const getFlag = (k: string) =>
+          orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;
+
+        const stationPrinter =
+          orgPrinters?.find(
+            (p) =>
+              p.printerUseFor === "Station" &&
+              (p.stationId === stationId || p.stationId === station?.name)
+          ) || orgPrinters?.find((p) => p.printerUseFor === "Station");
+
+        const kotOrder: KotOrder = {
+          orderNumber:
+            ticket.order.orderNumber ||
+            String(ticket.order._id).slice(-4).toUpperCase(),
+          tokenNumber: ticket.order.tokenNumber,
+          orderType: ticket.order.orderType || "Dine-In",
+          table: ticket.order.tableNumber
+            ? { number: ticket.order.tableNumber }
+            : null,
+          serverName: ticket.order.serverName || ticket.order.waiterName,
+          waiterName: ticket.order.waiterName || ticket.order.serverName,
+          guestCount: ticket.order.membersOnTable,
+          customerName: ticket.order.customerName,
+          customerPhone: ticket.order.customerPhone,
+          stationName: station?.name || "Kitchen",
+          createdAt: ticket.order.createdAt,
+          firedAt: Date.now(),
+          specialNotes: ticket.order.specialNotes,
+          items: (ticket.orderItems || []).map((it: any) => ({
+            itemName: it.itemName,
+            quantity: it.quantity,
+            itemPrice: it.itemPrice,
+            customizations: it.customizations?.map((c: any) => ({
+              optionName: c.optionName,
+            })),
+            notes: it.notes,
+          })),
+        };
+
+        const kotStr = generateDefxKotPlainString(kotOrder, getFlag, 48);
+        await printThermalReceiptDocument(
+          kotStr,
+          `KOT - Token #${ticket.order.tokenNumber || ""}`,
+          {
+            printerType: stationPrinter?.printerType,
+            printerUrl: stationPrinter?.printerUrl,
+            printerPort: stationPrinter?.printerPort,
+            stationId: stationPrinter?.stationId,
+          }
+        );
+
+        showToast(
+          isAuto
+            ? `Auto-Printed KOT (Token #${ticket.order.tokenNumber || ""})`
+            : `KOT Printed (Token #${ticket.order.tokenNumber || ""})`,
+          "local_printshop"
+        );
+      } catch (err: any) {
+        console.error("Failed to print KOT:", err);
+        showToast("Print failed - check printer connection", "error");
+      }
+    },
+    [orgFeatures, orgPrinters, stationId, station?.name, showToast]
+  );
+
+  // Trigger chime and auto-print when a new ticket enters the station
+  useEffect(() => {
+    if (!stationOrdersData?.orders) return;
+
+    const currentOrderIds = new Set(stationOrdersData.orders.map((t) => t.order._id));
+    if (seenOrderIdsRef.current.size > 0) {
+      const newTickets = stationOrdersData.orders.filter(
+        (t) => !seenOrderIdsRef.current.has(t.order._id)
+      );
+      if (newTickets.length > 0) {
+        playChime();
+
+        // Check if kds_auto_print_on_fire is active
+        const autoPrintFlag = orgFeatures?.find((f) => f.featureKey === "kds_auto_print_on_fire")?.active;
+        if (autoPrintFlag) {
+          for (const newTicket of newTickets) {
+            handlePrintKot(newTicket, true);
+          }
+        }
+      }
+    }
+    seenOrderIdsRef.current = currentOrderIds;
+  }, [stationOrdersData?.orders, playChime, orgFeatures, handlePrintKot]);
 
   // Toggle audio
   const handleToggleAudio = () => {
@@ -420,6 +511,8 @@ export function KdsTerminalView({
       setActionInProgressId(null);
     }
   };
+
+
 
   // Elapsed timer formatting & threshold classes
   const getElapsedDisplay = (createdAt: number) => {
@@ -839,16 +932,18 @@ export function KdsTerminalView({
                                 </div>
                               </div>
 
-                              {/* Timer / Ready Badge */}
+                              {/* Timer / Ready Badge & Print KOT */}
                               <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                <div
-                                  className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-xs font-bold shrink-0 ${elapsed.colorClass}`}
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <polyline points="12 6 12 12 16 14" />
-                                  </svg>
-                                  <span>{elapsed.timeStr}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <div
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border font-mono text-xs font-bold shrink-0 ${elapsed.colorClass}`}
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <polyline points="12 6 12 12 16 14" />
+                                    </svg>
+                                    <span>{elapsed.timeStr}</span>
+                                  </div>
                                 </div>
 
                                 {isReadyColumn && (
