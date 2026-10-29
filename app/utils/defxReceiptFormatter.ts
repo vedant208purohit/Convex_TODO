@@ -457,7 +457,12 @@ export function generateDefxReceiptPlainString(
   // 6. PAYMENT DETAILS & FOOTER
   // ==========================================
   lines.push(center("PAYMENT DETAILS", width));
-  const pMode = (order.paymentMode || "CASH").toUpperCase();
+  const isPending =
+    order.paymentStatus === "Pending" ||
+    order.paymentMode?.toLowerCase() === "pending";
+  const pMode = isPending
+    ? "PENDING (POST-PAID)"
+    : (order.paymentMode || "CASH").toUpperCase();
   lines.push(
     twoColRow(`Payment Mode: ${pMode}`, `${curr} ${grandTotal}`, width),
   );

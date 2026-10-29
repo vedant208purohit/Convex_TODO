@@ -391,7 +391,14 @@ export function openReceiptPdfInNewTab({ order, org }: OrderReceiptData) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(12, 10, 9);
-  doc.text("Total Paid:", summaryBoxX, summaryY);
+  const isPostpaidPending =
+    order?.paymentStatus === "Pending" ||
+    order?.paymentMode?.toLowerCase() === "pending";
+  doc.text(
+    isPostpaidPending ? "Amount Payable:" : "Total Paid:",
+    summaryBoxX,
+    summaryY,
+  );
   doc.text(`${currencySymbol} ${grandTotalNum.toFixed(2)}`, pageWidth - margin, summaryY, { align: "right" });
 
   summaryY += 2;
