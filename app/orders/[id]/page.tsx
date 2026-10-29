@@ -1782,19 +1782,31 @@ export default function OrderDetailsDynamicPage() {
                       );
                     })()}
 
-                    {/* Print Receipt */}
-                    <button
-                      type="button"
-                      onClick={handlePrintReceipt}
-                      title="Print Thermal Receipt"
+                    {/* Bill & Receipt Preview */}
+                    <Link
+                      href={`/orders/${order._id}/receipt`}
                       style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
                       className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                     >
                       <PrintIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                       <span className="!text-white text-white font-semibold text-xs truncate">
-                        Print Receipt
+                        Receipt Preview &amp; QR
                       </span>
-                    </button>
+                    </Link>
+
+                    {/* Customer Review Details */}
+                    <Link
+                      href={`/orders/${order._id}/review`}
+                      style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                      className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                    >
+                      <span className="material-symbols-outlined text-[18px] shrink-0 !text-white text-white">
+                        rate_review
+                      </span>
+                      <span className="!text-white text-white font-semibold text-xs truncate">
+                        Review Details &amp; Ratings
+                      </span>
+                    </Link>
 
                     {/* Download PDF */}
                     <button
@@ -1825,12 +1837,12 @@ export default function OrderDetailsDynamicPage() {
                       </span>
                     </button>
 
-                    {/* Order Timeline */}
+                    {/* Order Timeline (Spans full width for balanced grid) */}
                     <button
                       type="button"
                       onClick={() => setDrawerTab("timeline")}
                       style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                      className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                      className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                     >
                       <TimelineIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                       <span className="!text-white text-white font-semibold text-xs truncate">

@@ -557,9 +557,9 @@ export default function OrdersPage() {
 
   const currencySymbol =
     activeOrg?.defaultCurrencySymbol &&
-    activeOrg.defaultCurrencySymbol !== "Rs." &&
-    activeOrg.defaultCurrencySymbol !== "RS." &&
-    activeOrg.defaultCurrencySymbol !== "Rs"
+      activeOrg.defaultCurrencySymbol !== "Rs." &&
+      activeOrg.defaultCurrencySymbol !== "RS." &&
+      activeOrg.defaultCurrencySymbol !== "Rs"
       ? activeOrg.defaultCurrencySymbol
       : getCurrencyForCountry(countryCode).symbol || "₹";
   const currencyCode =
@@ -628,7 +628,7 @@ export default function OrdersPage() {
               if (isMounted) setPrinterStatus("connected");
               return;
             }
-          } catch {}
+          } catch { }
         }
         if (isMounted) setPrinterStatus("disconnected");
         return;
@@ -673,7 +673,7 @@ export default function OrdersPage() {
     try {
       const saved = sessionStorage.getItem("pos_orders_filters_v1");
       if (saved) return JSON.parse(saved);
-    } catch (e) {}
+    } catch (e) { }
     return null;
   }, []);
 
@@ -831,7 +831,7 @@ export default function OrdersPage() {
         "pos_orders_filters_v1",
         JSON.stringify(stateToSave),
       );
-    } catch (e) {}
+    } catch (e) { }
   }, [
     activeStage,
     searchQuery,
@@ -850,18 +850,18 @@ export default function OrdersPage() {
     api.orders.listOrders,
     activeOrg?._id
       ? {
-          organizationId: activeOrg._id,
-          startDate: getStartOfDay(appliedStartDate).getTime(),
-          endDate: getEndOfDay(appliedEndDate).getTime(),
-          stage: activeStage !== "All" ? activeStage : undefined,
-          search: searchQuery.trim() || undefined,
-          minPrice: priceFrom
-            ? Math.round(parseFloat(priceFrom) * 100)
-            : undefined,
-          maxPrice: priceTo ? Math.round(parseFloat(priceTo) * 100) : undefined,
-          page: currentPage,
-          pageSize,
-        }
+        organizationId: activeOrg._id,
+        startDate: getStartOfDay(appliedStartDate).getTime(),
+        endDate: getEndOfDay(appliedEndDate).getTime(),
+        stage: activeStage !== "All" ? activeStage : undefined,
+        search: searchQuery.trim() || undefined,
+        minPrice: priceFrom
+          ? Math.round(parseFloat(priceFrom) * 100)
+          : undefined,
+        maxPrice: priceTo ? Math.round(parseFloat(priceTo) * 100) : undefined,
+        page: currentPage,
+        pageSize,
+      }
       : "skip",
   );
 
@@ -996,9 +996,9 @@ export default function OrdersPage() {
     totalOrdersCount === 0
       ? 0
       : Math.min(
-          totalOrdersCount,
-          (currentPage - 1) * pageSize + displayedOrders.length,
-        );
+        totalOrdersCount,
+        (currentPage - 1) * pageSize + displayedOrders.length,
+      );
 
   const toggleSort = (field: "createdAt" | "totalAmount") => {
     if (sortField === field) {
@@ -1188,11 +1188,10 @@ export default function OrdersPage() {
                 key={idx}
                 type="button"
                 onClick={() => handleDateCellClick(cell.date)}
-                className={`w-7 h-7 flex items-center justify-center mx-auto text-xs cursor-pointer transition-colors ${bgClass} ${textClass} ${
-                  isToday && !isSelectedStart && !isSelectedEnd
+                className={`w-7 h-7 flex items-center justify-center mx-auto text-xs cursor-pointer transition-colors ${bgClass} ${textClass} ${isToday && !isSelectedStart && !isSelectedEnd
                     ? "border border-[#0c0a09] font-bold"
                     : ""
-                }`}
+                  }`}
               >
                 {cell.dayNum}
               </button>
@@ -1353,11 +1352,11 @@ export default function OrdersPage() {
       `Receipt ${order.orderNumber || ""}`,
       targetPrinter
         ? {
-            printerType: targetPrinter.printerType,
-            printerUrl: targetPrinter.printerUrl,
-            printerPort: targetPrinter.printerPort,
-            stationId: targetPrinter.stationId,
-          }
+          printerType: targetPrinter.printerType,
+          printerUrl: targetPrinter.printerUrl,
+          printerPort: targetPrinter.printerPort,
+          stationId: targetPrinter.stationId,
+        }
         : undefined,
     );
   };
@@ -1386,12 +1385,12 @@ export default function OrdersPage() {
     const currentProcessColor =
       currentProcess?.processColor ||
       (order?.orderStatusName === "Cancelled" ||
-      order?.orderStatusName === "Cancelled / Refunded" ||
-      order?.isRejected
+        order?.orderStatusName === "Cancelled / Refunded" ||
+        order?.isRejected
         ? "#e11d48"
         : order?.orderStatusName === "Completed" ||
-            order?.orderStatusName === "Delivered" ||
-            order?.isCompleted
+          order?.orderStatusName === "Delivered" ||
+          order?.isCompleted
           ? "#219653"
           : "#EA9C1B");
 
@@ -1515,27 +1514,27 @@ export default function OrdersPage() {
                         {(dbProcesses && dbProcesses.length > 0
                           ? dbProcesses
                           : [
-                              {
-                                _id: "p1" as any,
-                                name: "Accepted",
-                                processColor: "#262626",
-                              },
-                              {
-                                _id: "p2" as any,
-                                name: "In progress",
-                                processColor: "#EA9C1B",
-                              },
-                              {
-                                _id: "p3" as any,
-                                name: "Ready to deliver",
-                                processColor: "#FC8019",
-                              },
-                              {
-                                _id: "p4" as any,
-                                name: "Delivered",
-                                processColor: "#219653",
-                              },
-                            ]
+                            {
+                              _id: "p1" as any,
+                              name: "Accepted",
+                              processColor: "#262626",
+                            },
+                            {
+                              _id: "p2" as any,
+                              name: "In progress",
+                              processColor: "#EA9C1B",
+                            },
+                            {
+                              _id: "p3" as any,
+                              name: "Ready to deliver",
+                              processColor: "#FC8019",
+                            },
+                            {
+                              _id: "p4" as any,
+                              name: "Delivered",
+                              processColor: "#219653",
+                            },
+                          ]
                         ).map((proc) => {
                           const isCurrent =
                             (order?.orderStatusName || "")
@@ -1548,11 +1547,10 @@ export default function OrdersPage() {
                               onClick={() =>
                                 handleUpdateStatus(proc._id, proc.name)
                               }
-                              className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-left transition-colors cursor-pointer hover:bg-[#fdf8f7] ${
-                                isCurrent
+                              className={`w-full flex items-center justify-between px-3.5 py-2 text-xs font-medium text-left transition-colors cursor-pointer hover:bg-[#fdf8f7] ${isCurrent
                                   ? "bg-[#f1edec] font-semibold text-[#0c0a09]"
                                   : "text-[#44403c]"
-                              }`}
+                                }`}
                             >
                               <div className="flex items-center gap-2">
                                 <span
@@ -1675,27 +1673,27 @@ export default function OrdersPage() {
                 order?.orderType === "ScheduledDelivery" ||
                 order?.scheduledDeliveryDate ||
                 order?.scheduledDeliveryTime) && (
-                <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-3.5 px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                    <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  <div className="bg-amber-50 border border-amber-200/90 rounded-xl p-3.5 px-5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                        {order?.orderType === "ScheduledDelivery"
+                          ? "Scheduled Delivery Timing:"
+                          : "Scheduled Pickup Timing:"}
+                      </span>
+                      <span className="text-sm font-extrabold text-[#0c0a09] bg-white px-3 py-1 rounded-lg border border-amber-200 shadow-2xs">
+                        {order?.scheduledDeliveryDate || formattedOrderDate}
+                        {" • "}
+                        {order?.scheduledDeliveryTime || formattedOrderTime}
+                      </span>
+                    </div>
+                    <span className="text-xs font-semibold text-amber-800">
                       {order?.orderType === "ScheduledDelivery"
-                        ? "Scheduled Delivery Timing:"
-                        : "Scheduled Pickup Timing:"}
-                    </span>
-                    <span className="text-sm font-extrabold text-[#0c0a09] bg-white px-3 py-1 rounded-lg border border-amber-200 shadow-2xs">
-                      {order?.scheduledDeliveryDate || formattedOrderDate}
-                      {" • "}
-                      {order?.scheduledDeliveryTime || formattedOrderTime}
+                        ? "Requested Customer Delivery Slot"
+                        : "Requested Customer Pickup Slot"}
                     </span>
                   </div>
-                  <span className="text-xs font-semibold text-amber-800">
-                    {order?.orderType === "ScheduledDelivery"
-                      ? "Requested Customer Delivery Slot"
-                      : "Requested Customer Pickup Slot"}
-                  </span>
-                </div>
-              )}
+                )}
 
               {/* BEGIN: TwoColumnLayout */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -1839,22 +1837,22 @@ export default function OrdersPage() {
                                     item.prepPreferences.length > 0) ||
                                     (item.chefPrepPreferences &&
                                       item.chefPrepPreferences.length > 0)) && (
-                                    <span className="text-xs text-[#0c0a09] font-medium block mt-0.5">
-                                      Chef Prep:{" "}
-                                      {(
-                                        item.prepPreferences ||
-                                        item.chefPrepPreferences
-                                      )
-                                        .map((p: any) => p.name)
-                                        .join(", ")}
-                                    </span>
-                                  )}
+                                      <span className="text-xs text-[#0c0a09] font-medium block mt-0.5">
+                                        Chef Prep:{" "}
+                                        {(
+                                          item.prepPreferences ||
+                                          item.chefPrepPreferences
+                                        )
+                                          .map((p: any) => p.name)
+                                          .join(", ")}
+                                      </span>
+                                    )}
                                 </td>
                                 <td className="py-3.5 px-4 text-right text-xs font-medium text-[#7a716b] align-top">
                                   {currencySymbol}
                                   {formatCurrencyAmount(
                                     item.display_item_price ??
-                                      (item.itemPrice || 0) / 100,
+                                    (item.itemPrice || 0) / 100,
                                     activeOrg?.country,
                                   )}
                                 </td>
@@ -1867,7 +1865,7 @@ export default function OrdersPage() {
                                   {currencySymbol}
                                   {formatCurrencyAmount(
                                     item.display_total_price ??
-                                      (item.totalPrice || 0) / 100,
+                                    (item.totalPrice || 0) / 100,
                                     activeOrg?.country,
                                   )}
                                 </td>
@@ -1897,7 +1895,7 @@ export default function OrdersPage() {
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 order?.display_sub_total ??
-                                  (order?.subTotal || 0) / 100,
+                                (order?.subTotal || 0) / 100,
                                 activeOrg?.country,
                               )}
                             </span>
@@ -1970,19 +1968,19 @@ export default function OrdersPage() {
 
                           {parseFloat(order?.display_discount_amount || "0") >
                             0 && (
-                            <div className="flex justify-between items-center text-emerald-700">
-                              <span className="font-medium">
-                                Discount Applied
-                              </span>
-                              <span className="font-semibold">
-                                -{currencySymbol}
-                                {formatCurrencyAmount(
-                                  order?.display_discount_amount,
-                                  activeOrg?.country,
-                                )}
-                              </span>
-                            </div>
-                          )}
+                              <div className="flex justify-between items-center text-emerald-700">
+                                <span className="font-medium">
+                                  Discount Applied
+                                </span>
+                                <span className="font-semibold">
+                                  -{currencySymbol}
+                                  {formatCurrencyAmount(
+                                    order?.display_discount_amount,
+                                    activeOrg?.country,
+                                  )}
+                                </span>
+                              </div>
+                            )}
 
                           <div className="border-t border-[#e7e5e4] pt-2.5 mt-2.5 flex justify-between items-baseline">
                             <div className="flex flex-col">
@@ -1997,7 +1995,7 @@ export default function OrdersPage() {
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 order?.display_total_amount ??
-                                  (order?.totalAmount || 0) / 100,
+                                (order?.totalAmount || 0) / 100,
                                 activeOrg?.country,
                               )}
                             </span>
@@ -2089,13 +2087,12 @@ export default function OrdersPage() {
                                   </td>
                                   <td className="py-2.5">
                                     <span
-                                      className={`px-2 py-0.5 rounded text-xs font-semibold ${
-                                        p.paymentModeName === "UPI"
+                                      className={`px-2 py-0.5 rounded text-xs font-semibold ${p.paymentModeName === "UPI"
                                           ? "bg-indigo-50 text-indigo-700 border border-indigo-200"
                                           : p.paymentModeName === "Card"
                                             ? "bg-purple-50 text-purple-700 border border-purple-200"
                                             : "bg-gray-100 text-gray-800"
-                                      }`}
+                                        }`}
                                     >
                                       {p.paymentModeName || "Cash"}
                                     </span>
@@ -2153,7 +2150,7 @@ export default function OrdersPage() {
                           {currencySymbol}
                           {formatCurrencyAmount(
                             order?.display_sub_total ??
-                              (order?.subTotal || 0) / 100,
+                            (order?.subTotal || 0) / 100,
                             activeOrg?.country,
                           )}
                         </span>
@@ -2224,17 +2221,17 @@ export default function OrdersPage() {
                       })()}
                       {parseFloat(order?.display_discount_amount || "0") >
                         0 && (
-                        <div className="flex justify-between items-center text-emerald-700 text-xs">
-                          <span className="font-medium">Discount</span>
-                          <span className="font-semibold">
-                            -{currencySymbol}
-                            {formatCurrencyAmount(
-                              order?.display_discount_amount,
-                              activeOrg?.country,
-                            )}
-                          </span>
-                        </div>
-                      )}
+                          <div className="flex justify-between items-center text-emerald-700 text-xs">
+                            <span className="font-medium">Discount</span>
+                            <span className="font-semibold">
+                              -{currencySymbol}
+                              {formatCurrencyAmount(
+                                order?.display_discount_amount,
+                                activeOrg?.country,
+                              )}
+                            </span>
+                          </div>
+                        )}
                       <div className="border-t-2 border-[#0c0a09] pt-3 mt-4 flex justify-between items-baseline">
                         <div>
                           <span className="block text-xs uppercase tracking-widest font-semibold text-[#7a716b]">
@@ -2248,7 +2245,7 @@ export default function OrdersPage() {
                           {currencySymbol}
                           {formatCurrencyAmount(
                             order?.display_total_amount ??
-                              (order?.totalAmount || 0) / 100,
+                            (order?.totalAmount || 0) / 100,
                             activeOrg?.country,
                           )}
                         </span>
@@ -2275,12 +2272,12 @@ export default function OrdersPage() {
                           {currencySymbol}
                           {formatCurrencyAmount(
                             order?.display_refundable_amount ??
-                              Math.max(
-                                0,
-                                ((order?.totalCredit || 0) -
-                                  (order?.totalDebit || 0)) /
-                                  100,
-                              ),
+                            Math.max(
+                              0,
+                              ((order?.totalCredit || 0) -
+                                (order?.totalDebit || 0)) /
+                              100,
+                            ),
                             activeOrg?.country,
                           )}
                         </div>
@@ -2296,7 +2293,7 @@ export default function OrdersPage() {
                               0,
                               ((order?.totalCredit || 0) -
                                 (order?.totalDebit || 0)) /
-                                100,
+                              100,
                             ).toFixed(2);
                           setRefundAmountInput(remainingRefundable);
                           setDrawerTab("refund");
@@ -2352,11 +2349,10 @@ export default function OrdersPage() {
                               backgroundColor: hasPayment ? "#292524" : "#1c1917",
                               color: "#ffffff"
                             }}
-                            className={`flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs text-center ${
-                              hasPayment
+                            className={`flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] !text-white text-white text-xs font-semibold rounded-lg transition-colors shadow-xs text-center ${hasPayment
                                 ? "opacity-40 cursor-not-allowed select-none bg-[#292524]"
                                 : "bg-[#1c1917] hover:bg-black cursor-pointer hover:opacity-95"
-                            }`}
+                              }`}
                           >
                             <TrashIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                             <span className="!text-white text-white font-semibold text-xs truncate">
@@ -2366,17 +2362,41 @@ export default function OrdersPage() {
                         );
                       })()}
 
-                      {/* Print Thermal Receipt */}
+                      {/* Bill & Receipt Preview */}
                       <button
                         type="button"
-                        onClick={handlePrintReceipt}
-                        title="Print Thermal Receipt"
+                        onClick={() => {
+                          if (order) {
+                            router.push(`/orders/${order._id}/receipt`);
+                          }
+                        }}
+                        disabled={!order}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
                         className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
                         <PrintIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                         <span className="!text-white text-white font-semibold text-xs truncate">
-                          Print Receipt
+                          Receipt Preview &amp; QR
+                        </span>
+                      </button>
+
+                      {/* Customer Review Details */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (order) {
+                            router.push(`/orders/${order._id}/review`);
+                          }
+                        }}
+                        disabled={!order}
+                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                      >
+                        <span className="material-symbols-outlined text-[18px] shrink-0 !text-white text-white">
+                          rate_review
+                        </span>
+                        <span className="!text-white text-white font-semibold text-xs truncate">
+                          Review Details &amp; Ratings
                         </span>
                       </button>
 
@@ -2409,12 +2429,12 @@ export default function OrdersPage() {
                         </span>
                       </button>
 
-                      {/* Order Timeline */}
+                      {/* Order Timeline (Spans full width for balanced grid) */}
                       <button
                         type="button"
                         onClick={() => setDrawerTab("timeline")}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                        className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
                         <TimelineIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                         <span className="!text-white text-white font-semibold text-xs truncate">
@@ -2573,33 +2593,30 @@ export default function OrdersPage() {
                   <button
                     type="button"
                     onClick={() => setDrawerTab("pay")}
-                    className={`py-1.5 text-xs font-semibold rounded-md text-center transition-all cursor-pointer ${
-                      drawerTab === "pay"
+                    className={`py-1.5 text-xs font-semibold rounded-md text-center transition-all cursor-pointer ${drawerTab === "pay"
                         ? "bg-[#0c0a09] text-white shadow-xs"
                         : "text-[#7a716b] hover:text-black hover:bg-white/60"
-                    }`}
+                      }`}
                   >
                     Pay
                   </button>
                   <button
                     type="button"
                     onClick={() => setDrawerTab("timeline")}
-                    className={`py-1.5 text-xs font-semibold rounded-md text-center transition-all cursor-pointer ${
-                      drawerTab === "timeline"
+                    className={`py-1.5 text-xs font-semibold rounded-md text-center transition-all cursor-pointer ${drawerTab === "timeline"
                         ? "bg-[#0c0a09] text-white shadow-xs"
                         : "text-[#7a716b] hover:text-black hover:bg-white/60"
-                    }`}
+                      }`}
                   >
                     Timeline
                   </button>
                   <button
                     type="button"
                     onClick={() => setDrawerTab("refund")}
-                    className={`py-1.5 text-xs font-semibold rounded-md text-center transition-all cursor-pointer ${
-                      drawerTab === "refund"
+                    className={`py-1.5 text-xs font-semibold rounded-md text-center transition-all cursor-pointer ${drawerTab === "refund"
                         ? "bg-[#0c0a09] text-white shadow-xs"
                         : "text-[#7a716b] hover:text-black hover:bg-white/60"
-                    }`}
+                      }`}
                   >
                     Refund
                   </button>
@@ -2640,11 +2657,10 @@ export default function OrdersPage() {
                             key={mode}
                             type="button"
                             onClick={() => setPaymentTenderMode(mode)}
-                            className={`py-2 text-xs font-semibold rounded-lg border text-center transition-colors cursor-pointer ${
-                              paymentTenderMode === mode
+                            className={`py-2 text-xs font-semibold rounded-lg border text-center transition-colors cursor-pointer ${paymentTenderMode === mode
                                 ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-xs"
                                 : "bg-white text-[#141010] border-[#e7e5e4] hover:bg-[#f4eee8]"
-                            }`}
+                              }`}
                           >
                             {mode}
                           </button>
@@ -2855,21 +2871,19 @@ export default function OrdersPage() {
 
                                   {/* Middle: Status Circle Node */}
                                   <div
-                                    className={`w-5 h-5 rounded-full border-2 border-white shadow-xs flex-shrink-0 transition-colors ${
-                                      isCompleted
+                                    className={`w-5 h-5 rounded-full border-2 border-white shadow-xs flex-shrink-0 transition-colors ${isCompleted
                                         ? "bg-[#219653] ring-2 ring-[#219653]/30"
                                         : "bg-[#262626]"
-                                    }`}
+                                      }`}
                                   />
 
                                   {/* Right: Process Label */}
                                   <div className="w-1/2 pl-6">
                                     <span
-                                      className={`text-sm block tracking-tight ${
-                                        isCompleted
+                                      className={`text-sm block tracking-tight ${isCompleted
                                           ? "font-semibold text-[#141010]"
                                           : "font-medium text-[#262626]"
-                                      }`}
+                                        }`}
                                     >
                                       {step.name}
                                     </span>
@@ -2906,8 +2920,8 @@ export default function OrdersPage() {
                       <div className="flex flex-wrap gap-2">
                         {(paymentModesList && paymentModesList.length > 0
                           ? paymentModesList.filter(
-                              (m: any) => m.active !== false,
-                            )
+                            (m: any) => m.active !== false,
+                          )
                           : []
                         ).map((pm: any) => {
                           const isSelected =
@@ -2919,11 +2933,10 @@ export default function OrdersPage() {
                               key={pm._id || pm.name}
                               type="button"
                               onClick={() => setRefundPaymentMode(pm.name)}
-                              className={`px-4 py-2 text-xs font-semibold rounded-md border text-center transition-all cursor-pointer ${
-                                isSelected
+                              className={`px-4 py-2 text-xs font-semibold rounded-md border text-center transition-all cursor-pointer ${isSelected
                                   ? "bg-[#141010] text-white border-[#141010] shadow-xs"
                                   : "bg-white text-[#141010] border border-[#141010]/80 hover:bg-[#f4eee8]"
-                              }`}
+                                }`}
                             >
                               {pm.name}
                             </button>
@@ -2962,11 +2975,10 @@ export default function OrdersPage() {
                         type="button"
                         onClick={handleSettlePayment}
                         disabled={!isValidPay}
-                        className={`w-full py-3 bg-[#0c0a09] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
-                          !isValidPay
+                        className={`w-full py-3 bg-[#0c0a09] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${!isValidPay
                             ? "opacity-40 cursor-not-allowed pointer-events-none"
                             : "hover:bg-black cursor-pointer"
-                        }`}
+                          }`}
                       >
                         Record Payment ({currencySymbol}
                         {formatCurrencyAmount(settleAmt, activeOrg?.country)})
@@ -3008,11 +3020,10 @@ export default function OrdersPage() {
                         type="button"
                         onClick={handleIssueRefund}
                         disabled={!isRefundValid}
-                        className={`w-full py-3 bg-[#1f7d43] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${
-                          !isRefundValid
+                        className={`w-full py-3 bg-[#1f7d43] text-white text-sm font-semibold rounded-lg shadow-xs transition-all text-center ${!isRefundValid
                             ? "opacity-40 cursor-not-allowed pointer-events-none"
                             : "hover:bg-[#186636] cursor-pointer"
-                        }`}
+                          }`}
                       >
                         Confirm Refund ({currencySymbol}
                         {displayAmt})
@@ -3160,9 +3171,8 @@ export default function OrdersPage() {
                   {formattedDateRangeText}
                 </span>
                 <ChevronDownIcon
-                  className={`w-3.5 h-3.5 text-[#5e5e5e] ml-1 transition-transform duration-150 ${
-                    isDateDropdownOpen ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 text-[#5e5e5e] ml-1 transition-transform duration-150 ${isDateDropdownOpen ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -3182,11 +3192,10 @@ export default function OrdersPage() {
                             key={preset}
                             type="button"
                             onClick={() => handlePresetClick(preset)}
-                            className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${
-                              isSelected
+                            className={`w-full text-left px-4 py-2 text-xs transition-colors cursor-pointer ${isSelected
                                 ? "bg-[#0085d4] text-white font-medium"
                                 : "text-stone-800 hover:bg-stone-100 font-normal"
-                            }`}
+                              }`}
                           >
                             {preset}
                           </button>
@@ -3263,9 +3272,8 @@ export default function OrdersPage() {
                   </strong>
                 </span>
                 <ChevronDownIcon
-                  className={`w-3.5 h-3.5 text-[#5e5e5e] transition-transform duration-150 ${
-                    isStatusDropdownOpen ? "rotate-180" : ""
-                  }`}
+                  className={`w-3.5 h-3.5 text-[#5e5e5e] transition-transform duration-150 ${isStatusDropdownOpen ? "rotate-180" : ""
+                    }`}
                 />
               </button>
 
@@ -3281,11 +3289,10 @@ export default function OrdersPage() {
                           setActiveStage(stage.name);
                           setIsStatusDropdownOpen(false);
                         }}
-                        className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${
-                          isSelected
+                        className={`w-full text-left px-4 py-2.5 text-xs font-medium transition-colors flex items-center justify-between cursor-pointer ${isSelected
                             ? "bg-[#0c0a09] text-white font-semibold"
                             : "text-[#0c0a09] hover:bg-[#fdf8f7]"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-2">
                           {stage.name !== "All" && (
@@ -3375,19 +3382,17 @@ export default function OrdersPage() {
                   key={stage.id}
                   type="button"
                   onClick={() => setActiveStage("All")}
-                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold shadow-sm flex-shrink-0 cursor-pointer transition-all ${
-                    isActive
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg font-semibold shadow-sm flex-shrink-0 cursor-pointer transition-all ${isActive
                       ? "bg-[#0c0a09] text-white"
                       : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#fdf8f7]"
-                  }`}
+                    }`}
                 >
                   <span>All</span>
                   <span
-                    className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${
-                      isActive
+                    className={`px-1.5 py-0.5 rounded text-[11px] font-semibold ${isActive
                         ? "bg-white/20 text-white"
                         : "bg-[#f1edec] text-[#5e5e5e]"
-                    }`}
+                      }`}
                   >
                     {count}
                   </span>
@@ -3400,11 +3405,10 @@ export default function OrdersPage() {
                 key={stage.id}
                 type="button"
                 onClick={() => setActiveStage(stage.name)}
-                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition-colors flex-shrink-0 cursor-pointer ${
-                  isActive
+                className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg font-medium transition-colors flex-shrink-0 cursor-pointer ${isActive
                     ? "bg-[#fdf8f7] border border-[#0c0a09] text-[#0c0a09] shadow-xs font-semibold"
                     : "bg-white border border-[#e7e5e4] hover:bg-[#fdf8f7] text-[#5e5e5e]"
-                }`}
+                  }`}
               >
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
@@ -3519,9 +3523,9 @@ export default function OrdersPage() {
                               (p) =>
                                 p._id === order.orderStatusId ||
                                 p.name.trim().toLowerCase() ===
-                                  (order.orderStatusName || "")
-                                    .trim()
-                                    .toLowerCase(),
+                                (order.orderStatusName || "")
+                                  .trim()
+                                  .toLowerCase(),
                             );
                             const matchedStage = pipelineStages.find(
                               (st) =>
@@ -3532,22 +3536,21 @@ export default function OrdersPage() {
                               matchedProcess?.processColor ||
                               matchedStage?.color ||
                               (order.orderStatusName === "Cancelled" ||
-                              order.orderStatusName ===
+                                order.orderStatusName ===
                                 "Cancelled / Refunded" ||
-                              order.isRejected
+                                order.isRejected
                                 ? "#e11d48"
                                 : order.orderStatusName === "Completed" ||
-                                    order.isCompleted
+                                  order.isCompleted
                                   ? "#219653"
                                   : "#262626");
                             return (
                               <span className="inline-flex items-center gap-1.5 font-medium text-[#0c0a09]">
                                 <span
-                                  className={`w-2 h-2 rounded-full shrink-0 ${
-                                    order.orderStatusName === "In progress"
+                                  className={`w-2 h-2 rounded-full shrink-0 ${order.orderStatusName === "In progress"
                                       ? "animate-pulse"
                                       : ""
-                                  }`}
+                                    }`}
                                   style={{ backgroundColor: dotColor }}
                                 />
                                 {order.orderStatusName || "Accepted"}
@@ -3603,7 +3606,7 @@ export default function OrdersPage() {
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 order?.display_total_amount ??
-                                  (order?.totalAmount || 0) / 100,
+                                (order?.totalAmount || 0) / 100,
                                 activeOrg?.country,
                               )}{" "}
                               Refunded
@@ -3619,7 +3622,7 @@ export default function OrdersPage() {
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 order?.display_total_amount ??
-                                  (order?.totalAmount || 0) / 100,
+                                (order?.totalAmount || 0) / 100,
                                 activeOrg?.country,
                               )}{" "}
                               Paid
@@ -3630,7 +3633,7 @@ export default function OrdersPage() {
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 order?.display_total_amount ??
-                                  (order?.totalAmount || 0) / 100,
+                                (order?.totalAmount || 0) / 100,
                                 activeOrg?.country,
                               )}{" "}
                               Unpaid (COD)
@@ -3641,7 +3644,7 @@ export default function OrdersPage() {
                               {currencySymbol}
                               {formatCurrencyAmount(
                                 order?.display_total_amount ??
-                                  (order?.totalAmount || 0) / 100,
+                                (order?.totalAmount || 0) / 100,
                                 activeOrg?.country,
                               )}{" "}
                               Unpaid
@@ -3654,7 +3657,7 @@ export default function OrdersPage() {
                           {currencySymbol}
                           {formatCurrencyAmount(
                             order?.display_total_amount ??
-                              (order?.totalAmount || 0) / 100,
+                            (order?.totalAmount || 0) / 100,
                             activeOrg?.country,
                           )}
                         </td>
@@ -3716,11 +3719,10 @@ export default function OrdersPage() {
                       key={pageNum}
                       type="button"
                       onClick={() => setCurrentPage(pageNum)}
-                      className={`w-8 h-8 flex items-center justify-center text-xs font-semibold rounded-md transition-colors cursor-pointer ${
-                        isCurrent
+                      className={`w-8 h-8 flex items-center justify-center text-xs font-semibold rounded-md transition-colors cursor-pointer ${isCurrent
                           ? "bg-[#0c0a09] text-white"
                           : "bg-white border border-[#e7e5e4] text-[#0c0a09] hover:bg-[#fdf8f7]"
-                      }`}
+                        }`}
                     >
                       {pageNum}
                     </button>
