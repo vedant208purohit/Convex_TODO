@@ -111,26 +111,6 @@ export const recordScan = mutation({
       }
     }
 
-    // Check recent session for this device/QR within active window
-    if (!effectiveSessionId) {
-      const recentSessions = await ctx.db
-        .query("organizationOrderingSessions")
-        .withIndex("by_qr", (q) => q.eq("qrId", qr._id))
-        .collect();
-
-      const validRecent = recentSessions.find(
-        (s) =>
-          s.deletedAt === undefined &&
-          s.status === "ACTIVE" &&
-          now - s.lastActivityAt <= SESSION_ACTIVITY_WINDOW_MS,
-      );
-
-      if (validRecent) {
-        existingSession = validRecent;
-        effectiveSessionId = validRecent.sessionId;
-      }
-    }
-
     let scanDocId: any = null;
 
     if (!existingSession) {
@@ -205,6 +185,8 @@ export const recordCartActivity = mutation({
     sessionId: v.string(),
     cartId: v.optional(v.string()),
     itemCount: v.number(),
+    qrId: v.optional(v.union(v.id("organizationQrCodes"), v.string())),
+    tableId: v.optional(v.union(v.id("organizationTables"), v.string())),
   },
   handler: async (ctx, args) => {
     const now = Date.now();
@@ -243,6 +225,79 @@ export const recordCartActivity = mutation({
     }
 
     if (!activeSession) {
+      if (args.qrId || args.tableId) {
+        let resolvedQrId: Id<"organizationQrCodes"> | undefined = undefined;
+        let resolvedOrgId: Id<"organizations"> | undefined = undefined;
+        let resolvedTableId: string | undefined = undefined;
+
+        if (args.qrId) {
+          try {
+            const qrDoc = await ctx.db.get(args.qrId as Id<"organizationQrCodes">);
+            if (qrDoc && qrDoc.deletedAt === undefined) {
+              resolvedQrId = qrDoc._id;
+              resolvedOrgId = qrDoc.organizationId;
+              resolvedTableId = qrDoc.tableId;
+            }
+          } catch {
+            const qrs = await ctx.db.query("organizationQrCodes").collect();
+            const matched = qrs.find(
+              (q) =>
+                q.deletedAt === undefined &&
+                (String(q._id) === args.qrId || q.legacyId === args.qrId),
+            );
+            if (matched) {
+              resolvedQrId = matched._id;
+              resolvedOrgId = matched.organizationId;
+              resolvedTableId = matched.tableId;
+            }
+          }
+        }
+
+        if (args.tableId) {
+          if (!resolvedTableId) resolvedTableId = args.tableId;
+          if (!resolvedOrgId || !resolvedQrId) {
+            const tableQrs = await ctx.db
+              .query("organizationQrCodes")
+              .withIndex("by_table", (q) => q.eq("tableId", args.tableId!))
+              .collect();
+            const matched = tableQrs.find((q) => q.deletedAt === undefined);
+            if (matched) {
+              if (!resolvedQrId) resolvedQrId = matched._id;
+              if (!resolvedOrgId) resolvedOrgId = matched.organizationId;
+            }
+          }
+        }
+
+        if (resolvedOrgId && resolvedQrId) {
+          const effectiveCartId = args.cartId || `cart_${args.sessionId}`;
+          const existingCarts = await ctx.db
+            .query("organizationCarts")
+            .withIndex("by_cart_id", (q) => q.eq("cartId", effectiveCartId))
+            .collect();
+          const existing = existingCarts.find((c) => c.deletedAt === undefined);
+          const hasItems = args.itemCount > 0;
+
+          if (existing) {
+            await ctx.db.patch(existing._id, {
+              itemCount: args.itemCount,
+              hasItems,
+              updatedAt: now,
+            });
+          } else {
+            await ctx.db.insert("organizationCarts", {
+              cartId: effectiveCartId,
+              sessionId: args.sessionId,
+              qrId: resolvedQrId,
+              organizationId: resolvedOrgId,
+              tableId: resolvedTableId,
+              itemCount: args.itemCount,
+              hasItems,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+        }
+      }
       return { cartId: args.cartId || `cart_${args.sessionId}`, itemCount: args.itemCount, hasItems: args.itemCount > 0 };
     }
 

@@ -1195,6 +1195,7 @@ export default function CaptainPage() {
                 printerUrl: stationPrinter.printerUrl,
                 printerPort: stationPrinter.printerPort,
                 stationId: stationPrinter.stationId,
+                silent: true,
               }
             ).catch((e) => console.warn("Captain Add-on KOT print failed:", e));
           } catch (kotErr) {
@@ -1288,6 +1289,7 @@ export default function CaptainPage() {
                 printerUrl: stationPrinter.printerUrl,
                 printerPort: stationPrinter.printerPort,
                 stationId: stationPrinter.stationId,
+                silent: true,
               }
             ).catch((e) => console.warn("Captain KOT print failed:", e));
           } catch (kotErr) {
@@ -1333,6 +1335,7 @@ export default function CaptainPage() {
                   printerUrl: workstationPrinter.printerUrl,
                   printerPort: workstationPrinter.printerPort,
                   stationId: workstationPrinter.stationId,
+                  silent: true,
                 }
               ).catch((e) => console.warn("Captain Runner slip print failed:", e));
             }, 800);
