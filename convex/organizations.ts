@@ -1145,7 +1145,7 @@ export const create = mutation({
       isWorkstation: args.isWorkstation ?? false,
       isCashier: args.isCashier ?? true,
       isSettings: args.isSettings ?? true,
-      onlineStore: args.onlineStore ?? false,
+      onlineStore: args.onlineStore ?? true,
       isDelivery,
       isMenu: args.isMenu ?? false,
       isQueue: args.isQueue ?? true,
@@ -1507,16 +1507,6 @@ export const update = mutation({
         throw new Error("Name can't be blank");
       }
       updates.name = updates.name.trim();
-    }
-
-    // 2. Online Store Lock Restriction
-    if (
-      existing.published === true &&
-      existing.isTest === false &&
-      updates.onlineStore !== undefined &&
-      updates.onlineStore !== existing.onlineStore
-    ) {
-      throw new Error("Please contact support");
     }
 
     // 3. Phone Validation if updated

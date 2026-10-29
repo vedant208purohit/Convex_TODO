@@ -134,17 +134,26 @@ export default function OrderReceiptPreviewPage() {
 
   // QR destination URL targeting pos-user customer application
   const feedbackUrl = useMemo(() => {
+    let url = "";
     if (attemptInfo?.surveyQrUrl) {
       if (attemptInfo.surveyQrUrl.startsWith("http")) {
-        return attemptInfo.surveyQrUrl;
+        url = attemptInfo.surveyQrUrl;
+      } else {
+        url = `${posUserBaseUrl}${attemptInfo.surveyQrUrl.startsWith("/") ? "" : "/"}${attemptInfo.surveyQrUrl}`;
       }
-      return `${posUserBaseUrl}${attemptInfo.surveyQrUrl.startsWith("/") ? "" : "/"}${attemptInfo.surveyQrUrl}`;
+    } else if (attemptInfo?.attemptId) {
+      url = `${posUserBaseUrl}/attempts/${attemptInfo.attemptId}`;
     }
-    if (attemptInfo?.attemptId) {
-      return `${posUserBaseUrl}/attempts/${attemptInfo.attemptId}`;
+    if (!url) return "";
+
+    // Always ensure the store slug is attached for authoritative store resolution in dev & production
+    const slug = activeOrg?.slug;
+    if (slug && !url.includes("store=") && !url.includes("slug=")) {
+      const sep = url.includes("?") ? "&" : "?";
+      return `${url}${sep}store=${encodeURIComponent(slug)}`;
     }
-    return "";
-  }, [attemptInfo, posUserBaseUrl]);
+    return url;
+  }, [attemptInfo, posUserBaseUrl, activeOrg?.slug]);
 
   const shortFeedbackDisplay = useMemo(() => {
     if (!feedbackUrl) return "prest.dine/review";

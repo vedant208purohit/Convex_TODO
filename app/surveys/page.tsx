@@ -289,9 +289,9 @@ export default function SurveysDashboardPage() {
         </div>
 
         {/* Table Management Section */}
-        <div className="bg-white rounded-xl shadow-xs border border-[#efeded] flex flex-col overflow-hidden">
+        <div className="bg-white rounded-xl shadow-xs border border-[#efeded] flex flex-col">
           {/* Filter Bar & Search */}
-          <div className="p-4 bg-white flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#efeded]">
+          <div className="p-4 bg-white flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-[#efeded] rounded-t-xl">
             {/* Segmented Filter Pills */}
             <div className="flex items-center gap-1.5 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
               <button
@@ -376,20 +376,20 @@ export default function SurveysDashboardPage() {
 
           {/* Main Surveys Table Container */}
           {surveys !== undefined && filteredSurveys.length > 0 && (
-            <div className="w-full overflow-x-auto">
+            <div className="w-full overflow-x-auto min-h-[300px] relative">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-[#f5f3f3]/70 text-[#5b5f64] text-[11px] uppercase tracking-wider border-b border-[#efeded]">
-                    <th className="py-3 px-4 font-semibold min-w-[280px]">SURVEY NAME</th>
-                    <th className="py-3 px-4 font-semibold min-w-[130px]">QUESTIONS</th>
-                    <th className="py-3 px-4 font-semibold min-w-[170px]">REVIEWS RECEIVED</th>
-                    <th className="py-3 px-4 font-semibold min-w-[120px]">STATUS</th>
-                    <th className="py-3 px-4 font-semibold min-w-[150px]">LAST UPDATED</th>
-                    <th className="py-3 px-4 font-semibold text-right min-w-[200px]">ACTIONS</th>
+                    <th className="py-3 px-4 font-semibold min-w-[200px]">SURVEY NAME</th>
+                    <th className="py-3 px-4 font-semibold min-w-[110px]">QUESTIONS</th>
+                    <th className="py-3 px-4 font-semibold min-w-[130px]">REVIEWS RECEIVED</th>
+                    <th className="py-3 px-4 font-semibold min-w-[90px]">STATUS</th>
+                    <th className="py-3 px-4 font-semibold min-w-[120px]">LAST UPDATED</th>
+                    <th className="py-3 px-4 font-semibold text-right min-w-[190px]">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#efeded] text-[14px] text-[#1b1c1c]">
-                  {filteredSurveys.map((survey) => {
+                  {filteredSurveys.map((survey, idx) => {
                     const { date, time } = formatDateTime(survey.updatedAt);
                     const isMenuOpen = activeMenuSurveyId === survey._id;
 
@@ -515,42 +515,57 @@ export default function SurveysDashboardPage() {
 
                               {/* Dropdown Menu Popover */}
                               {isMenuOpen && (
-                                <div className="absolute right-0 top-9 w-48 bg-white border border-[#e3e2e2] rounded-xl shadow-xl py-1.5 z-50 text-left text-xs font-medium">
-                                  <button
-                                    onClick={() => handleToggleActive(survey)}
-                                    disabled={survey.active}
-                                    className={`w-full px-3 py-2 text-left flex items-center gap-2 ${
-                                      survey.active
-                                        ? "text-stone-300 cursor-not-allowed"
-                                        : "text-[#1b1c1c] hover:bg-[#f5f3f3] cursor-pointer"
-                                    }`}
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                                    <span>{survey.active ? "Currently Active" : "Set as Active"}</span>
-                                  </button>
-
-                                  <button
-                                    onClick={() => handleCloneSurvey(survey)}
-                                    disabled={isCloning}
-                                    className="w-full px-3 py-2 text-left text-[#1b1c1c] hover:bg-[#f5f3f3] flex items-center gap-2 cursor-pointer"
-                                  >
-                                    <span className="material-symbols-outlined text-[16px]">content_copy</span>
-                                    <span>Clone Survey</span>
-                                  </button>
-
-                                  <div className="my-1 border-t border-[#efeded]" />
-
-                                  <button
-                                    onClick={() => {
-                                      setSurveyToDelete(survey);
+                                <>
+                                  <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       setActiveMenuSurveyId(null);
                                     }}
-                                    className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                                  />
+                                  <div
+                                    className={`absolute right-0 w-48 bg-white border border-[#e3e2e2] rounded-xl shadow-2xl py-1.5 z-50 text-left text-xs font-medium animate-in fade-in zoom-in-95 duration-100 ${
+                                      filteredSurveys.length > 2 && idx >= filteredSurveys.length - 1
+                                        ? "bottom-8 mb-1 origin-bottom-right"
+                                        : "top-9 origin-top-right"
+                                    }`}
                                   >
-                                    <span className="material-symbols-outlined text-[16px]">delete</span>
-                                    <span>Delete Survey</span>
-                                  </button>
-                                </div>
+                                    <button
+                                      onClick={() => handleToggleActive(survey)}
+                                      disabled={survey.active}
+                                      className={`w-full px-3 py-2 text-left flex items-center gap-2 ${
+                                        survey.active
+                                          ? "text-stone-300 cursor-not-allowed"
+                                          : "text-[#1b1c1c] hover:bg-[#f5f3f3] cursor-pointer"
+                                      }`}
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                                      <span>{survey.active ? "Currently Active" : "Set as Active"}</span>
+                                    </button>
+
+                                    <button
+                                      onClick={() => handleCloneSurvey(survey)}
+                                      disabled={isCloning}
+                                      className="w-full px-3 py-2 text-left text-[#1b1c1c] hover:bg-[#f5f3f3] flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">content_copy</span>
+                                      <span>Clone Survey</span>
+                                    </button>
+
+                                    <div className="my-1 border-t border-[#efeded]" />
+
+                                    <button
+                                      onClick={() => {
+                                        setSurveyToDelete(survey);
+                                        setActiveMenuSurveyId(null);
+                                      }}
+                                      className="w-full px-3 py-2 text-left text-red-600 hover:bg-red-50 flex items-center gap-2 cursor-pointer"
+                                    >
+                                      <span className="material-symbols-outlined text-[16px]">delete</span>
+                                      <span>Delete Survey</span>
+                                    </button>
+                                  </div>
+                                </>
                               )}
                             </div>
                           </div>
@@ -604,7 +619,7 @@ export default function SurveysDashboardPage() {
           )}
 
           {/* Table Footer / Metadata Bar */}
-          <div className="px-4 py-3 bg-white border-t border-[#efeded] flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-[#5b5f64]">
+          <div className="px-4 py-3 bg-white border-t border-[#efeded] rounded-b-xl flex flex-col sm:flex-row items-center justify-between gap-2 text-[11px] text-[#5b5f64] relative z-10">
             <div>
               Showing <span className="font-semibold text-[#1b1c1c]">{filteredSurveys.length}</span> of{" "}
               <span className="font-semibold text-[#1b1c1c]">{totalSurveysCount}</span> surveys

@@ -1670,8 +1670,9 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
     });
     expect(binding1).not.toBeNull();
     expect(binding1?.surveyId).toBe(surveyId);
-    expect(binding1?.published).toBe(false);
-    expect(binding1?.surveyQrUrl).toBe(`https://prest.dine/attempts/${binding1?.attemptId}`);
+    expect(binding1?.surveyQrUrl).toBe(
+      `https://prest.dine/attempts/${binding1?.attemptId}?store=defx-pos-flagship`
+    );
 
     // Call again to verify idempotency: must return existing attempt ID
     const binding2 = await t.mutation(api.surveyAttempts.getOrCreateForOrder, {

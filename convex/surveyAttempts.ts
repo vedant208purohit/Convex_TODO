@@ -2,6 +2,7 @@ import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireSurveyAdmin } from "./surveys";
+import { resolveAssetOrStorageUrl } from "./assetResolver";
 
 // ----------------------------------------------------
 // DATE FORMAT VALIDATION & CANONICAL URL RESOLUTION
@@ -173,10 +174,16 @@ export const getOrCreateForOrder = mutation({
       )
       .first();
 
+    const org = order.organizationId
+      ? await ctx.db.get(order.organizationId)
+      : await ctx.db.query("organizations").first();
+    const storeSlug = org?.slug;
+    const querySuffix = storeSlug ? `?store=${encodeURIComponent(storeSlug)}` : "";
+
     const baseUrl = getCustomerFacingBaseUrl(args.publicBaseUrl);
 
     if (existingAttempt) {
-      const surveyQrUrl = `${baseUrl}/attempts/${existingAttempt._id}`;
+      const surveyQrUrl = `${baseUrl}/attempts/${existingAttempt._id}${querySuffix}`;
 
       return {
         attemptId: existingAttempt._id,
@@ -202,7 +209,7 @@ export const getOrCreateForOrder = mutation({
       updatedAt: now,
     });
 
-    const surveyQrUrl = `${baseUrl}/attempts/${newAttemptId}`;
+    const surveyQrUrl = `${baseUrl}/attempts/${newAttemptId}${querySuffix}`;
 
     return {
       attemptId: newAttemptId,
@@ -317,6 +324,10 @@ export const getForRespondent = query({
     let currencySymbol: string | undefined = undefined;
     let country: string | undefined = undefined;
     let timezone: string | undefined = undefined;
+    let organizationId: string | undefined = undefined;
+    let primaryColor: string | undefined = undefined;
+    let secondaryColor: string | undefined = undefined;
+    let theme: string | undefined = undefined;
 
     if (attempt.orderId) {
       const order = await ctx.db.get(attempt.orderId);
@@ -329,12 +340,45 @@ export const getForRespondent = query({
         if (order.organizationId) {
           const org = await ctx.db.get(order.organizationId);
           if (org) {
+            organizationId = org._id;
             storeName = org.name;
             storeSlug = org.slug;
-            storeLogoUrl = org.logoUrl;
             currencySymbol = org.defaultCurrencySymbol;
             country = org.country;
             timezone = org.organizationTimeZone;
+            primaryColor = org.primaryColor;
+            secondaryColor = org.secondaryColor;
+            theme = org.theme;
+
+            if (org.logoAssetId || org.logoStorageId) {
+              try {
+                const storageOrR2Url = await resolveAssetOrStorageUrl(ctx, {
+                  assetId: org.logoAssetId,
+                  storageId: org.logoStorageId,
+                  organizationId: org._id,
+                });
+                if (storageOrR2Url) {
+                  storeLogoUrl = storageOrR2Url;
+                }
+              } catch {}
+            }
+            if (!storeLogoUrl && (org as any).logoImageStorageId) {
+              try {
+                const storageUrl = await ctx.storage.getUrl((org as any).logoImageStorageId);
+                if (storageUrl) {
+                  storeLogoUrl = storageUrl;
+                }
+              } catch {}
+            }
+            if (!storeLogoUrl && org.logoUrl && typeof org.logoUrl === "string") {
+              const trimmed = org.logoUrl.trim();
+              if (
+                (trimmed.startsWith("http://") || trimmed.startsWith("https://")) &&
+                !trimmed.startsWith("blob:")
+              ) {
+                storeLogoUrl = trimmed;
+              }
+            }
           }
         }
 
@@ -402,6 +446,23 @@ export const getForRespondent = query({
       }
     }
 
+    if (!organizationId) {
+      const activeOrgs = await ctx.db.query("organizations").collect();
+      const defaultOrg = activeOrgs.find((o) => o.deletedAt === undefined) || activeOrgs[0];
+      if (defaultOrg) {
+        organizationId = defaultOrg._id;
+        if (!storeName) storeName = defaultOrg.name;
+        if (!storeSlug) storeSlug = defaultOrg.slug;
+        if (!storeLogoUrl) storeLogoUrl = defaultOrg.logoUrl;
+        if (!currencySymbol) currencySymbol = defaultOrg.defaultCurrencySymbol;
+        if (!country) country = defaultOrg.country;
+        if (!timezone) timezone = defaultOrg.organizationTimeZone;
+        primaryColor = defaultOrg.primaryColor;
+        secondaryColor = defaultOrg.secondaryColor;
+        theme = defaultOrg.theme;
+      }
+    }
+
     return {
       attemptId: attempt._id,
       surveyId: survey._id,
@@ -423,6 +484,10 @@ export const getForRespondent = query({
       currencySymbol,
       country,
       timezone,
+      organizationId,
+      primaryColor,
+      secondaryColor,
+      theme,
       itemCount,
       orderItems,
       questions: questions
