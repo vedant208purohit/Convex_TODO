@@ -57,6 +57,77 @@ export const DEFAULT_STORE_FEATURES = [
     description: "Skip phone number required",
     active: false,
   },
+  // KDS & Kitchen Thermal Printing Feature Flags
+  {
+    featureKey: "kds_print_waiter_name",
+    name: "kds_print_waiter_name",
+    displayName: "Show Waiter / Server Name on KOT",
+    description: "Display the server who took the order on the printed KOT",
+    active: true,
+  },
+  {
+    featureKey: "kds_print_guest_count",
+    name: "kds_print_guest_count",
+    displayName: "Show Guest Count on KOT",
+    description: "Print the number of seated guests on the kitchen ticket",
+    active: false,
+  },
+  {
+    featureKey: "kds_print_customer_info",
+    name: "kds_print_customer_info",
+    displayName: "Show Customer Name & Phone on KOT",
+    description: "Include customer contact details on takeaway and delivery kitchen tickets",
+    active: false,
+  },
+  {
+    featureKey: "kds_print_order_type",
+    name: "kds_print_order_type",
+    displayName: "Highlight Order Type Badge on KOT",
+    description: "Print high-contrast tags ([DINE-IN], [TAKEAWAY], [DELIVERY]) on the ticket",
+    active: true,
+  },
+  {
+    featureKey: "kds_print_timestamp",
+    name: "kds_print_timestamp",
+    displayName: "Show Fired Time & Seconds on KOT",
+    description: "Include exact timestamp (HH:MM:SS) on the kitchen ticket",
+    active: true,
+  },
+  {
+    featureKey: "kds_print_item_modifiers",
+    name: "kds_print_item_modifiers",
+    displayName: "Show Item Modifiers on KOT",
+    description: "Print indented item modifiers beneath each dish description",
+    active: true,
+  },
+  {
+    featureKey: "kds_print_special_notes",
+    name: "kds_print_special_notes",
+    displayName: "Show Custom Cooking Notes on KOT",
+    description: "Print custom kitchen instructions and chef preparation notes",
+    active: true,
+  },
+  {
+    featureKey: "kds_print_show_prices",
+    name: "kds_print_show_prices",
+    displayName: "Print Prices on KOT",
+    description: "Include individual item prices and subtotal on the kitchen ticket",
+    active: false,
+  },
+  {
+    featureKey: "kds_print_combo_breakdown",
+    name: "kds_print_combo_breakdown",
+    displayName: "Expand Combo / Meal Components on KOT",
+    description: "Print individual combo components indented under the parent combo package",
+    active: true,
+  },
+  {
+    featureKey: "kds_auto_print_on_fire",
+    name: "kds_auto_print_on_fire",
+    displayName: "Auto-Print KOT on Order Fired",
+    description: "Automatically dispatch and print KOT ticket to station printer when order arrives on KDS",
+    active: false,
+  },
 ];
 
 /**
@@ -187,11 +258,29 @@ export const list = query({
   handler: async (ctx, args) => {
     const flags = await ctx.db.query("organizationFeatures").collect();
 
-    // If database has records, return filtered records
+    // If database has records, return filtered records merged with any missing catalog defaults
     if (flags.length > 0) {
       const filtered = flags.filter(
         (f) => (args.includeDeleted || f.deletedAt === undefined) && f.featureKey !== "test"
       );
+
+      // Merge unseeded default catalog features (not yet created in DB and not soft-deleted)
+      const dbAllKeys = new Set(flags.map((f) => f.featureKey));
+      for (const df of DEFAULT_STORE_FEATURES) {
+        if (!dbAllKeys.has(df.featureKey)) {
+          filtered.push({
+            _id: `default_${df.featureKey}` as unknown as Id<"organizationFeatures">,
+            organizationId: args.organizationId,
+            featureKey: df.featureKey,
+            name: df.name,
+            displayName: df.displayName,
+            description: df.description,
+            active: df.active,
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          } as any);
+        }
+      }
 
       return filtered.sort((a, b) => {
         const idxA = DEFAULT_STORE_FEATURES.findIndex((f) => f.featureKey === a.featureKey);

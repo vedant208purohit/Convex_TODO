@@ -2,13 +2,17 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import EditOrderDrawer from "../components/orders/EditOrderDrawer";
 import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
-import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
+import {
+  generateDefxReceiptPlainString,
+  printThermalReceiptDocument,
+} from "../utils/defxReceiptFormatter";
 
 import {
   formatPhoneNumberWithCountryCode,
@@ -552,10 +556,12 @@ export default function OrdersPage() {
     (activeOrg as any)?.timezone || getTimezoneForCountry(countryCode);
 
   const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : "$");
+    activeOrg?.defaultCurrencySymbol &&
+    activeOrg.defaultCurrencySymbol !== "Rs." &&
+    activeOrg.defaultCurrencySymbol !== "RS." &&
+    activeOrg.defaultCurrencySymbol !== "Rs"
+      ? activeOrg.defaultCurrencySymbol
+      : getCurrencyForCountry(countryCode).symbol || "₹";
   const currencyCode =
     activeOrg?.defaultCurrency ||
     (activeOrg?.country
@@ -651,10 +657,13 @@ export default function OrdersPage() {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+
+    const handleFocus = () => { if (isMounted) checkStatus(); };
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [printers]);
 
@@ -1318,16 +1327,39 @@ export default function OrdersPage() {
   };
 
   // Print Thermal Receipt
-  const handlePrintReceipt = () => {
-    showToast("Opening print dialogue for thermal receipt...");
-    if (typeof window !== "undefined") {
-      const origTitle = document.title;
-      document.title = "";
-      window.print();
-      setTimeout(() => {
-        document.title = origTitle;
-      }, 1000);
+  const handlePrintReceipt = async () => {
+    const order = selectedOrderDetails;
+    if (!order) return;
+
+    if (!printers || printers.length === 0) {
+      showToast("No printer configured. Please connect a printer first in Settings > Printers.");
+      return;
     }
+
+    if (printerStatus === "checking") {
+      // Allow attempt while checking
+    }
+
+    showToast("Printing thermal receipt...");
+
+    const targetPrinter =
+      printers?.find((p) => p.printerUseFor === "Cashier") ||
+      printers?.find((p) => p.printerUseFor === "Station") ||
+      printers?.[0];
+
+    const receiptStr = generateDefxReceiptPlainString(order, activeOrg, 48);
+    await printThermalReceiptDocument(
+      receiptStr,
+      `Receipt ${order.orderNumber || ""}`,
+      targetPrinter
+        ? {
+            printerType: targetPrinter.printerType,
+            printerUrl: targetPrinter.printerUrl,
+            printerPort: targetPrinter.printerPort,
+            stationId: targetPrinter.stationId,
+          }
+        : undefined,
+    );
   };
 
   // Download PDF Receipt (Opens real PDF in native Chrome/Edge PDF viewer)
@@ -2334,41 +2366,17 @@ export default function OrdersPage() {
                         );
                       })()}
 
-                      {/* Bill & Receipt Preview */}
+                      {/* Print Thermal Receipt */}
                       <button
                         type="button"
-                        onClick={() => {
-                          if (order) {
-                            router.push(`/orders/${order._id}/receipt`);
-                          }
-                        }}
-                        disabled={!order}
+                        onClick={handlePrintReceipt}
+                        title="Print Thermal Receipt"
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
                         className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
                         <PrintIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                         <span className="!text-white text-white font-semibold text-xs truncate">
-                          Receipt Preview &amp; QR
-                        </span>
-                      </button>
-
-                      {/* Customer Review Details */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (order) {
-                            router.push(`/orders/${order._id}/review`);
-                          }
-                        }}
-                        disabled={!order}
-                        style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
-                      >
-                        <span className="material-symbols-outlined text-[18px] shrink-0 !text-white text-white">
-                          rate_review
-                        </span>
-                        <span className="!text-white text-white font-semibold text-xs truncate">
-                          Review Details &amp; Ratings
+                          Print Receipt
                         </span>
                       </button>
 
@@ -2401,12 +2409,12 @@ export default function OrdersPage() {
                         </span>
                       </button>
 
-                      {/* Order Timeline (Spans full width for balanced grid) */}
+                      {/* Order Timeline */}
                       <button
                         type="button"
                         onClick={() => setDrawerTab("timeline")}
                         style={{ backgroundColor: "#1c1917", color: "#ffffff" }}
-                        className="col-span-1 sm:col-span-2 flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
+                        className="flex items-center justify-center gap-2 px-3 py-2.5 min-h-[42px] bg-[#1c1917] hover:bg-black !text-white text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs hover:opacity-95 text-center"
                       >
                         <TimelineIcon className="w-4 h-4 shrink-0 !text-white text-white" />
                         <span className="!text-white text-white font-semibold text-xs truncate">
@@ -2434,10 +2442,14 @@ export default function OrdersPage() {
                           Checking...
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] px-2 py-0.5 rounded-full border border-[#e7e5e4]">
+                        <Link
+                          href="/settings?tab=printers"
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#78716c] bg-[#f5f5f4] hover:bg-[#e7e5e4] px-2 py-0.5 rounded-full border border-[#e7e5e4] transition-colors cursor-pointer"
+                          title="Click to connect printer in Settings"
+                        >
                           <span className="w-1.5 h-1.5 rounded-full bg-[#a8a29e]" />
-                          Disconnected
-                        </span>
+                          Disconnected • Connect
+                        </Link>
                       )}
                     </div>
                   </section>
@@ -2481,17 +2493,21 @@ export default function OrdersPage() {
                 background: #ffffff !important;
                 color: #000000 !important;
                 display: block !important;
-                font-family: "Courier New", Courier, monospace !important;
-                font-size: 11px !important;
+                font-family: Consolas, "Lucida Console", "Liberation Mono", Monaco, "Courier New", monospace !important;
+                font-size: 10px !important;
                 font-weight: 500 !important;
                 line-height: 1.25 !important;
                 white-space: pre !important;
-                letter-spacing: 0 !important;
+                letter-spacing: -0.15px !important;
                 word-break: normal !important;
                 z-index: 999999 !important;
                 box-shadow: none !important;
               }
               #printable-order-receipt pre {
+                font-family: inherit !important;
+                font-size: inherit !important;
+                font-weight: inherit !important;
+                letter-spacing: inherit !important;
                 padding-bottom: 25mm !important;
               }
             }

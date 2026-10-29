@@ -23,18 +23,18 @@ export function MarketplaceCard({
   
   const getBadgeClass = () => {
     if (isPurchased || app.badge === "Installed") {
-      return "bg-[#ede7e4] text-[#4d4541] border border-[#d0c4be]";
+      return "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]";
     }
     if (app.badge === "Featured") {
-      return "bg-[#eae1da] text-[#4c4641] border border-[#cec5be]";
+      return "bg-[#faf8f5] text-[#0c0a09] border border-[#e7e5e4]";
     }
     if (app.badge === "Live") {
-      return "bg-[#ede7e4] text-[#1d1b1a] border border-[#d0c4be]";
+      return "bg-emerald-50 text-emerald-800 border border-emerald-200";
     }
     if (app.badge === "Attention") {
-      return "bg-[#ffdad6] text-[#ba1a1a] border border-[#ba1a1a]/20";
+      return "bg-red-50 text-red-700 border border-red-200";
     }
-    return "bg-[#ede7e4] text-[#4d4541] border border-[#d0c4be]";
+    return "bg-[#fdf8f7] text-[#5e5e5e] border border-[#e7e5e4]";
   };
 
   const getStatusDot = () => {
@@ -45,14 +45,14 @@ export function MarketplaceCard({
       case "live":
         return "bg-emerald-500";
       case "attention":
-        return "bg-[#ba1a1a]";
+        return "bg-red-600";
       case "installed":
-        return "bg-stone-500";
+        return "bg-[#5e5e5e]";
       case "paid_required":
-        return "bg-[#141010]";
+        return "bg-[#0c0a09]";
       case "available":
       default:
-        return "bg-stone-300";
+        return "bg-[#e7e5e4]";
     }
   };
 
@@ -137,48 +137,48 @@ export function MarketplaceCard({
 
   const getButtonClass = () => {
     if (!isPurchased && isHeroApp) {
-      return "w-full py-2.5 px-4 rounded-lg bg-[#141010] text-white font-medium text-sm tracking-wide flex items-center justify-center gap-2 hover:bg-black transition-all shadow-sm cursor-pointer";
+      return "w-full py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg bg-[#0c0a09] text-white font-medium text-xs sm:text-sm tracking-wide flex items-center justify-center gap-2 hover:bg-[#262626] transition-all shadow-xs cursor-pointer";
     }
     if (app.actionType === "fix") {
-      return "w-full py-2.5 px-4 rounded-lg bg-[#f3ecea] hover:bg-[#e9e1dd] text-[#1d1b1a] font-medium text-sm tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer border border-[#d0c4be]/60";
+      return "w-full py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg bg-[#fdf8f7] hover:bg-[#f1edec] text-red-700 font-medium text-xs sm:text-sm tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer border border-red-200";
     }
-    return "w-full py-2.5 px-4 rounded-lg bg-[#f3ecea] hover:bg-[#ede7e4] text-[#1d1b1a] font-medium text-sm tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer border border-[#d0c4be]/50";
+    return "w-full py-2 sm:py-2.5 px-3 sm:px-4 rounded-lg bg-[#fdf8f7] hover:bg-[#f1edec] text-[#0c0a09] font-medium text-xs sm:text-sm tracking-wide transition-all flex items-center justify-center gap-2 cursor-pointer border border-[#e7e5e4]";
   };
 
   return (
     <article
       data-category={app.category}
-      className={`flex flex-col justify-between bg-white rounded-2xl p-6 shadow-sm border border-stone-200/80 transition-all duration-300 hover:shadow-md group relative overflow-hidden ${
-        isHeroApp ? "shadow-md hover:shadow-xl" : ""
+      className={`flex flex-col justify-between bg-white rounded-xl sm:rounded-2xl p-4 sm:p-5 lg:p-6 shadow-xs border border-[#e7e5e4] transition-all duration-300 hover:shadow-md group relative overflow-hidden ${
+        isHeroApp ? "shadow-sm hover:shadow-lg ring-1 ring-[#0c0a09]/10" : ""
       }`}
     >
       {/* Accent top bar indicator for Hero Card */}
-      {isHeroApp && <div className="absolute top-0 left-0 right-0 h-1 bg-[#141010]" />}
+      {isHeroApp && <div className="absolute top-0 left-0 right-0 h-1 bg-[#0c0a09]" />}
 
       {/* Clickable Card Body (Opens Drawer) */}
       <div
-        className="flex flex-col gap-4 cursor-pointer"
+        className="flex flex-col gap-3 sm:gap-4 cursor-pointer"
         onClick={() => onCardClick(app)}
         role="button"
         tabIndex={0}
       >
         {/* Header Row: Icon + Title + Badge */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <div
-              className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
-                isHeroApp ? "bg-[#141010] text-white" : "bg-[#f3ecea] text-[#1d1b1a]"
+              className={`w-10 h-10 sm:w-11 sm:h-11 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
+                isHeroApp ? "bg-[#0c0a09] text-white" : "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
               }`}
             >
-              <span className="material-symbols-outlined text-[26px]">
+              <span className="material-symbols-outlined text-[20px] sm:text-[23px] lg:text-[26px]">
                 {app.iconName}
               </span>
             </div>
-            <div>
-              <span className="text-[10px] uppercase tracking-widest text-stone-500 font-semibold block">
+            <div className="min-w-0 flex-1">
+              <span className="text-[10px] uppercase tracking-widest text-[#5e5e5e] font-semibold block truncate">
                 {app.vendor}
               </span>
-              <h3 className="font-garamond text-[20px] font-semibold text-stone-900 leading-tight mt-0.5">
+              <h3 className="font-garamond text-[17px] sm:text-[19px] lg:text-[20px] font-semibold text-[#0c0a09] leading-tight mt-0.5 break-words">
                 {app.title}
               </h3>
             </div>
@@ -186,47 +186,47 @@ export function MarketplaceCard({
 
           {badgeText && (
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] uppercase font-semibold shrink-0 ${getBadgeClass()}`}
+              className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] sm:text-[11px] uppercase font-semibold shrink-0 self-start mt-0.5 ${getBadgeClass()}`}
             >
               <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot()}`} />
-              {badgeText}
+              <span className="whitespace-nowrap">{badgeText}</span>
             </span>
           )}
         </div>
 
         {/* Description */}
-        <p className="text-sm text-stone-600 leading-relaxed line-clamp-3">
+        <p className="text-xs sm:text-sm text-[#5e5e5e] leading-relaxed line-clamp-3 min-h-[2.75rem] sm:min-h-[3.5rem]">
           {app.description}
         </p>
 
         {/* Structured Spec Box */}
-        <div className="flex flex-col gap-1.5 bg-[#faf2ee] p-3.5 rounded-xl border border-stone-200/60">
-          <div className="flex items-center justify-between text-xs">
-            <span className="uppercase tracking-wider text-stone-500 font-medium text-[10px]">
+        <div className="flex flex-col gap-1.5 bg-[#fdf8f7] p-3 sm:p-3.5 rounded-xl border border-[#e7e5e4]">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs">
+            <span className="uppercase tracking-wider text-[#5e5e5e] font-medium text-[10px]">
               Category
             </span>
-            <span className="font-medium text-stone-800">{app.category}</span>
+            <span className="font-medium text-[#0c0a09] truncate max-w-[55%] text-right">{app.category}</span>
           </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="uppercase tracking-wider text-stone-500 font-medium text-[10px]">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs">
+            <span className="uppercase tracking-wider text-[#5e5e5e] font-medium text-[10px]">
               Pricing
             </span>
-            <span className="font-semibold text-stone-900">{app.priceText}</span>
+            <span className="font-semibold text-[#0c0a09] truncate max-w-[65%] text-right">{app.priceText}</span>
           </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="uppercase tracking-wider text-stone-500 font-medium text-[10px]">
+          <div className="flex items-center justify-between text-[11px] sm:text-xs">
+            <span className="uppercase tracking-wider text-[#5e5e5e] font-medium text-[10px]">
               Status
             </span>
-            <span className="inline-flex items-center gap-1.5 font-semibold text-stone-800">
-              <span className={`w-2 h-2 rounded-full ${getStatusDot()}`} />
-              {getStatusText()}
+            <span className="inline-flex items-center gap-1.5 font-semibold text-[#0c0a09] truncate max-w-[65%] justify-end">
+              <span className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full shrink-0 ${getStatusDot()}`} />
+              <span className="truncate">{getStatusText()}</span>
             </span>
           </div>
         </div>
       </div>
 
       {/* Action Button Footer */}
-      <div className="pt-5 mt-auto">
+      <div className="pt-3.5 sm:pt-4 lg:pt-5 mt-auto">
         <button
           type="button"
           onClick={(e) => {

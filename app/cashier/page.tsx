@@ -15,7 +15,13 @@ import CashierTablesView from "../components/CashierTablesView";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { generateDefxReceiptPlainString } from "../utils/defxReceiptFormatter";
+import {
+  generateDefxReceiptPlainString,
+  generateDefxKotPlainString,
+  generateWorkstationRunnerSlipPlainString,
+  KotOrder,
+  printThermalReceiptDocument,
+} from "../utils/defxReceiptFormatter";
 import { openReceiptPdfInNewTab } from "../utils/generateReceiptPdf";
 import {
   COUNTRY_DIAL_OPTIONS,
@@ -196,6 +202,10 @@ function CashierPosContent() {
     api.organizationPrinters.list,
     activeOrg ? {} : "skip",
   );
+  const liveOrders = useQuery(
+    api.orders.listLiveOrders,
+    activeOrg ? { organizationId: activeOrg._id } : "skip",
+  );
   const orgFeatures = useQuery(
     api.organizationFeatures.list,
     activeOrg ? { organizationId: activeOrg._id } : "skip",
@@ -364,6 +374,7 @@ function CashierPosContent() {
   const [splitPart2Mode, setSplitPart2Mode] = useState<string>("UPI QR");
   const [isProcessingOrder, setIsProcessingOrder] = useState(false);
   const [completedOrderData, setCompletedOrderData] = useState<any>(null);
+  const [isPrintingThermal, setIsPrintingThermal] = useState(false);
   const [notificationToast, setNotificationToast] = useState<string | null>(
     null,
   );
@@ -374,6 +385,10 @@ function CashierPosContent() {
   >("checking");
 
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const seenLiveOrderIdsRef = useRef<Set<string>>(new Set());
+  const printedLiveOrderIdsRef = useRef<Set<string>>(new Set());
+  const isInitialLiveOrderLoadRef = useRef(true);
+  const seenOrderItemCountsRef = useRef<Map<string, number>>(new Map());
 
   // Helper Toast
   const showToast = (msg: string) => {
@@ -382,6 +397,203 @@ function CashierPosContent() {
       setNotificationToast(null);
     }, 4000);
   };
+
+  // Auto-print KDS KOT & Workstation Runner Slip when an order is created or updated from Captain
+  useEffect(() => {
+    if (!liveOrders || !activeOrg) return;
+
+    // On initial mount/load, mark all existing open orders as seen and printed to prevent printing stale historical orders
+    if (isInitialLiveOrderLoadRef.current) {
+      liveOrders.forEach((o: any) => {
+        const orderIdStr = String(o._id);
+        seenLiveOrderIdsRef.current.add(orderIdStr);
+        printedLiveOrderIdsRef.current.add(orderIdStr);
+        seenOrderItemCountsRef.current.set(orderIdStr, o.items?.length || 0);
+      });
+      isInitialLiveOrderLoadRef.current = false;
+      return;
+    }
+
+    const isAutoPrintKdsActive = orgFeatures?.find(
+      (f) => f.featureKey === "kds_auto_print_on_fire"
+    )?.active;
+
+    const stationPrinter =
+      printers?.find((p) => p.printerUseFor === "Station") ||
+      printers?.[0];
+
+    const workstationPrinter =
+      printers?.find((p) => p.printerUseFor === "WorkStation");
+
+    const getFlag = (k: string) =>
+      orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;
+
+    for (const order of liveOrders) {
+      const orderIdStr = String(order._id);
+      const isNewOrder = !seenLiveOrderIdsRef.current.has(orderIdStr);
+      const prevItemCount = seenOrderItemCountsRef.current.get(orderIdStr) ?? 0;
+      const currentItemCount = order.items?.length || 0;
+
+      if (isNewOrder) {
+        seenLiveOrderIdsRef.current.add(orderIdStr);
+        seenOrderItemCountsRef.current.set(orderIdStr, currentItemCount);
+
+        // If not already printed by the local Cashier completion handler
+        if (!printedLiveOrderIdsRef.current.has(orderIdStr)) {
+          printedLiveOrderIdsRef.current.add(orderIdStr);
+
+          const tableDisplay = order.table?.number ? `Table ${order.table.number}` : "";
+          const tokenDisplay = order.tokenNumber ? `#${order.tokenNumber}` : "";
+
+          // 1. AUTO-PRINT KOT / STATION TICKET TO KITCHEN PRINTER
+          if (isAutoPrintKdsActive && stationPrinter) {
+            try {
+              const kotOrder: KotOrder = {
+                orderNumber:
+                  order.orderNumber || String(order._id).slice(-4).toUpperCase(),
+                tokenNumber: order.tokenNumber,
+                orderType: order.orderType || "DineIn",
+                table: order.table ? { number: order.table.number } : null,
+                serverName: order.waiterName || "Captain",
+                waiterName: order.waiterName || "Captain",
+                guestCount: order.membersOnTable,
+                customerName: order.customerName,
+                customerPhone: order.customerPhone,
+                stationName: "Kitchen",
+                createdAt: order.createdAt || Date.now(),
+                firedAt: Date.now(),
+                specialNotes: order.specialNotes,
+                items: (order.items || []).map((it: any) => ({
+                  itemName: it.itemName || it.name,
+                  quantity: it.quantity,
+                  itemPrice: it.itemPrice || it.price,
+                  customizations: it.customizations?.map((c: any) => ({
+                    optionName: c.name || c.optionName,
+                  })),
+                  notes: it.notes,
+                })),
+              };
+
+              const kotStr = generateDefxKotPlainString(kotOrder, getFlag, 48);
+              printThermalReceiptDocument(
+                kotStr,
+                `KOT - Token #${order.tokenNumber || ""}`,
+                {
+                  printerType: stationPrinter.printerType,
+                  printerUrl: stationPrinter.printerUrl,
+                  printerPort: stationPrinter.printerPort,
+                  stationId: stationPrinter.stationId,
+                }
+              ).catch((e) => console.warn("Auto-print Captain KOT failed:", e));
+            } catch (kotErr) {
+              console.warn("Failed generating auto KOT for Captain order:", kotErr);
+            }
+          }
+
+          // 2. AUTO-PRINT WORKSTATION / RUNNER SLIP
+          if (workstationPrinter) {
+            try {
+              const runnerOrder = {
+                orderNumber:
+                  order.orderNumber || String(order._id).slice(-4).toUpperCase(),
+                tokenNumber: order.tokenNumber,
+                orderType: order.orderType || "DineIn",
+                table: order.table ? { number: order.table.number } : undefined,
+                tableName: order.table?.number,
+                waiterName: order.waiterName || "Captain",
+                serverName: order.waiterName || "Captain",
+                customerName: order.customerName,
+                customerPhone: order.customerPhone,
+                createdAt: order.createdAt || Date.now(),
+                specialNotes: order.specialNotes,
+                items: (order.items || []).map((it: any) => ({
+                  itemName: it.itemName || it.name,
+                  name: it.name || it.itemName,
+                  quantity: it.quantity,
+                  customizations: it.customizations,
+                  notes: it.notes,
+                })),
+              };
+
+              const slipStr = generateWorkstationRunnerSlipPlainString(
+                runnerOrder,
+                activeOrg,
+                48
+              );
+
+              // 800ms stagger so if station & workstation printers are same physical device, commands do not collide
+              setTimeout(() => {
+                printThermalReceiptDocument(
+                  slipStr,
+                  `Runner Slip - Token #${order.tokenNumber || ""}`,
+                  {
+                    printerType: workstationPrinter.printerType,
+                    printerUrl: workstationPrinter.printerUrl,
+                    printerPort: workstationPrinter.printerPort,
+                    stationId: workstationPrinter.stationId,
+                  }
+                ).catch((e) => console.warn("Auto-print Captain Runner slip failed:", e));
+              }, 800);
+            } catch (slipErr) {
+              console.warn("Failed generating auto Runner slip for Captain order:", slipErr);
+            }
+          }
+
+          if (order.orderSource === "Prest-Captain") {
+            showToast(`🖨️ Auto-printed KOT & Runner Slip for Captain Order (${tokenDisplay || tableDisplay})`);
+          }
+        }
+      } else if (currentItemCount > prevItemCount) {
+        // Additional items added to existing order (KOT #2)
+        seenOrderItemCountsRef.current.set(orderIdStr, currentItemCount);
+        const addedItems = (order.items || []).slice(prevItemCount);
+
+        if (isAutoPrintKdsActive && stationPrinter && addedItems.length > 0) {
+          try {
+            const kotOrder: KotOrder = {
+              orderNumber:
+                order.orderNumber || String(order._id).slice(-4).toUpperCase(),
+              tokenNumber: order.tokenNumber,
+              orderType: order.orderType || "DineIn",
+              table: order.table ? { number: order.table.number } : null,
+              serverName: order.waiterName || "Captain",
+              waiterName: order.waiterName || "Captain",
+              guestCount: order.membersOnTable,
+              customerName: order.customerName,
+              customerPhone: order.customerPhone,
+              stationName: "Kitchen",
+              createdAt: Date.now(),
+              firedAt: Date.now(),
+              specialNotes: "ADD-ON / KOT #2",
+              items: addedItems.map((it: any) => ({
+                itemName: it.itemName || it.name,
+                quantity: it.quantity,
+                itemPrice: it.itemPrice || it.price,
+                customizations: it.customizations?.map((c: any) => ({
+                  optionName: c.name || c.optionName,
+                })),
+                notes: it.notes,
+              })),
+            };
+
+            const kotStr = generateDefxKotPlainString(kotOrder, getFlag, 48);
+            printThermalReceiptDocument(
+              kotStr,
+              `KOT Add-on - Token #${order.tokenNumber || ""}`,
+              {
+                printerType: stationPrinter.printerType,
+                printerUrl: stationPrinter.printerUrl,
+                printerPort: stationPrinter.printerPort,
+                stationId: stationPrinter.stationId,
+              }
+            ).catch((e) => console.warn("Auto-print Add-on KOT failed:", e));
+          } catch (kotErr) {
+            console.warn("Failed generating add-on KOT:", kotErr);
+          }
+        }
+      }
+    }
+  }, [liveOrders, activeOrg, orgFeatures, printers]);
 
   // Hydrate cart tabs and active tab from localStorage on mount (preserves cart across page refreshes)
   useEffect(() => {
@@ -1644,6 +1856,42 @@ function CashierPosContent() {
     goToStep(1);
   }, [handleClearCart, goToStep]);
 
+  // Thermal Receipt Printing for Completed Cashier Order
+  const handlePrintThermalReceipt = useCallback(async () => {
+    if (!completedOrderData) return;
+    setIsPrintingThermal(true);
+    try {
+      const receiptStr = generateDefxReceiptPlainString(
+        completedOrderData,
+        activeOrg,
+        48
+      );
+      const targetPrinter =
+        printers?.find((p) => p.printerUseFor === "Cashier") ||
+        printers?.find((p) => p.printerUseFor === "Station") ||
+        printers?.[0];
+
+      await printThermalReceiptDocument(
+        receiptStr,
+        `Receipt ${completedOrderData.orderNumber || ""}`,
+        targetPrinter
+          ? {
+              printerType: targetPrinter.printerType,
+              printerUrl: targetPrinter.printerUrl,
+              printerPort: targetPrinter.printerPort,
+              stationId: targetPrinter.stationId,
+            }
+          : undefined
+      );
+    } catch (err) {
+      console.error("Thermal print failed:", err);
+    } finally {
+      setIsPrintingThermal(false);
+    }
+  }, [completedOrderData, activeOrg, printers]);
+
+
+
   // Matched customer profile for active cart
   const matchedCustomer = useMemo(() => {
     if (!customersList || !activeCart?.customerPhone) return null;
@@ -1781,47 +2029,40 @@ function CashierPosContent() {
     }
 
     const checkStatus = async () => {
-      if (cashierPrinter.printerType === "Usb") {
+      // 1. Bluetooth check
+      if (cashierPrinter.printerType === "Bluetooth" || cashierPrinter.printerPort === "BT") {
+        if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
+          try {
+            const available = await (navigator as any).bluetooth.getAvailability?.();
+            if (available === false) {
+              if (isMounted) setPrinterStatus("disconnected");
+              return;
+            }
+          } catch {}
+        }
+      }
+
+      // 2. USB WebUSB check
+      if (cashierPrinter.printerType === "Usb" || cashierPrinter.printerPort === "USB") {
         if (typeof navigator !== "undefined" && "usb" in navigator) {
           try {
             const devices = await (navigator as any).usb.getDevices();
-            if (isMounted) {
-              setPrinterStatus(
-                devices.length > 0 ? "connected" : "disconnected",
-              );
-            }
-            return;
-          } catch {
-            if (isMounted) setPrinterStatus("disconnected");
-            return;
-          }
-        }
-        if (isMounted) setPrinterStatus("disconnected");
-        return;
-      }
-
-      if (cashierPrinter.printerType === "Bluetooth") {
-        if (typeof navigator !== "undefined" && "bluetooth" in navigator) {
-          try {
-            const devices = await (navigator as any).bluetooth.getDevices?.();
             if (devices && devices.length > 0) {
               if (isMounted) setPrinterStatus("connected");
               return;
             }
           } catch {}
         }
-        if (isMounted) setPrinterStatus("disconnected");
-        return;
       }
 
-      // LAN Ping
+      // 3. Hardware check via /api/printers/test-connection (handles Windows Bluetooth/COM8, Windows USB spooler, and LAN TCP socket)
       try {
         const res = await fetch("/api/printers/test-connection", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             printerUrl: cashierPrinter.printerUrl,
-            printerPort: cashierPrinter.printerPort || "9100",
+            printerPort: cashierPrinter.printerPort || (cashierPrinter.printerType === "Bluetooth" ? "BT" : cashierPrinter.printerType === "Usb" ? "USB" : "9100"),
             printerType: cashierPrinter.printerType,
           }),
         });
@@ -1835,9 +2076,27 @@ function CashierPosContent() {
     };
 
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+
+    // Event listeners for instant Bluetooth and USB state changes
+    const bt = typeof navigator !== "undefined" && "bluetooth" in navigator ? (navigator as any).bluetooth : null;
+    const handleBtAvailability = () => { if (isMounted) checkStatus(); };
+    if (bt?.addEventListener) bt.addEventListener("availabilitychanged", handleBtAvailability);
+
+    const usb = typeof navigator !== "undefined" && "usb" in navigator ? (navigator as any).usb : null;
+    const handleUsbChange = () => { if (isMounted) checkStatus(); };
+    if (usb?.addEventListener) {
+      usb.addEventListener("connect", handleUsbChange);
+      usb.addEventListener("disconnect", handleUsbChange);
+    }
+
+    const interval = setInterval(checkStatus, 10000);
     return () => {
       isMounted = false;
+      if (bt?.removeEventListener) bt.removeEventListener("availabilitychanged", handleBtAvailability);
+      if (usb?.removeEventListener) {
+        usb.removeEventListener("connect", handleUsbChange);
+        usb.removeEventListener("disconnect", handleUsbChange);
+      }
       clearInterval(interval);
     };
   }, [printers]);
@@ -2085,17 +2344,17 @@ function CashierPosContent() {
         tableName: tableObj?.tableNumber,
         table: tableObj ? { number: tableObj.tableNumber } : undefined,
         subTotal: cartSubtotalPaise,
-        taxTotal: taxGstPaise,
+        taxTotal: taxCalculation.taxExclusivePaise,
         deliveryCharge: deliveryFeePaise,
         totalAmount: totalPayablePaise,
         display_sub_total: (cartSubtotalPaise / 100).toFixed(2),
-        display_tax_total: (taxGstPaise / 100).toFixed(2),
+        display_tax_total: (taxCalculation.taxExclusivePaise / 100).toFixed(2),
         display_discount_amount: "0.00",
         display_total_amount: (totalPayablePaise / 100).toFixed(2),
         taxInfoSnapshot: {
           tax_mode:
             taxCalculation.taxExclusivePaise > 0 ? "exclusive" : "inclusive",
-          tax_amount: (taxGstPaise / 100).toFixed(2),
+          tax_amount: (taxCalculation.taxExclusivePaise / 100).toFixed(2),
           components: taxCalculation.componentBreakdown.map((c) => ({
             name: c.name,
             rate: c.rate,
@@ -2105,6 +2364,123 @@ function CashierPosContent() {
         items: itemsSnapshot,
         createdAt: Date.now(),
       });
+
+      if (res?.orderId) {
+        const orderIdStr = String(res.orderId);
+        printedLiveOrderIdsRef.current.add(orderIdStr);
+        seenLiveOrderIdsRef.current.add(orderIdStr);
+        seenOrderItemCountsRef.current.set(orderIdStr, itemsSnapshot.length);
+      }
+
+      // AUTO-PRINT KOT / STATION TICKET:
+      // If kds_auto_print_on_fire is active, automatically fire KOT to Station printer!
+      const isAutoPrintKdsActive = orgFeatures?.find(
+        (f) => f.featureKey === "kds_auto_print_on_fire"
+      )?.active;
+
+      const stationPrinter =
+        printers?.find((p) => p.printerUseFor === "Station") ||
+        printers?.[0];
+
+      if (isAutoPrintKdsActive && stationPrinter) {
+        try {
+          const getFlag = (k: string) =>
+            orgFeatures?.find((f) => f.featureKey === k)?.active ?? false;
+
+          const kotOrder: KotOrder = {
+            orderNumber:
+              res.orderNumber || String(res.orderId).slice(-4).toUpperCase(),
+            tokenNumber: res.tokenNumber,
+            orderType: resolvedOrderType,
+            table: tableObj ? { number: tableObj.tableNumber } : null,
+            serverName: activeCart.waiterName,
+            waiterName: activeCart.waiterName,
+            guestCount: activeCart.guestCount,
+            customerName: resolvedCustomerName,
+            customerPhone: resolvedCustomerPhone,
+            stationName: "Kitchen",
+            createdAt: Date.now(),
+            firedAt: Date.now(),
+            specialNotes: resolvedNotes || undefined,
+            items: itemsSnapshot.map((it: any) => ({
+              itemName: it.itemName,
+              quantity: it.quantity,
+              itemPrice: it.itemPrice,
+              customizations: it.customizations?.map((c: any) => ({
+                optionName: c.name || c.optionName,
+              })),
+              notes: (it as any).notes,
+            })),
+          };
+
+          const kotStr = generateDefxKotPlainString(kotOrder, getFlag, 48);
+          printThermalReceiptDocument(
+            kotStr,
+            `KOT - Token #${res.tokenNumber || ""}`,
+            {
+              printerType: stationPrinter.printerType,
+              printerUrl: stationPrinter.printerUrl,
+              printerPort: stationPrinter.printerPort,
+              stationId: stationPrinter.stationId,
+            }
+          ).catch((e) => console.warn("Auto-print KOT failed:", e));
+        } catch (printKotErr) {
+          console.warn("Failed generating auto KOT:", printKotErr);
+        }
+      }
+
+      // AUTO-PRINT WORKSTATION / RUNNER SLIP:
+      // When an order is placed, dispatch the Runner / Assembly slip to the Workstation printer!
+      const workstationPrinter =
+        printers?.find((p) => p.printerUseFor === "WorkStation");
+
+      if (workstationPrinter) {
+        try {
+          const runnerOrder = {
+            orderNumber:
+              res.orderNumber || String(res.orderId).slice(-4).toUpperCase(),
+            tokenNumber: res.tokenNumber,
+            orderType: resolvedOrderType,
+            table: tableObj ? { number: tableObj.tableNumber } : undefined,
+            tableName: tableObj?.tableNumber,
+            waiterName: activeCart.waiterName,
+            serverName: activeCart.waiterName,
+            customerName: resolvedCustomerName,
+            customerPhone: resolvedCustomerPhone,
+            createdAt: Date.now(),
+            specialNotes: resolvedNotes || undefined,
+            items: itemsSnapshot.map((it: any) => ({
+              itemName: it.itemName,
+              name: it.name,
+              quantity: it.quantity,
+              customizations: it.customizations,
+              notes: (it as any).notes,
+            })),
+          };
+
+          const slipStr = generateWorkstationRunnerSlipPlainString(
+            runnerOrder,
+            activeOrg,
+            48,
+          );
+
+          // Small stagger so if the same printer is used for both KOT & Workstation, the port/driver doesn't collide
+          setTimeout(() => {
+            printThermalReceiptDocument(
+              slipStr,
+              `Runner Slip - Token #${res.tokenNumber || ""}`,
+              {
+                printerType: workstationPrinter.printerType,
+                printerUrl: workstationPrinter.printerUrl,
+                printerPort: workstationPrinter.printerPort,
+                stationId: workstationPrinter.stationId,
+              },
+            ).catch((e) => console.warn("Auto-print Workstation slip failed:", e));
+          }, 800);
+        } catch (printWsErr) {
+          console.warn("Failed generating auto Workstation slip:", printWsErr);
+        }
+      }
 
       // Clear the current cart
       handleClearCart();
@@ -2147,6 +2523,8 @@ function CashierPosContent() {
     taxGstPaise,
     deliveryFeePaise,
     taxCalculation,
+    orgFeatures,
+    printers,
     goToStep,
     handleClearCart,
   ]);
@@ -4888,6 +5266,7 @@ function CashierPosContent() {
                     {(totalPayablePaise / 100).toFixed(2)}
                   </span>
                 </div>
+
                 <button
                   onClick={() => {
                     const digits = (activeCart?.customerPhone || "").replace(/\D/g, "");
@@ -6337,14 +6716,13 @@ function CashierPosContent() {
 
               <button
                 type="button"
-                disabled
-                title="Thermal print feature coming soon"
-                className="flex-1 py-2.5 bg-stone-100 text-stone-400 border border-stone-200 rounded-xl text-xs font-semibold cursor-not-allowed opacity-75 flex items-center justify-center gap-1.5"
+                onClick={handlePrintThermalReceipt}
+                disabled={isPrintingThermal}
+                title="Print thermal receipt on roll printer"
+                className="flex-1 py-2.5 bg-[#141010] hover:bg-black text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
               >
-                <span>Thermal Print</span>
-                <span className="px-1.5 py-0.5 text-[9px] leading-none font-medium bg-[#fffbeb] text-[#b45309] border border-[#fde68a] rounded-full whitespace-nowrap">
-                  Coming Soon
-                </span>
+                <span>🖨️</span>
+                <span>{isPrintingThermal ? "Printing..." : "Thermal Print"}</span>
               </button>
 
               <button

@@ -79,7 +79,9 @@ async function validateUniquePrinterUseFor(
     .first();
 
   if (existing && (!excludeId || existing._id !== excludeId)) {
-    throw new Error(`Hey! ${printerUseFor} printer is already taken.`);
+    throw new Error(
+      `Hey! ${printerUseFor} printer is already taken. Please remove the existing printer first before adding a new one.`,
+    );
   }
 }
 

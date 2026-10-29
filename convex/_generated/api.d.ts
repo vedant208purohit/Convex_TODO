@@ -11,6 +11,10 @@
 import type * as assetResolver from "../assetResolver.js";
 import type * as chefPrepPreferences from "../chefPrepPreferences.js";
 import type * as customers from "../customers.js";
+import type * as dashboardCatalog from "../dashboardCatalog.js";
+import type * as dashboardDataProviders from "../dashboardDataProviders.js";
+import type * as dashboardTypes from "../dashboardTypes.js";
+import type * as dashboards from "../dashboards.js";
 import type * as deliveryProvider from "../deliveryProvider.js";
 import type * as digitalStoreImages from "../digitalStoreImages.js";
 import type * as features from "../features.js";
@@ -73,6 +77,10 @@ declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
   chefPrepPreferences: typeof chefPrepPreferences;
   customers: typeof customers;
+  dashboardCatalog: typeof dashboardCatalog;
+  dashboardDataProviders: typeof dashboardDataProviders;
+  dashboardTypes: typeof dashboardTypes;
+  dashboards: typeof dashboards;
   deliveryProvider: typeof deliveryProvider;
   digitalStoreImages: typeof digitalStoreImages;
   features: typeof features;
