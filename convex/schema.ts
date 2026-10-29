@@ -1252,7 +1252,10 @@ postpaidOrderRequests: defineTable({
     refundAmount: v.optional(v.number()),
     transactionReference: v.optional(v.string()),
     createdAt: v.number(),
-  }).index("by_order", ["orderId"]),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_org", ["organizationId"])
+    .index("by_org_created_at", ["organizationId", "createdAt"]),
 
   // Inventory, Suppliers, Recipes & Purchase Orders Domain Entities
   suppliers: defineTable({
@@ -1697,5 +1700,84 @@ postpaidOrderRequests: defineTable({
     updatedAt: v.number(),
   })
     .index("by_org_terminal", ["organizationId", "terminalId"]),
+
+  // ==========================================
+  // MODULAR WIDGET-DRIVEN DASHBOARD DOMAIN
+  // ==========================================
+
+  dashboards: defineTable({
+    organizationId: v.id("organizations"),
+    userId: v.string(), // Clerk subject ID, or "system" / "store_default"
+    name: v.string(),
+    description: v.optional(v.string()),
+    scope: v.union(
+      v.literal("user"),
+      v.literal("store_default"),
+      v.literal("template")
+    ),
+    templateKey: v.optional(v.string()), // e.g. "executive_dinner_peak", "breakfast_buffet_bakery", etc.
+    revision: v.number(), // Optimistic concurrency tracking
+    isDefault: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deletedAt: v.optional(v.number()),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_user", ["organizationId", "userId"])
+    .index("by_org_scope", ["organizationId", "scope"])
+    .index("by_org_template", ["organizationId", "templateKey"]),
+
+  dashboardPlacements: defineTable({
+    organizationId: v.id("organizations"),
+    dashboardId: v.id("dashboards"),
+    widgetId: v.string(),
+    gridRow: v.number(),
+    gridCol: v.number(), // 0 to 11 in a 12-col grid
+    width: v.number(), // Col span (e.g. 4, 6, 8, 12)
+    height: v.number(), // Row span / height units
+    displayOrder: v.number(),
+    isEnabled: v.boolean(),
+    configuration: v.optional(v.any()),
+    configurationVersion: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_dashboard", ["dashboardId"])
+    .index("by_dashboard_widget", ["dashboardId", "widgetId"])
+    .index("by_org", ["organizationId"]),
+
+  dashboardDrafts: defineTable({
+    organizationId: v.id("organizations"),
+    dashboardId: v.id("dashboards"),
+    userId: v.string(),
+    baseRevision: v.number(),
+    placements: v.array(
+      v.object({
+        widgetId: v.string(),
+        gridRow: v.number(),
+        gridCol: v.number(),
+        width: v.number(),
+        height: v.number(),
+        displayOrder: v.number(),
+        isEnabled: v.boolean(),
+        configuration: v.optional(v.any()),
+        configurationVersion: v.number(),
+      })
+    ),
+    updatedAt: v.number(),
+  })
+    .index("by_org_user_dashboard", ["organizationId", "userId", "dashboardId"])
+    .index("by_dashboard", ["dashboardId"]),
+
+  dashboardPreferences: defineTable({
+    organizationId: v.id("organizations"),
+    userId: v.string(),
+    activeDashboardId: v.optional(v.id("dashboards")),
+    autoAlign: v.optional(v.boolean()),
+    gridResolution: v.optional(v.string()), // e.g. "1440px Fluid", "Compact 1200px"
+    selectedTemplateKey: v.optional(v.string()),
+    updatedAt: v.number(),
+  })
+    .index("by_org_user", ["organizationId", "userId"]),
 }, { schemaValidation: false });
 
