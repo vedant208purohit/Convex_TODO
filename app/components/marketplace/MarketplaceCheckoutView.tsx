@@ -2,36 +2,86 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import { PosShell } from "../PosShell";
 import { INITIAL_MARKETPLACE_APPS } from "../../lib/services/marketplaceService";
 import { MarketplaceApp } from "./types";
 
 export function MarketplaceCheckoutView() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const appId = searchParams.get("appId") || "app-1";
 
-  const app: MarketplaceApp =
+  // 1. Live Backend Query for Wallet & Listing
+  const wallet = useQuery(api.marketplace.getWallet, {});
+  const listingData = useQuery(api.marketplace.getListing, {
+    appIdOrSlug: appId,
+  });
+
+  const fallbackApp: MarketplaceApp =
     INITIAL_MARKETPLACE_APPS.find((a) => a.id === appId || a.slug === appId) ||
     INITIAL_MARKETPLACE_APPS[0];
 
-  const [walletBalance, setWalletBalance] = useState<number>(8000);
+  const app: MarketplaceApp = listingData
+    ? {
+      id: listingData._id,
+      slug: listingData.slug,
+      title: listingData.title,
+      subtitle: listingData.subtitle,
+      vendor: listingData.vendor,
+      category: listingData.category as MarketplaceApp["category"],
+      description: listingData.description,
+      badge: (listingData.isInstalled ? "Installed" : listingData.badge) as MarketplaceApp["badge"],
+      iconName: listingData.iconName,
+      rating: listingData.rating,
+      version: listingData.version,
+      statusText: listingData.statusText,
+      statusType: listingData.statusType as MarketplaceApp["statusType"],
+      priceText: listingData.priceText,
+      priceAmount: listingData.priceAmount,
+      isOneTime: listingData.isOneTime,
+      actionText: listingData.actionText,
+      actionType: listingData.actionType as MarketplaceApp["actionType"],
+      isInstalled: listingData.isInstalled,
+      practicalFeatures: listingData.practicalFeatures,
+      prerequisites: listingData.prerequisites,
+      permissions: listingData.permissions,
+      terms: listingData.terms,
+    }
+    : fallbackApp;
+
+  // 2. Convex Mutation for Purchase
+  const purchaseAppMutation = useMutation(api.marketplace.purchaseApp);
+
+  const walletBalance = wallet?.balance ?? 8000;
   const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [transactionCode, setTransactionCode] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number>(2); // Step 2: Wallet Audit
 
   const appPrice = app.priceAmount > 0 ? app.priceAmount : 5000;
   const projectedBalance = walletBalance - appPrice;
 
-  const handleConfirmPurchase = () => {
-    setIsAuthorizing(true);
-    setTimeout(() => {
+  const handleConfirmPurchase = async () => {
+    try {
+      setIsAuthorizing(true);
+      setErrorMessage(null);
+      const uniqueSuffix = Math.random().toString(36).substring(2, 9);
+      const res = await purchaseAppMutation({
+        appIdOrSlug: app.slug || app.id,
+        idempotencyKey: `checkout_${app.slug}_${uniqueSuffix}`,
+      });
+      setTransactionCode(res.transactionCode);
       setIsAuthorizing(false);
       setIsSuccess(true);
       setActiveStep(3);
-      setWalletBalance((prev) => Math.max(0, prev - appPrice));
-    }, 1200);
+    } catch (err: unknown) {
+      setIsAuthorizing(false);
+      const msg = err instanceof Error ? err.message : "Failed to authorize purchase.";
+      setErrorMessage(msg);
+    }
   };
 
   return (
@@ -94,11 +144,10 @@ export function MarketplaceCheckoutView() {
                 {/* Step 2: Active */}
                 <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                   <div
-                    className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold shrink-0 shadow-2xs ${
-                      activeStep >= 2
-                        ? "bg-[#0c0a09] text-white"
-                        : "bg-white text-[#5e5e5e] border border-[#e7e5e4]"
-                    }`}
+                    className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold shrink-0 shadow-2xs ${activeStep >= 2
+                      ? "bg-[#0c0a09] text-white"
+                      : "bg-white text-[#5e5e5e] border border-[#e7e5e4]"
+                      }`}
                   >
                     {activeStep > 2 ? (
                       <span className="material-symbols-outlined text-[10px] sm:text-[12px]">check</span>
@@ -110,23 +159,20 @@ export function MarketplaceCheckoutView() {
                 </div>
 
                 <div
-                  className={`h-0.5 w-4 sm:w-8 shrink-0 ${
-                    activeStep >= 3 ? "bg-[#0c0a09]" : "bg-[#e7e5e4]"
-                  }`}
+                  className={`h-0.5 w-4 sm:w-8 shrink-0 ${activeStep >= 3 ? "bg-[#0c0a09]" : "bg-[#e7e5e4]"
+                    }`}
                 />
 
                 {/* Step 3 */}
                 <div
-                  className={`flex items-center gap-1 sm:gap-1.5 shrink-0 ${
-                    activeStep < 3 ? "opacity-50" : ""
-                  }`}
+                  className={`flex items-center gap-1 sm:gap-1.5 shrink-0 ${activeStep < 3 ? "opacity-50" : ""
+                    }`}
                 >
                   <div
-                    className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold shrink-0 ${
-                      activeStep >= 3
-                        ? "bg-[#0c0a09] text-white"
-                        : "bg-white text-[#5e5e5e] border border-[#e7e5e4]"
-                    }`}
+                    className={`w-4 h-4 sm:w-5 sm:h-5 rounded-full flex items-center justify-center text-[9px] sm:text-[10px] font-bold shrink-0 ${activeStep >= 3
+                      ? "bg-[#0c0a09] text-white"
+                      : "bg-white text-[#5e5e5e] border border-[#e7e5e4]"
+                      }`}
                   >
                     3
                   </div>
@@ -316,6 +362,16 @@ export function MarketplaceCheckoutView() {
                     </div>
                   </div>
 
+                  {/* Error Alert Banner */}
+                  {errorMessage && (
+                    <div className="bg-red-50 border border-red-200 text-red-800 rounded-xl p-3 text-xs flex items-center gap-2">
+                      <span className="material-symbols-outlined text-red-600 text-[18px] shrink-0">
+                        error
+                      </span>
+                      <span>{errorMessage}</span>
+                    </div>
+                  )}
+
                   {/* Big Primary Action Button */}
                   <div className="flex flex-col gap-2 pt-0.5 sm:pt-1">
                     <button
@@ -335,7 +391,7 @@ export function MarketplaceCheckoutView() {
                               <span className="truncate">Authorizing Escrow...</span>
                             </span>
                           ) : isSuccess ? (
-                            <span>Purchase Authorized ✓</span>
+                            <span>Purchase Authorized ✓ {transactionCode ? `(${transactionCode})` : ""}</span>
                           ) : (
                             `Confirm & Pay ₹${appPrice.toLocaleString("en-IN", {
                               minimumFractionDigits: 2,
@@ -354,7 +410,7 @@ export function MarketplaceCheckoutView() {
                       href="/marketplace"
                       className="w-full text-center py-1 sm:py-1.5 text-[11px] sm:text-xs font-semibold text-[#5e5e5e] hover:text-[#0c0a09] transition-colors"
                     >
-                      Cancel and Return to Marketplace
+                      {isSuccess ? "Return to Marketplace" : "Cancel and Return to Marketplace"}
                     </Link>
                   </div>
                 </div>
@@ -379,11 +435,10 @@ export function MarketplaceCheckoutView() {
 
                   {/* Simulated Preview Box (neatly integrated inside right panel) */}
                   <div
-                    className={`p-2.5 sm:p-3 rounded-xl border text-xs flex flex-col gap-1 sm:gap-1.5 transition-colors ${
-                      isSuccess
-                        ? "bg-emerald-50 border-emerald-200 text-emerald-900"
-                        : "bg-white border-[#e7e5e4] text-[#0c0a09]"
-                    }`}
+                    className={`p-2.5 sm:p-3 rounded-xl border text-xs flex flex-col gap-1 sm:gap-1.5 transition-colors ${isSuccess
+                      ? "bg-emerald-50 border-emerald-200 text-emerald-900"
+                      : "bg-white border-[#e7e5e4] text-[#0c0a09]"
+                      }`}
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 font-bold text-[10px] sm:text-[11px]">

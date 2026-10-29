@@ -21,6 +21,7 @@ import type * as features from "../features.js";
 import type * as frontDisplay from "../frontDisplay.js";
 import type * as http from "../http.js";
 import type * as inventory from "../inventory.js";
+import type * as marketplace from "../marketplace.js";
 import type * as menu from "../menu.js";
 import type * as menuImport from "../menuImport.js";
 import type * as migrateStorageToR2 from "../migrateStorageToR2.js";
@@ -87,6 +88,7 @@ declare const fullApi: ApiFromModules<{
   frontDisplay: typeof frontDisplay;
   http: typeof http;
   inventory: typeof inventory;
+  marketplace: typeof marketplace;
   menu: typeof menu;
   menuImport: typeof menuImport;
   migrateStorageToR2: typeof migrateStorageToR2;

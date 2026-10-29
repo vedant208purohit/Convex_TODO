@@ -77,16 +77,14 @@ export function MarketplaceDetailDrawer({
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold tracking-wide flex items-center gap-1.5 ${
-                      isPurchased
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold tracking-wide flex items-center gap-1.5 ${isPurchased
                         ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                         : "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
-                    }`}
+                      }`}
                   >
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        isPurchased ? "bg-emerald-500" : "bg-[#0c0a09]"
-                      }`}
+                      className={`w-1.5 h-1.5 rounded-full ${isPurchased ? "bg-emerald-500" : "bg-[#0c0a09]"
+                        }`}
                     />
                     {isPurchased ? "Installed" : "Paid • Purchase Required"}
                   </span>
@@ -264,9 +262,8 @@ export function MarketplaceDetailDrawer({
                 Wallet: <strong className="font-mono">₹{walletBalance.toLocaleString("en-IN")}</strong>
               </span>
               <span
-                className={`w-2 h-2 rounded-full ml-0.5 shrink-0 ${
-                  walletBalance >= appPrice ? "bg-emerald-500" : "bg-amber-500"
-                }`}
+                className={`w-2 h-2 rounded-full ml-0.5 shrink-0 ${walletBalance >= appPrice ? "bg-emerald-500" : "bg-amber-500"
+                  }`}
               />
             </div>
           </div>
@@ -297,7 +294,7 @@ export function MarketplaceDetailDrawer({
 
           {!isPurchased && (
             <Link
-              href={`/marketplace/checkout?appId=${app.id}`}
+              href={`/marketplace/checkout?appId=${app.slug || app.id}`}
               onClick={onClose}
               className="text-center text-[10.5px] sm:text-[11px] text-[#5e5e5e] hover:text-[#0c0a09] underline pt-0.5 truncate"
             >
