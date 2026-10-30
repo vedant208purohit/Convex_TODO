@@ -2124,16 +2124,17 @@ export async function seedDefaultSurvey(
     updatedAt: now,
   });
 
-  // Question 1: Numeric rating (1-10 NPS)
+  // Question 1: 5-Star Overall Dining Experience Rating
   await ctx.db.insert("surveyQuestions", {
     surveyId,
     type: "numeric",
-    questionText: `On a scale of 1-10, How likely are you to recommend ${nameToUse} to your friends & family?`,
+    ratingDisplayMode: "stars",
+    questionText: `How was your overall dining experience at ${nameToUse}?`,
     position: 1,
     validationRules: {
       presence: true,
       greaterThanOrEqualTo: 1,
-      lessThanOrEqualTo: 10,
+      lessThanOrEqualTo: 5,
     },
     createdAt: now,
     updatedAt: now,

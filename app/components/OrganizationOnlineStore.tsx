@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Toast, type ToastMessage } from "./Toast";
 import { getCanonicalStorefrontUrl } from "../../lib/storefrontUrl";
+import { resolveOrganizationCurrency } from "../../lib/constants/countries";
 
 // ==========================================
 // UTILITY HELPERS & COLOR PRESETS
@@ -123,6 +124,8 @@ export function OrganizationOnlineStore() {
       setSelectedPreset(org.theme);
     }
   }, [org]);
+
+  const currencySymbol = useMemo(() => resolveOrganizationCurrency(org).symbol, [org]);
 
   // Canonical Storefront URL
   const storeSlug = org?.slug || "spicegarden";
@@ -497,7 +500,7 @@ export function OrganizationOnlineStore() {
                       >
                         <div>
                           <div className="text-[9px] font-bold tracking-wide">FLAT 20% OFF</div>
-                          <div className="text-[7px] opacity-80">Use code SPICE20 above ₹499</div>
+                          <div className="text-[7px] opacity-80">Use code SPICE20 above {currencySymbol}499</div>
                         </div>
                         <span className="material-symbols-outlined text-[16px]">local_activity</span>
                       </div>
@@ -528,7 +531,7 @@ export function OrganizationOnlineStore() {
                           </div>
                           <span className="text-[8px] text-[#645d58]">6 pcs charcoal smoked</span>
                           <div className="flex items-center justify-between mt-1">
-                            <span className="font-bold text-[10px]">₹280</span>
+                            <span className="font-bold text-[10px]">{currencySymbol}280</span>
                             <button
                               type="button"
                               className="text-white text-[8px] font-bold px-2 py-0.5 rounded-full shadow-xs"
@@ -554,7 +557,7 @@ export function OrganizationOnlineStore() {
                           </div>
                           <span className="text-[8px] text-[#645d58]">Rich cashew gravy</span>
                           <div className="flex items-center justify-between mt-1">
-                            <span className="font-bold text-[10px]">₹360</span>
+                            <span className="font-bold text-[10px]">{currencySymbol}360</span>
                             <div className="inline-flex items-center gap-1 bg-[#f4ece8] px-1.5 py-0.5 rounded text-[8px] font-bold">
                               <span>-</span>
                               <span>1</span>
@@ -574,7 +577,7 @@ export function OrganizationOnlineStore() {
                       >
                         <div className="flex items-center gap-1">
                           <span className="material-symbols-outlined text-[11px]">shopping_bag</span>
-                          <span>3 Items • ₹940</span>
+                          <span>3 Items • {currencySymbol}940</span>
                         </div>
                         <span className="text-[8px] font-semibold flex items-center">View Cart →</span>
                       </div>
@@ -655,7 +658,7 @@ export function OrganizationOnlineStore() {
                           <span className="font-bold text-[9px] mt-1 truncate">Margherita Pizza</span>
                           <span className="text-[8px] text-[#645d58]">Regular 7&quot;</span>
                           <div className="flex items-center justify-between mt-1">
-                            <span className="font-bold text-[9px]">₹100</span>
+                            <span className="font-bold text-[9px]">{currencySymbol}100</span>
                             <button type="button" className="bg-[#1b5e20] text-white rounded text-[8px] px-1.5 py-0.5 font-bold">+</button>
                           </div>
                         </div>
@@ -668,7 +671,7 @@ export function OrganizationOnlineStore() {
                           <span className="font-bold text-[9px] mt-1 truncate">Macaroni Pizza</span>
                           <span className="text-[8px] text-[#645d58]">Cheesy Crust</span>
                           <div className="flex items-center justify-between mt-1">
-                            <span className="font-bold text-[9px]">₹150</span>
+                            <span className="font-bold text-[9px]">{currencySymbol}150</span>
                             <button type="button" className="bg-[#1b5e20] text-white rounded text-[8px] px-1.5 py-0.5 font-bold">+</button>
                           </div>
                         </div>
@@ -677,7 +680,7 @@ export function OrganizationOnlineStore() {
 
                     <div className="p-2 bg-white">
                       <button type="button" className="w-full py-1.5 rounded-lg bg-[#1b5e20] text-white font-bold text-[9px] flex items-center justify-between px-3">
-                        <span>₹291.00 • 2 Items</span>
+                        <span>{currencySymbol}291.00 • 2 Items</span>
                         <span>Pay with UPI →</span>
                       </button>
                     </div>
@@ -731,7 +734,7 @@ export function OrganizationOnlineStore() {
                       <div className="space-y-0.5">
                         <div className="flex justify-between items-baseline font-serif text-[10px] text-[#2c221e]">
                           <span className="font-normal italic">I. Heirloom Beetroot Tartare</span>
-                          <span>₹420</span>
+                          <span>{currencySymbol}420</span>
                         </div>
                         <p className="text-[7.5px] text-[#7d6f65] leading-tight">Smoked goat curd, fermented blackberry pearls, buckwheat wafer.</p>
                         <span className="text-[7px] text-[#916b55] font-serif italic">Paired with: Pinot Noir ’21</span>
@@ -740,7 +743,7 @@ export function OrganizationOnlineStore() {
                       <div className="space-y-0.5">
                         <div className="flex justify-between items-baseline font-serif text-[10px] text-[#2c221e]">
                           <span className="font-normal italic">II. Black Truffle Agnolotti</span>
-                          <span>₹680</span>
+                          <span>{currencySymbol}680</span>
                         </div>
                         <p className="text-[7.5px] text-[#7d6f65] leading-tight">Parmigiano foam, shaved autumn truffles, brown butter glaze.</p>
                       </div>
@@ -812,7 +815,7 @@ export function OrganizationOnlineStore() {
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
                             <span className="font-bold text-[9px] text-white truncate">Smoked Mezcalita</span>
-                            <span className="text-[9px] font-bold text-[#ffb74d]">₹550</span>
+                            <span className="text-[9px] font-bold text-[#ffb74d]">{currencySymbol}550</span>
                           </div>
                           <span className="text-[7.5px] text-neutral-400 block mt-0.5">Agave, chili salt, charred lime</span>
                         </div>
@@ -826,7 +829,7 @@ export function OrganizationOnlineStore() {
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
                             <span className="font-bold text-[9px] text-white truncate">Crimson Velvet</span>
-                            <span className="text-[9px] font-bold text-[#ffb74d]">₹620</span>
+                            <span className="text-[9px] font-bold text-[#ffb74d]">{currencySymbol}620</span>
                           </div>
                           <span className="text-[7.5px] text-neutral-400 block mt-0.5">London dry gin, hibiscus</span>
                         </div>
@@ -836,7 +839,7 @@ export function OrganizationOnlineStore() {
                     <div className="p-2 bg-[#121214] border-t border-neutral-800">
                       <div className="flex items-center justify-between text-[8px] bg-[#1e1e24] px-2 py-1.5 rounded-lg text-white">
                         <span>Split Table Tab</span>
-                        <span className="font-bold text-[#ffb74d]">₹1,170 →</span>
+                        <span className="font-bold text-[#ffb74d]">{currencySymbol}1,170 →</span>
                       </div>
                     </div>
                   </div>
@@ -1256,7 +1259,7 @@ export function OrganizationOnlineStore() {
                                     <p className="text-[10px] text-[#645d58] line-clamp-2 mt-0.5">
                                       Charcoal-grilled cottage cheese cubes infused with aromatic tandoori masala.
                                     </p>
-                                    <span className="text-xs font-bold text-[#1e1b19] mt-1 font-mono">₹280.00</span>
+                                    <span className="text-xs font-bold text-[#1e1b19] mt-1 font-mono">{currencySymbol}280.00</span>
                                   </div>
                                   <div className="flex flex-col items-center gap-1 shrink-0">
                                     <div className="w-18 h-18 rounded-lg overflow-hidden bg-[#f4ece8]">
@@ -1291,7 +1294,7 @@ export function OrganizationOnlineStore() {
                                     <p className="text-[10px] text-[#645d58] line-clamp-2 mt-0.5">
                                       Slow-simmered tender chicken pieces in velvety spiced tomato and cashew butter gravy.
                                     </p>
-                                    <span className="text-xs font-bold text-[#1e1b19] mt-1 font-mono">₹420.00</span>
+                                    <span className="text-xs font-bold text-[#1e1b19] mt-1 font-mono">{currencySymbol}420.00</span>
                                   </div>
                                   <div className="flex flex-col items-center gap-1 shrink-0">
                                     <div className="w-18 h-18 rounded-lg overflow-hidden bg-[#f4ece8]">
@@ -1326,7 +1329,7 @@ export function OrganizationOnlineStore() {
                                     <p className="text-[10px] text-[#645d58] line-clamp-2 mt-0.5">
                                       Traditional tandoor-baked leavened bread brushed with fresh garlic herb butter.
                                     </p>
-                                    <span className="text-xs font-bold text-[#1e1b19] mt-1 font-mono">₹120.00</span>
+                                    <span className="text-xs font-bold text-[#1e1b19] mt-1 font-mono">{currencySymbol}120.00</span>
                                   </div>
                                   <div className="flex flex-col items-center gap-1 shrink-0">
                                     <div className="w-18 h-18 rounded-lg overflow-hidden bg-[#f4ece8]">
@@ -1458,7 +1461,7 @@ export function OrganizationOnlineStore() {
                                     </span>
                                     <span className="text-xs font-medium">Regular (6 pieces)</span>
                                   </div>
-                                  <span className="font-mono text-xs font-bold">₹280.00</span>
+                                  <span className="font-mono text-xs font-bold">{currencySymbol}280.00</span>
                                 </div>
                                 <div
                                   onClick={() => setModifierPortion("large")}
@@ -1471,7 +1474,7 @@ export function OrganizationOnlineStore() {
                                     </span>
                                     <span className="text-xs font-medium">Large Sharing (10 pieces)</span>
                                   </div>
-                                  <span className="font-mono text-xs text-[#645d58]">+ ₹140.00</span>
+                                  <span className="font-mono text-xs text-[#645d58]">+ {currencySymbol}140.00</span>
                                 </div>
                               </div>
                             </div>
@@ -1512,7 +1515,7 @@ export function OrganizationOnlineStore() {
                                     </span>
                                     <span className="text-[11px]">Extra Mint Chutney Dip (50ml)</span>
                                   </div>
-                                  <span className="font-mono text-xs">+ ₹25.00</span>
+                                  <span className="font-mono text-xs">+ {currencySymbol}25.00</span>
                                 </div>
                                 <div
                                   onClick={() => setExtraSalad(!extraSalad)}
@@ -1524,7 +1527,7 @@ export function OrganizationOnlineStore() {
                                     </span>
                                     <span className="text-[11px]">Lachha Masala Onion Salad</span>
                                   </div>
-                                  <span className="font-mono text-xs">+ ₹35.00</span>
+                                  <span className="font-mono text-xs">+ {currencySymbol}35.00</span>
                                 </div>
                               </div>
                             </div>
@@ -1540,7 +1543,7 @@ export function OrganizationOnlineStore() {
                             >
                               <span>Add Item to Order</span>
                               <span className="font-mono">
-                                ₹{modifierPortion === "regular" ? (280 + (extraChutney ? 25 : 0) + (extraSalad ? 35 : 0)) : (420 + (extraChutney ? 25 : 0) + (extraSalad ? 35 : 0))}.00
+                                {currencySymbol}{modifierPortion === "regular" ? (280 + (extraChutney ? 25 : 0) + (extraSalad ? 35 : 0)) : (420 + (extraChutney ? 25 : 0) + (extraSalad ? 35 : 0))}.00
                               </span>
                             </button>
                           </div>
@@ -1561,21 +1564,21 @@ export function OrganizationOnlineStore() {
                                   <span className="font-bold text-xs text-[#1e1b19]">1 × Butter Chicken Masala</span>
                                   <span className="text-[10px] text-[#645d58]">Boneless Makhani Gravy</span>
                                 </div>
-                                <span className="font-mono text-xs font-bold">₹420.00</span>
+                                <span className="font-mono text-xs font-bold">{currencySymbol}420.00</span>
                               </div>
                               <div className="p-2.5 rounded-xl bg-white border border-[#e9e1dd] flex items-center justify-between">
                                 <div className="flex flex-col">
                                   <span className="font-bold text-xs text-[#1e1b19]">2 × Garlic Butter Naan</span>
                                   <span className="text-[10px] text-[#645d58]">Fresh Clay Tandoori</span>
                                 </div>
-                                <span className="font-mono text-xs font-bold">₹240.00</span>
+                                <span className="font-mono text-xs font-bold">{currencySymbol}240.00</span>
                               </div>
                               <div className="p-2.5 rounded-xl bg-white border border-[#e9e1dd] flex items-center justify-between">
                                 <div className="flex flex-col">
                                   <span className="font-bold text-xs text-[#1e1b19]">1 × Tandoori Paneer Tikka</span>
                                   <span className="text-[10px] text-[#645d58]">Medium Spice + Extra Chutney</span>
                                 </div>
-                                <span className="font-mono text-xs font-bold">₹305.00</span>
+                                <span className="font-mono text-xs font-bold">{currencySymbol}305.00</span>
                               </div>
                             </div>
 
@@ -1586,23 +1589,23 @@ export function OrganizationOnlineStore() {
                               </span>
                               <div className="flex justify-between">
                                 <span className="text-[#645d58]">Item Total</span>
-                                <span className="font-mono">₹965.00</span>
+                                <span className="font-mono">{currencySymbol}965.00</span>
                               </div>
                               <div className="flex justify-between text-[#2e7d32] font-semibold">
                                 <span>Discount (FESTIVE20)</span>
-                                <span className="font-mono">- ₹193.00</span>
+                                <span className="font-mono">- {currencySymbol}193.00</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[#645d58]">GST &amp; Restaurant Tax (5%)</span>
-                                <span className="font-mono">₹38.60</span>
+                                <span className="font-mono">{currencySymbol}38.60</span>
                               </div>
                               <div className="flex justify-between">
                                 <span className="text-[#645d58]">Delivery Fee</span>
-                                <span className="font-mono">₹25.00</span>
+                                <span className="font-mono">{currencySymbol}25.00</span>
                               </div>
                               <div className="pt-2 border-t border-[#cfc4c5]/60 flex justify-between text-sm font-bold text-[#1e1b19]">
                                 <span>To Pay</span>
-                                <span className="font-mono text-[#1b5e20]">₹835.60</span>
+                                <span className="font-mono text-[#1b5e20]">{currencySymbol}835.60</span>
                               </div>
                             </div>
 
@@ -1642,16 +1645,16 @@ export function OrganizationOnlineStore() {
                               <div className="space-y-1 text-[11px] text-[#645d58]">
                                 <div className="flex justify-between">
                                   <span>1 × Masala Lemon Soda</span>
-                                  <span className="font-mono text-[#1e1b19]">₹95.00</span>
+                                  <span className="font-mono text-[#1e1b19]">{currencySymbol}95.00</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span>1 × Crispy Corn Chaat</span>
-                                  <span className="font-mono text-[#1e1b19]">₹180.00</span>
+                                  <span className="font-mono text-[#1e1b19]">{currencySymbol}180.00</span>
                                 </div>
                               </div>
                               <div className="pt-2 mt-2 border-t border-[#e9e1dd] flex justify-between text-xs font-bold text-[#1e1b19]">
                                 <span>Table Subtotal:</span>
-                                <span className="font-mono">₹275.00</span>
+                                <span className="font-mono">{currencySymbol}275.00</span>
                               </div>
                             </div>
 
@@ -1687,7 +1690,7 @@ export function OrganizationOnlineStore() {
                                 3
                               </div>
                               <div className="flex flex-col">
-                                <span className="text-[10px] font-bold">3 Items • ₹820.00</span>
+                                <span className="text-[10px] font-bold">3 Items • {currencySymbol}820.00</span>
                                 <span className="text-[8px] text-white/80">Plus taxes &amp; fees</span>
                               </div>
                             </div>
@@ -2353,7 +2356,7 @@ export function OrganizationOnlineStore() {
                           <span className="material-symbols-outlined text-[15px]">celebration</span>
                           <div>
                             <span className="text-[8px] uppercase font-bold tracking-wider block">Festive Treat</span>
-                            <span className="text-[10px] font-medium">FLAT 20% OFF ABOVE ₹499</span>
+                            <span className="text-[10px] font-medium">FLAT 20% OFF ABOVE {currencySymbol}499</span>
                           </div>
                         </div>
                         <span className="px-1.5 py-0.5 rounded bg-black/20 text-[9px] font-mono font-bold">SPICE20</span>
@@ -2382,7 +2385,7 @@ export function OrganizationOnlineStore() {
                           <h4 className="text-[11px] font-bold truncate">Tandoori Paneer Tikka</h4>
                           <p className="text-[9px] opacity-70 line-clamp-1">Charred cottage cheese with mint chutney.</p>
                           <div className="flex items-center justify-between mt-1.5">
-                            <span className="font-mono text-[10px] font-bold">₹280.00</span>
+                            <span className="font-mono text-[10px] font-bold">{currencySymbol}280.00</span>
                             <button
                               type="button"
                               className="px-2.5 py-0.5 rounded-full text-white text-[9px] font-bold shadow-xs"
@@ -2409,7 +2412,7 @@ export function OrganizationOnlineStore() {
                           <h4 className="text-[11px] font-bold truncate">Royal Butter Chicken</h4>
                           <p className="text-[9px] opacity-70 line-clamp-1">Velvety makhani sauce with fenugreek.</p>
                           <div className="flex items-center justify-between mt-1.5">
-                            <span className="font-mono text-[10px] font-bold">₹390.00</span>
+                            <span className="font-mono text-[10px] font-bold">{currencySymbol}390.00</span>
                             <button
                               type="button"
                               className="px-2.5 py-0.5 rounded-full text-white text-[9px] font-bold shadow-xs"
@@ -2434,7 +2437,7 @@ export function OrganizationOnlineStore() {
                     >
                       <div className="flex items-center gap-1.5 pl-2">
                         <span className="w-4 h-4 rounded-full bg-white/20 flex items-center justify-center text-[9px] font-bold">2</span>
-                        <span className="text-[10px] font-bold">₹670.00</span>
+                        <span className="text-[10px] font-bold">{currencySymbol}670.00</span>
                       </div>
                       <span className="px-2.5 py-1 rounded-full bg-white text-black text-[10px] font-bold flex items-center gap-0.5">
                         <span>View Cart</span>

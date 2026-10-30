@@ -538,6 +538,7 @@ export const getResults = query({
     const ratingsByAttempt = new Map<string, Array<{ label: string; score: number }>>();
     for (const { question, answers } of allQuestionAnswers) {
       if (question.type === "numeric") {
+        const isPerDish = question.frequency === "per_order_item";
         const label = question.questionText.toLowerCase().includes("speed")
           ? "Speed"
           : question.questionText.toLowerCase().includes("overall")
@@ -546,7 +547,14 @@ export const getResults = query({
               ? question.questionText.slice(0, 15)
               : question.questionText;
 
-        for (const a of answers) {
+        const candidateAnswers = isPerDish
+          ? answers
+          : answers.filter((a) => !a.orderItemId || a.orderItemId.trim() === "");
+
+        // Only 1 badge per attempt for this question
+        const seenInAttempt = new Set<string>();
+        for (const a of candidateAnswers) {
+          if (seenInAttempt.has(a.attemptId)) continue;
           const val =
             a.numericValue !== undefined
               ? a.numericValue
@@ -554,6 +562,7 @@ export const getResults = query({
                 ? Number(a.answerText)
                 : null;
           if (val !== null) {
+            seenInAttempt.add(a.attemptId);
             const list = ratingsByAttempt.get(a.attemptId) || [];
             list.push({ label, score: val });
             ratingsByAttempt.set(a.attemptId, list);
@@ -564,10 +573,22 @@ export const getResults = query({
 
     // Aggregate results for each question
     const questionResults = allQuestionAnswers.map(({ question, answers: filteredAnswers }) => {
+      const isPerDish = question.frequency === "per_order_item";
+      // Answers with orderItemId are dish-specific critiques; exclude them from once_per_order survey questions
+      const applicableAnswers = isPerDish
+        ? filteredAnswers
+        : filteredAnswers.filter((a) => !a.orderItemId || a.orderItemId.trim() === "");
+
+      // Group answers by distinct attemptId
+      const answersByAttempt = new Map<string, typeof filteredAnswers>();
+      for (const ans of applicableAnswers) {
+        const list = answersByAttempt.get(ans.attemptId) || [];
+        list.push(ans);
+        answersByAttempt.set(ans.attemptId, list);
+      }
+
       switch (question.type) {
-        case "checkbox":
-        case "radio":
-        case "select": {
+        case "checkbox": {
           const counts: Record<string, number> = {};
           if (question.answerOptions) {
             for (const opt of question.answerOptions) {
@@ -575,16 +596,28 @@ export const getResults = query({
             }
           }
 
+          let distinctRespondents = 0;
           let totalSelections = 0;
-          for (const a of filteredAnswers) {
-            if (Array.isArray(a.selectedOptions) && a.selectedOptions.length > 0) {
-              for (const opt of a.selectedOptions) {
+
+          for (const [attemptId, attemptAnswers] of answersByAttempt.entries()) {
+            const selectedSet = new Set<string>();
+            for (const a of attemptAnswers) {
+              if (Array.isArray(a.selectedOptions) && a.selectedOptions.length > 0) {
+                for (const opt of a.selectedOptions) {
+                  if (opt && opt.trim()) selectedSet.add(opt.trim());
+                }
+              } else if (a.answerText && a.answerText.trim()) {
+                const parts = a.answerText.split(",").map((s) => s.trim()).filter(Boolean);
+                for (const p of parts) selectedSet.add(p);
+              }
+            }
+
+            if (selectedSet.size > 0) {
+              distinctRespondents++;
+              for (const opt of selectedSet) {
                 counts[opt] = (counts[opt] || 0) + 1;
                 totalSelections++;
               }
-            } else if (a.answerText) {
-              counts[a.answerText] = (counts[a.answerText] || 0) + 1;
-              totalSelections++;
             }
           }
 
@@ -596,33 +629,113 @@ export const getResults = query({
             validationRules: question.validationRules,
             answerOptions: question.answerOptions,
             frequency: question.frequency,
-            totalResponses: filteredAnswers.length,
+            totalResponses: distinctRespondents,
             totalSelections,
             optionCounts: counts,
           };
         }
 
-        case "numeric": {
-          const distribution: Record<number, number> = {};
-          let sum = 0;
-          let numericCount = 0;
-
-          for (const a of filteredAnswers) {
-            const val =
-              a.numericValue !== undefined
-                ? a.numericValue
-                : a.answerText !== undefined && !isNaN(Number(a.answerText))
-                  ? Number(a.answerText)
-                  : null;
-
-            if (val !== null) {
-              distribution[val] = (distribution[val] || 0) + 1;
-              sum += val;
-              numericCount++;
+        case "radio":
+        case "select": {
+          const counts: Record<string, number> = {};
+          if (question.answerOptions) {
+            for (const opt of question.answerOptions) {
+              counts[opt] = 0;
             }
           }
 
-          const average = numericCount > 0 ? Number((sum / numericCount).toFixed(2)) : 0;
+          let distinctRespondents = 0;
+
+          for (const [attemptId, attemptAnswers] of answersByAttempt.entries()) {
+            const latest = attemptAnswers
+              .slice()
+              .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0];
+            if (!latest) continue;
+
+            const chosen =
+              Array.isArray(latest.selectedOptions) && latest.selectedOptions.length > 0
+                ? latest.selectedOptions[0].trim()
+                : latest.answerText?.trim() || "";
+
+            if (chosen) {
+              counts[chosen] = (counts[chosen] || 0) + 1;
+              distinctRespondents++;
+            }
+          }
+
+          return {
+            questionId: question._id,
+            type: question.type,
+            questionText: question.questionText,
+            position: question.position,
+            validationRules: question.validationRules,
+            answerOptions: question.answerOptions,
+            frequency: question.frequency,
+            totalResponses: distinctRespondents,
+            totalSelections: distinctRespondents,
+            optionCounts: counts,
+          };
+        }
+
+        case "numeric": {
+          const isStars = question.ratingDisplayMode === "stars";
+          const scaleMin = question.validationRules?.greaterThanOrEqualTo ?? 1;
+          const scaleMax =
+            question.validationRules?.lessThanOrEqualTo ?? (isStars ? 5 : 10);
+
+          const distribution: Record<number, number> = {};
+          let sum = 0;
+          let validRespondentsCount = 0;
+          let totalRatingsCount = 0;
+
+          if (isPerDish) {
+            for (const [attemptId, attemptAnswers] of answersByAttempt.entries()) {
+              let attemptHadValid = false;
+              for (const a of attemptAnswers) {
+                const val =
+                  a.numericValue !== undefined
+                    ? a.numericValue
+                    : a.answerText !== undefined && !isNaN(Number(a.answerText))
+                      ? Number(a.answerText)
+                      : null;
+
+                if (val !== null && val >= scaleMin && val <= scaleMax) {
+                  distribution[val] = (distribution[val] || 0) + 1;
+                  sum += val;
+                  totalRatingsCount++;
+                  attemptHadValid = true;
+                }
+              }
+              if (attemptHadValid) validRespondentsCount++;
+            }
+          } else {
+            // Once per order / overall numeric question: exactly 1 rating per distinct attempt
+            for (const [attemptId, attemptAnswers] of answersByAttempt.entries()) {
+              const candidate =
+                attemptAnswers
+                  .slice()
+                  .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0];
+
+              if (!candidate) continue;
+
+              const val =
+                candidate.numericValue !== undefined
+                  ? candidate.numericValue
+                  : candidate.answerText !== undefined && !isNaN(Number(candidate.answerText))
+                    ? Number(candidate.answerText)
+                    : null;
+
+              if (val !== null && val >= scaleMin && val <= scaleMax) {
+                distribution[val] = (distribution[val] || 0) + 1;
+                sum += val;
+                validRespondentsCount++;
+                totalRatingsCount++;
+              }
+            }
+          }
+
+          const average =
+            totalRatingsCount > 0 ? Number((sum / totalRatingsCount).toFixed(2)) : 0;
 
           return {
             questionId: question._id,
@@ -634,7 +747,8 @@ export const getResults = query({
             lowLabel: question.lowLabel,
             highLabel: question.highLabel,
             frequency: question.frequency,
-            totalResponses: numericCount,
+            totalResponses: validRespondentsCount,
+            totalRatings: totalRatingsCount,
             averageRating: average,
             distribution,
           };
@@ -644,36 +758,50 @@ export const getResults = query({
         case "long":
         case "date":
         default: {
-          const textResponses = filteredAnswers
-            .filter((a) => a.answerText && a.answerText.trim().length > 0)
-            .map((a) => {
-              const attempt = attemptMap.get(a.attemptId);
-              const order = attempt?.orderId ? orderMap.get(attempt.orderId) : undefined;
-              const table = order?.tableId ? tableMap.get(order.tableId) : undefined;
+          const responsesByAttempt: Array<{
+            attemptId: string;
+            answerText: string;
+            submittedAt: number;
+            tableNumber?: string;
+            orderNumber?: string;
+            serviceMode?: string;
+            ratingBadges: Array<{ label: string; score: number }>;
+          }> = [];
 
-              let tableNumber: string | undefined = table ? `Table ${table.tableNumber}` : undefined;
-              let serviceMode: string | undefined = undefined;
-              if (order?.orderType) {
-                if (order.orderType === "DineIn") serviceMode = "Dinner Service";
-                else if (order.orderType === "TakeAway") serviceMode = "Takeaway";
-                else if (order.orderType === "Delivery") serviceMode = "Delivery";
-                else serviceMode = `${order.orderType} Service`;
-              }
+          for (const [attemptId, attemptAnswers] of answersByAttempt.entries()) {
+            const validAns = attemptAnswers
+              .filter((a) => a.answerText && a.answerText.trim().length > 0)
+              .sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0];
 
-              return {
-                attemptId: a.attemptId,
-                answerText: a.answerText!,
-                submittedAt: attempt?.submittedAt ?? a.updatedAt,
-                tableNumber,
-                orderNumber: order?.orderNumber,
-                serviceMode,
-                ratingBadges: ratingsByAttempt.get(a.attemptId) || [],
-              };
+            if (!validAns) continue;
+
+            const attempt = attemptMap.get(validAns.attemptId);
+            const order = attempt?.orderId ? orderMap.get(attempt.orderId) : undefined;
+            const table = order?.tableId ? tableMap.get(order.tableId) : undefined;
+
+            let tableNumber: string | undefined = table ? `Table ${table.tableNumber}` : undefined;
+            let serviceMode: string | undefined = undefined;
+            if (order?.orderType) {
+              if (order.orderType === "DineIn") serviceMode = "Dinner Service";
+              else if (order.orderType === "TakeAway") serviceMode = "Takeaway";
+              else if (order.orderType === "Delivery") serviceMode = "Delivery";
+              else serviceMode = `${order.orderType} Service`;
+            }
+
+            responsesByAttempt.push({
+              attemptId: validAns.attemptId,
+              answerText: validAns.answerText!.trim(),
+              submittedAt: attempt?.submittedAt ?? validAns.updatedAt,
+              tableNumber,
+              orderNumber: order?.orderNumber,
+              serviceMode,
+              ratingBadges: ratingsByAttempt.get(validAns.attemptId) || [],
             });
+          }
 
           const responseRate =
             attemptsQuery.length > 0
-              ? Number(((textResponses.length / attemptsQuery.length) * 100).toFixed(1))
+              ? Number(((responsesByAttempt.length / attemptsQuery.length) * 100).toFixed(1))
               : 0;
 
           return {
@@ -683,9 +811,9 @@ export const getResults = query({
             position: question.position,
             validationRules: question.validationRules,
             frequency: question.frequency,
-            totalResponses: textResponses.length,
+            totalResponses: responsesByAttempt.length,
             responseRate,
-            responses: textResponses,
+            responses: responsesByAttempt,
           };
         }
       }
@@ -705,12 +833,16 @@ export const getResults = query({
     if (primaryNumericQ) {
       const qr = questionResults.find((r) => r.questionId === primaryNumericQ._id);
       if (qr && "averageRating" in qr) {
+        const scaleMin = primaryNumericQ.validationRules?.greaterThanOrEqualTo ?? 1;
+        const scaleMax = primaryNumericQ.validationRules?.lessThanOrEqualTo ?? (primaryNumericQ.ratingDisplayMode === "stars" ? 5 : 10);
+        const rawAvg = (qr as any).averageRating;
+        const boundedAvg = rawAvg != null ? Math.min(scaleMax, Math.max(scaleMin, rawAvg)) : 0;
         overallRating = {
           questionId: primaryNumericQ._id,
           questionText: primaryNumericQ.questionText,
-          average: (qr as any).averageRating,
-          scaleMin: primaryNumericQ.validationRules?.greaterThanOrEqualTo ?? 1,
-          scaleMax: primaryNumericQ.validationRules?.lessThanOrEqualTo ?? 5,
+          average: boundedAvg,
+          scaleMin,
+          scaleMax,
           totalResponses: (qr as any).totalResponses,
         };
       }

@@ -1134,6 +1134,10 @@ postpaidOrderRequests: defineTable({
     deliveryCharge: v.optional(v.number()),
     totalAmount: v.number(),
 
+    // Historical Currency Integrity Snapshot
+    currency: v.optional(v.string()),
+    currencySymbol: v.optional(v.string()),
+
     // Delivery Address Details
     userAddressId: v.optional(v.id("userAddresses")),
     deliveryAddress: v.optional(
@@ -1250,6 +1254,8 @@ postpaidOrderRequests: defineTable({
     amount: v.number(),
     payAmount: v.optional(v.number()),
     refundAmount: v.optional(v.number()),
+    currency: v.optional(v.string()),
+    currencySymbol: v.optional(v.string()),
     transactionReference: v.optional(v.string()),
     createdAt: v.number(),
   })
@@ -1600,6 +1606,7 @@ postpaidOrderRequests: defineTable({
     published: v.boolean(),
     submittedAt: v.optional(v.number()),
     flaggedForMeeting: v.optional(v.boolean()),
+    overallRating: v.optional(v.number()),
     source: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),

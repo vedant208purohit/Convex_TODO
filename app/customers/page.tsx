@@ -18,6 +18,7 @@ import {
   getCurrencyForCountry,
   getPhoneCodeForCountry,
   getTimezoneForCountry,
+  resolveOrganizationCurrency,
 } from "../../lib/constants/countries";
 
 function CalendarIcon({ className = "w-4 h-4" }: { className?: string }) {
@@ -159,9 +160,8 @@ export default function CustomersPage() {
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
+  const currencySymbol = orgCurrency.symbol;
   const storeTimezone =
     activeOrg?.organizationTimeZone ||
     (activeOrg?.country ? getTimezoneForCountry(activeOrg.country) : "Asia/Kolkata");

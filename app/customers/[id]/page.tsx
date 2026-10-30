@@ -22,10 +22,11 @@ import {
   getCurrencyForCountry,
   getPhoneCodeForCountry,
   getTimezoneForCountry,
+  resolveOrganizationCurrency,
 } from "../../../lib/constants/countries";
 
 function StarRatingDisplay({ score, max = 5 }: { score: number; max?: number }) {
-  const rounded = Math.round(score);
+  const rounded = Math.min(max, Math.max(0, Math.round(score)));
   return (
     <div className="flex items-center gap-1">
       {Array.from({ length: max }).map((_, i) => {
@@ -103,11 +104,8 @@ export default function CustomerProfilePage() {
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : "₹");
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
+  const currencySymbol = orgCurrency.symbol;
   const storeTimezone =
     activeOrg?.organizationTimeZone ||
     (activeOrg?.country
@@ -1376,10 +1374,14 @@ export default function CustomerProfilePage() {
                                   </span>
                                   <div className="flex items-center gap-1.5">
                                     <StarRatingDisplay
-                                      score={survey.overallRating}
+                                      score={
+                                        (survey as any).overallMaxRating && (survey as any).overallMaxRating !== 5
+                                          ? Math.min(5, Math.max(0, (survey.overallRating / (survey as any).overallMaxRating) * 5))
+                                          : Math.min(5, Math.max(0, survey.overallRating))
+                                      }
                                     />
                                     <span className="text-sm font-bold text-stone-900">
-                                      {survey.overallRating} / 5
+                                      {survey.overallRating} / {(survey as any).overallMaxRating || 5}
                                     </span>
                                   </div>
                                 </div>

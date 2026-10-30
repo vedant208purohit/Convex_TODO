@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { QRCodeSVG } from "qrcode.react";
 import { api } from "../../convex/_generated/api";
+import { resolveOrganizationCurrency, formatPriceWithSymbol } from "../../lib/constants/countries";
 
 interface CartLineItem {
   itemId: string;
@@ -332,9 +333,9 @@ function FrontDisplayContent() {
   const currentSlide = activeSlides[carouselIndex] || activeSlides[0];
 
   // Amounts format helper
+  const orgCurrency = useMemo(() => resolveOrganizationCurrency(activeOrg), [activeOrg]);
   const formatCurrency = (amountPaise?: number) => {
-    if (typeof amountPaise !== "number") return "₹ 0.00";
-    return `₹ ${(amountPaise / 100).toFixed(2)}`;
+    return formatPriceWithSymbol(amountPaise, orgCurrency.symbol, orgCurrency.countryCode, true);
   };
 
   // If CFD is disabled by master setting

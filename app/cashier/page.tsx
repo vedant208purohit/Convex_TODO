@@ -28,6 +28,7 @@ import {
   formatPhoneNumberWithCountryCode,
   getPhoneCodeForCountry,
   getCurrencyForCountry,
+  resolveOrganizationCurrency,
   formatCurrencyAmount,
   formatStoreDate,
   formatStoreTime,
@@ -176,7 +177,7 @@ function CashierPosContent() {
   );
 
   const currencySymbol = useMemo(() => {
-    return activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country)?.symbol : "$") || "$";
+    return resolveOrganizationCurrency(activeOrg).symbol;
   }, [activeOrg]);
 
   // 4. Query Tables, Staff (Employees), Customers, Payment Modes, and Printers

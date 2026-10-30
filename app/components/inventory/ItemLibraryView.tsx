@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { getCurrencyForCountry, formatStoreDate, formatStoreDateTime } from "@/lib/constants/countries";
+import { getCurrencyForCountry, formatStoreDate, formatStoreDateTime, resolveOrganizationCurrency } from "@/lib/constants/countries";
 import { ComingSoonOverlay } from "../ComingSoonOverlay";
 
 // Preset Buying Units & Relatable Serving Units matching old project
@@ -186,7 +186,7 @@ export function ItemLibraryView({
 }) {
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
-  const currencySymbol = activeOrg?.defaultCurrencySymbol || (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : "₹");
+  const currencySymbol = resolveOrganizationCurrency(activeOrg).symbol;
   const rawItems = useQuery(api.inventory.listInventoryItems, organizationId ? { organizationId } : "skip");
   const items = useMemo(() => rawItems ?? [], [rawItems]);
 
