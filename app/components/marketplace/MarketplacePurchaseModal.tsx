@@ -38,10 +38,13 @@ export function MarketplacePurchaseModal({
   if (!isOpen || !app) return null;
 
   const appPrice = app.priceAmount > 0 ? app.priceAmount : 5000;
+  const isActualSufficient = walletBalance >= appPrice;
   const currentSimulatedBalance =
-    modalState === "sufficient" ? Math.max(walletBalance, 8000) : 2000;
+  modalState === "sufficient"
+    ? (isActualSufficient ? walletBalance : Math.max(walletBalance, appPrice + 3000))
+    : (walletBalance < appPrice ? walletBalance : 2000);
   const balanceAfterActivation = currentSimulatedBalance - appPrice;
-  const shortfallAmount = Math.max(appPrice - currentSimulatedBalance, 3000);
+  const shortfallAmount = Math.max(appPrice - walletBalance, 1000);
 
   const handleConfirm = () => {
     setIsActivating(true);
@@ -74,11 +77,10 @@ export function MarketplacePurchaseModal({
               <button
                 type="button"
                 onClick={() => setModalState("sufficient")}
-                className={`py-1.5 px-2 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg transition-all cursor-pointer text-center truncate ${
-                  modalState === "sufficient"
+                className={`py-1.5 px-2 sm:px-3 text-[11px] sm:text-xs font-semibold rounded-lg transition-all cursor-pointer text-center truncate ${modalState === "sufficient"
                     ? "bg-white text-[#0c0a09] shadow-xs border border-[#e7e5e4]"
                     : "text-[#5e5e5e] hover:text-[#0c0a09]"
-                }`}
+                  }`}
               >
                 Sufficient Balance
               </button>
@@ -86,11 +88,10 @@ export function MarketplacePurchaseModal({
               <button
                 type="button"
                 onClick={() => setModalState("insufficient")}
-                className={`py-1.5 px-2 sm:px-3 text-[11px] sm:text-xs font-medium rounded-lg transition-all cursor-pointer text-center truncate ${
-                  modalState === "insufficient"
+                className={`py-1.5 px-2 sm:px-3 text-[11px] sm:text-xs font-medium rounded-lg transition-all cursor-pointer text-center truncate ${modalState === "insufficient"
                     ? "bg-white text-[#0c0a09] shadow-xs border border-[#e7e5e4]"
                     : "text-[#5e5e5e] hover:text-[#0c0a09]"
-                }`}
+                  }`}
               >
                 Insufficient Balance
               </button>
@@ -148,9 +149,8 @@ export function MarketplacePurchaseModal({
                 <div className="flex items-center justify-between text-xs sm:text-sm gap-2">
                   <span className="text-[#5e5e5e] font-medium min-w-0">Wallet Balance</span>
                   <span
-                    className={`font-semibold font-mono shrink-0 text-right ${
-                      modalState === "sufficient" ? "text-emerald-600" : "text-[#0c0a09]"
-                    }`}
+                    className={`font-semibold font-mono shrink-0 text-right ${modalState === "sufficient" ? "text-emerald-600" : "text-[#0c0a09]"
+                      }`}
                   >
                     ₹{currentSimulatedBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
                   </span>
@@ -204,7 +204,7 @@ export function MarketplacePurchaseModal({
         {/* Modal Actions Footer - Fully Responsive for Mobile, iPhone, Fold, iPad, Mac, Windows */}
         <div className="px-4 sm:px-6 py-3.5 sm:py-4 bg-[#faf8f5] border-t border-[#e7e5e4] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
           <Link
-            href={`/marketplace/checkout?appId=${app.id}`}
+            href={`/marketplace/checkout?appId=${app.slug || app.id}`}
             onClick={onClose}
             className="text-[11px] sm:text-xs text-[#5e5e5e] hover:text-[#0c0a09] underline flex items-center justify-center sm:justify-start gap-1 order-2 sm:order-1 text-center transition-colors font-medium"
           >

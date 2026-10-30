@@ -6,13 +6,11 @@ import { MarketplaceCategory, MarketplaceSortOption, MarketplaceTab } from "./ty
 
 interface MarketplaceHeaderProps {
   walletBalance: number;
-  activeScenario?: "A" | "B";
   activeTab: MarketplaceTab;
   activeCategory: MarketplaceCategory;
   searchQuery: string;
   sortOption: MarketplaceSortOption;
-  onScenarioChange?: (scenario: "A" | "B") => void;
-  onTabChange: (tab: MarketplaceTab) => void;
+  onTabChange?: (tab: MarketplaceTab) => void;
   onCategoryChange: (category: MarketplaceCategory) => void;
   onSearchChange: (query: string) => void;
   onSortChange: (sort: MarketplaceSortOption) => void;
@@ -39,13 +37,10 @@ const SORT_OPTIONS: { label: string; value: MarketplaceSortOption }[] = [
 
 export function MarketplaceHeader({
   walletBalance,
-  activeScenario,
   activeTab,
   activeCategory,
   searchQuery,
   sortOption,
-  onScenarioChange,
-  onTabChange,
   onCategoryChange,
   onSearchChange,
   onSortChange,

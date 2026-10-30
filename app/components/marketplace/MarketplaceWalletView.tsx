@@ -2,9 +2,11 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import { PosShell } from "../PosShell";
 import { OrderDateRangePicker, getPresetDateRange } from "../OrderDateRangePicker";
-import { generateWalletLedgerPdf } from "@/app/utils/generateWalletLedgerPdf";
+import { generateWalletLedgerPdf } from "../../utils/generateWalletLedgerPdf";
 import { Toast, type ToastMessage } from "../Toast";
 
 export interface Transaction {
@@ -21,100 +23,6 @@ export interface Transaction {
   actionText: string;
 }
 
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  {
-    id: "tx-1",
-    code: "TXN-994820",
-    dateTime: "Oct 20, 2026 14:32",
-    description: "Wallet Top-up",
-    detail: "(via UPI - HDFC Bank)",
-    type: "topup",
-    typeLabel: "Top-up",
-    amount: 10000,
-    status: "confirmed",
-    statusLabel: "Confirmed",
-    actionText: "View Receipt",
-  },
-  {
-    id: "tx-2",
-    code: "TXN-982144",
-    dateTime: "Oct 18, 2026 09:15",
-    description: "WhatsApp Catalog & Direct Order",
-    detail: "(Monthly)",
-    type: "subscription",
-    typeLabel: "Subscription",
-    amount: -999,
-    status: "confirmed",
-    statusLabel: "Confirmed",
-    actionText: "Invoice",
-  },
-  {
-    id: "tx-3",
-    code: "TXN-973002",
-    dateTime: "Oct 15, 2026 18:40",
-    description: "PhonePe PG Integration Setup Fee",
-    detail: "",
-    type: "purchase",
-    typeLabel: "Purchase",
-    amount: -2500,
-    status: "confirmed",
-    statusLabel: "Confirmed",
-    actionText: "Invoice",
-  },
-  {
-    id: "tx-4",
-    code: "TXN-962119",
-    dateTime: "Oct 10, 2026 11:20",
-    description: "Wallet Top-up",
-    detail: "(via Net Banking - ICICI)",
-    type: "topup",
-    typeLabel: "Top-up",
-    amount: 5000,
-    status: "confirmed",
-    statusLabel: "Confirmed",
-    actionText: "View Receipt",
-  },
-  {
-    id: "tx-5",
-    code: "TXN-950183",
-    dateTime: "Oct 05, 2026 16:05",
-    description: "Top-up Attempt",
-    detail: "(UPI QR)",
-    type: "topup",
-    typeLabel: "Top-up",
-    amount: 2000,
-    status: "pending",
-    statusLabel: "Pending",
-    actionText: "Check Status",
-  },
-  {
-    id: "tx-6",
-    code: "TXN-941092",
-    dateTime: "Sep 28, 2026 12:10",
-    description: "Zomato Dine-in Sync Extension",
-    detail: "(Annual Plan)",
-    type: "purchase",
-    typeLabel: "Purchase",
-    amount: -12000,
-    status: "confirmed",
-    statusLabel: "Confirmed",
-    actionText: "Invoice",
-  },
-  {
-    id: "tx-7",
-    code: "TXN-938812",
-    dateTime: "Sep 20, 2026 10:45",
-    description: "Initial Organization Wallet Provisioning",
-    detail: "(Wire Transfer)",
-    type: "topup",
-    typeLabel: "Top-up",
-    amount: 30000,
-    status: "confirmed",
-    statusLabel: "Confirmed",
-    actionText: "View Receipt",
-  },
-];
-
 interface MarketplaceWalletViewProps {
   embeddedInMarketplace?: boolean;
   externalBalance?: number;
@@ -126,9 +34,8 @@ export function MarketplaceWalletView({
   externalBalance,
   onBalanceChange,
 }: MarketplaceWalletViewProps) {
-  const [balance, setBalance] = useState<number>(
-    externalBalance !== undefined ? externalBalance : 14500
-  );
+  // 1. Live Convex Queries
+  const wallet = useQuery(api.marketplace.getWallet, {});
   const [filterType, setFilterType] = useState<
     "all" | "topup" | "purchase" | "subscription" | "refund"
   >("all");
@@ -138,12 +45,40 @@ export function MarketplaceWalletView({
     const { start, end } = getPresetDateRange(preset);
     return { startDate: start, endDate: end, preset };
   });
+
+  const transactionsData = useQuery(api.marketplace.listTransactions, {
+    type: filterType === "all" ? undefined : filterType,
+    searchQuery: searchQuery.trim(),
+    startDate: dateRange.startDate.getTime(),
+    endDate: dateRange.endDate.getTime(),
+  });
+
+  // 2. Live Convex Mutations
+  const topupWalletMutation = useMutation(api.marketplace.topupWallet);
+  const updateAutoTopupMutation = useMutation(api.marketplace.updateAutoTopup);
+
+  const balance =
+    wallet?.balance !== undefined
+      ? wallet.balance
+      : externalBalance !== undefined
+        ? externalBalance
+        : 14500;
+
+  const storeName = wallet?.storeName || "The Grand Bistro HQ";
+  const escrowId = wallet?.escrowId || "PRST-WLT-88219";
+
   const [isAddMoneyModalOpen, setIsAddMoneyModalOpen] = useState(false);
   const [isAutoTopupModalOpen, setIsAutoTopupModalOpen] = useState(false);
   const [autoTopupEnabled, setAutoTopupEnabled] = useState(false);
+
+  useEffect(() => {
+    if (wallet?.autoTopupEnabled !== undefined) {
+      setAutoTopupEnabled(wallet.autoTopupEnabled);
+    }
+  }, [wallet?.autoTopupEnabled]);
+
   const [customAmount, setCustomAmount] = useState<string>("5000");
   const [toast, setToast] = useState<ToastMessage | null>(null);
-  const [imgError, setImgError] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const downloadMenuRef = useRef<HTMLDivElement | null>(null);
@@ -156,33 +91,43 @@ export function MarketplaceWalletView({
     setToast({ message, type, subtext });
   };
 
-  const handleAddMoney = (amt: number) => {
-    const updated = balance + amt;
-    setBalance(updated);
-    if (onBalanceChange) onBalanceChange(updated);
-    setIsAddMoneyModalOpen(false);
-    showToast(`₹${amt.toLocaleString("en-IN")} added to wallet`);
+  const handleAddMoney = async (amt: number) => {
+    try {
+      const suffix = Math.random().toString(36).substring(2, 9);
+      const res = await topupWalletMutation({
+        amount: amt,
+        paymentMethod: "upi",
+        idempotencyKey: `wallet_topup_${suffix}`,
+      });
+      if (onBalanceChange) onBalanceChange(res.newBalance);
+      setIsAddMoneyModalOpen(false);
+      showToast(`₹${amt.toLocaleString("en-IN")} added to wallet`, "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add money";
+      showToast(msg, "error");
+    }
   };
 
-  const filteredTransactions = useMemo(() => {
-    const startTime = dateRange.startDate.getTime();
-    const endTime = dateRange.endDate.getTime();
+  const handleSaveAutoTopup = async () => {
+    try {
+      await updateAutoTopupMutation({
+        enabled: autoTopupEnabled,
+      });
+      setIsAutoTopupModalOpen(false);
+      showToast(
+        autoTopupEnabled
+          ? "Auto-Topup enabled successfully"
+          : "Auto-Topup disabled"
+      );
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to update auto-topup";
+      showToast(msg, "error");
+    }
+  };
 
-    return INITIAL_TRANSACTIONS.filter((tx) => {
-      const matchesType =
-        filterType === "all" ? true : tx.type === filterType;
-      const matchesSearch =
-        searchQuery.trim() === "" ||
-        tx.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        tx.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (tx.detail && tx.detail.toLowerCase().includes(searchQuery.toLowerCase()));
-
-      const txTime = new Date(tx.dateTime).getTime();
-      const matchesDate = txTime >= startTime && txTime <= endTime;
-
-      return matchesType && matchesSearch && matchesDate;
-    });
-  }, [filterType, searchQuery, dateRange]);
+  const filteredTransactions: Transaction[] = useMemo(() => {
+    return (transactionsData as Transaction[]) ?? [];
+  }, [transactionsData]);
 
   const ITEMS_PER_PAGE = 5;
   const totalItems = filteredTransactions.length;
@@ -191,10 +136,6 @@ export function MarketplaceWalletView({
   const startIndex = (activePage - 1) * ITEMS_PER_PAGE;
   const endIndex = Math.min(startIndex + ITEMS_PER_PAGE, totalItems);
   const paginatedTransactions = filteredTransactions.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filterType, searchQuery, dateRange]);
 
   // Close download menu on outside click
   useEffect(() => {
@@ -304,8 +245,8 @@ export function MarketplaceWalletView({
         transactions: filteredTransactions,
         balance,
         dateRange,
-        escrowId: "PRST-WLT-88219",
-        storeName: "Mahendra Suthar",
+        escrowId,
+        storeName,
       });
       showToast("PDF downloaded");
     } catch (err) {
@@ -345,7 +286,7 @@ export function MarketplaceWalletView({
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] sm:text-xs text-[#5e5e5e] flex-wrap">
-                <span className="font-semibold text-[#0c0a09]">The Grand Bistro HQ</span>
+                <span className="font-semibold text-[#0c0a09]">{storeName}</span>
               </div>
             </div>
 
@@ -402,9 +343,8 @@ export function MarketplaceWalletView({
                   <span className="material-symbols-outlined text-[16px] sm:text-[18px]">file_download</span>
                   <span>Download Ledger (CSV/PDF)</span>
                   <span
-                    className={`material-symbols-outlined text-[16px] text-[#78716c] transition-transform duration-200 ${
-                      isDownloadMenuOpen ? "rotate-180" : ""
-                    }`}
+                    className={`material-symbols-outlined text-[16px] text-[#78716c] transition-transform duration-200 ${isDownloadMenuOpen ? "rotate-180" : ""
+                      }`}
                   >
                     expand_more
                   </span>
@@ -553,7 +493,10 @@ export function MarketplaceWalletView({
               </span>
               <input
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
                 className="w-full pl-9 pr-3 py-2 rounded-lg bg-white border border-[#e7e5e4] text-[#0c0a09] placeholder:text-[#a8a29e] text-xs outline-none focus:ring-1 focus:ring-[#0c0a09] transition-all shadow-2xs font-sans"
                 placeholder="Search Transaction ID or App..."
                 type="text"
@@ -562,22 +505,26 @@ export function MarketplaceWalletView({
 
             {/* Filter Pills with touch scrolling */}
             <div className="flex items-center gap-1.5 overflow-x-auto py-1 scrollbar-none [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-x">
-              {[
-                { label: "All Types", val: "all" },
-                { label: "Top-ups", val: "topup" },
-                { label: "Purchases", val: "purchase" },
-                { label: "Subscriptions", val: "subscription" },
-                { label: "Refunds", val: "refund" },
-              ].map((pill) => (
+              {(
+                [
+                  { label: "All Types", val: "all" },
+                  { label: "Top-ups", val: "topup" },
+                  { label: "Purchases", val: "purchase" },
+                  { label: "Subscriptions", val: "subscription" },
+                  { label: "Refunds", val: "refund" },
+                ] as const
+              ).map((pill) => (
                 <button
                   key={pill.val}
                   type="button"
-                  onClick={() => setFilterType(pill.val as any)}
-                  className={`px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
-                    filterType === pill.val
+                  onClick={() => {
+                    setFilterType(pill.val);
+                    setCurrentPage(1);
+                  }}
+                  className={`px-3 py-1.5 rounded-full text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all cursor-pointer shrink-0 ${filterType === pill.val
                       ? "bg-[#0c0a09] text-white shadow-xs"
                       : "bg-[#fdf8f7] text-[#5e5e5e] hover:bg-[#f1edec] border border-[#e7e5e4]"
-                  }`}
+                    }`}
                 >
                   {pill.label}
                 </button>
@@ -641,21 +588,19 @@ export function MarketplaceWalletView({
                     </td>
                     <td className="py-3.5 px-3 sm:px-4 whitespace-nowrap">
                       <span
-                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${
-                          tx.type === "topup"
+                        className={`inline-flex px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider ${tx.type === "topup"
                             ? "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
                             : tx.type === "subscription"
-                            ? "bg-amber-50 text-amber-900 border border-amber-200"
-                            : "bg-[#fdf8f7] text-[#5e5e5e] border border-[#e7e5e4]"
-                        }`}
+                              ? "bg-amber-50 text-amber-900 border border-amber-200"
+                              : "bg-[#fdf8f7] text-[#5e5e5e] border border-[#e7e5e4]"
+                          }`}
                       >
                         {tx.typeLabel}
                       </span>
                     </td>
                     <td
-                      className={`py-3.5 px-3 sm:px-4 text-right whitespace-nowrap font-mono font-bold ${
-                        tx.amount > 0 ? "text-emerald-700" : "text-[#0c0a09]"
-                      }`}
+                      className={`py-3.5 px-3 sm:px-4 text-right whitespace-nowrap font-mono font-bold ${tx.amount > 0 ? "text-emerald-700" : "text-[#0c0a09]"
+                        }`}
                     >
                       {tx.amount > 0 ? `+₹${tx.amount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}` : `-₹${Math.abs(tx.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`}
                     </td>
@@ -717,11 +662,10 @@ export function MarketplaceWalletView({
                   key={pageNum}
                   type="button"
                   onClick={() => setCurrentPage(pageNum)}
-                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold transition-all cursor-pointer ${
-                    isActive
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-semibold transition-all cursor-pointer ${isActive
                       ? "bg-[#0c0a09] text-white shadow-xs"
                       : "bg-white border border-[#e7e5e4] hover:bg-[#f1edec] text-[#0c0a09]"
-                  }`}
+                    }`}
                 >
                   {pageNum}
                 </button>
@@ -794,11 +738,10 @@ export function MarketplaceWalletView({
                     key={amt}
                     type="button"
                     onClick={() => setCustomAmount(amt.toString())}
-                    className={`py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-mono font-bold border transition-all cursor-pointer ${
-                      customAmount === amt.toString()
+                    className={`py-2.5 sm:py-3 px-1.5 sm:px-2 rounded-lg text-[11px] sm:text-xs font-mono font-bold border transition-all cursor-pointer ${customAmount === amt.toString()
                         ? "bg-[#0c0a09] text-white border-[#0c0a09] shadow-xs"
                         : "bg-[#fdf8f7] border-[#e7e5e4] text-[#0c0a09] hover:bg-[#f1edec]"
-                    }`}
+                      }`}
                   >
                     +₹{amt.toLocaleString("en-IN")}
                   </button>
@@ -878,14 +821,12 @@ export function MarketplaceWalletView({
                 <button
                   type="button"
                   onClick={() => setAutoTopupEnabled(!autoTopupEnabled)}
-                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${
-                    autoTopupEnabled ? "bg-[#0c0a09]" : "bg-stone-300"
-                  }`}
+                  className={`w-11 h-6 flex items-center rounded-full p-1 transition-colors cursor-pointer shrink-0 ${autoTopupEnabled ? "bg-[#0c0a09]" : "bg-stone-300"
+                    }`}
                 >
                   <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      autoTopupEnabled ? "translate-x-5" : "translate-x-0"
-                    }`}
+                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${autoTopupEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
                   />
                 </button>
               </div>
@@ -898,14 +839,7 @@ export function MarketplaceWalletView({
             <div className="flex flex-col xs:flex-row items-center gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => {
-                  setIsAutoTopupModalOpen(false);
-                  showToast(
-                    autoTopupEnabled
-                      ? "Auto-Topup enabled"
-                      : "Auto-Topup disabled"
-                  );
-                }}
+                onClick={handleSaveAutoTopup}
                 className="w-full xs:flex-1 py-2.5 sm:py-3 px-4 sm:px-5 rounded-lg bg-[#0c0a09] hover:bg-[#262626] text-white font-semibold text-xs flex items-center justify-center gap-2 shadow-xs cursor-pointer"
               >
                 Save Settings

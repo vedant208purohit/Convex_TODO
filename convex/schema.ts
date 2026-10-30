@@ -1779,5 +1779,134 @@ postpaidOrderRequests: defineTable({
     updatedAt: v.number(),
   })
     .index("by_org_user", ["organizationId", "userId"]),
+
+  // -------------------------------------------------------------------------
+  // Marketplace Domain Tables
+  // -------------------------------------------------------------------------
+  marketplaceListings: defineTable({
+    slug: v.string(),
+    title: v.string(),
+    subtitle: v.string(),
+    vendor: v.string(),
+    category: v.string(),
+    description: v.string(),
+    badge: v.optional(v.string()),
+    iconName: v.string(),
+    rating: v.optional(v.string()),
+    version: v.optional(v.string()),
+    statusText: v.string(),
+    statusType: v.string(),
+    priceText: v.string(),
+    priceAmount: v.number(),
+    isOneTime: v.optional(v.boolean()),
+    actionText: v.string(),
+    actionType: v.string(),
+    practicalFeatures: v.optional(
+      v.array(
+        v.object({
+          icon: v.string(),
+          title: v.string(),
+          description: v.string(),
+        })
+      )
+    ),
+    prerequisites: v.optional(
+      v.array(
+        v.object({
+          icon: v.string(),
+          title: v.string(),
+          detail: v.string(),
+        })
+      )
+    ),
+    permissions: v.optional(v.array(v.string())),
+    terms: v.optional(
+      v.object({
+        licenseType: v.string(),
+        platformSurcharge: v.string(),
+        taxes: v.string(),
+      })
+    ),
+    isPublished: v.boolean(),
+    displayOrder: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_slug", ["slug"])
+    .index("by_category", ["category"])
+    .index("by_published", ["isPublished"])
+    .index("by_display_order", ["displayOrder"]),
+
+  marketplaceInstallations: defineTable({
+    organizationId: v.id("organizations"),
+    listingId: v.id("marketplaceListings"),
+    appSlug: v.string(),
+    status: v.string(), // "installed" | "live" | "attention" | "uninstalled"
+    statusText: v.optional(v.string()),
+    actionType: v.optional(v.string()),
+    isPaid: v.boolean(),
+    licenseType: v.string(), // "one_time" | "subscription" | "free"
+    purchasedAt: v.optional(v.number()),
+    installedAt: v.number(),
+    uninstalledAt: v.optional(v.number()),
+    installedByUserId: v.string(),
+    configuration: v.optional(v.any()),
+    lastSyncedAt: v.optional(v.number()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_org_and_app", ["organizationId", "appSlug"])
+    .index("by_org_and_listing", ["organizationId", "listingId"])
+    .index("by_status", ["organizationId", "status"]),
+
+  marketplaceWallets: defineTable({
+    organizationId: v.id("organizations"),
+    balance: v.number(),
+    escrowId: v.string(),
+    currency: v.string(),
+    autoTopupEnabled: v.boolean(),
+    autoTopupThreshold: v.number(),
+    autoTopupAmount: v.number(),
+    status: v.string(), // "active" | "suspended" | "locked"
+    lastTopupAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"]),
+
+  marketplaceTransactions: defineTable({
+    organizationId: v.id("organizations"),
+    walletId: v.id("marketplaceWallets"),
+    code: v.string(), // e.g. "TXN-994820"
+    type: v.string(), // "topup" | "purchase" | "subscription" | "refund"
+    typeLabel: v.string(),
+    amount: v.number(), // positive for credit, negative for debit
+    balanceBefore: v.number(),
+    balanceAfter: v.number(),
+    description: v.string(),
+    detail: v.optional(v.string()),
+    status: v.string(), // "confirmed" | "pending" | "failed"
+    statusLabel: v.string(),
+    actionText: v.string(),
+    appSlug: v.optional(v.string()),
+    paymentMethod: v.optional(v.string()),
+    idempotencyKey: v.optional(v.string()),
+    razorpayOrderId: v.optional(v.string()),
+    razorpayPaymentId: v.optional(v.string()),
+    razorpaySignature: v.optional(v.string()),
+    initiatedByUserId: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_wallet", ["walletId"])
+    .index("by_org_and_type", ["organizationId", "type"])
+    .index("by_org_and_code", ["organizationId", "code"])
+    .index("by_idempotency", ["organizationId", "idempotencyKey"])
+    .index("by_razorpay_order_id", ["organizationId", "razorpayOrderId"])
+    .index("by_razorpay_payment_id", ["organizationId", "razorpayPaymentId"])
+    .index("by_created_at", ["organizationId", "createdAt"]),
+
 }, { schemaValidation: false });
 

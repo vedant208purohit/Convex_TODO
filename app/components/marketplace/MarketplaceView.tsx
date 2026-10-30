@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useQuery, useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
 import {
   MarketplaceApp,
   MarketplaceCategory,
   MarketplaceSortOption,
   MarketplaceTab,
 } from "./types";
-import {
-  INITIAL_MARKETPLACE_APPS,
-  filterAndSortApps,
-} from "../../lib/services/marketplaceService";
 import { PosShell } from "../PosShell";
 import { MarketplaceHeader } from "./MarketplaceHeader";
 import { MarketplaceCard } from "./MarketplaceCard";
@@ -24,9 +22,7 @@ export function MarketplaceView() {
   const searchParams = useSearchParams();
   const router = useRouter();
 
-  // 1. Interactive State
-  const [walletBalance, setWalletBalance] = useState<number>(8000);
-  const [activeScenario, setActiveScenario] = useState<"A" | "B">("A");
+  // 1. URL & Filter State
   const tabParam = searchParams.get("tab") as MarketplaceTab | null;
   const [internalTab, setInternalTab] = useState<MarketplaceTab>("explore");
 
@@ -43,15 +39,30 @@ export function MarketplaceView() {
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortOption, setSortOption] = useState<MarketplaceSortOption>("recommended");
 
-  // 2. Purchased Apps State
-  const [purchasedAppIds, setPurchasedAppIds] = useState<string[]>([]);
+  // 2. Real Convex Backend Subscriptions
+  const wallet = useQuery(api.marketplace.getWallet, {});
+  const catalogData = useQuery(api.marketplace.listCatalog, {
+    category: activeCategory,
+    searchQuery: searchQuery.trim(),
+    sortOption,
+    tab: activeTab,
+  });
 
-  // 3. Modal & Drawer State
+  // 3. Convex Mutations
+  const purchaseAppMutation = useMutation(api.marketplace.purchaseApp);
+  const installAppMutation = useMutation(api.marketplace.installApp);
+  const topupWalletMutation = useMutation(api.marketplace.topupWallet);
+
+  const walletBalance = wallet?.balance ?? 14500;
+  const filteredApps = (catalogData?.apps as MarketplaceApp[]) ?? [];
+  const isLoading = catalogData === undefined;
+
+  // 4. Modal & Drawer State
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState<MarketplaceApp | null>(null);
 
-  // 4. Standard Toast Notification State (same as Menu)
+  // 5. Standard Toast Notification State
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
   const showToast = (
@@ -62,34 +73,29 @@ export function MarketplaceView() {
     setToast({ message, type, subtext });
   };
 
-  // Switch Scenario Logic
-  const handleScenarioChange = (scenario: "A" | "B") => {
-    setActiveScenario(scenario);
-    if (scenario === "A") {
-      setWalletBalance(8000);
-      showToast("Wallet balance: ₹8,000");
-    } else {
-      setWalletBalance(2000);
-      showToast("Wallet balance: ₹2,000", "warning");
+  // Add Money / Wallet Recharge
+  const handleAddMoney = async (amount: number = 5000) => {
+    try {
+      const suffix = Math.random().toString(36).substring(2, 9);
+      await topupWalletMutation({
+        amount,
+        paymentMethod: "upi",
+        idempotencyKey: `client_topup_${suffix}`,
+      });
+      showToast(`₹${amount.toLocaleString("en-IN")} added to wallet`, "success");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to add money";
+      showToast(msg, "error");
     }
-    setSelectedApp(INITIAL_MARKETPLACE_APPS[0]);
-    setIsPurchaseModalOpen(true);
-  };
-
-  // Add Money / Wallet Recharge Simulation
-  const handleAddMoney = (amount: number = 5000) => {
-    setWalletBalance((prev) => prev + amount);
-    showToast(`₹${amount.toLocaleString("en-IN")} added to wallet`);
   };
 
   // Handle Action Button Clicks
-  const handleActionClick = (app: MarketplaceApp) => {
+  const handleActionClick = async (app: MarketplaceApp) => {
     const isHero = app.slug === "prest-whatsapp-automation";
-    const isPurchased = purchasedAppIds.includes(app.id);
 
     if (isHero) {
-      if (isPurchased) {
-        showToast("WhatsApp Automation is active");
+      if (app.isInstalled) {
+        showToast("WhatsApp Automation is active", "success");
         return;
       }
       setSelectedApp(app);
@@ -109,7 +115,18 @@ export function MarketplaceView() {
       return;
     }
 
-    // Interactive Toast feedback for other apps
+    if (app.actionType === "install") {
+      try {
+        await installAppMutation({ appIdOrSlug: app.slug || app.id });
+        showToast(`${app.title} installed successfully!`, "success");
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : `Failed to install ${app.title}`;
+        showToast(msg, "error");
+      }
+      return;
+    }
+
+    // Interactive Toast feedback for other actions
     switch (app.actionType) {
       case "setup":
       case "settings":
@@ -118,10 +135,6 @@ export function MarketplaceView() {
         break;
       case "fix":
         showToast(`Authenticating ${app.title}`);
-        break;
-      case "install":
-        showToast(`${app.title} installed`);
-        setPurchasedAppIds((prev) => [...prev, app.id]);
         break;
       default:
         showToast(`Opening ${app.title}`);
@@ -135,33 +148,21 @@ export function MarketplaceView() {
   };
 
   // Handle Purchase Confirmation in Modal
-  const handleConfirmPurchase = (app: MarketplaceApp) => {
-    const price = app.priceAmount > 0 ? app.priceAmount : 5000;
-
-    // Deduct from wallet: e.g. ₹8,000 - ₹5,000 = ₹3,000
-    setWalletBalance((prev) => Math.max(0, prev - price));
-
-    // Register as purchased
-    setPurchasedAppIds((prev) => (prev.includes(app.id) ? prev : [...prev, app.id]));
-
-    showToast(`${app.title} activated successfully`);
+  const handleConfirmPurchase = async (app: MarketplaceApp) => {
+    try {
+      const suffix = Math.random().toString(36).substring(2, 9);
+      const res = await purchaseAppMutation({
+        appIdOrSlug: app.slug || app.id,
+        idempotencyKey: `client_purchase_${app.slug}_${suffix}`,
+      });
+      showToast(`${app.title} activated successfully!`, "success", `Ref: ${res.transactionCode}`);
+      setIsPurchaseModalOpen(false);
+      setIsDrawerOpen(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : `Failed to purchase ${app.title}`;
+      showToast(msg, "error");
+    }
   };
-
-  // Filter and Sort Apps
-  const filteredApps = useMemo(() => {
-    const appsWithPurchased = INITIAL_MARKETPLACE_APPS.map((app) => ({
-      ...app,
-      isInstalled: app.isInstalled || purchasedAppIds.includes(app.id),
-    }));
-
-    return filterAndSortApps(
-      appsWithPurchased,
-      activeCategory,
-      searchQuery,
-      sortOption,
-      activeTab
-    );
-  }, [activeCategory, searchQuery, sortOption, activeTab, purchasedAppIds]);
 
   return (
     <PosShell
@@ -170,10 +171,10 @@ export function MarketplaceView() {
         activeTab === "wallet"
           ? "Wallet"
           : activeTab === "installed"
-          ? "Installed Products"
-          : activeTab === "purchases"
-          ? "Subscriptions & Purchases"
-          : "Integrations & Extensions"
+            ? "Installed Products"
+            : activeTab === "purchases"
+              ? "Subscriptions & Purchases"
+              : "Integrations & Extensions"
       }
     >
       {activeTab === "categories" ? (
@@ -203,19 +204,16 @@ export function MarketplaceView() {
         <MarketplaceWalletView
           embeddedInMarketplace={true}
           externalBalance={walletBalance}
-          onBalanceChange={(newBal) => setWalletBalance(newBal)}
         />
       ) : (
         <div className="p-3.5 sm:p-5 md:p-6 lg:p-7 xl:p-8 flex flex-col gap-4 sm:gap-5 w-full max-w-[1920px] mx-auto">
           {/* Header Section */}
           <MarketplaceHeader
             walletBalance={walletBalance}
-            activeScenario={activeScenario}
             activeTab={activeTab}
             activeCategory={activeCategory}
             searchQuery={searchQuery}
             sortOption={sortOption}
-            onScenarioChange={handleScenarioChange}
             onTabChange={handleTabChange}
             onCategoryChange={setActiveCategory}
             onSearchChange={setSearchQuery}
@@ -223,95 +221,120 @@ export function MarketplaceView() {
             onAddMoneyClick={() => router.push("/marketplace/wallet/add")}
           />
 
-          {/* 12-App Bento Grid: 1 col on mobile, 2 on tablet/small laptop, 3 on desktop, 4 on big screens */}
-          <section
-            id="catalog-grid"
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5 sm:gap-4 md:gap-5"
-          >
-          {filteredApps.map((app) => (
-            <MarketplaceCard
-              key={app.id}
-              app={app}
-              isPurchased={purchasedAppIds.includes(app.id)}
-              onActionClick={handleActionClick}
-              onCardClick={handleCardClick}
-            />
-          ))}
-        </section>
-
-        {/* Empty Search Feedback */}
-        {filteredApps.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 text-center bg-white rounded-2xl sm:rounded-3xl border border-[#e7e5e4] shadow-xs">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#fdf8f7] border border-[#e7e5e4] flex items-center justify-center text-[#5e5e5e] mb-3 sm:mb-4">
-              <span className="material-symbols-outlined text-[24px] sm:text-[28px]">search_off</span>
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5 sm:gap-4 md:gap-5 py-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <div
+                  key={i}
+                  className="animate-pulse bg-white rounded-2xl p-6 border border-[#e7e5e4] flex flex-col gap-4 min-h-[280px]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-stone-200" />
+                    <div className="flex-1 flex flex-col gap-2">
+                      <div className="h-3 w-16 bg-stone-200 rounded" />
+                      <div className="h-4 w-32 bg-stone-200 rounded" />
+                    </div>
+                  </div>
+                  <div className="h-3 bg-stone-200 rounded w-full mt-2" />
+                  <div className="h-3 bg-stone-200 rounded w-4/5" />
+                  <div className="h-20 bg-[#fdf8f7] rounded-xl mt-auto" />
+                  <div className="h-10 bg-stone-200 rounded-lg" />
+                </div>
+              ))}
             </div>
-            <h3 className="font-sans text-base sm:text-lg font-semibold text-[#0c0a09]">
-              {activeTab === "installed"
-                ? "No installed apps found"
-                : activeTab === "purchases"
-                ? "No subscriptions or purchases found"
-                : "No matching integrations found"}
-            </h3>
-            <p className="text-xs text-[#5e5e5e] mt-1 max-w-sm leading-relaxed">
-              {activeTab === "installed"
-                ? "You haven’t installed or connected any apps matching your filters yet. Explore the marketplace catalog to add tools."
-                : activeTab === "purchases"
-                ? "No active subscriptions or paid plans match your filters. Browse the catalog to explore available add-ons."
-                : `We couldn’t find any tools matching "${searchQuery}" in the ${activeCategory} category.`}
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery("");
-                setActiveCategory("all");
-                if (
-                  (activeTab === "installed" || activeTab === "purchases") &&
-                  filteredApps.length === 0 &&
-                  !searchQuery &&
-                  activeCategory === "all"
-                ) {
-                  handleTabChange("explore");
-                }
-              }}
-              className="mt-4 px-4 py-2 rounded-lg bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#262626] transition-colors cursor-pointer"
-            >
-              {(activeTab === "installed" || activeTab === "purchases") &&
-              !searchQuery &&
-              activeCategory === "all"
-                ? "Explore Marketplace Products"
-                : "Reset Filters"}
-            </button>
-          </div>
-        )}
+          ) : (
+            <>
+              {/* 12-App Bento Grid */}
+              <section
+                id="catalog-grid"
+                className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3.5 sm:gap-4 md:gap-5"
+              >
+                {filteredApps.map((app) => (
+                  <MarketplaceCard
+                    key={app.id || app.slug}
+                    app={app}
+                    isPurchased={Boolean(app.isInstalled)}
+                    onActionClick={handleActionClick}
+                    onCardClick={handleCardClick}
+                  />
+                ))}
+              </section>
 
-        {/* Editorial Standards Footer Strip */}
-        <section className="bg-[#faf8f5] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 border border-[#e7e5e4] shadow-xs">
-          <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-[#0c0a09] border border-[#e7e5e4] shadow-xs shrink-0">
-              <span className="material-symbols-outlined text-[20px] sm:text-[24px]">verified_user</span>
-            </div>
-            <div className="flex flex-col min-w-0">
-              <h4 className="font-garamond text-base sm:text-lg text-[#0c0a09] font-medium">
-                Certified Hospitality Integrations
-              </h4>
-              <p className="text-xs text-[#5e5e5e] mt-0.5 leading-relaxed">
-                All PREST marketplace plugins undergo rigorous kitchen ticket concurrency testing and
-                SOC2 compliance validation.
-              </p>
-            </div>
-          </div>
+              {/* Empty Search Feedback */}
+              {filteredApps.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 sm:py-16 px-4 text-center bg-white rounded-2xl sm:rounded-3xl border border-[#e7e5e4] shadow-xs">
+                  <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#fdf8f7] border border-[#e7e5e4] flex items-center justify-center text-[#5e5e5e] mb-3 sm:mb-4">
+                    <span className="material-symbols-outlined text-[24px] sm:text-[28px]">search_off</span>
+                  </div>
+                  <h3 className="font-sans text-base sm:text-lg font-semibold text-[#0c0a09]">
+                    {activeTab === "installed"
+                      ? "No installed apps found"
+                      : activeTab === "purchases"
+                        ? "No subscriptions or purchases found"
+                        : "No matching integrations found"}
+                  </h3>
+                  <p className="text-xs text-[#5e5e5e] mt-1 max-w-sm leading-relaxed">
+                    {activeTab === "installed"
+                      ? "You haven’t installed or connected any apps matching your filters yet. Explore the marketplace catalog to add tools."
+                      : activeTab === "purchases"
+                        ? "No active subscriptions or paid plans match your filters. Browse the catalog to explore available add-ons."
+                        : `We couldn’t find any tools matching "${searchQuery}" in the ${activeCategory} category.`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery("");
+                      setActiveCategory("all");
+                      if (
+                        (activeTab === "installed" || activeTab === "purchases") &&
+                        filteredApps.length === 0 &&
+                        !searchQuery &&
+                        activeCategory === "all"
+                      ) {
+                        handleTabChange("explore");
+                      }
+                    }}
+                    className="mt-4 px-4 py-2 rounded-lg bg-[#0c0a09] text-white text-xs font-semibold hover:bg-[#262626] transition-colors cursor-pointer"
+                  >
+                    {(activeTab === "installed" || activeTab === "purchases") &&
+                      !searchQuery &&
+                      activeCategory === "all"
+                      ? "Explore Marketplace Products"
+                      : "Reset Filters"}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
 
-          <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-semibold text-[#0c0a09] shrink-0">
-            <a href="#" className="hover:underline">
-              Developer Documentation
-            </a>
-            <span className="text-[#e7e5e4]">·</span>
-            <a href="#" className="hover:underline">
-              Request Custom Plugin
-            </a>
-          </div>
-        </section>
-      </div>
+          {/* Editorial Standards Footer Strip */}
+          <section className="bg-[#faf8f5] rounded-2xl sm:rounded-3xl p-4 sm:p-6 lg:p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 sm:gap-6 border border-[#e7e5e4] shadow-xs">
+            <div className="flex items-start sm:items-center gap-3 sm:gap-4 min-w-0">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white flex items-center justify-center text-[#0c0a09] border border-[#e7e5e4] shadow-xs shrink-0">
+                <span className="material-symbols-outlined text-[20px] sm:text-[24px]">verified_user</span>
+              </div>
+              <div className="flex flex-col min-w-0">
+                <h4 className="font-garamond text-base sm:text-lg text-[#0c0a09] font-medium">
+                  Certified Hospitality Integrations
+                </h4>
+                <p className="text-xs text-[#5e5e5e] mt-0.5 leading-relaxed">
+                  All PREST marketplace plugins undergo rigorous kitchen ticket concurrency testing and
+                  SOC2 compliance validation.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 text-xs font-semibold text-[#0c0a09] shrink-0">
+              <a href="#" className="hover:underline">
+                Developer Documentation
+              </a>
+              <span className="text-[#e7e5e4]">·</span>
+              <a href="#" className="hover:underline">
+                Request Custom Plugin
+              </a>
+            </div>
+          </section>
+        </div>
       )}
 
       {/* Interactive Purchase Modal */}
@@ -319,7 +342,7 @@ export function MarketplaceView() {
         isOpen={isPurchaseModalOpen}
         app={selectedApp}
         walletBalance={walletBalance}
-        isAlreadyPurchased={selectedApp ? purchasedAppIds.includes(selectedApp.id) : false}
+        isAlreadyPurchased={Boolean(selectedApp?.isInstalled)}
         onClose={() => setIsPurchaseModalOpen(false)}
         onConfirmPurchase={handleConfirmPurchase}
         onSimulateRecharge={(amount) => {
@@ -332,7 +355,7 @@ export function MarketplaceView() {
         isOpen={isDrawerOpen}
         app={selectedApp}
         walletBalance={walletBalance}
-        isPurchased={selectedApp ? purchasedAppIds.includes(selectedApp.id) : false}
+        isPurchased={Boolean(selectedApp?.isInstalled)}
         onClose={() => setIsDrawerOpen(false)}
         onActionClick={handleActionClick}
       />
