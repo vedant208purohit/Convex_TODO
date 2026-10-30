@@ -17,6 +17,7 @@ export interface MarketplaceRazorpayOptions {
   orderId?: string | null;
   isRemoteOrder?: boolean;
   storeName?: string;
+  customerName?: string;
   selectedMethod: PaymentMethodType;
   customerEmail?: string;
   customerPhone?: string;
@@ -110,53 +111,17 @@ export function useMarketplaceRazorpay() {
         process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
         "rzp_test_Ti7x9n4f0oPJJy";
 
-      // Configure strictly restricted payment instruments
-      const methodDisplayConfig: Record<PaymentMethodType, any> = {
-        upi: {
-          display: {
-            blocks: {
-              upi_block: {
-                name: "Instant UPI",
-                instruments: [{ method: "upi" }],
-              },
-            },
-            sequence: ["block.upi_block"],
-            preferences: {
-              show_default_blocks: false, // Strictly restricts to UPI only
-            },
-          },
-        },
-        netbanking: {
-          display: {
-            blocks: {
-              netbanking_block: {
-                name: "Net Banking",
-                instruments: [{ method: "netbanking" }],
-              },
-            },
-            sequence: ["block.netbanking_block"],
-            preferences: {
-              show_default_blocks: false, // Strictly restricts to Net Banking only
-            },
-          },
-        },
-        card: {
-          display: {
-            blocks: {
-              card_block: {
-                name: "Corporate Card",
-                instruments: [{ method: "card" }],
-              },
-            },
-            sequence: ["block.card_block"],
-            preferences: {
-              show_default_blocks: false, // Strictly restricts to Card only
-            },
-          },
-        },
-      };
+      const logoUrl =
+        typeof window !== "undefined" && window.location?.origin
+          ? `${window.location.origin}/images/prest-wallet.svg`
+          : undefined;
 
-      const selectedConfig = methodDisplayConfig[options.selectedMethod] || methodDisplayConfig.upi;
+      // Map selected method to Razorpay prefill method format
+      const methodMap: Record<PaymentMethodType, string> = {
+        upi: "upi",
+        netbanking: "netbanking",
+        card: "card",
+      };
 
       const rzpOptions: any = {
         key: resolvedKey,
@@ -164,13 +129,15 @@ export function useMarketplaceRazorpay() {
         currency: options.currency || "INR",
         name: options.storeName || "PREST Marketplace Escrow",
         description: `Escrow Deposit (${options.selectedMethod.toUpperCase()})`,
-        image: "/images/prest-wallet.svg",
+        image: logoUrl,
         handler: function (response: any) {
           options.onSuccess(response);
         },
         prefill: {
+          name: options.customerName || options.storeName || "Store Admin",
           email: options.customerEmail || "",
           contact: options.customerPhone || "",
+          method: methodMap[options.selectedMethod] || "upi",
         },
         notes: {
           purpose: "marketplace_wallet_topup",
@@ -184,10 +151,18 @@ export function useMarketplaceRazorpay() {
             options.onDismiss?.();
           },
         },
-        config: selectedConfig,
       };
 
-      if (options.orderId && options.orderId.startsWith("order_")) {
+      // Only pass order_id if it is a genuine remote order created via Razorpay Orders API
+      if (
+        options.isRemoteOrder &&
+        options.orderId &&
+        options.orderId.startsWith("order_") &&
+        !options.orderId.startsWith("order_sim_") &&
+        !options.orderId.startsWith("order_mock_") &&
+        !options.orderId.includes("_17") &&
+        !options.orderId.includes("_demo_")
+      ) {
         rzpOptions.order_id = options.orderId;
       }
 
