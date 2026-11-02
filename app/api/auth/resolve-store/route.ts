@@ -32,7 +32,7 @@ export async function resolveStoreForAuthenticatedUser(request?: Request) {
         url.searchParams.get("organizationId") ||
         url.searchParams.get("orgId") ||
         undefined;
-    } catch { }
+    } catch {}
   }
 
   const bridgeSecret = process.env.BRIDGE_SECRET;
