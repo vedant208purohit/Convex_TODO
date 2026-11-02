@@ -29,6 +29,28 @@ export async function POST(req: NextRequest) {
       process.env.RAZORPAY_KEY_SECRET?.trim() ||
       "";
 
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (isProduction) {
+      if (!keySecret || keySecret === "mock_secret" || keySecret.includes("mock")) {
+        return NextResponse.json(
+          { success: false, error: "Razorpay secret key is not configured on the server." },
+          { status: 500 }
+        );
+      }
+      if (
+        razorpaySignature === "valid_mock_signature" ||
+        razorpaySignature?.startsWith("mock_sig_") ||
+        razorpayPaymentId?.startsWith("pay_mock_") ||
+        razorpayPaymentId?.startsWith("pay_sim_")
+      ) {
+        return NextResponse.json(
+          { success: false, error: "Mock payments are disallowed in production." },
+          { status: 400 }
+        );
+      }
+    }
+
     const isMock =
       !keySecret ||
       keySecret === "mock_secret" ||
