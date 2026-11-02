@@ -8,8 +8,6 @@ export const revalidate = 0;
 export async function resolveStoreForAuthenticatedUser(request?: Request) {
   const { userId } = await auth();
 
-  console.log("Bridge secret:", process.env.BRIDGE_SECRET);
-
   if (!userId) {
     return NextResponse.json(
       {
@@ -34,7 +32,7 @@ export async function resolveStoreForAuthenticatedUser(request?: Request) {
         url.searchParams.get("organizationId") ||
         url.searchParams.get("orgId") ||
         undefined;
-    } catch {}
+    } catch { }
   }
 
   const bridgeSecret = process.env.BRIDGE_SECRET;
