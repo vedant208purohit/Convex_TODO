@@ -26,6 +26,7 @@ import {
   formatPhoneNumberWithCountryCode,
   getPhoneCodeForCountry,
   getCurrencyForCountry,
+  resolveOrganizationCurrency,
   isIndiaCountry,
   formatCurrencyAmount,
   formatStoreDate,
@@ -184,11 +185,7 @@ export default function CashierTablesView(props?: any) {
     return orgFeatures?.find((f: any) => f.featureKey === "show_member_number_on_cashier_card")?.active ?? false;
   }, [orgFeatures]);
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country ? getCurrencyForCountry(activeOrg.country).symbol : undefined) ||
-    storeTaxSettings?.currencySymbol ||
-    "$";
+  const currencySymbol = resolveOrganizationCurrency(activeOrg).symbol;
 
   // Fetch employees from store organizationUsers
   const employees = useQuery(

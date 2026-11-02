@@ -9,6 +9,9 @@ import {
   getPhoneCodeForCountry,
   formatPhoneNumberWithCountryCode,
   isIndiaCountry,
+  resolveOrganizationCurrency,
+  formatPriceWithSymbol,
+  formatOrganizationPrice,
 } from "./countries";
 
 describe("Centralized Countries Master & Geographical Data Module", () => {
@@ -150,6 +153,88 @@ describe("Centralized Countries Master & Geographical Data Module", () => {
       expect(COUNTRY_DIAL_OPTIONS.some((o) => o.code === "+971" && o.iso === "AE")).toBe(true);
       expect(COUNTRY_DIAL_OPTIONS.some((o) => o.code === "+1" && o.iso === "US")).toBe(true);
       expect(COUNTRY_DIAL_OPTIONS.some((o) => o.code === "+44" && o.iso === "GB")).toBe(true);
+    });
+  });
+
+  describe("resolveOrganizationCurrency & formatOrganizationPrice", () => {
+    it("should resolve currency for UAE organization without explicit defaultCurrencySymbol", () => {
+      const uaeOrg = { country: "AE" };
+      const resolved = resolveOrganizationCurrency(uaeOrg);
+      expect(resolved.code).toBe("AED");
+      expect(resolved.symbol).toBe("AED");
+      expect(resolved.countryCode).toBe("AE");
+
+      expect(formatOrganizationPrice(1500, uaeOrg)).toBe("AED 1,500.00");
+    });
+
+    it("should resolve currency for India organization correctly", () => {
+      const inOrg = { country: "IN" };
+      const resolved = resolveOrganizationCurrency(inOrg);
+      expect(resolved.code).toBe("INR");
+      expect(resolved.symbol).toBe("₹");
+      expect(resolved.countryCode).toBe("IN");
+
+      expect(formatOrganizationPrice(1500, inOrg)).toBe("₹1,500.00");
+    });
+
+    it("should resolve currency for United States organization correctly", () => {
+      const usOrg = { country: "US" };
+      const resolved = resolveOrganizationCurrency(usOrg);
+      expect(resolved.code).toBe("USD");
+      expect(resolved.symbol).toBe("$");
+      expect(resolved.countryCode).toBe("US");
+
+      expect(formatOrganizationPrice(1500, usOrg)).toBe("$1,500.00");
+    });
+
+    it("should resolve currency for United Kingdom organization correctly", () => {
+      const ukOrg = { country: "GB" };
+      const resolved = resolveOrganizationCurrency(ukOrg);
+      expect(resolved.code).toBe("GBP");
+      expect(resolved.symbol).toBe("£");
+
+      expect(formatOrganizationPrice(1500, ukOrg)).toBe("£1,500.00");
+    });
+
+    it("should resolve currency for Germany / France (EUR) correctly", () => {
+      const deOrg = { country: "DE" };
+      const resolved = resolveOrganizationCurrency(deOrg);
+      expect(resolved.code).toBe("EUR");
+      expect(resolved.symbol).toBe("€");
+
+      expect(formatOrganizationPrice(1500, deOrg)).toBe("€1,500.00");
+    });
+
+    it("should fall back safely to India when organization country is undefined", () => {
+      const emptyOrg = {};
+      const resolved = resolveOrganizationCurrency(emptyOrg);
+      expect(resolved.code).toBe("INR");
+      expect(resolved.symbol).toBe("₹");
+      expect(resolved.countryCode).toBe("IN");
+
+      expect(formatOrganizationPrice(1500, emptyOrg)).toBe("₹1,500.00");
+    });
+
+    it("should respect explicit custom currency configuration on the organization", () => {
+      const customOrg = {
+        country: "AE",
+        defaultCurrency: "AED",
+        defaultCurrencySymbol: "AED",
+      };
+      const resolved = resolveOrganizationCurrency(customOrg);
+      expect(resolved.code).toBe("AED");
+      expect(resolved.symbol).toBe("AED");
+      expect(formatOrganizationPrice(25000, customOrg, true)).toBe("AED 250.00");
+    });
+
+    it("should format single-char symbols without space and multi-char symbols with space", () => {
+      expect(formatPriceWithSymbol(1500, "₹", "IN")).toBe("₹1,500.00");
+      expect(formatPriceWithSymbol(1500, "$", "US")).toBe("$1,500.00");
+      expect(formatPriceWithSymbol(1500, "£", "GB")).toBe("£1,500.00");
+      expect(formatPriceWithSymbol(1500, "€", "DE")).toBe("€1,500.00");
+      expect(formatPriceWithSymbol(1500, "AED", "AE")).toBe("AED 1,500.00");
+      expect(formatPriceWithSymbol(1500, "SAR", "SA")).toBe("SAR 1,500.00");
+      expect(formatPriceWithSymbol(1500, "CA$", "CA")).toBe("CA$ 1,500.00");
     });
   });
 });

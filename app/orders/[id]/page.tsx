@@ -19,6 +19,7 @@ import {
   formatStoreDate,
   formatStoreTime,
   formatStoreDateTime,
+  resolveOrganizationCurrency,
 } from "../../../lib/constants/countries";
 
 function formatOrderPhoneDisplay(phone?: string): string {
@@ -387,18 +388,9 @@ export default function OrderDetailsDynamicPage() {
   const activeOrg =
     organizations && organizations.length > 0 ? organizations[0] : null;
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol &&
-    activeOrg.defaultCurrencySymbol !== "Rs." &&
-    activeOrg.defaultCurrencySymbol !== "RS." &&
-    activeOrg.defaultCurrencySymbol !== "Rs"
-      ? activeOrg.defaultCurrencySymbol
-      : getCurrencyForCountry(activeOrg?.country || "IN").symbol || "₹";
-  const currencyCode =
-    activeOrg?.defaultCurrency ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).code
-      : "USD");
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
+  const currencySymbol = orgCurrency.symbol;
+  const currencyCode = orgCurrency.code;
 
   // Query Real Store Order Processes from DB
   const dbProcesses = useQuery(api.organizationOrderProcesses.list, {

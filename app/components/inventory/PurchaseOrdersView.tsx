@@ -9,6 +9,7 @@ import {
   getCurrencyForCountry,
   formatStoreDate,
   getPhoneCodeForCountry,
+  resolveOrganizationCurrency,
 } from "@/lib/constants/countries";
 import { downloadPurchaseOrderPdf } from "@/app/utils/generatePurchaseOrderPdf";
 import { Toast, type ToastMessage, type ToastType } from "@/app/components/Toast";
@@ -40,11 +41,7 @@ export function PurchaseOrdersView({
   const organizations = useQuery(api.organizations.list);
   const activeOrg =
     organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : "₹");
+  const currencySymbol = resolveOrganizationCurrency(activeOrg).symbol;
 
   // Live Convex Queries
   const suppliers = useQuery(api.inventory.listSuppliers, { organizationId });

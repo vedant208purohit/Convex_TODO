@@ -1405,7 +1405,7 @@ export function MenuReportView({
                           effectiveCountry,
                           true
                         )
-                      : "₹ 0.00 (Inclusive)"}
+                      : `${formatPriceWithSymbol(0, currencySymbol, effectiveCountry)} (Inclusive)`}
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-[#5e5e5e]">

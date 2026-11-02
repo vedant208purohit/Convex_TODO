@@ -7,6 +7,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { PosShell } from "@/app/components/PosShell";
+import { formatPriceWithSymbol, resolveOrganizationCurrency } from "@/lib/constants/countries";
 
 // ====================================================
 // HELPER FUNCTIONS
@@ -125,10 +126,12 @@ export default function OrderCustomerReviewPage() {
 
   const { order, review, items, benchmarks, hasReview } = reviewDetails;
 
-  const formattedTotal = (order.totalAmount / 100).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const formattedTotal = formatPriceWithSymbol(
+    order.totalAmount,
+    (order as any).currencySymbol,
+    (order as any).country,
+    true
+  );
 
   const minutesPostCheckout =
     review?.submittedAt && order.createdAt
@@ -301,27 +304,33 @@ export default function OrderCustomerReviewPage() {
               <div className="mt-3">
                 <div className="flex items-baseline gap-2">
                   <span className="text-3xl font-extrabold text-[#1A1A1A] tracking-tight">
-                    {hasReview && review?.overallScore ? review.overallScore.toFixed(1) : "—"}
+                    {hasReview && review?.overallScore != null ? review.overallScore.toFixed(1) : "—"}
                   </span>
                   <span className="text-xs text-[#5b5f64]">
-                    {hasReview ? `/ ${review?.maxScore.toFixed(1)}` : "(No ratings yet)"}
+                    {hasReview ? `/ ${review?.maxScore ? review.maxScore.toFixed(1) : "5.0"}` : "(No ratings yet)"}
                   </span>
-                  {hasReview && (
+                  {hasReview && review?.overallScore != null && (
                     <div className="flex items-center text-[#B06000] ml-1">
-                      {[1, 2, 3, 4, 5].map((s) => (
-                        <span
-                          key={s}
-                          className="material-symbols-outlined text-[18px]"
-                          style={{
-                            fontVariationSettings:
-                              s <= Math.round(review?.overallScore || 0)
-                                ? "'FILL' 1"
-                                : "'FILL' 0",
-                          }}
-                        >
-                          star
-                        </span>
-                      ))}
+                      {[1, 2, 3, 4, 5].map((s) => {
+                        const normalizedScore =
+                          review.maxScore > 0
+                            ? Math.min(5, Math.max(0, (review.overallScore! / review.maxScore) * 5))
+                            : review.overallScore!;
+                        return (
+                          <span
+                            key={s}
+                            className="material-symbols-outlined text-[18px]"
+                            style={{
+                              fontVariationSettings:
+                                s <= Math.round(normalizedScore)
+                                  ? "'FILL' 1"
+                                  : "'FILL' 0",
+                            }}
+                          >
+                            star
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -383,7 +392,7 @@ export default function OrderCustomerReviewPage() {
               <div className="mt-3">
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold text-[#1A1A1A]">
-                    ₹{formattedTotal}
+                    {formattedTotal}
                   </span>
                   <span className="text-xs text-[#5b5f64]">
                     • T-{order.tableNumber}
