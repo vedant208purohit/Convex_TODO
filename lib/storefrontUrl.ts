@@ -64,18 +64,18 @@ export function getCanonicalStorefrontUrl(options: StorefrontUrlOptions): string
       } else if (parts[0].startsWith("staging-")) {
         base = `https://staging-pos-user.get-prest.com`;
       } else if (cleanSlug) {
-        base = `https://${cleanSlug}.get-prest.com`;
+        base = `https://${cleanSlug}.ui.get-prest.com`;
       } else {
-        base = `https://app.get-prest.com`;
+        base = `https://ui.get-prest.com`;
       }
     } else if (cleanSlug) {
-      base = `https://${cleanSlug}.get-prest.com`;
+      base = `https://${cleanSlug}.ui.get-prest.com`;
     } else {
       base = `${window.location.protocol}//${window.location.host}`;
     }
   } else {
     // Server-side default
-    base = cleanSlug ? `https://${cleanSlug}.get-prest.com` : "https://get-prest.com";
+    base = cleanSlug ? `https://${cleanSlug}.ui.get-prest.com` : "https://ui.get-prest.com";
   }
 
   // 2. Query Parameters

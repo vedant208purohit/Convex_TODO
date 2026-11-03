@@ -138,7 +138,7 @@ export function OrganizationOnlineStore() {
       const parsed = new URL(publicStoreUrl);
       return parsed.host + (parsed.pathname !== "/" ? parsed.pathname : "");
     } catch {
-      return `${storeSlug}.get-prest.com`;
+      return `${storeSlug}.ui.get-prest.com`;
     }
   }, [publicStoreUrl, storeSlug]);
 
@@ -2519,7 +2519,7 @@ export function OrganizationOnlineStore() {
                 </div>
                 <p className="text-xs text-[#645d58] mt-1 max-w-xl">
                   {onlineStore
-                    ? "Your online store is actively receiving orders at " + storeSlug + ".get-prest.com"
+                    ? "Your online store is actively receiving orders at " + storeSlug + ".ui.get-prest.com"
                     : "Your storefront is currently offline. Customers will see a polite paused message."}
                 </p>
               </div>
