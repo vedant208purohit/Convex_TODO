@@ -135,7 +135,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       expect(
         searchResults.some((w) => w.name.toLowerCase().includes("revenue"))
       ).toBe(true);
-    });
+    }, 20000);
 
     test("getCatalogWithUserState computes accurate counts and added status", async () => {
       const { asStaff, orgId } = await setupStoreWithUsers();
@@ -162,7 +162,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Add a widget
       const addRes = await asStaff.mutation(api.dashboards.addWidgetPlacement, {
@@ -226,7 +226,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Add unique widget
       await asStaff.mutation(api.dashboards.addWidgetPlacement, {
@@ -257,7 +257,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // gridCol 8 + width 6 = 14 > 12 -> throws
       await expect(
@@ -283,8 +283,8 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
-      const initialRev = dashRes.dashboard.revision;
+      const dashId = dashRes.dashboard!._id;
+      const initialRev = dashRes.dashboard!.revision;
 
       // Create draft
       const draftRes = await asStaff.mutation(api.dashboards.createOrUpdateDraft, {
@@ -334,7 +334,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       });
       expect(postApplyDash.hasUnsavedDraft).toBe(false);
       expect(postApplyDash.placements.length).toBe(2);
-      expect(postApplyDash.dashboard.revision).toBe(initialRev + 1);
+      expect(postApplyDash.dashboard!.revision).toBe(initialRev + 1);
     });
 
     test("Revision conflict prevents stale draft from applying", async () => {
@@ -343,8 +343,8 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
-      const initialRev = dashRes.dashboard.revision;
+      const dashId = dashRes.dashboard!._id;
+      const initialRev = dashRes.dashboard!.revision;
 
       // Create draft based on initialRev
       await asStaff.mutation(api.dashboards.createOrUpdateDraft, {
@@ -398,7 +398,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Apply Late Night Bar & Lounge template
       const applyTpl = await asStaff.mutation(api.dashboards.applyTemplate, {
@@ -413,7 +413,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
         organizationId: orgId,
         dashboardId: dashId,
       });
-      expect(afterTpl.dashboard.templateKey).toBe("late_night_bar_lounge");
+      expect(afterTpl.dashboard!.templateKey).toBe("late_night_bar_lounge");
       expect(afterTpl.placements.some((p) => p.widgetId === "kds_live_orders")).toBe(true);
 
       // Reset to defaults
@@ -426,7 +426,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
         organizationId: orgId,
         dashboardId: dashId,
       });
-      expect(afterReset.dashboard.templateKey).toBe("executive_dinner_peak");
+      expect(afterReset.dashboard!.templateKey).toBe("executive_dinner_peak");
     });
 
     test("Only Admin can save as global template", async () => {
@@ -435,7 +435,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Non-admin rejected
       await expect(

@@ -42,7 +42,94 @@
   --color-foreground: var(--foreground);
   --font-sans: 'Inter', sans-serif;
   --font-serif: 'EB Garamond', serif;
+
+  --color-surface-container-lowest: #ffffff;
+  --color-secondary-container: #eae1da;
+  --color-secondary-fixed: #ebe1da;
+  --color-surface-variant: #e9e1dd;
+  --color-error-container: #ffdad6;
+  --color-on-tertiary-fixed: #331200;
+  --color-surface-container-highest: #e9e1dd;
+  --color-surface: #fff8f5;
+  --color-secondary-fixed-dim: #cec5be;
+  --color-on-tertiary-fixed-variant: #683c21;
+  --color-outline: #7f7570;
+  --color-inverse-surface: #33302d;
+  --color-surface-dim: #e0d9d5;
+  --color-tertiary-fixed-dim: #f8b896;
+  --color-tertiary: #000000;
+  --color-primary: #000000;
+  --color-surface-container-low: #faf2ee;
+  --color-on-tertiary-container: #cf6721;
+  --color-on-tertiary: #ffffff;
+  --color-on-secondary-container: #6a635e;
+  --color-outline-variant: #d0c4be;
+  --color-error: #ba1a1a;
+  --color-on-surface-variant: #4d4541;
+  --color-secondary: #645d58;
+  --color-on-secondary: #ffffff;
+  --color-surface-container-high: #eee7e3;
+  --color-tertiary-fixed: #ffdbc9;
+  --color-on-primary: #ffffff;
+  --color-on-secondary-fixed-variant: #4c4641;
+  --color-tertiary-container: #331200;
+  --color-surface-bright: #fff8f5;
+  --color-primary-fixed: #e2e2e2;
+  --color-on-primary-fixed: #1b1b1b;
+  --color-surface-container: #f4ece9;
+  --color-on-surface: #1e1b19;
+  --color-on-background: #1e1b19;
+  --color-primary-fixed-dim: #c6c6c6;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #93000a;
+  --color-inverse-primary: #c6c6c6;
+  --color-on-primary-fixed-variant: #474747;
+  --color-surface-tint: #5e5e5e;
+  --color-on-secondary-fixed: #1f1b17;
+  --color-primary-container: #1b1b1b;
+  --color-inverse-on-surface: #f7efeb;
+  --color-on-primary-container: #848484;
 }
+
+/* PREST Design System Typography & Spacing Helpers */
+.font-display-lg { font-family: var(--font-eb-garamond), 'EB Garamond', Georgia, serif; font-size: 3rem; line-height: 3.5rem; letter-spacing: -0.02em; font-weight: 400; }
+.font-display-sm { font-family: var(--font-eb-garamond), 'EB Garamond', Georgia, serif; font-size: 2.25rem; line-height: 2.75rem; letter-spacing: -0.015em; font-weight: 400; }
+.font-headline-lg { font-family: var(--font-eb-garamond), 'EB Garamond', Georgia, serif; font-size: 1.75rem; line-height: 2.25rem; letter-spacing: -0.01em; font-weight: 400; }
+.font-headline-md { font-family: var(--font-eb-garamond), 'EB Garamond', Georgia, serif; font-size: 1.375rem; line-height: 1.875rem; letter-spacing: 0em; font-weight: 400; }
+.font-headline-sm { font-family: var(--font-eb-garamond), 'EB Garamond', Georgia, serif; font-size: 1.125rem; line-height: 1.625rem; letter-spacing: 0em; font-weight: 400; }
+
+.font-body-lg { font-family: var(--font-inter), 'Inter', sans-serif; font-size: 1rem; line-height: 1.5rem; letter-spacing: -0.011em; font-weight: 400; }
+.font-body-md { font-family: var(--font-inter), 'Inter', sans-serif; font-size: 0.875rem; line-height: 1.375rem; letter-spacing: -0.006em; font-weight: 400; }
+.font-body-sm { font-family: var(--font-inter), 'Inter', sans-serif; font-size: 0.75rem; line-height: 1.125rem; letter-spacing: 0em; font-weight: 400; }
+
+.font-label-lg { font-family: var(--font-inter), 'Inter', sans-serif; font-size: 0.875rem; line-height: 1.25rem; letter-spacing: 0.01em; font-weight: 500; }
+.font-label-md { font-family: var(--font-inter), 'Inter', sans-serif; font-size: 0.75rem; line-height: 1rem; letter-spacing: 0.04em; font-weight: 600; }
+.font-label-sm { font-family: var(--font-inter), 'Inter', sans-serif; font-size: 0.6875rem; line-height: 0.875rem; letter-spacing: 0.06em; font-weight: 600; }
+
+.gap-gutter { gap: 1.25rem; }
+.p-margin { padding: 1.5rem; }
+.px-margin { padding-left: 1.5rem; padding-right: 1.5rem; }
+.py-space-md { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.py-space-sm { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+.py-space-xs { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+.px-space-md { padding-left: 0.75rem; padding-right: 0.75rem; }
+.px-space-sm { padding-left: 0.5rem; padding-right: 0.5rem; }
+.px-space-lg { padding-left: 1.5rem; padding-right: 1.5rem; }
+.px-space-xl { padding-left: 2rem; padding-right: 2rem; }
+.p-space-lg { padding: 1.5rem; }
+.p-space-xl { padding: 2rem; }
+.p-space-md { padding: 0.75rem; }
+.p-space-sm { padding: 0.5rem; }
+.gap-space-sm { gap: 0.5rem; }
+.gap-space-md { gap: 0.75rem; }
+.gap-space-lg { gap: 1.5rem; }
+.gap-space-xs { gap: 0.25rem; }
+.mt-space-md { margin-top: 0.75rem; }
+.mt-space-lg { margin-top: 1.5rem; }
+.mt-space-xl { margin-top: 2rem; }
+.mb-space-md { margin-bottom: 0.75rem; }
+.mb-space-lg { margin-bottom: 1.5rem; }
+.rounded-DEFAULT { border-radius: 1rem; }
 
 .font-garamond {
   font-family: var(--font-eb-garamond), 'EB Garamond', 'Waldenburg', Georgia, serif;

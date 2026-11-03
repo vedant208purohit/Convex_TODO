@@ -48,6 +48,8 @@ export type DateRangePreset =
   | "previous_shift"
   | "last_7_days"
   | "last_30_days"
+  | "this_month"
+  | "last_month"
   | "custom";
 
 // Convex Validator for DateRangePreset
@@ -58,6 +60,8 @@ export const dateRangePresetValidator = v.union(
   v.literal("previous_shift"),
   v.literal("last_7_days"),
   v.literal("last_30_days"),
+  v.literal("this_month"),
+  v.literal("last_month"),
   v.literal("custom")
 );
 
@@ -220,6 +224,7 @@ export interface WidgetDataResponse {
   liveFeed?: LiveFeedPayload;
   alert?: AlertPayload;
   summary?: Record<string, any>;
+  payload?: any;
 }
 
 // ==========================================

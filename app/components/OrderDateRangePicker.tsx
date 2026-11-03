@@ -450,8 +450,8 @@ export function OrderDateRangePicker({
         >
           <div
             className={`relative bg-white border border-[#d1d5db] rounded-2xl sm:rounded-lg shadow-2xl z-50 font-sans w-full max-w-[340px] sm:max-w-none sm:w-auto sm:absolute ${
-              align === "right" ? "sm:right-0" : "sm:left-0"
-            } sm:top-full sm:mt-2.5 overflow-hidden sm:overflow-visible`}
+              align === "right" ? "sm:right-0 sm:left-auto" : "sm:left-0 sm:right-auto"
+            } sm:top-full sm:mt-2.5 overflow-hidden`}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top pointer notch arrow on desktop only */}
@@ -475,7 +475,7 @@ export function OrderDateRangePicker({
               </button>
             </div>
 
-            {/* Main section: Presets list + Dual calendar */}
+            {/* Main section: Presets list + Month calendar */}
             <div className="flex flex-col sm:flex-row">
               {/* Mobile Presets: horizontal scrollable pills */}
               <div className="sm:hidden flex items-center gap-1.5 p-2.5 overflow-x-auto border-b border-[#e5e7eb] bg-[#faf8f5] scrollbar-none touch-pan-x">
@@ -529,18 +529,12 @@ export function OrderDateRangePicker({
                 )}
               </div>
 
-              {/* Desktop (sm and up): Dual side-by-side months */}
+              {/* Desktop (sm and up): Month calendar with full < and > navigation */}
               <div className="hidden sm:flex p-4 flex-row gap-6 bg-white shrink-0">
                 {renderMonthCalendar(
                   viewMonth.getFullYear(),
                   viewMonth.getMonth(),
                   true,
-                  false,
-                )}
-                {renderMonthCalendar(
-                  nextViewMonth.getFullYear(),
-                  nextViewMonth.getMonth(),
-                  false,
                   true,
                 )}
               </div>

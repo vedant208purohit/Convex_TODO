@@ -237,7 +237,6 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: <DashboardIcon className="w-4 h-4" />,
-    badge: "Coming Soon",
   },
   {
     href: "/menu",
@@ -928,7 +927,7 @@ export function PosShell({
     <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
       <aside
-        className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full transition-all duration-300 ease-in-out ${isCollapsed ? "w-20 overflow-visible z-40" : "w-64 overflow-hidden"
+        className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full transition-all duration-300 ease-in-out relative z-50 ${isCollapsed ? "w-20 overflow-visible" : "w-64 overflow-hidden"
           }`}
       >
         {/* Logo Header */}
