@@ -1915,5 +1915,251 @@ postpaidOrderRequests: defineTable({
     .index("by_razorpay_payment_id", ["organizationId", "razorpayPaymentId"])
     .index("by_created_at", ["organizationId", "createdAt"]),
 
+  // =========================================================================
+  // POLYMORPHIC PAYMENT GATEWAYS DOMAIN (Razorpay, Stripe, PayPal, etc.)
+  // Shared normalized data model supporting multiple payment providers
+  // =========================================================================
+
+  payment_gateway_connections: defineTable({
+    organizationId: v.id("organizations"),
+    provider: v.string(), // "razorpay" | "stripe" | "paypal"
+    connectionType: v.union(v.literal("api_key"), v.literal("oauth")),
+    providerAccountId: v.optional(v.string()), // Merchant ID or account identifier
+    merchantName: v.optional(v.string()),
+    accountMode: v.union(v.literal("test"), v.literal("live")),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("connected"),
+      v.literal("needs_attention"),
+      v.literal("disconnected"),
+      v.literal("error")
+    ),
+    encryptedCredentials: v.optional(v.string()), // AES-256-GCM authenticated payload
+    encryptionKeyVersion: v.optional(v.number()),
+    credentialsUpdatedAt: v.optional(v.number()),
+    connectedAt: v.optional(v.number()),
+    disconnectedAt: v.optional(v.number()),
+    lastVerifiedAt: v.optional(v.number()),
+    lastSyncAt: v.optional(v.number()),
+    lastErrorCode: v.optional(v.string()),
+    lastErrorMessage: v.optional(v.string()),
+    isDefault: v.boolean(),
+    metadata: v.optional(v.any()), // Non-sensitive provider metadata
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_provider", ["provider"])
+    .index("by_org_and_provider", ["organizationId", "provider"])
+    .index("by_status", ["status"])
+    .index("by_org_and_status", ["organizationId", "status"])
+    .index("by_provider_account", ["providerAccountId"])
+    .index("by_org_provider_account", ["organizationId", "provider", "providerAccountId"]),
+
+  payment_transactions: defineTable({
+    organizationId: v.id("organizations"),
+    connectionId: v.id("payment_gateway_connections"),
+    provider: v.string(),
+    providerPaymentId: v.string(), // e.g. "pay_29QQoUBi66xm2f"
+    providerOrderId: v.optional(v.string()),
+    internalOrderId: v.optional(v.id("orders")),
+    customerId: v.optional(v.id("customers")),
+    customerName: v.optional(v.string()),
+    customerEmail: v.optional(v.string()),
+    customerPhone: v.optional(v.string()),
+    amountMinor: v.number(), // Integer minor currency units (paise / cents)
+    currency: v.string(), // ISO 4217 code (e.g. "INR", "USD")
+    paymentMethod: v.string(), // "upi" | "card" | "netbanking" | "wallet" | "emi"
+    status: v.union(
+      v.literal("created"),
+      v.literal("authorized"),
+      v.literal("captured"),
+      v.literal("failed"),
+      v.literal("pending"),
+      v.literal("refunded"),
+      v.literal("partially_refunded"),
+      v.literal("cancelled")
+    ),
+    providerStatus: v.string(), // Raw provider status (e.g. "captured", "succeeded")
+    paidAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    refundedAmountMinor: v.optional(v.number()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_connection", ["connectionId"])
+    .index("by_provider", ["provider"])
+    .index("by_provider_payment_id", ["providerPaymentId"])
+    .index("by_provider_order_id", ["providerOrderId"])
+    .index("by_internal_order", ["internalOrderId"])
+    .index("by_customer", ["customerId"])
+    .index("by_status", ["status"])
+    .index("by_paid_at", ["paidAt"])
+    .index("by_created_at", ["createdAt"])
+    .index("by_connection_and_provider_payment", ["connectionId", "providerPaymentId"])
+    .index("by_provider_and_payment_id", ["provider", "providerPaymentId"]),
+
+  payment_refunds: defineTable({
+    organizationId: v.id("organizations"),
+    connectionId: v.id("payment_gateway_connections"),
+    transactionId: v.id("payment_transactions"),
+    provider: v.string(),
+    providerRefundId: v.string(),
+    providerPaymentId: v.string(),
+    amountMinor: v.number(), // Integer minor units
+    currency: v.string(), // ISO 4217
+    reason: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processed"),
+      v.literal("failed"),
+      v.literal("cancelled")
+    ),
+    providerStatus: v.string(),
+    initiatedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_connection", ["connectionId"])
+    .index("by_provider", ["provider"])
+    .index("by_provider_refund_id", ["providerRefundId"])
+    .index("by_transaction", ["transactionId"])
+    .index("by_provider_payment_id", ["providerPaymentId"])
+    .index("by_status", ["status"])
+    .index("by_connection_and_provider_refund", ["connectionId", "providerRefundId"]),
+
+  payment_settlements: defineTable({
+    organizationId: v.id("organizations"),
+    connectionId: v.id("payment_gateway_connections"),
+    provider: v.string(),
+    providerSettlementId: v.string(),
+    amountMinor: v.number(), // Gross amount in minor units
+    currency: v.string(), // ISO 4217
+    feesMinor: v.optional(v.number()),
+    taxMinor: v.optional(v.number()),
+    netAmountMinor: v.number(), // Net payout in minor units
+    status: v.union(
+      v.literal("pending"),
+      v.literal("processed"),
+      v.literal("failed"),
+      v.literal("partially_processed")
+    ),
+    providerStatus: v.string(),
+    settlementDate: v.number(),
+    utrOrReference: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_connection", ["connectionId"])
+    .index("by_provider", ["provider"])
+    .index("by_provider_settlement_id", ["providerSettlementId"])
+    .index("by_settlement_date", ["settlementDate"])
+    .index("by_status", ["status"])
+    .index("by_connection_and_provider_settlement", ["connectionId", "providerSettlementId"]),
+
+  payment_webhook_events: defineTable({
+    organizationId: v.id("organizations"),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    provider: v.string(),
+    providerEventId: v.string(),
+    eventType: v.string(),
+    eventCategory: v.optional(v.string()),
+    payload: v.string(), // Sanitized JSON string
+    signatureVerified: v.boolean(),
+    processingStatus: v.union(
+      v.literal("received"),
+      v.literal("verified"),
+      v.literal("processing"),
+      v.literal("processed"),
+      v.literal("failed"),
+      v.literal("ignored")
+    ),
+    attemptCount: v.number(),
+    receivedAt: v.number(),
+    processedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_connection", ["connectionId"])
+    .index("by_provider", ["provider"])
+    .index("by_provider_event_id", ["providerEventId"])
+    .index("by_provider_and_event_id", ["provider", "providerEventId"])
+    .index("by_event_type", ["eventType"])
+    .index("by_processing_status", ["processingStatus"])
+    .index("by_received_at", ["receivedAt"]),
+
+  payment_sync_runs: defineTable({
+    organizationId: v.id("organizations"),
+    connectionId: v.id("payment_gateway_connections"),
+    provider: v.string(),
+    resourceType: v.union(
+      v.literal("transactions"),
+      v.literal("refunds"),
+      v.literal("settlements")
+    ),
+    syncType: v.union(
+      v.literal("initial"),
+      v.literal("incremental"),
+      v.literal("manual"),
+      v.literal("scheduled")
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("partial"),
+      v.literal("failed")
+    ),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    recordsFetched: v.number(),
+    recordsCreated: v.number(),
+    recordsUpdated: v.number(),
+    recordsSkipped: v.number(),
+    errorCount: v.number(),
+    lastError: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_connection", ["connectionId"])
+    .index("by_provider", ["provider"])
+    .index("by_resource_type", ["resourceType"])
+    .index("by_status", ["status"])
+    .index("by_started_at", ["startedAt"])
+    .index("by_connection_and_resource", ["connectionId", "resourceType"]),
+
+  payment_sync_cursors: defineTable({
+    organizationId: v.id("organizations"),
+    connectionId: v.id("payment_gateway_connections"),
+    provider: v.string(),
+    resourceType: v.union(
+      v.literal("transactions"),
+      v.literal("refunds"),
+      v.literal("settlements")
+    ),
+    cursor: v.optional(v.string()),
+    lastSuccessfulSyncAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_org", ["organizationId"])
+    .index("by_connection", ["connectionId"])
+    .index("by_provider", ["provider"])
+    .index("by_resource_type", ["resourceType"])
+    .index("by_connection_and_resource", ["connectionId", "resourceType"]),
+
 }, { schemaValidation: false });
 

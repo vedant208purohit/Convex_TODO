@@ -114,22 +114,22 @@ export const DEFAULT_CATALOG_LISTINGS = [
   {
     slug: "razorpay",
     title: "Razorpay",
-    subtitle: "Unified payment gateway for table checks and online orders.",
+    subtitle: "Accept UPI, Cards, Wallets, EMI and Net Banking payments.",
     vendor: "RAZORPAY",
     category: "Payments",
     description:
-      "Accept eligible online payments through a connected Razorpay merchant account. Auto-settle QR table checks and mobile pickup orders directly.",
-    badge: "Live",
-    iconName: "account_balance",
+      "Accept UPI, Cards, Wallets, EMI and Net Banking payments.",
+    badge: "Recommended for India",
+    iconName: "razorpay",
     rating: "4.9/5",
     version: "v3.1.2",
-    statusText: "Installed & Active",
-    statusType: "live",
+    statusText: "Not Connected",
+    statusType: "available",
     priceText: "Pay-as-you-go (1.9% per txn)",
     priceAmount: 0,
     isOneTime: true,
-    actionText: "Settings",
-    actionType: "settings",
+    actionText: "Connect",
+    actionType: "install",
     isPublished: true,
     displayOrder: 3,
   },
@@ -587,10 +587,9 @@ export async function getOrCreateWallet(
     });
   }
 
-  // Pre-seed initial installed apps for WhatsApp Business, Razorpay, GA4, Surveys
+  // Pre-seed initial installed apps for WhatsApp Business, GA4, Surveys
   const preInstalledSlugs = [
     { slug: "whatsapp-business", status: "installed", actionType: "setup", isPaid: false },
-    { slug: "razorpay", status: "live", actionType: "settings", isPaid: false },
     { slug: "phonepe-payment-gateway", status: "attention", actionType: "fix", isPaid: false },
     { slug: "google-analytics-4", status: "live", actionType: "open", isPaid: false },
     { slug: "customer-feedback-surveys", status: "live", actionType: "settings", isPaid: false },
