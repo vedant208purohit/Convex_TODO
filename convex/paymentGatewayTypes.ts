@@ -119,6 +119,7 @@ export interface PublicGatewayConnection {
   lastErrorCode?: string;
   lastErrorMessage?: string;
   isDefault: boolean;
+  metadata?: Record<string, any>;
   maskedKeyId?: string;
   createdAt: number;
   updatedAt: number;

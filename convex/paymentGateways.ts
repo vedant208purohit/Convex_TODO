@@ -1115,3 +1115,589 @@ export const getSyncStatus = query({
   },
 });
 
+// =========================================================================
+// DASHBOARD ANALYTICS & WEBHOOK EVENT PROCESSING
+// =========================================================================
+
+/**
+ * State transition safety matrix for transactions:
+ * Terminal/captured states must not regress if delayed events arrive out-of-order.
+ */
+function canTransitionTransaction(currentStatus: string, newStatus: string): boolean {
+  if (currentStatus === newStatus) return true;
+  // If already refunded, never regress to any non-refunded state
+  if (currentStatus === "refunded") return false;
+  // If partially refunded, never regress to created/authorized/pending/failed
+  if (currentStatus === "partially_refunded" && newStatus !== "refunded") return false;
+  // If captured, never regress to authorized, pending, created, or failed
+  if (
+    currentStatus === "captured" &&
+    (newStatus === "authorized" ||
+      newStatus === "pending" ||
+      newStatus === "created" ||
+      newStatus === "failed")
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Retrieves aggregate payment analytics for the dashboard.
+ * Evaluates metrics safely per currency, using store timezone calendar boundaries.
+ */
+export const getDashboardAnalytics = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    provider: v.optional(v.string()),
+    startOfTodayMs: v.number(),
+    endOfTodayMs: v.number(),
+    startOfMonthMs: v.number(),
+    endOfMonthMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const provider = args.provider || "razorpay";
+
+    // 1. Fetch transactions for this store organization
+    let txns = await ctx.db
+      .query("payment_transactions")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+
+    if (args.connectionId) {
+      txns = txns.filter((t) => t.connectionId === args.connectionId);
+    } else if (provider) {
+      txns = txns.filter((t) => t.provider === provider);
+    }
+
+    // 2. Fetch refunds for this store organization
+    let refunds = await ctx.db
+      .query("payment_refunds")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+
+    if (args.connectionId) {
+      refunds = refunds.filter((r) => r.connectionId === args.connectionId);
+    } else if (provider) {
+      refunds = refunds.filter((r) => r.provider === provider);
+    }
+
+    const primaryCurrency = txns[0]?.currency || "INR";
+
+    let todayGrossMinor = 0;
+    let monthGrossMinor = 0;
+    let todayRefundsMinor = 0;
+    let monthRefundsMinor = 0;
+
+    let successfulPayments = 0;
+    let failedPayments = 0;
+    let pendingPayments = 0;
+
+    const currencies: Record<
+      string,
+      {
+        todayGrossMinor: number;
+        todayRefundsMinor: number;
+        monthGrossMinor: number;
+        monthRefundsMinor: number;
+        successfulPayments: number;
+        failedPayments: number;
+        pendingPayments: number;
+      }
+    > = {};
+
+    function getCurrencyBucket(curr: string) {
+      if (!currencies[curr]) {
+        currencies[curr] = {
+          todayGrossMinor: 0,
+          todayRefundsMinor: 0,
+          monthGrossMinor: 0,
+          monthRefundsMinor: 0,
+          successfulPayments: 0,
+          failedPayments: 0,
+          pendingPayments: 0,
+        };
+      }
+      return currencies[curr];
+    }
+
+    for (const t of txns) {
+      const bucket = getCurrencyBucket(t.currency || primaryCurrency);
+      const effectivePaidTime = t.paidAt || t.createdAt;
+
+      if (t.status === "captured" || t.status === "partially_refunded" || t.status === "refunded") {
+        successfulPayments++;
+        bucket.successfulPayments++;
+
+        if (effectivePaidTime >= args.startOfTodayMs && effectivePaidTime <= args.endOfTodayMs) {
+          if (t.currency === primaryCurrency) {
+            todayGrossMinor += t.amountMinor;
+          }
+          bucket.todayGrossMinor += t.amountMinor;
+        }
+
+        if (effectivePaidTime >= args.startOfMonthMs && effectivePaidTime <= args.endOfMonthMs) {
+          if (t.currency === primaryCurrency) {
+            monthGrossMinor += t.amountMinor;
+          }
+          bucket.monthGrossMinor += t.amountMinor;
+        }
+      } else if (t.status === "failed") {
+        failedPayments++;
+        bucket.failedPayments++;
+      } else if (t.status === "pending" || t.status === "authorized" || t.status === "created") {
+        pendingPayments++;
+        bucket.pendingPayments++;
+      }
+    }
+
+    let refundCount = 0;
+    for (const r of refunds) {
+      if (r.status === "processed") {
+        refundCount++;
+        const bucket = getCurrencyBucket(r.currency || primaryCurrency);
+        const effectiveRefundTime = r.processedAt || r.initiatedAt;
+
+        if (effectiveRefundTime >= args.startOfTodayMs && effectiveRefundTime <= args.endOfTodayMs) {
+          if (r.currency === primaryCurrency) {
+            todayRefundsMinor += r.amountMinor;
+          }
+          bucket.todayRefundsMinor += r.amountMinor;
+        }
+
+        if (effectiveRefundTime >= args.startOfMonthMs && effectiveRefundTime <= args.endOfMonthMs) {
+          if (r.currency === primaryCurrency) {
+            monthRefundsMinor += r.amountMinor;
+          }
+          bucket.monthRefundsMinor += r.amountMinor;
+        }
+      } else if (r.status === "pending") {
+        refundCount++;
+      }
+    }
+
+    const todayNetMinor = Math.max(todayGrossMinor - todayRefundsMinor, 0);
+    const monthNetMinor = Math.max(monthGrossMinor - monthRefundsMinor, 0);
+
+    const totalEvaluated = successfulPayments + failedPayments;
+    const successRate =
+      totalEvaluated > 0
+        ? Math.round((successfulPayments / totalEvaluated) * 1000) / 10
+        : 100;
+
+    return {
+      organizationId: org._id,
+      primaryCurrency,
+      todayRevenue: {
+        grossMinor: todayGrossMinor,
+        refundsMinor: todayRefundsMinor,
+        netMinor: todayNetMinor,
+        currency: primaryCurrency,
+      },
+      monthlyRevenue: {
+        grossMinor: monthGrossMinor,
+        refundsMinor: monthRefundsMinor,
+        netMinor: monthNetMinor,
+        currency: primaryCurrency,
+      },
+      successfulPayments,
+      failedPayments,
+      pendingPayments,
+      refundCount,
+      successRate,
+      currencies,
+    };
+  },
+});
+
+/**
+ * Idempotently and securely processes an incoming Razorpay webhook event.
+ * Enforces atomic deduplication, state machine regression protection, and entity upserts.
+ */
+export const processWebhookEvent = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    provider: v.string(), // "razorpay"
+    providerEventId: v.string(),
+    eventType: v.string(),
+    payload: v.string(), // raw JSON string
+    signatureVerified: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const now = Date.now();
+
+    // 1. Deduplication check via provider and providerEventId
+    const existingEvent = await ctx.db
+      .query("payment_webhook_events")
+      .withIndex("by_provider_and_event_id", (q) =>
+        q.eq("provider", args.provider).eq("providerEventId", args.providerEventId)
+      )
+      .first();
+
+    if (existingEvent && existingEvent.processingStatus === "processed") {
+      return {
+        eventId: existingEvent._id,
+        alreadyProcessed: true,
+        status: "processed",
+      };
+    }
+
+    // 2. Resolve connection if not explicitly provided
+    let connectionId = args.connectionId;
+    if (!connectionId) {
+      const conn = await ctx.db
+        .query("payment_gateway_connections")
+        .withIndex("by_org_and_provider", (q) =>
+          q.eq("organizationId", org._id).eq("provider", args.provider)
+        )
+        .first();
+      if (conn) {
+        connectionId = conn._id;
+      }
+    }
+
+    // 3. Upsert the payment_webhook_events record
+    let eventRecordId = existingEvent?._id;
+    if (!existingEvent || !eventRecordId) {
+      eventRecordId = await ctx.db.insert("payment_webhook_events", {
+        organizationId: org._id,
+        connectionId,
+        provider: args.provider,
+        providerEventId: args.providerEventId,
+        eventType: args.eventType,
+        payload: args.payload,
+        signatureVerified: args.signatureVerified,
+        processingStatus: "processing",
+        attemptCount: 1,
+        receivedAt: now,
+        createdAt: now,
+        updatedAt: now,
+      });
+    } else {
+      await ctx.db.patch(eventRecordId, {
+        processingStatus: "processing",
+        attemptCount: (existingEvent.attemptCount || 1) + 1,
+        updatedAt: now,
+      });
+    }
+
+    // 4. Parse payload
+    let parsedPayload: any;
+    try {
+      parsedPayload = JSON.parse(args.payload);
+    } catch (parseErr: any) {
+      await ctx.db.patch(eventRecordId, {
+        processingStatus: "failed",
+        lastError: `Invalid JSON payload: ${parseErr.message}`,
+        updatedAt: now,
+      });
+      return { eventId: eventRecordId, error: "Invalid JSON", success: false };
+    }
+
+    try {
+      const eventType = args.eventType;
+
+      if (
+        eventType === "payment.authorized" ||
+        eventType === "payment.captured" ||
+        eventType === "payment.failed"
+      ) {
+        const payment =
+          parsedPayload.payload?.payment?.entity ||
+          parsedPayload.payment?.entity ||
+          parsedPayload.payload?.payment ||
+          parsedPayload.payment;
+
+        if (!payment || !payment.id) {
+          throw new Error("Missing payment entity in payload");
+        }
+
+        const providerPaymentId = payment.id;
+        const rawStatus = payment.status;
+        let normalizedStatus: "authorized" | "captured" | "failed" | "pending" = "pending";
+        if (eventType === "payment.captured" || rawStatus === "captured") {
+          normalizedStatus = "captured";
+        } else if (eventType === "payment.failed" || rawStatus === "failed") {
+          normalizedStatus = "failed";
+        } else if (eventType === "payment.authorized" || rawStatus === "authorized") {
+          normalizedStatus = "authorized";
+        }
+
+        const existingTxn = await ctx.db
+          .query("payment_transactions")
+          .withIndex("by_provider_and_payment_id", (q) =>
+            q.eq("provider", args.provider).eq("providerPaymentId", providerPaymentId)
+          )
+          .first();
+
+        if (existingTxn) {
+          const shouldUpdateStatus = canTransitionTransaction(existingTxn.status, normalizedStatus);
+          const patchData: any = {
+            providerStatus: rawStatus || existingTxn.providerStatus,
+            updatedAt: now,
+          };
+
+          if (shouldUpdateStatus) {
+            patchData.status = normalizedStatus;
+          }
+
+          if (normalizedStatus === "captured") {
+            patchData.paidAt = payment.created_at ? payment.created_at * 1000 : now;
+          } else if (normalizedStatus === "failed") {
+            patchData.failedAt = payment.created_at ? payment.created_at * 1000 : now;
+            patchData.errorCode = payment.error_code || existingTxn.errorCode;
+            patchData.errorMessage = payment.error_description || existingTxn.errorMessage;
+          }
+
+          if (payment.amount_refunded !== undefined) {
+            patchData.refundedAmountMinor = payment.amount_refunded;
+          }
+
+          await ctx.db.patch(existingTxn._id, patchData);
+        } else {
+          if (!connectionId) {
+            throw new Error(`Cannot create transaction: No connection found for provider ${args.provider}`);
+          }
+
+          const txnId = await ctx.db.insert("payment_transactions", {
+            organizationId: org._id,
+            connectionId,
+            provider: args.provider,
+            providerPaymentId,
+            providerOrderId: payment.order_id,
+            customerName: payment.notes?.customer_name || payment.notes?.name,
+            customerEmail: payment.email,
+            customerPhone: payment.contact,
+            amountMinor: payment.amount || 0,
+            currency: payment.currency || "INR",
+            paymentMethod: payment.method || "card",
+            status: normalizedStatus,
+            providerStatus: rawStatus || normalizedStatus,
+            paidAt:
+              normalizedStatus === "captured"
+                ? payment.created_at
+                  ? payment.created_at * 1000
+                  : now
+                : undefined,
+            failedAt:
+              normalizedStatus === "failed"
+                ? payment.created_at
+                  ? payment.created_at * 1000
+                  : now
+                : undefined,
+            errorCode: payment.error_code,
+            errorMessage: payment.error_description,
+            refundedAmountMinor: payment.amount_refunded || 0,
+            metadata: payment.notes,
+            createdAt: payment.created_at ? payment.created_at * 1000 : now,
+            updatedAt: now,
+          });
+
+          // Link any orphaned refunds
+          const orphanedRefunds = await ctx.db
+            .query("payment_refunds")
+            .withIndex("by_provider_payment_id", (q) =>
+              q.eq("providerPaymentId", providerPaymentId)
+            )
+            .collect();
+          for (const rf of orphanedRefunds) {
+            if (!rf.transactionId) {
+              await ctx.db.patch(rf._id, { transactionId: txnId, updatedAt: now });
+            }
+          }
+        }
+      } else if (eventType === "refund.created" || eventType === "refund.processed") {
+        const refund =
+          parsedPayload.payload?.refund?.entity ||
+          parsedPayload.refund?.entity ||
+          parsedPayload.payload?.refund ||
+          parsedPayload.refund;
+
+        if (!refund || !refund.id) {
+          throw new Error("Missing refund entity in payload");
+        }
+
+        const providerRefundId = refund.id;
+        const providerPaymentId = refund.payment_id;
+        const refundStatus: "processed" | "pending" | "failed" | "cancelled" =
+          refund.status === "processed"
+            ? "processed"
+            : refund.status === "failed"
+            ? "failed"
+            : refund.status === "cancelled"
+            ? "cancelled"
+            : "pending";
+
+        const txn = await ctx.db
+          .query("payment_transactions")
+          .withIndex("by_provider_and_payment_id", (q) =>
+            q.eq("provider", args.provider).eq("providerPaymentId", providerPaymentId)
+          )
+          .first();
+
+        const resolvedConnectionId = connectionId || txn?.connectionId;
+        if (!resolvedConnectionId) {
+          throw new Error(`Cannot process refund: No connection found for provider ${args.provider}`);
+        }
+
+        const existingRefund = await ctx.db
+          .query("payment_refunds")
+          .withIndex("by_connection_and_provider_refund", (q) =>
+            q.eq("connectionId", resolvedConnectionId).eq("providerRefundId", providerRefundId)
+          )
+          .first();
+
+        let refundDocId = existingRefund?._id;
+        if (existingRefund) {
+          await ctx.db.patch(existingRefund._id, {
+            status: refundStatus,
+            providerStatus: refund.status || refundStatus,
+            speed: refund.speed_processed || refund.speed_requested || existingRefund.speed,
+            processedAt: refundStatus === "processed" ? now : existingRefund.processedAt,
+            updatedAt: now,
+          });
+        } else {
+          refundDocId = await ctx.db.insert("payment_refunds", {
+            organizationId: org._id,
+            connectionId: resolvedConnectionId,
+            transactionId: txn?._id,
+            provider: args.provider,
+            providerRefundId,
+            providerPaymentId,
+            amountMinor: refund.amount || 0,
+            currency: refund.currency || "INR",
+            reason: refund.notes?.reason || refund.notes?.comment,
+            status: refundStatus,
+            providerStatus: refund.status || refundStatus,
+            speed: refund.speed_processed || refund.speed_requested || "normal",
+            initiatedAt: refund.created_at ? refund.created_at * 1000 : now,
+            processedAt: refundStatus === "processed" ? now : undefined,
+            metadata: refund.notes,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+
+        // Reconcile parent transaction refunded amount
+        if (txn) {
+          const allRefunds = await ctx.db
+            .query("payment_refunds")
+            .withIndex("by_provider_payment_id", (q) =>
+              q.eq("providerPaymentId", providerPaymentId)
+            )
+            .collect();
+
+          const totalRefunded = allRefunds
+            .filter(
+              (r) =>
+                r.status === "processed" ||
+                (r._id === refundDocId && refundStatus === "processed")
+            )
+            .reduce((sum, r) => sum + r.amountMinor, 0);
+
+          const isFullyRefunded = totalRefunded >= txn.amountMinor;
+          await ctx.db.patch(txn._id, {
+            refundedAmountMinor: totalRefunded,
+            status: isFullyRefunded ? "refunded" : "partially_refunded",
+            updatedAt: now,
+          });
+        }
+      } else if (eventType === "settlement.processed") {
+        const settlement =
+          parsedPayload.payload?.settlement?.entity ||
+          parsedPayload.settlement?.entity ||
+          parsedPayload.payload?.settlement ||
+          parsedPayload.settlement;
+
+        if (!settlement || !settlement.id) {
+          throw new Error("Missing settlement entity in payload");
+        }
+
+        if (!connectionId) {
+          throw new Error(
+            `Cannot process settlement: No connection found for provider ${args.provider}`
+          );
+        }
+
+        const providerSettlementId = settlement.id;
+        const existingSettlement = await ctx.db
+          .query("payment_settlements")
+          .withIndex("by_connection_and_provider_settlement", (q) =>
+            q
+              .eq("connectionId", connectionId!)
+              .eq("providerSettlementId", providerSettlementId)
+          )
+          .first();
+
+        const amountMinor = settlement.amount || 0;
+        const feesMinor = settlement.fees || 0;
+        const taxMinor = settlement.tax || 0;
+        const netAmountMinor = amountMinor - feesMinor - taxMinor;
+
+        if (existingSettlement) {
+          await ctx.db.patch(existingSettlement._id, {
+            status: "processed",
+            providerStatus: settlement.status || "processed",
+            utrOrReference: settlement.utr || existingSettlement.utrOrReference,
+            updatedAt: now,
+          });
+        } else {
+          await ctx.db.insert("payment_settlements", {
+            organizationId: org._id,
+            connectionId,
+            provider: args.provider,
+            providerSettlementId,
+            amountMinor,
+            currency: settlement.currency || "INR",
+            feesMinor,
+            taxMinor,
+            netAmountMinor,
+            status: "processed",
+            providerStatus: settlement.status || "processed",
+            settlementDate: settlement.created_at ? settlement.created_at * 1000 : now,
+            utrOrReference: settlement.utr,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      } else {
+        await ctx.db.patch(eventRecordId, {
+          processingStatus: "ignored",
+          updatedAt: now,
+        });
+        return { eventId: eventRecordId, success: true, ignored: true, eventType };
+      }
+
+      await ctx.db.patch(eventRecordId, {
+        processingStatus: "processed",
+        processedAt: now,
+        updatedAt: now,
+      });
+
+      return {
+        eventId: eventRecordId,
+        success: true,
+        eventType,
+        status: "processed",
+      };
+    } catch (err: any) {
+      await ctx.db.patch(eventRecordId, {
+        processingStatus: "failed",
+        lastError: err.message || "Failed processing webhook event",
+        updatedAt: now,
+      });
+      return {
+        eventId: eventRecordId,
+        success: false,
+        error: err.message || "Failed processing webhook event",
+      };
+    }
+  },
+});
+
+

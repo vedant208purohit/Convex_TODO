@@ -92,6 +92,31 @@ export function RazorpayDashboardView({
   const [stlStatusFilter, setStlStatusFilter] = useState("");
   const [isSyncingStl, setIsSyncingStl] = useState(false);
 
+  // =========================================================================
+  // TAB 0: DASHBOARD ANALYTICS LIVE STATE
+  // =========================================================================
+  const [dashboardMetrics, setDashboardMetrics] = useState<any | null>(null);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+
+  const loadDashboardMetrics = useCallback(async () => {
+    setDashboardLoading(true);
+    setDashboardError(null);
+    try {
+      const res = await fetch("/api/payments/razorpay/dashboard");
+      const data = await res.json();
+      if (data.success && data.metrics) {
+        setDashboardMetrics(data.metrics);
+      } else {
+        setDashboardError(data.error || "Failed to load dashboard metrics");
+      }
+    } catch (err: any) {
+      setDashboardError(err.message || "Network error loading metrics");
+    } finally {
+      setDashboardLoading(false);
+    }
+  }, []);
+
   const showToast = (
     message: string,
     type: "success" | "error" | "info" | "warning" = "info",
@@ -207,14 +232,25 @@ export function RazorpayDashboardView({
   );
 
   useEffect(() => {
-    if (activeTab === "Transactions") {
+    if (activeTab === "Dashboard") {
+      loadDashboardMetrics();
+    } else if (activeTab === "Transactions") {
       loadTransactions(txPage);
     } else if (activeTab === "Refunds") {
       loadRefunds(refPage);
     } else if (activeTab === "Settlements") {
       loadSettlements(stlPage);
     }
-  }, [activeTab, txPage, refPage, stlPage, loadTransactions, loadRefunds, loadSettlements]);
+  }, [
+    activeTab,
+    txPage,
+    refPage,
+    stlPage,
+    loadDashboardMetrics,
+    loadTransactions,
+    loadRefunds,
+    loadSettlements,
+  ]);
 
   const handleTabClick = (tab: DashboardTab) => {
     setActiveTab(tab);
@@ -369,38 +405,100 @@ export function RazorpayDashboardView({
       {activeTab === "Dashboard" && (
         <div className="space-y-6">
           {/* Summary Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-            {razorpayDashboardMetrics.map((card) => (
-              <div
-                key={card.id}
-                data-testid={`metric-card-${card.id}`}
-                className="bg-white border border-[#e7e5e4] rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-stone-400 hover:shadow-md transition-all duration-200"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <span className="text-xs font-medium text-[#78716c] uppercase tracking-wider">
-                    {card.title}
-                  </span>
-                  <div className="w-8 h-8 rounded-lg bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#0c0a09] shrink-0">
-                    <span className="material-symbols-outlined text-[18px]">{card.icon}</span>
-                  </div>
-                </div>
+          {(() => {
+            const cards = dashboardMetrics
+              ? [
+                  {
+                    id: "today-revenue",
+                    title: "Today's Revenue",
+                    value: dashboardMetrics.todayRevenue?.formattedNet || "₹0.00",
+                    supportingText: `Gross: ${dashboardMetrics.todayRevenue?.formattedGross || "₹0.00"} • Refunds: ${dashboardMetrics.todayRevenue?.formattedRefunds || "₹0.00"}`,
+                    icon: "payments",
+                  },
+                  {
+                    id: "monthly-revenue",
+                    title: "Monthly Revenue",
+                    value: dashboardMetrics.monthlyRevenue?.formattedNet || "₹0.00",
+                    supportingText: `Gross: ${dashboardMetrics.monthlyRevenue?.formattedGross || "₹0.00"}`,
+                    icon: "calendar_month",
+                  },
+                  {
+                    id: "successful-payments",
+                    title: "Successful Payments",
+                    value: String(dashboardMetrics.successfulPayments ?? 0),
+                    badge: `${dashboardMetrics.successRate ?? 100}%`,
+                    supportingText: `${dashboardMetrics.successRate ?? 100}% Success Rate`,
+                    icon: "check_circle",
+                  },
+                  {
+                    id: "failed-payments",
+                    title: "Failed Payments",
+                    value: String(dashboardMetrics.failedPayments ?? 0),
+                    badge: "Failed",
+                    supportingText: `${dashboardMetrics.failedPayments ?? 0} failed attempts`,
+                    icon: "cancel",
+                  },
+                  {
+                    id: "pending-payments",
+                    title: "Pending Payments",
+                    value: String(dashboardMetrics.pendingPayments ?? 0),
+                    badge: "Pending",
+                    supportingText: "Awaiting confirmation",
+                    icon: "schedule",
+                  },
+                  {
+                    id: "refunds-count",
+                    title: "Total Refunds",
+                    value: String(dashboardMetrics.refundCount ?? 0),
+                    badge: "Refunds",
+                    supportingText: "Processed refunds",
+                    icon: "currency_exchange",
+                  },
+                ]
+              : razorpayDashboardMetrics;
 
-                <div className="mt-4 space-y-1.5">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl sm:text-3xl font-bold text-[#0c0a09] tracking-tight">
-                      {card.value}
-                    </span>
-                    {card.badge && (
-                      <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border border-[#e7e5e4] bg-[#fafaf9] text-[#0c0a09]">
-                        {card.badge}
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-5">
+                {cards.map((card) => (
+                  <div
+                    key={card.id}
+                    data-testid={`metric-card-${card.id}`}
+                    className={`bg-white border border-[#e7e5e4] rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-stone-400 hover:shadow-md transition-all duration-200 ${
+                      dashboardLoading ? "opacity-75 animate-pulse" : ""
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="text-xs font-medium text-[#78716c] uppercase tracking-wider">
+                        {card.title}
                       </span>
-                    )}
+                      <div className="w-8 h-8 rounded-lg bg-[#f5f5f4] border border-[#e7e5e4] flex items-center justify-center text-[#0c0a09] shrink-0">
+                        <span className="material-symbols-outlined text-[18px]">{card.icon}</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-1.5">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-[#0c0a09] tracking-tight">
+                          {card.value}
+                        </span>
+                        {card.badge && (
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full border border-[#e7e5e4] bg-[#fafaf9] text-[#0c0a09]">
+                            {card.badge}
+                          </span>
+                        )}
+                      </div>
+                      <p
+                        className="text-xs text-[#78716c] font-medium truncate"
+                        title={card.supportingText}
+                      >
+                        {card.supportingText}
+                      </p>
+                    </div>
                   </div>
-                  <p className="text-xs text-[#78716c] font-medium">{card.supportingText}</p>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           {/* Middle Section: Trends & Status */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-stretch">
