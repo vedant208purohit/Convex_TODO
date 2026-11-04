@@ -380,6 +380,20 @@ export const recordTransaction = mutation({
       updatedAt: now,
     });
 
+    // Reconcile any existing unlinked refunds for this payment
+    const pendingRefunds = await ctx.db
+      .query("payment_refunds")
+      .withIndex("by_provider_payment_id", (q) =>
+        q.eq("providerPaymentId", args.providerPaymentId)
+      )
+      .collect();
+
+    for (const rf of pendingRefunds) {
+      if (!rf.transactionId) {
+        await ctx.db.patch(rf._id, { transactionId, updatedAt: now });
+      }
+    }
+
     return { transactionId, alreadyExists: false };
   },
 });
@@ -394,7 +408,8 @@ export const recordTransaction = mutation({
 export const recordRefund = mutation({
   args: {
     connectionId: v.id("payment_gateway_connections"),
-    transactionId: v.id("payment_transactions"),
+    transactionId: v.optional(v.id("payment_transactions")),
+    providerPaymentId: v.optional(v.string()),
     providerRefundId: v.string(),
     amountMinor: v.number(),
     currency: v.string(),
@@ -406,6 +421,7 @@ export const recordRefund = mutation({
       v.literal("cancelled")
     ),
     providerStatus: v.string(),
+    speed: v.optional(v.string()),
     initiatedAt: v.optional(v.number()),
     processedAt: v.optional(v.number()),
     errorCode: v.optional(v.string()),
@@ -413,12 +429,28 @@ export const recordRefund = mutation({
     metadata: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    const txn = await ctx.db.get(args.transactionId);
-    if (!txn) throw new Error("Transaction not found");
-
     const conn = await ctx.db.get(args.connectionId);
     if (!conn) throw new Error("Connection not found");
 
+    let txn: any = null;
+    let resolvedTransactionId = args.transactionId;
+
+    if (resolvedTransactionId) {
+      txn = await ctx.db.get(resolvedTransactionId);
+    } else if (args.providerPaymentId) {
+      txn = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_connection_and_provider_payment", (q) =>
+          q.eq("connectionId", args.connectionId).eq("providerPaymentId", args.providerPaymentId!)
+        )
+        .first();
+      if (txn) {
+        resolvedTransactionId = txn._id;
+      }
+    }
+
+    const providerPaymentId = args.providerPaymentId || txn?.providerPaymentId || "";
+    const organizationId = txn?.organizationId || conn.organizationId;
     const now = Date.now();
 
     // Enforce idempotency
@@ -431,28 +463,55 @@ export const recordRefund = mutation({
 
     if (existing) {
       await ctx.db.patch(existing._id, {
+        transactionId: resolvedTransactionId ?? existing.transactionId,
+        providerPaymentId: providerPaymentId || existing.providerPaymentId,
         status: args.status,
         providerStatus: args.providerStatus,
+        speed: args.speed ?? existing.speed,
         processedAt: args.processedAt ?? existing.processedAt,
         errorCode: args.errorCode,
         errorMessage: args.errorMessage,
         updatedAt: now,
       });
+
+      // Update aggregate refunded amount on the parent transaction if resolved
+      if (resolvedTransactionId && (args.status === "processed" || existing.status === "processed")) {
+        const allRefunds = await ctx.db
+          .query("payment_refunds")
+          .withIndex("by_transaction", (q) => q.eq("transactionId", resolvedTransactionId!))
+          .collect();
+
+        const totalRefunded = allRefunds
+          .filter((r) => r.status === "processed")
+          .reduce((sum, r) => sum + r.amountMinor, 0);
+
+        const currentTxn = txn || (await ctx.db.get(resolvedTransactionId));
+        if (currentTxn) {
+          const isFullyRefunded = totalRefunded >= currentTxn.amountMinor;
+          await ctx.db.patch(currentTxn._id, {
+            refundedAmountMinor: totalRefunded,
+            status: isFullyRefunded ? "refunded" : "partially_refunded",
+            updatedAt: now,
+          });
+        }
+      }
+
       return { refundId: existing._id, alreadyExists: true };
     }
 
     const refundId = await ctx.db.insert("payment_refunds", {
-      organizationId: txn.organizationId,
+      organizationId,
       connectionId: args.connectionId,
-      transactionId: args.transactionId,
+      transactionId: resolvedTransactionId,
       provider: conn.provider,
       providerRefundId: args.providerRefundId,
-      providerPaymentId: txn.providerPaymentId,
+      providerPaymentId,
       amountMinor: args.amountMinor,
       currency: args.currency,
       reason: args.reason,
       status: args.status,
       providerStatus: args.providerStatus,
+      speed: args.speed,
       initiatedAt: args.initiatedAt ?? now,
       processedAt: args.processedAt,
       errorCode: args.errorCode,
@@ -463,22 +522,25 @@ export const recordRefund = mutation({
     });
 
     // Update aggregate refunded amount on the parent transaction
-    if (args.status === "processed") {
+    if (resolvedTransactionId && args.status === "processed") {
       const allRefunds = await ctx.db
         .query("payment_refunds")
-        .withIndex("by_transaction", (q) => q.eq("transactionId", args.transactionId))
+        .withIndex("by_transaction", (q) => q.eq("transactionId", resolvedTransactionId!))
         .collect();
 
       const totalRefunded = allRefunds
         .filter((r) => r.status === "processed" || r._id === refundId)
         .reduce((sum, r) => sum + r.amountMinor, 0);
 
-      const isFullyRefunded = totalRefunded >= txn.amountMinor;
-      await ctx.db.patch(txn._id, {
-        refundedAmountMinor: totalRefunded,
-        status: isFullyRefunded ? "refunded" : "partially_refunded",
-        updatedAt: now,
-      });
+      const currentTxn = txn || (await ctx.db.get(resolvedTransactionId));
+      if (currentTxn) {
+        const isFullyRefunded = totalRefunded >= currentTxn.amountMinor;
+        await ctx.db.patch(currentTxn._id, {
+          refundedAmountMinor: totalRefunded,
+          status: isFullyRefunded ? "refunded" : "partially_refunded",
+          updatedAt: now,
+        });
+      }
     }
 
     return { refundId, alreadyExists: false };
@@ -742,6 +804,314 @@ export const updateSyncCursor = mutation({
     });
 
     return cursorId;
+  },
+});
+
+// =========================================================================
+// QUERY ENDPOINTS: TRANSACTIONS, REFUNDS, SETTLEMENTS, SYNC
+// =========================================================================
+
+/**
+ * Lists payment transactions for the store organization with filtering and pagination.
+ */
+export const listTransactions = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    status: v.optional(v.string()),
+    paymentMethod: v.optional(v.string()),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    search: v.optional(v.string()),
+    page: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    let records: any[] = [];
+    if (args.connectionId) {
+      records = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId!))
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+    }
+
+    // Filter within store boundary
+    records = records.filter((r) => r.organizationId === org._id);
+
+    if (args.status) {
+      records = records.filter((r) => r.status === args.status);
+    }
+    if (args.paymentMethod) {
+      const pm = args.paymentMethod.toLowerCase();
+      records = records.filter((r) => (r.paymentMethod || "").toLowerCase() === pm);
+    }
+    if (args.from !== undefined) {
+      records = records.filter((r) => r.createdAt >= args.from!);
+    }
+    if (args.to !== undefined) {
+      records = records.filter((r) => r.createdAt <= args.to!);
+    }
+    if (args.search) {
+      const s = args.search.toLowerCase().trim();
+      records = records.filter(
+        (r) =>
+          r.providerPaymentId.toLowerCase().includes(s) ||
+          (r.customerEmail && r.customerEmail.toLowerCase().includes(s)) ||
+          (r.customerName && r.customerName.toLowerCase().includes(s)) ||
+          (r.customerPhone && r.customerPhone.toLowerCase().includes(s))
+      );
+    }
+
+    // Sort by createdAt descending
+    records.sort((a, b) => b.createdAt - a.createdAt);
+
+    const total = records.length;
+    const page = Math.max(args.page || 1, 1);
+    const limit = Math.min(Math.max(args.limit || 10, 1), 100);
+    const skip = (page - 1) * limit;
+    const paginated = records.slice(skip, skip + limit);
+    const hasMore = skip + limit < total;
+
+    return {
+      transactions: paginated,
+      total,
+      page,
+      limit,
+      hasMore,
+    };
+  },
+});
+
+/**
+ * Lists refunds for the store organization with filtering and pagination.
+ */
+export const listRefunds = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    status: v.optional(v.string()),
+    providerPaymentId: v.optional(v.string()),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    search: v.optional(v.string()),
+    page: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    let records: any[] = [];
+    if (args.connectionId) {
+      records = await ctx.db
+        .query("payment_refunds")
+        .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId!))
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("payment_refunds")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+    }
+
+    records = records.filter((r) => r.organizationId === org._id);
+
+    if (args.status) {
+      records = records.filter((r) => r.status === args.status);
+    }
+    if (args.providerPaymentId) {
+      records = records.filter((r) => r.providerPaymentId === args.providerPaymentId);
+    }
+    if (args.from !== undefined) {
+      records = records.filter((r) => r.initiatedAt >= args.from!);
+    }
+    if (args.to !== undefined) {
+      records = records.filter((r) => r.initiatedAt <= args.to!);
+    }
+    if (args.search) {
+      const s = args.search.toLowerCase().trim();
+      records = records.filter(
+        (r) =>
+          r.providerRefundId.toLowerCase().includes(s) ||
+          r.providerPaymentId.toLowerCase().includes(s) ||
+          (r.reason && r.reason.toLowerCase().includes(s))
+      );
+    }
+
+    records.sort((a, b) => b.initiatedAt - a.initiatedAt);
+
+    const total = records.length;
+    const page = Math.max(args.page || 1, 1);
+    const limit = Math.min(Math.max(args.limit || 10, 1), 100);
+    const skip = (page - 1) * limit;
+    const paginated = records.slice(skip, skip + limit);
+    const hasMore = skip + limit < total;
+
+    return {
+      refunds: paginated,
+      total,
+      page,
+      limit,
+      hasMore,
+    };
+  },
+});
+
+/**
+ * Lists settlements for the store organization with filtering and pagination.
+ */
+export const listSettlements = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    status: v.optional(v.string()),
+    from: v.optional(v.number()),
+    to: v.optional(v.number()),
+    search: v.optional(v.string()),
+    page: v.optional(v.number()),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    let records: any[] = [];
+    if (args.connectionId) {
+      records = await ctx.db
+        .query("payment_settlements")
+        .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId!))
+        .collect();
+    } else {
+      records = await ctx.db
+        .query("payment_settlements")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+    }
+
+    records = records.filter((r) => r.organizationId === org._id);
+
+    if (args.status) {
+      records = records.filter((r) => r.status === args.status);
+    }
+    if (args.from !== undefined) {
+      records = records.filter((r) => r.settlementDate >= args.from!);
+    }
+    if (args.to !== undefined) {
+      records = records.filter((r) => r.settlementDate <= args.to!);
+    }
+    if (args.search) {
+      const s = args.search.toLowerCase().trim();
+      records = records.filter(
+        (r) =>
+          r.providerSettlementId.toLowerCase().includes(s) ||
+          (r.utrOrReference && r.utrOrReference.toLowerCase().includes(s))
+      );
+    }
+
+    records.sort((a, b) => b.settlementDate - a.settlementDate);
+
+    const total = records.length;
+    const page = Math.max(args.page || 1, 1);
+    const limit = Math.min(Math.max(args.limit || 10, 1), 100);
+    const skip = (page - 1) * limit;
+    const paginated = records.slice(skip, skip + limit);
+    const hasMore = skip + limit < total;
+
+    return {
+      settlements: paginated,
+      total,
+      page,
+      limit,
+      hasMore,
+    };
+  },
+});
+
+/**
+ * Validates a payment transaction for refund eligibility and computes the remaining refundable balance.
+ */
+export const getTransactionForRefund = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    providerPaymentId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    const txn = await ctx.db
+      .query("payment_transactions")
+      .withIndex("by_provider_and_payment_id", (q) =>
+        q.eq("provider", "razorpay").eq("providerPaymentId", args.providerPaymentId)
+      )
+      .first();
+
+    if (!txn || txn.organizationId !== org._id) {
+      return null;
+    }
+
+    const conn = await ctx.db.get(txn.connectionId);
+    const totalRefunded = txn.refundedAmountMinor || 0;
+    const refundableBalance = Math.max(txn.amountMinor - totalRefunded, 0);
+
+    return {
+      transactionId: txn._id,
+      connectionId: txn.connectionId,
+      provider: txn.provider,
+      providerPaymentId: txn.providerPaymentId,
+      amountMinor: txn.amountMinor,
+      currency: txn.currency,
+      refundedAmountMinor: totalRefunded,
+      refundableBalanceMinor: refundableBalance,
+      status: txn.status,
+      isEligibleForRefund:
+        (txn.status === "captured" || txn.status === "partially_refunded") &&
+        refundableBalance > 0,
+      connectionStatus: conn?.status,
+    };
+  },
+});
+
+/**
+ * Retrieves the current synchronization status and cursors for a connection.
+ */
+export const getSyncStatus = query({
+  args: {
+    connectionId: v.id("payment_gateway_connections"),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const conn = await ctx.db.get(args.connectionId);
+    if (!conn) return null;
+
+    const cursors = await ctx.db
+      .query("payment_sync_cursors")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .collect();
+
+    const runs = await ctx.db
+      .query("payment_sync_runs")
+      .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId))
+      .collect();
+
+    runs.sort((a, b) => b.startedAt - a.startedAt);
+
+    return {
+      lastSyncAt: conn.lastSyncAt,
+      cursors: cursors.map((c) => ({
+        resourceType: c.resourceType,
+        lastSuccessfulSyncAt: c.lastSuccessfulSyncAt,
+      })),
+      recentRuns: runs.slice(0, 5),
+    };
   },
 });
 

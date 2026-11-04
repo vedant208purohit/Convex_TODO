@@ -554,6 +554,26 @@ describe("BACKEND TASK 2: Razorpay Merchant Connection, Verification & Profile T
             connection_status: "connected",
           };
         }
+        async fetchTransactions() {
+          return { items: [], count: 0, skip: 0, hasMore: false };
+        }
+        async fetchRefunds() {
+          return { items: [], count: 0, skip: 0, hasMore: false };
+        }
+        async createRefund() {
+          return {
+            providerRefundId: "re_123",
+            providerPaymentId: "pi_123",
+            amountMinor: 1000,
+            currency: "USD",
+            status: "processed" as const,
+            providerStatus: "succeeded",
+            initiatedAt: Date.now(),
+          };
+        }
+        async fetchSettlements() {
+          return { items: [], count: 0, skip: 0, hasMore: false };
+        }
         normalizeError(err: any) {
           return { code: "BAD_REQUEST", message: "Error", httpStatus: 400 };
         }

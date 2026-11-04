@@ -2006,13 +2006,14 @@ postpaidOrderRequests: defineTable({
   payment_refunds: defineTable({
     organizationId: v.id("organizations"),
     connectionId: v.id("payment_gateway_connections"),
-    transactionId: v.id("payment_transactions"),
+    transactionId: v.optional(v.id("payment_transactions")),
     provider: v.string(),
     providerRefundId: v.string(),
     providerPaymentId: v.string(),
     amountMinor: v.number(), // Integer minor units
     currency: v.string(), // ISO 4217
     reason: v.optional(v.string()),
+    speed: v.optional(v.string()),
     status: v.union(
       v.literal("pending"),
       v.literal("processed"),

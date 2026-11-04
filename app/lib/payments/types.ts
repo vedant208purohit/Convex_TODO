@@ -47,6 +47,97 @@ export interface PaymentCredentials {
   [key: string]: unknown;
 }
 
+export type NormalizedTransactionStatus =
+  | "created"
+  | "authorized"
+  | "captured"
+  | "failed"
+  | "pending"
+  | "refunded"
+  | "partially_refunded"
+  | "cancelled";
+
+export interface NormalizedTransaction {
+  providerPaymentId: string;
+  providerOrderId?: string;
+  amountMinor: number;
+  currency: string;
+  paymentMethod: string;
+  status: NormalizedTransactionStatus;
+  providerStatus: string;
+  paidAt?: number;
+  failedAt?: number;
+  errorCode?: string;
+  errorMessage?: string;
+  refundedAmountMinor?: number;
+  customerEmail?: string;
+  customerPhone?: string;
+  customerName?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+}
+
+export type NormalizedRefundStatus = "pending" | "processed" | "failed" | "cancelled";
+
+export interface NormalizedRefund {
+  providerRefundId: string;
+  providerPaymentId: string;
+  amountMinor: number;
+  currency: string;
+  status: NormalizedRefundStatus;
+  providerStatus: string;
+  speed?: string;
+  reason?: string;
+  initiatedAt: number;
+  processedAt?: number;
+  errorCode?: string;
+  errorMessage?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export type NormalizedSettlementStatus =
+  | "pending"
+  | "processed"
+  | "failed"
+  | "partially_processed";
+
+export interface NormalizedSettlement {
+  providerSettlementId: string;
+  amountMinor: number;
+  currency: string;
+  status: NormalizedSettlementStatus;
+  providerStatus: string;
+  settlementDate: number;
+  utrOrReference?: string;
+  feesMinor?: number;
+  taxMinor?: number;
+  netAmountMinor: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface FetchOptions {
+  count?: number;
+  skip?: number;
+  from?: number; // epoch timestamp in seconds or ms
+  to?: number;   // epoch timestamp in seconds or ms
+  paymentId?: string;
+}
+
+export interface CreateRefundOptions {
+  amount?: number; // minor units (paise/cents). If omitted, full refund is requested.
+  speed?: "normal" | "optimum";
+  notes?: Record<string, string>;
+  receipt?: string;
+}
+
+export interface FetchResult<T> {
+  items: T[];
+  totalCount?: number;
+  hasMore: boolean;
+  count: number;
+  skip: number;
+}
+
 /**
  * Universal Provider Adapter Interface
  * All payment gateways (Razorpay, Stripe, PayPal) must adhere to this contract.
@@ -76,8 +167,40 @@ export interface PaymentProviderAdapter {
   fetchProfile(credentials: PaymentCredentials): Promise<MerchantProfileResult>;
 
   /**
+   * Fetches payments/transactions from provider REST API.
+   */
+  fetchTransactions(
+    credentials: PaymentCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<NormalizedTransaction>>;
+
+  /**
+   * Fetches refunds from provider REST API.
+   */
+  fetchRefunds(
+    credentials: PaymentCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<NormalizedRefund>>;
+
+  /**
+   * Initiates a refund for a payment via provider REST API.
+   */
+  createRefund(
+    credentials: PaymentCredentials,
+    paymentId: string,
+    options?: CreateRefundOptions
+  ): Promise<NormalizedRefund>;
+
+  /**
+   * Fetches settlements/payouts from provider REST API.
+   */
+  fetchSettlements(
+    credentials: PaymentCredentials,
+    options?: FetchOptions
+  ): Promise<FetchResult<NormalizedSettlement>>;
+
+  /**
    * Normalizes provider-specific error codes into standardized platform error representations.
    */
   normalizeError(error: unknown): NormalizedError;
 }
-
