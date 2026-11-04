@@ -23,6 +23,7 @@ function bytesToHex(bytes: Uint8Array): string {
  */
 export async function getCryptoKeyForVersion(version = 1): Promise<CryptoKey> {
   const envVarName = `PAYMENT_GATEWAY_ENCRYPTION_KEY_V${version}`;
+  const isProd = typeof process !== "undefined" && process.env && process.env.NODE_ENV === "production";
   const keyFromEnv = (typeof process !== "undefined" && process.env)
     ? (process.env[envVarName] || process.env.PAYMENT_GATEWAY_ENCRYPTION_KEY)
     : undefined;
@@ -39,6 +40,11 @@ export async function getCryptoKeyForVersion(version = 1): Promise<CryptoKey> {
       rawKeyBytes = new Uint8Array(hashBuffer);
     }
   } else {
+    if (isProd) {
+      throw new Error(
+        "ENCRYPTION_CONFIGURATION_MISSING: Dedicated PAYMENT_GATEWAY_ENCRYPTION_KEY_V1 is required in production."
+      );
+    }
     rawKeyBytes = hexToBytes(DEFAULT_DEV_KEY_HEX);
   }
 

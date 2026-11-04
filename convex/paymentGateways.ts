@@ -77,6 +77,96 @@ export const getConnection = query({
 });
 
 /**
+ * Server-side authenticated query to retrieve encrypted credentials for a connection.
+ * Used exclusively by server-side payment adapters. Decryption occurs only in server memory.
+ */
+export const getConnectionCredentials = query({
+  args: {
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    organizationId: v.optional(v.id("organizations")),
+    provider: v.optional(v.string()),
+    accountMode: v.optional(v.union(v.literal("test"), v.literal("live"))),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    let connection: any = null;
+
+    if (args.connectionId) {
+      connection = await ctx.db.get(args.connectionId);
+      if (connection && connection.organizationId !== org._id) {
+        throw new Error("Forbidden: Access denied to connection outside current store.");
+      }
+    } else if (args.provider) {
+      const connections = await ctx.db
+        .query("payment_gateway_connections")
+        .withIndex("by_org_and_provider", (q) =>
+          q.eq("organizationId", org._id).eq("provider", args.provider!)
+        )
+        .collect();
+
+      if (args.accountMode) {
+        connection = connections.find(
+          (c) => c.accountMode === args.accountMode && c.status === "connected"
+        );
+      }
+      if (!connection) {
+        connection =
+          connections.find((c) => c.isDefault && c.status === "connected") ||
+          connections.find((c) => c.status === "connected") ||
+          connections[0];
+      }
+    }
+
+    if (!connection) return null;
+
+    return {
+      connectionId: connection._id,
+      organizationId: connection.organizationId,
+      provider: connection.provider,
+      connectionType: connection.connectionType,
+      providerAccountId: connection.providerAccountId,
+      merchantName: connection.merchantName,
+      accountMode: connection.accountMode,
+      status: connection.status,
+      encryptedCredentials: connection.encryptedCredentials,
+      encryptionKeyVersion: connection.encryptionKeyVersion,
+      connectedAt: connection.connectedAt,
+      lastVerifiedAt: connection.lastVerifiedAt,
+      metadata: connection.metadata,
+    };
+  },
+});
+
+/**
+ * Updates merchant metadata on an existing connection.
+ */
+export const updateConnectionMetadata = mutation({
+  args: {
+    connectionId: v.id("payment_gateway_connections"),
+    merchantName: v.optional(v.string()),
+    providerAccountId: v.optional(v.string()),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const conn = await ctx.db.get(args.connectionId);
+    if (!conn) throw new Error("Connection not found");
+
+    const patch: any = { updatedAt: Date.now() };
+    if (args.merchantName !== undefined) patch.merchantName = args.merchantName;
+    if (args.providerAccountId !== undefined) patch.providerAccountId = args.providerAccountId;
+    if (args.metadata !== undefined) {
+      patch.metadata = { ...(conn.metadata || {}), ...args.metadata };
+    }
+
+    await ctx.db.patch(args.connectionId, patch);
+    return args.connectionId;
+  },
+});
+
+/**
  * Creates or updates a polymorphic payment gateway connection.
  * Encrypts sensitive credentials server-side using versioned authenticated AES-256-GCM.
  */
@@ -120,7 +210,13 @@ export const saveConnection = mutation({
       )
       .collect();
 
-    const existing = existingConnections.find((c) => c.accountMode === args.accountMode);
+    const existing = existingConnections.find((c) => {
+      if (c.accountMode !== args.accountMode) return false;
+      if (args.providerAccountId && c.providerAccountId) {
+        return c.providerAccountId === args.providerAccountId;
+      }
+      return true;
+    });
 
     let encryptedCredentials = existing?.encryptedCredentials;
     let encryptionKeyVersion = existing?.encryptionKeyVersion;
