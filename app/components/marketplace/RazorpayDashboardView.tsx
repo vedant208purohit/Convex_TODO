@@ -99,6 +99,123 @@ export function RazorpayDashboardView({
   const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
 
+  // =========================================================================
+  // TAB 4: HEALTH MONITORING & LIFECYCLE LIVE STATE
+  // =========================================================================
+  const [healthData, setHealthData] = useState<any | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+
+  // Connection Lifecycle State
+  const [connectionStatus, setConnectionStatus] = useState<any | null>(null);
+  const [isDisconnectModalOpen, setIsDisconnectModalOpen] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [isReconnectModalOpen, setIsReconnectModalOpen] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const [reconnectKeyId, setReconnectKeyId] = useState("");
+  const [reconnectKeySecret, setReconnectKeySecret] = useState("");
+  const [useFreshCredentials, setUseFreshCredentials] = useState(false);
+
+  const loadHealthData = useCallback(async () => {
+    setHealthLoading(true);
+    setHealthError(null);
+    try {
+      const res = await fetch("/api/payments/razorpay/health");
+      const data = await res.json();
+      if (data.success && data.data) {
+        setHealthData(data.data);
+      } else {
+        setHealthError(data.error || "Failed to load health telemetry");
+      }
+    } catch (err: any) {
+      setHealthError(err.message || "Network error checking health");
+    } finally {
+      setHealthLoading(false);
+    }
+  }, []);
+
+  const loadConnectionStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/payments/razorpay/status");
+      const data = await res.json();
+      if (data.success && data.data) {
+        setConnectionStatus(data.data);
+      }
+    } catch {
+      // Ignore background check failure
+    }
+  }, []);
+
+  const handleDisconnect = async () => {
+    setIsDisconnecting(true);
+    try {
+      const res = await fetch("/api/payments/razorpay/disconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(
+          "Razorpay gateway disconnected.",
+          "info",
+          "Live payments & sync paused. Historical records preserved."
+        );
+        setIsDisconnectModalOpen(false);
+        loadConnectionStatus();
+        loadHealthData();
+      } else {
+        showToast(data.error || "Failed to disconnect gateway", "error");
+      }
+    } catch (err: any) {
+      showToast("Network error disconnecting gateway", "error", err.message);
+    } finally {
+      setIsDisconnecting(false);
+    }
+  };
+
+  const handleReconnect = async () => {
+    setIsReconnecting(true);
+    try {
+      const body: any = {};
+      if (useFreshCredentials) {
+        if (!reconnectKeyId.trim() || !reconnectKeySecret.trim()) {
+          showToast("Key ID and Key Secret are required.", "error");
+          setIsReconnecting(false);
+          return;
+        }
+        body.keyId = reconnectKeyId.trim();
+        body.keySecret = reconnectKeySecret.trim();
+      }
+
+      const res = await fetch("/api/payments/razorpay/reconnect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast(
+          "Razorpay reconnected and verified successfully.",
+          "success",
+          "Live operations and synchronization resumed."
+        );
+        setIsReconnectModalOpen(false);
+        setReconnectKeyId("");
+        setReconnectKeySecret("");
+        loadConnectionStatus();
+        loadHealthData();
+        loadDashboardMetrics();
+      } else {
+        showToast(data.error || "Reconnection failed.", "error");
+      }
+    } catch (err: any) {
+      showToast("Network error reconnecting gateway", "error", err.message);
+    } finally {
+      setIsReconnecting(false);
+    }
+  };
+
   const loadDashboardMetrics = useCallback(async () => {
     setDashboardLoading(true);
     setDashboardError(null);
@@ -232,6 +349,10 @@ export function RazorpayDashboardView({
   );
 
   useEffect(() => {
+    loadConnectionStatus();
+  }, [loadConnectionStatus]);
+
+  useEffect(() => {
     if (activeTab === "Dashboard") {
       loadDashboardMetrics();
     } else if (activeTab === "Transactions") {
@@ -240,6 +361,8 @@ export function RazorpayDashboardView({
       loadRefunds(refPage);
     } else if (activeTab === "Settlements") {
       loadSettlements(stlPage);
+    } else if (activeTab === "Health") {
+      loadHealthData();
     }
   }, [
     activeTab,
@@ -250,6 +373,7 @@ export function RazorpayDashboardView({
     loadTransactions,
     loadRefunds,
     loadSettlements,
+    loadHealthData,
   ]);
 
   const handleTabClick = (tab: DashboardTab) => {
@@ -361,9 +485,46 @@ export function RazorpayDashboardView({
 
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 self-start sm:self-auto bg-white border border-[#e7e5e4] px-3 py-1.5 rounded-full shadow-2xs text-xs font-semibold text-[#0c0a09]">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-              <span>Gateway Active (Live Mode)</span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  connectionStatus?.status === "connected"
+                    ? "bg-emerald-600 animate-pulse"
+                    : connectionStatus?.status === "disconnected"
+                    ? "bg-stone-400"
+                    : "bg-amber-500"
+                }`}
+              />
+              <span>
+                {connectionStatus?.status === "connected"
+                  ? `Gateway Active (${connectionStatus?.accountMode === "test" ? "Test" : "Live"} Mode)`
+                  : connectionStatus?.status === "disconnected"
+                  ? "Gateway Disconnected"
+                  : "Gateway Active (Live Mode)"}
+              </span>
             </div>
+
+            {connectionStatus?.status === "connected" ? (
+              <button
+                type="button"
+                onClick={() => setIsDisconnectModalOpen(true)}
+                data-testid="btn-disconnect-gateway"
+                className="px-3.5 py-1.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-xs font-semibold text-red-700 transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">power_settings_new</span>
+                <span>Disconnect</span>
+              </button>
+            ) : connectionStatus?.status === "disconnected" ? (
+              <button
+                type="button"
+                onClick={() => setIsReconnectModalOpen(true)}
+                data-testid="btn-reconnect-gateway"
+                className="px-3.5 py-1.5 rounded-xl border border-[#0c0a09] bg-[#0c0a09] hover:bg-stone-800 text-xs font-semibold text-white transition-all flex items-center gap-1.5 shadow-2xs cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                <span>Reconnect</span>
+              </button>
+            ) : null}
+
             <button
               type="button"
               onClick={() => setIsCredentialsModalOpen(true)}
@@ -1056,26 +1217,455 @@ export function RazorpayDashboardView({
       )}
 
       {/* ========================================================================= */}
-      {/* VIEW E: HEALTH / SETTINGS TABS */}
+      {/* VIEW E: HEALTH TAB */}
       {/* ========================================================================= */}
-      {(activeTab === "Health" || activeTab === "Settings") && (
-        <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 shadow-xs space-y-4">
-          <h2 className="text-lg font-bold text-[#0c0a09]">{activeTab} Overview</h2>
-          <p className="text-xs text-[#78716c]">
-            Connection status, security encryption, and webhook endpoints configured for Razorpay.
-          </p>
-          <div className="p-4 bg-[#fafaf9] border border-[#e7e5e4] rounded-xl space-y-2 text-xs">
-            <div className="flex justify-between">
+      {activeTab === "Health" && (
+        <div className="space-y-6">
+          <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <h2 className="text-lg font-bold text-[#0c0a09]">Integration Health Probe</h2>
+                {healthData && (
+                  <span
+                    className={`text-[11px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
+                      healthData.overallStatus === "healthy"
+                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                        : healthData.overallStatus === "warning"
+                        ? "bg-amber-50 text-amber-800 border-amber-200"
+                        : healthData.overallStatus === "degraded"
+                        ? "bg-orange-50 text-orange-800 border-orange-200"
+                        : healthData.overallStatus === "disconnected"
+                        ? "bg-stone-100 text-stone-700 border-stone-200"
+                        : "bg-red-50 text-red-800 border-red-200"
+                    }`}
+                  >
+                    {healthData.overallStatus}
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#78716c] mt-1">
+                Real-time API probe, webhook ingestion health, and 15-minute background synchronization telemetry.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadHealthData()}
+              disabled={healthLoading}
+              data-testid="btn-probe-health"
+              className="px-3.5 py-2 rounded-xl border border-[#e7e5e4] bg-[#fafaf9] hover:bg-stone-100 text-xs font-semibold text-[#0c0a09] transition-all flex items-center gap-2 self-start sm:self-auto cursor-pointer disabled:opacity-50"
+            >
+              <span
+                className={`material-symbols-outlined text-[16px] ${
+                  healthLoading ? "animate-spin" : ""
+                }`}
+              >
+                autorenew
+              </span>
+              <span>{healthLoading ? "Probing Gateway..." : "Probe Health Now"}</span>
+            </button>
+          </div>
+
+          {/* 4 Health Dimension Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+            {/* 1. Connection Status Card */}
+            <div className="bg-white border border-[#e7e5e4] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs font-medium text-[#78716c] uppercase tracking-wider">
+                  Gateway Connection
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">link</span>
+              </div>
+              <div className="mt-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-[#0c0a09] capitalize">
+                    {healthData?.connection?.status || "Checking..."}
+                  </span>
+                  {healthData?.connection?.mode && (
+                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border border-[#e7e5e4] bg-[#fafaf9]">
+                      {healthData.connection.mode}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#78716c]">
+                  Key ID: {healthData?.connection?.maskedKeyId || "—"}
+                </p>
+              </div>
+            </div>
+
+            {/* 2. API Status Card */}
+            <div className="bg-white border border-[#e7e5e4] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs font-medium text-[#78716c] uppercase tracking-wider">
+                  Razorpay REST API
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">dns</span>
+              </div>
+              <div className="mt-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-[#0c0a09] capitalize">
+                    {healthData?.api?.status || "Checking..."}
+                  </span>
+                  {healthData?.api?.latencyMs && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200 bg-emerald-50 text-emerald-800">
+                      {healthData.api.latencyMs}ms
+                    </span>
+                  )}
+                </div>
+                <p
+                  className="text-xs text-[#78716c] truncate"
+                  title={healthData?.api?.message || healthData?.api?.error}
+                >
+                  {healthData?.api?.error ||
+                    healthData?.api?.message ||
+                    "Read probe: payments?count=1"}
+                </p>
+              </div>
+            </div>
+
+            {/* 3. Webhook Delivery Card */}
+            <div className="bg-white border border-[#e7e5e4] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs font-medium text-[#78716c] uppercase tracking-wider">
+                  Webhook Ingestion
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">webhook</span>
+              </div>
+              <div className="mt-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-[#0c0a09] capitalize">
+                    {healthData?.webhook?.status || "Checking..."}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#e7e5e4] bg-[#fafaf9]">
+                    {healthData?.webhook?.totalEvents || 0} events
+                  </span>
+                </div>
+                <p className="text-xs text-[#78716c]">
+                  {healthData?.webhook?.failedEvents > 0 ? (
+                    <span className="text-red-600 font-semibold">
+                      {healthData.webhook.failedEvents} failures (24h)
+                    </span>
+                  ) : (
+                    "HMAC-SHA256 signature verified"
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* 4. Automated 15-Minute Sync Engine Card */}
+            <div className="bg-white border border-[#e7e5e4] rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-xs font-medium text-[#78716c] uppercase tracking-wider">
+                  Sync Engine (15m)
+                </span>
+                <span className="material-symbols-outlined text-[18px] text-[#0c0a09]">schedule</span>
+              </div>
+              <div className="mt-4 space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-[#0c0a09]">Active</span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-[#e7e5e4] bg-[#fafaf9]">
+                    Convex Cron
+                  </span>
+                </div>
+                <p className="text-xs text-[#78716c]">
+                  Runs every 15 min with 5m overlap buffer
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Sync Engine Telemetry Table */}
+          <div className="bg-white border border-[#e7e5e4] rounded-2xl overflow-hidden shadow-xs">
+            <div className="p-5 border-b border-[#e7e5e4]">
+              <h3 className="text-sm font-bold text-[#0c0a09]">
+                Synchronization Cursors & Run Audit
+              </h3>
+              <p className="text-xs text-[#78716c] mt-0.5">
+                Telemetry from payment_sync_runs and payment_sync_cursors.
+              </p>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-[#e7e5e4] bg-[#fafaf9] text-[#78716c] font-semibold">
+                    <th className="py-3 px-5">Resource Entity</th>
+                    <th className="py-3 px-5">Execution Status</th>
+                    <th className="py-3 px-5">Last Synced At</th>
+                    <th className="py-3 px-5">Last Successful Sync</th>
+                    <th className="py-3 px-5">Fetched / Created / Updated</th>
+                    <th className="py-3 px-5">Last Log / Error</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#e7e5e4]">
+                  {(["transactions", "refunds", "settlements"] as const).map((entity) => {
+                    const info = healthData?.sync?.[entity];
+                    return (
+                      <tr key={entity} className="hover:bg-[#fafaf9] transition-colors">
+                        <td className="py-3.5 px-5 font-bold text-[#0c0a09] capitalize">
+                          {entity}
+                        </td>
+                        <td className="py-3.5 px-5">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase border ${
+                              info?.status === "success" || info?.status === "completed"
+                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                : info?.status === "failed"
+                                ? "bg-red-50 text-red-800 border-red-200"
+                                : info?.status === "running"
+                                ? "bg-blue-50 text-blue-800 border-blue-200"
+                                : "bg-stone-50 text-stone-600 border-stone-200"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                info?.status === "success" || info?.status === "completed"
+                                  ? "bg-emerald-600"
+                                  : info?.status === "failed"
+                                  ? "bg-red-600"
+                                  : "bg-stone-400"
+                              }`}
+                            />
+                            {info?.status || "never"}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-5 text-[#78716c]">
+                          {info?.lastSyncedAt
+                            ? new Date(info.lastSyncedAt).toLocaleString()
+                            : "Never"}
+                        </td>
+                        <td className="py-3.5 px-5 text-[#78716c]">
+                          {info?.lastSuccessfulSyncAt
+                            ? new Date(info.lastSuccessfulSyncAt).toLocaleString()
+                            : "Never"}
+                        </td>
+                        <td className="py-3.5 px-5 font-mono text-[#0c0a09]">
+                          {info?.recordsFetched ?? 0} / {info?.recordsCreated ?? 0} /{" "}
+                          {info?.recordsUpdated ?? 0}
+                        </td>
+                        <td
+                          className="py-3.5 px-5 text-[#78716c] truncate max-w-[200px]"
+                          title={info?.lastError || "None"}
+                        >
+                          {info?.lastError || "—"}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* VIEW F: SETTINGS TAB */}
+      {/* ========================================================================= */}
+      {activeTab === "Settings" && (
+        <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 shadow-xs space-y-6">
+          <div>
+            <h2 className="text-lg font-bold text-[#0c0a09]">Gateway Connection Settings</h2>
+            <p className="text-xs text-[#78716c] mt-0.5">
+              Security encryption, provider account details, and connection lifecycle management.
+            </p>
+          </div>
+
+          <div className="p-4 bg-[#fafaf9] border border-[#e7e5e4] rounded-xl space-y-3 text-xs">
+            <div className="flex justify-between py-1 border-b border-[#e7e5e4]">
               <span className="text-[#78716c]">Provider</span>
               <span className="font-semibold text-[#0c0a09]">Razorpay (Polymorphic Gateway)</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-[#78716c]">Credential Encryption</span>
-              <span className="font-semibold text-emerald-700">AES-256-GCM Authenticated</span>
+            <div className="flex justify-between py-1 border-b border-[#e7e5e4]">
+              <span className="text-[#78716c]">Account Mode</span>
+              <span className="font-semibold text-[#0c0a09] uppercase">
+                {connectionStatus?.accountMode || "Live"}
+              </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-[#78716c]">Sync Engine</span>
-              <span className="font-semibold text-[#0c0a09]">Active with 5-minute Overlap Buffers</span>
+            <div className="flex justify-between py-1 border-b border-[#e7e5e4]">
+              <span className="text-[#78716c]">Credential Encryption</span>
+              <span className="font-semibold text-emerald-700">
+                AES-256-GCM Authenticated Envelope
+              </span>
+            </div>
+            <div className="flex justify-between py-1 border-b border-[#e7e5e4]">
+              <span className="text-[#78716c]">Automatic Sync</span>
+              <span className="font-semibold text-[#0c0a09]">
+                Convex 15-Minute Cron (Every :00, :15, :30, :45)
+              </span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span className="text-[#78716c]">Financial Audit Policy</span>
+              <span className="font-semibold text-[#0c0a09]">
+                Non-destructive: Disconnect preserves all transaction records
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 flex items-center justify-between border-t border-[#e7e5e4]">
+            <div>
+              <h4 className="text-xs font-bold text-[#0c0a09]">Gateway Lifecycle Action</h4>
+              <p className="text-[11px] text-[#78716c]">
+                {connectionStatus?.status === "connected"
+                  ? "Disconnect Razorpay to pause live collections and automated background synchronization."
+                  : "Reconnect Razorpay using verified credentials to resume operations."}
+              </p>
+            </div>
+
+            {connectionStatus?.status === "connected" ? (
+              <button
+                type="button"
+                onClick={() => setIsDisconnectModalOpen(true)}
+                className="px-4 py-2 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 text-xs font-semibold text-red-700 transition-all cursor-pointer"
+              >
+                Disconnect Gateway
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsReconnectModalOpen(true)}
+                className="px-4 py-2 rounded-xl border border-[#0c0a09] bg-[#0c0a09] hover:bg-stone-800 text-xs font-semibold text-white transition-all cursor-pointer"
+              >
+                Reconnect Gateway
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 3: DISCONNECT GATEWAY MODAL */}
+      {/* ========================================================================= */}
+      {isDisconnectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 max-w-[480px] w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 border border-red-200 flex items-center justify-center text-red-700 shrink-0">
+                <span className="material-symbols-outlined text-[20px]">warning</span>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#0c0a09]">Disconnect Razorpay Gateway?</h3>
+                <p className="text-xs text-[#78716c]">Please review this action before proceeding.</p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-[#fafaf9] border border-[#e7e5e4] rounded-xl text-xs text-[#78716c] space-y-2">
+              <p>
+                <strong className="text-[#0c0a09]">Financial Data Retention:</strong> All historical
+                payment transactions, refunds, and settlement reports will remain completely
+                preserved in PREST POS.
+              </p>
+              <p>
+                <strong className="text-[#0c0a09]">Sync & Operations:</strong> Live payment
+                operations, webhook processing, and automated 15-minute background synchronization
+                will be paused until reconnected.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDisconnectModalOpen(false)}
+                disabled={isDisconnecting}
+                className="px-4 py-2 rounded-xl border border-[#e7e5e4] bg-white hover:bg-[#fafaf9] text-xs font-semibold text-[#0c0a09] transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDisconnect}
+                disabled={isDisconnecting}
+                data-testid="btn-confirm-disconnect"
+                className="px-4 py-2 rounded-xl border border-red-600 bg-red-600 hover:bg-red-700 text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isDisconnecting ? "Disconnecting..." : "Confirm Disconnect"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 4: RECONNECT GATEWAY MODAL */}
+      {/* ========================================================================= */}
+      {isReconnectModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-[#e7e5e4] rounded-2xl p-6 max-w-[480px] w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-3">
+              <h3 className="text-base font-bold text-[#0c0a09]">Reconnect Razorpay Gateway</h3>
+              <button
+                type="button"
+                onClick={() => setIsReconnectModalOpen(false)}
+                className="text-[#78716c] hover:text-[#0c0a09] cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <label className="flex items-center gap-2 cursor-pointer font-medium text-[#0c0a09]">
+                <input
+                  type="checkbox"
+                  checked={useFreshCredentials}
+                  onChange={(e) => setUseFreshCredentials(e.target.checked)}
+                  className="rounded border-[#e7e5e4]"
+                />
+                <span>Supply new API Key & Secret (optional)</span>
+              </label>
+
+              {useFreshCredentials ? (
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block font-semibold text-[#0c0a09] mb-1">
+                      Razorpay Key ID *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="rzp_live_..."
+                      value={reconnectKeyId}
+                      onChange={(e) => setReconnectKeyId(e.target.value)}
+                      className="w-full px-3 py-2 border border-[#e7e5e4] rounded-xl text-xs font-mono text-[#0c0a09] focus:outline-none focus:border-[#0c0a09]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-[#0c0a09] mb-1">
+                      Razorpay Key Secret *
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="••••••••"
+                      value={reconnectKeySecret}
+                      onChange={(e) => setReconnectKeySecret(e.target.value)}
+                      className="w-full px-3 py-2 border border-[#e7e5e4] rounded-xl text-xs font-mono text-[#0c0a09] focus:outline-none focus:border-[#0c0a09]"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <p className="text-[#78716c] bg-[#fafaf9] p-3 rounded-xl border border-[#e7e5e4]">
+                  PREST will verify previously encrypted credentials and resume live operations and
+                  automated 15-minute synchronization.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsReconnectModalOpen(false)}
+                disabled={isReconnecting}
+                className="px-4 py-2 rounded-xl border border-[#e7e5e4] bg-white hover:bg-[#fafaf9] text-xs font-semibold text-[#0c0a09] transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleReconnect}
+                disabled={isReconnecting}
+                data-testid="btn-confirm-reconnect"
+                className="px-4 py-2 rounded-xl border border-[#0c0a09] bg-[#0c0a09] hover:bg-stone-800 text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
+              >
+                {isReconnecting ? "Verifying..." : "Verify & Reconnect"}
+              </button>
             </div>
           </div>
         </div>

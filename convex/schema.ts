@@ -2102,6 +2102,7 @@ postpaidOrderRequests: defineTable({
     .index("by_provider_and_event_id", ["provider", "providerEventId"])
     .index("by_event_type", ["eventType"])
     .index("by_processing_status", ["processingStatus"])
+    .index("by_org_and_status", ["organizationId", "processingStatus"])
     .index("by_received_at", ["receivedAt"]),
 
   payment_sync_runs: defineTable({

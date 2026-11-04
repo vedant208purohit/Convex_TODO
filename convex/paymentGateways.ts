@@ -1,7 +1,8 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
+import { internal, api } from "./_generated/api";
 import { v } from "convex/values";
 import { requireAuth, resolveStoreOrganization } from "./organizationUsers";
-import { encryptCredentials, maskKeyIdentifier } from "./paymentGatewayCrypto";
+import { encryptCredentials, decryptCredentials, maskKeyIdentifier } from "./paymentGatewayCrypto";
 import {
   PublicGatewayConnection,
   PaymentConnectionType,
@@ -1699,5 +1700,590 @@ export const processWebhookEvent = mutation({
     }
   },
 });
+
+// =========================================================================
+// CONNECTION LIFECYCLE & INTEGRATION HEALTH
+// =========================================================================
+
+/**
+ * Disconnects an active payment gateway connection safely.
+ * Disables live processing and automatic sync while strictly preserving
+ * all historical financial records (transactions, refunds, settlements, audit runs).
+ */
+export const disconnectGatewayConnection = mutation({
+  args: {
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    organizationId: v.optional(v.id("organizations")),
+    provider: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const provider = args.provider || "razorpay";
+    const now = Date.now();
+
+    let conn: any = null;
+    if (args.connectionId) {
+      conn = await ctx.db.get(args.connectionId);
+    } else {
+      const connections = await ctx.db
+        .query("payment_gateway_connections")
+        .withIndex("by_org_and_provider", (q) =>
+          q.eq("organizationId", org._id).eq("provider", provider)
+        )
+        .collect();
+      conn =
+        connections.find((c) => c.status === "connected") ||
+        connections.find((c) => c.status === "needs_attention") ||
+        connections[0];
+    }
+
+    if (!conn || conn.organizationId !== org._id) {
+      throw new Error("Connection not found for this store.");
+    }
+
+    await ctx.db.patch(conn._id, {
+      status: "disconnected",
+      disconnectedAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      connectionId: conn._id,
+      status: "disconnected",
+      disconnectedAt: now,
+      provider: conn.provider,
+      merchantName: conn.merchantName,
+    };
+  },
+});
+
+/**
+ * Reconnects a previously disconnected payment gateway connection.
+ * Can reuse existing verified credentials or update them with freshly verified credentials.
+ */
+export const reconnectGatewayConnection = mutation({
+  args: {
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    organizationId: v.optional(v.id("organizations")),
+    provider: v.optional(v.string()),
+    encryptedCredentials: v.optional(v.string()),
+    encryptionKeyVersion: v.optional(v.number()),
+    providerAccountId: v.optional(v.string()),
+    accountMode: v.optional(v.union(v.literal("test"), v.literal("live"))),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const provider = args.provider || "razorpay";
+    const now = Date.now();
+
+    let conn: any = null;
+    if (args.connectionId) {
+      conn = await ctx.db.get(args.connectionId);
+    } else {
+      const connections = await ctx.db
+        .query("payment_gateway_connections")
+        .withIndex("by_org_and_provider", (q) =>
+          q.eq("organizationId", org._id).eq("provider", provider)
+        )
+        .collect();
+      conn =
+        connections.find((c) => c.status === "disconnected") ||
+        connections.find((c) => c.status === "needs_attention") ||
+        connections[0];
+    }
+
+    if (!conn || conn.organizationId !== org._id) {
+      throw new Error("Connection not found for this store.");
+    }
+
+    const patch: any = {
+      status: "connected",
+      disconnectedAt: undefined,
+      lastVerifiedAt: now,
+      updatedAt: now,
+    };
+
+    if (args.encryptedCredentials) {
+      patch.encryptedCredentials = args.encryptedCredentials;
+      patch.encryptionKeyVersion = args.encryptionKeyVersion || 1;
+      patch.credentialsUpdatedAt = now;
+    }
+
+    if (args.providerAccountId) {
+      patch.providerAccountId = args.providerAccountId;
+    }
+
+    if (args.accountMode) {
+      patch.accountMode = args.accountMode;
+    }
+
+    await ctx.db.patch(conn._id, patch);
+
+    const updated = await ctx.db.get(conn._id);
+    return toPublicConnection(updated);
+  },
+});
+
+/**
+ * Aggregates live integration health status across Connection, Webhook, and Synchronization.
+ */
+export const getIntegrationHealthData = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.optional(v.id("payment_gateway_connections")),
+    provider: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const provider = args.provider || "razorpay";
+    const now = Date.now();
+
+    // 1. Connection telemetry
+    let conn: any = null;
+    if (args.connectionId) {
+      conn = await ctx.db.get(args.connectionId);
+    } else {
+      const connections = await ctx.db
+        .query("payment_gateway_connections")
+        .withIndex("by_org_and_provider", (q) =>
+          q.eq("organizationId", org._id).eq("provider", provider)
+        )
+        .collect();
+      conn =
+        connections.find((c) => c.status === "connected") ||
+        connections.find((c) => c.status === "disconnected") ||
+        connections[0];
+    }
+
+    const publicConn = conn ? toPublicConnection(conn) : null;
+
+    // 2. Webhooks telemetry
+    let webhookEvents: any[] = [];
+    if (conn) {
+      webhookEvents = await ctx.db
+        .query("payment_webhook_events")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+      webhookEvents = webhookEvents.filter(
+        (e) => e.provider === provider && (!e.connectionId || e.connectionId === conn._id)
+      );
+    }
+
+    const totalEvents = webhookEvents.length;
+    let lastReceivedAt: number | undefined;
+    let lastProcessedAt: number | undefined;
+    let pendingEvents = 0;
+    let failedEvents = 0;
+
+    const oneDayAgo = now - 24 * 60 * 60 * 1000;
+    for (const ev of webhookEvents) {
+      if (!lastReceivedAt || ev.receivedAt > lastReceivedAt) {
+        lastReceivedAt = ev.receivedAt;
+      }
+      if (ev.processedAt && (!lastProcessedAt || ev.processedAt > lastProcessedAt)) {
+        lastProcessedAt = ev.processedAt;
+      }
+      if (
+        ev.processingStatus === "pending" ||
+        ev.processingStatus === "processing" ||
+        ev.processingStatus === "received"
+      ) {
+        pendingEvents++;
+      }
+      if (ev.processingStatus === "failed" && ev.receivedAt >= oneDayAgo) {
+        failedEvents++;
+      }
+    }
+
+    const hasWebhookSecret = Boolean(
+      conn?.metadata?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET
+    );
+
+    let webhookStatus: "healthy" | "warning" | "degraded" | "not_configured" | "unknown" =
+      "not_configured";
+    if (hasWebhookSecret) {
+      if (failedEvents > 0 && (!lastProcessedAt || lastProcessedAt < oneDayAgo)) {
+        webhookStatus = "degraded";
+      } else if (totalEvents > 0) {
+        webhookStatus = "healthy";
+      } else {
+        webhookStatus = "healthy"; // Configured & ready for transactions
+      }
+    } else {
+      webhookStatus = totalEvents > 0 ? "warning" : "not_configured";
+    }
+
+    // 3. Sync Telemetry
+    const syncStatus = {
+      transactions: {
+        status: "never",
+        lastSyncedAt: undefined as number | undefined,
+        lastSuccessfulSyncAt: undefined as number | undefined,
+        recordsFetched: 0,
+        recordsCreated: 0,
+        recordsUpdated: 0,
+        lastError: undefined as string | undefined,
+      },
+      refunds: {
+        status: "never",
+        lastSyncedAt: undefined as number | undefined,
+        lastSuccessfulSyncAt: undefined as number | undefined,
+        recordsFetched: 0,
+        recordsCreated: 0,
+        recordsUpdated: 0,
+        lastError: undefined as string | undefined,
+      },
+      settlements: {
+        status: "never",
+        lastSyncedAt: undefined as number | undefined,
+        lastSuccessfulSyncAt: undefined as number | undefined,
+        recordsFetched: 0,
+        recordsCreated: 0,
+        recordsUpdated: 0,
+        lastError: undefined as string | undefined,
+      },
+    };
+
+    if (conn) {
+      const cursors = await ctx.db
+        .query("payment_sync_cursors")
+        .withIndex("by_connection", (q) => q.eq("connectionId", conn._id))
+        .collect();
+
+      const runs = await ctx.db
+        .query("payment_sync_runs")
+        .withIndex("by_connection", (q) => q.eq("connectionId", conn._id))
+        .collect();
+
+      for (const resType of ["transactions", "refunds", "settlements"] as const) {
+        const cursor = cursors.find((c) => c.resourceType === resType);
+        if (cursor) {
+          syncStatus[resType].lastSuccessfulSyncAt = cursor.lastSuccessfulSyncAt;
+        }
+
+        const entityRuns = runs
+          .filter((r) => r.resourceType === resType)
+          .sort((a, b) => b.startedAt - a.startedAt);
+
+        const latestRun = entityRuns[0];
+        if (latestRun) {
+          syncStatus[resType].lastSyncedAt = latestRun.startedAt;
+          syncStatus[resType].status =
+            latestRun.status === "completed" ? "success" : latestRun.status;
+          syncStatus[resType].recordsFetched = latestRun.recordsFetched;
+          syncStatus[resType].recordsCreated = latestRun.recordsCreated;
+          syncStatus[resType].recordsUpdated = latestRun.recordsUpdated;
+          syncStatus[resType].lastError = latestRun.lastError;
+        } else if (cursor) {
+          syncStatus[resType].lastSyncedAt = cursor.lastSuccessfulSyncAt;
+          syncStatus[resType].status = "success";
+        }
+      }
+    }
+
+    return {
+      connection: publicConn,
+      webhook: {
+        status: webhookStatus,
+        configured: hasWebhookSecret,
+        lastReceivedAt,
+        lastProcessedAt,
+        pendingEvents,
+        failedEvents,
+        totalEvents,
+      },
+      sync: syncStatus,
+      checkedAt: now,
+    };
+  },
+});
+
+// =========================================================================
+// 15-MINUTE AUTOMATIC SYNCHRONIZATION ENGINE
+// =========================================================================
+
+/**
+ * Retrieves all active connections that are eligible for automated synchronization.
+ * Excludes disconnected, pending, or paused connections.
+ */
+export const getActiveConnectionsForScheduledSync = internalQuery({
+  args: {
+    provider: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let q = ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_status", (q) => q.eq("status", "connected"));
+
+    const connections = await q.collect();
+    if (args.provider) {
+      return connections.filter((c) => c.provider === args.provider);
+    }
+    return connections;
+  },
+});
+
+/**
+ * Synchronizes an entity resource from Razorpay REST API inside the scheduled action runner.
+ */
+async function syncScheduledEntityResource(params: {
+  ctx: any;
+  connectionId: any;
+  resourceType: "transactions" | "refunds" | "settlements";
+  url: string;
+  basicAuth: string;
+  mapItemToMutation: (item: any) => any;
+  recordMutation: any;
+}) {
+  const startedAt = Date.now();
+  let fetchedTotal = 0;
+  let createdTotal = 0;
+  let updatedTotal = 0;
+
+  try {
+    const syncStatus: any = await params.ctx.runQuery(api.paymentGateways.getSyncStatus, {
+      connectionId: params.connectionId,
+    });
+    const cursor = syncStatus?.cursors?.find((c: any) => c.resourceType === params.resourceType);
+
+    // 5-minute overlap window to prevent edge races
+    const from = cursor?.lastSuccessfulSyncAt
+      ? Math.max(cursor.lastSuccessfulSyncAt - 5 * 60 * 1000, 0)
+      : Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const fromSec = Math.floor(from / 1000);
+    const toSec = Math.floor(Date.now() / 1000);
+
+    const fullUrl = `${params.url}?count=50&from=${fromSec}&to=${toSec}`;
+
+    // Retry with exponential backoff on 429 / 5xx
+    let response: any = null;
+    let attempt = 0;
+    while (attempt < 3) {
+      attempt++;
+      try {
+        const res = await fetch(fullUrl, {
+          method: "GET",
+          headers: {
+            Authorization: `Basic ${params.basicAuth}`,
+            Accept: "application/json",
+            "User-Agent": "PREST-POS-ScheduledSync/1.0",
+          },
+        });
+        if (res.status === 200) {
+          response = await res.json();
+          break;
+        } else if (res.status === 429 || res.status >= 500) {
+          if (attempt >= 3) {
+            throw new Error(`HTTP ${res.status} after ${attempt} attempts`);
+          }
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+        } else {
+          const errBody = await res.json().catch(() => ({}));
+          throw new Error(errBody.error?.description || `HTTP ${res.status}`);
+        }
+      } catch (err: any) {
+        if (attempt >= 3) throw err;
+        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+      }
+    }
+
+    const items = response?.items || [];
+    let maxSeenTimestamp = from;
+
+    for (const item of items) {
+      fetchedTotal++;
+      const args = params.mapItemToMutation(item);
+      const res = await params.ctx.runMutation(params.recordMutation, args);
+      if (res?.alreadyExists) {
+        updatedTotal++;
+      } else {
+        createdTotal++;
+      }
+
+      const itemTime = item.created_at ? item.created_at * 1000 : Date.now();
+      if (itemTime > maxSeenTimestamp) {
+        maxSeenTimestamp = itemTime;
+      }
+    }
+
+    if (maxSeenTimestamp > from) {
+      await params.ctx.runMutation(api.paymentGateways.updateSyncCursor, {
+        connectionId: params.connectionId,
+        resourceType: params.resourceType,
+        lastSuccessfulSyncAt: maxSeenTimestamp,
+      });
+    }
+
+    await params.ctx.runMutation(api.paymentGateways.recordSyncRun, {
+      connectionId: params.connectionId,
+      resourceType: params.resourceType,
+      syncType: "scheduled",
+      status: "completed",
+      startedAt,
+      completedAt: Date.now(),
+      recordsFetched: fetchedTotal,
+      recordsCreated: createdTotal,
+      recordsUpdated: updatedTotal,
+      recordsSkipped: 0,
+      errorCount: 0,
+    });
+  } catch (err: any) {
+    await params.ctx.runMutation(api.paymentGateways.recordSyncRun, {
+      connectionId: params.connectionId,
+      resourceType: params.resourceType,
+      syncType: "scheduled",
+      status: "failed",
+      startedAt,
+      completedAt: Date.now(),
+      recordsFetched: fetchedTotal,
+      recordsCreated: createdTotal,
+      recordsUpdated: updatedTotal,
+      recordsSkipped: 0,
+      errorCount: 1,
+      lastError: err?.message || "Scheduled sync failed",
+    });
+    throw err;
+  }
+}
+
+/**
+ * 15-Minute Scheduled Sync Action executed via Convex Crons.
+ * Disconnected connections are immediately skipped. Transactions, refunds,
+ * and settlements execute independently.
+ */
+export const runScheduledSync: any = internalAction({
+  args: {},
+  handler: async (ctx): Promise<any> => {
+    const activeConnections = await ctx.runQuery(
+      internal.paymentGateways.getActiveConnectionsForScheduledSync,
+      { provider: "razorpay" }
+    );
+
+    if (activeConnections.length === 0) {
+      return { skipped: true, reason: "No active Razorpay connections found" };
+    }
+
+    const results = [];
+    for (const conn of activeConnections) {
+      if (!conn.encryptedCredentials) continue;
+
+      let credentials: any;
+      try {
+        credentials = await decryptCredentials(conn.encryptedCredentials);
+      } catch (err: any) {
+        console.error(
+          `[Scheduled Sync] Failed to decrypt credentials for connection ${conn._id}:`,
+          err
+        );
+        continue;
+      }
+
+      const basicAuth = btoa(`${credentials.keyId}:${credentials.keySecret}`);
+      const baseUrl = "https://api.razorpay.com/v1";
+
+      // 1. Transactions
+      try {
+        await syncScheduledEntityResource({
+          ctx,
+          connectionId: conn._id,
+          resourceType: "transactions",
+          url: `${baseUrl}/payments`,
+          basicAuth,
+          mapItemToMutation: (item: any) => ({
+            connectionId: conn._id,
+            providerPaymentId: item.id,
+            providerOrderId: item.order_id,
+            customerEmail: item.email,
+            customerPhone: item.contact,
+            amountMinor: item.amount || 0,
+            currency: item.currency || "INR",
+            paymentMethod: item.method || "card",
+            status:
+              item.status === "captured"
+                ? "captured"
+                : item.status === "failed"
+                ? "failed"
+                : "pending",
+            providerStatus: item.status,
+            paidAt: item.created_at ? item.created_at * 1000 : undefined,
+            refundedAmountMinor: item.amount_refunded || 0,
+            metadata: item.notes,
+          }),
+          recordMutation: api.paymentGateways.recordTransaction,
+        });
+      } catch (txErr: any) {
+        console.error(`[Scheduled Sync] Transaction sync error for ${conn._id}:`, txErr);
+      }
+
+      // 2. Refunds
+      try {
+        await syncScheduledEntityResource({
+          ctx,
+          connectionId: conn._id,
+          resourceType: "refunds",
+          url: `${baseUrl}/refunds`,
+          basicAuth,
+          mapItemToMutation: (item: any) => ({
+            connectionId: conn._id,
+            providerRefundId: item.id,
+            providerPaymentId: item.payment_id,
+            amountMinor: item.amount || 0,
+            currency: item.currency || "INR",
+            status: item.status === "processed" ? "processed" : "pending",
+            providerStatus: item.status,
+            speed: item.speed_processed || item.speed_requested || "normal",
+            initiatedAt: item.created_at ? item.created_at * 1000 : Date.now(),
+            processedAt:
+              item.status === "processed"
+                ? item.created_at
+                  ? item.created_at * 1000
+                  : Date.now()
+                : undefined,
+            metadata: item.notes,
+          }),
+          recordMutation: api.paymentGateways.recordRefund,
+        });
+      } catch (rfErr: any) {
+        console.error(`[Scheduled Sync] Refunds sync error for ${conn._id}:`, rfErr);
+      }
+
+      // 3. Settlements
+      try {
+        await syncScheduledEntityResource({
+          ctx,
+          connectionId: conn._id,
+          resourceType: "settlements",
+          url: `${baseUrl}/settlements`,
+          basicAuth,
+          mapItemToMutation: (item: any) => ({
+            connectionId: conn._id,
+            providerSettlementId: item.id,
+            amountMinor: item.amount || 0,
+            currency: item.currency || "INR",
+            feesMinor: item.fees || 0,
+            taxMinor: item.tax || 0,
+            netAmountMinor: (item.amount || 0) - (item.fees || 0) - (item.tax || 0),
+            status: "processed",
+            providerStatus: item.status || "processed",
+            settlementDate: item.created_at ? item.created_at * 1000 : Date.now(),
+            utrOrReference: item.utr,
+          }),
+          recordMutation: api.paymentGateways.recordSettlement,
+        });
+      } catch (stlErr: any) {
+        console.error(`[Scheduled Sync] Settlements sync error for ${conn._id}:`, stlErr);
+      }
+
+      results.push({ connectionId: conn._id, status: "completed" });
+    }
+
+    return { success: true, processedCount: results.length };
+  },
+});
+
 
 
