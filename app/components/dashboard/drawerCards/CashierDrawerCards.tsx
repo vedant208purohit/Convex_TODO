@@ -2,6 +2,7 @@
 
 import React from "react";
 import { OrdersCatalogWidget } from "../AddWidgetDrawer";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 export interface DrawerCardProps {
   widget: OrdersCatalogWidget;
@@ -89,6 +90,8 @@ export const CASHIER_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
 // 1. Current Shift Summary
 export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
+  const currencySymbol = data?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -109,16 +112,16 @@ export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onA
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] min-h-[95px] justify-center text-xs">
           <div className="flex justify-between items-baseline">
             <span className="text-stone-500 uppercase text-[10px] font-bold">Gross Intake</span>
-            <span className="font-bold text-stone-900">{summary.grossIntake || "₹ 0.00"}</span>
+            <span className="font-bold text-stone-900">{summary.grossIntake || zeroFormatted}</span>
           </div>
           <div className="flex justify-between items-baseline">
             <span className="text-stone-500 uppercase text-[10px] font-bold">Float Cash</span>
-            <span className="text-stone-700 font-medium">{summary.floatCash || "₹ 0.00"}</span>
+            <span className="text-stone-700 font-medium">{summary.floatCash || zeroFormatted}</span>
           </div>
           <div className="pt-1 flex justify-between items-baseline border-t border-[#f0eae3]">
             <span className="text-stone-500 uppercase text-[10px] font-bold">Variance</span>
             <span className="font-semibold text-stone-800 bg-stone-100 px-2 py-0.5 rounded text-[10px]">
-              {summary.drawerVariance || "+₹ 0.00 Balanced"}
+              {summary.drawerVariance || `+${zeroFormatted} Balanced`}
             </span>
           </div>
         </div>
@@ -147,6 +150,8 @@ export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onA
 // 2. Total Transactions
 export function DrawerCashierTotalTransactionsCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
+  const currencySymbol = data?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -201,6 +206,8 @@ export function DrawerCashierTotalTransactionsCard({ widget, isPlaced, placement
 // 3. Cash Sales
 export function DrawerCashierCashSalesCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
+  const currencySymbol = data?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -220,7 +227,7 @@ export function DrawerCashierCashSalesCard({ widget, isPlaced, placement, onAdd,
 
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col justify-center border border-[#f3ede6] min-h-[95px]">
           <div className="flex items-baseline justify-between">
-            <span className="text-lg font-semibold text-stone-900">{summary.cashVolume || "₹ 0.00"}</span>
+            <span className="text-lg font-semibold text-stone-900">{summary.cashVolume || zeroFormatted}</span>
             <span className="text-[10px] text-stone-500">{summary.txnCount || "0 Txns"}</span>
           </div>
           <div className="mt-1 flex items-center gap-1.5">
@@ -255,6 +262,8 @@ export function DrawerCashierCashSalesCard({ widget, isPlaced, placement, onAdd,
 // 4. Digital Payment Sales
 export function DrawerCashierDigitalSalesCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
+  const currencySymbol = data?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -274,7 +283,7 @@ export function DrawerCashierDigitalSalesCard({ widget, isPlaced, placement, onA
 
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col justify-center border border-[#f3ede6] min-h-[95px]">
           <div className="flex items-baseline justify-between">
-            <span className="text-lg font-semibold text-stone-900">{summary.digitalVolume || "₹ 0.00"}</span>
+            <span className="text-lg font-semibold text-stone-900">{summary.digitalVolume || zeroFormatted}</span>
             <span className="text-[10px] bg-stone-100 text-stone-700 font-semibold px-2 py-0.5 rounded">
               {summary.deltaPercent || "▲ 0.0%"}
             </span>
@@ -308,6 +317,8 @@ export function DrawerCashierDigitalSalesCard({ widget, isPlaced, placement, onA
 // 5. Payment Method Breakdown
 export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
+  const currencySymbol = data?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -338,15 +349,15 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
           <div className="flex flex-col gap-0.5 flex-1 min-w-0 text-[10px]">
             <div className="flex justify-between items-center">
               <span className="truncate">UPI ({summary.upiPercent || "0%"})</span>
-              <span className="font-bold text-stone-900">{summary.upiAmount || "₹0"}</span>
+              <span className="font-bold text-stone-900">{summary.upiAmount || zeroFormatted}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="truncate">Cards ({summary.cardsPercent || "0%"})</span>
-              <span className="font-bold text-stone-900">{summary.cardsAmount || "₹0"}</span>
+              <span className="font-bold text-stone-900">{summary.cardsAmount || zeroFormatted}</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="truncate">Cash ({summary.cashPercent || "0%"})</span>
-              <span className="font-bold text-stone-900">{summary.cashAmount || "₹0"}</span>
+              <span className="font-bold text-stone-900">{summary.cashAmount || zeroFormatted}</span>
             </div>
           </div>
         </div>
@@ -375,6 +386,8 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
 // 6. Refund Summary
 export function DrawerCashierRefundSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
+  const currencySymbol = data?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -394,12 +407,12 @@ export function DrawerCashierRefundSummaryCard({ widget, isPlaced, placement, on
 
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] min-h-[95px] justify-center text-xs">
           <div className="flex items-baseline justify-between">
-            <span className="text-lg font-semibold text-stone-900">{summary.refundTotal || "₹ 0.00"}</span>
+            <span className="text-lg font-semibold text-stone-900">{summary.refundTotal || zeroFormatted}</span>
             <span className="text-[10px] text-stone-500">{summary.refundCount || "0 Refunds"}</span>
           </div>
           <div className="flex justify-between text-[11px] text-stone-600">
             <span>Void: {summary.voidCount || "0 Items"}</span>
-            <span className="font-semibold text-stone-800">{summary.voidTotal || "₹ 0.00"}</span>
+            <span className="font-semibold text-stone-800">{summary.voidTotal || zeroFormatted}</span>
           </div>
         </div>
       </div>

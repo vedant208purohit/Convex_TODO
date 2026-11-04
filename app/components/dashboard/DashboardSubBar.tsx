@@ -4,12 +4,12 @@ import React, { useState } from "react";
 import { OrderDateRangePicker } from "../OrderDateRangePicker";
 
 interface Props {
-  userName: string;
-  userRole: string;
-  gridResolution: "1440px Fluid" | "Compact 1200px";
-  onResolutionChange: (res: "1440px Fluid" | "Compact 1200px") => void;
-  autoAlign: boolean;
-  onToggleAutoAlign: () => void;
+  userName?: string;
+  userRole?: string;
+  gridResolution?: "1440px Fluid" | "Compact 1200px";
+  onResolutionChange?: (res: "1440px Fluid" | "Compact 1200px") => void;
+  autoAlign?: boolean;
+  onToggleAutoAlign?: () => void;
   startDate?: Date;
   endDate?: Date;
   datePreset?: string;
@@ -23,12 +23,6 @@ interface Props {
 }
 
 export function DashboardSubBar({
-  userName,
-  userRole,
-  gridResolution,
-  onResolutionChange,
-  autoAlign,
-  onToggleAutoAlign,
   startDate,
   endDate,
   datePreset,
@@ -41,55 +35,23 @@ export function DashboardSubBar({
   return (
     <div className="w-full px-margin py-space-sm bg-surface-container-low flex flex-wrap items-center justify-between text-body-sm font-body-sm text-secondary border-b border-surface-container/60 gap-y-2">
       <div className="flex items-center gap-space-md flex-wrap">
-        <span className="font-semibold text-on-surface"># 12-COL DYNAMIC CANVAS</span>
         {onDateRangeChange && startDate && endDate && (
-          <>
-            <span className="text-outline">/</span>
-            <div className="flex items-center gap-1.5 relative z-30">
-              <span className="text-outline font-label-sm flex items-center gap-1">
-                <span className="material-symbols-outlined text-[16px]">calendar_today</span>
-                Timeframe:
-              </span>
-              <OrderDateRangePicker
-                startDate={startDate}
-                endDate={endDate}
-                preset={datePreset || "Today"}
-                onChange={onDateRangeChange}
-                countryCode={countryCode || "IN"}
-                timezone={timezone}
-                variant="pill"
-                align="left"
-              />
-            </div>
-          </>
+          <div className="relative z-30">
+            <OrderDateRangePicker
+              startDate={startDate}
+              endDate={endDate}
+              preset={datePreset || "Today"}
+              onChange={onDateRangeChange}
+              countryCode={countryCode || "IN"}
+              timezone={timezone}
+              variant="pill"
+              align="left"
+            />
+          </div>
         )}
       </div>
 
       <div className="flex items-center gap-space-sm text-label-sm font-label-sm relative">
-        <span className="text-outline">Grid Resolution:</span>
-        <button
-          onClick={() => onResolutionChange("1440px Fluid")}
-          className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
-            gridResolution === "1440px Fluid"
-              ? "bg-surface-container font-semibold text-primary"
-              : "hover:bg-surface-container/50 text-secondary"
-          }`}
-        >
-          1440px Fluid
-        </button>
-        <button
-          onClick={() => onResolutionChange("Compact 1200px")}
-          className={`px-2 py-0.5 rounded cursor-pointer transition-colors ${
-            gridResolution === "Compact 1200px"
-              ? "bg-surface-container font-semibold text-primary"
-              : "hover:bg-surface-container/50 text-secondary"
-          }`}
-        >
-          Compact 1200px
-        </button>
-
-        <span className="text-outline">|</span>
-
         <button
           onClick={() => setShowGuides(!showGuides)}
           className="text-outline hover:text-primary flex items-center gap-1 cursor-pointer transition-colors"

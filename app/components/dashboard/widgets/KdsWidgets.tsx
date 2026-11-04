@@ -33,9 +33,14 @@ export function KdsLiveOrdersWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const capacityPercent = typeof summary.capacityPercent === "number" ? summary.capacityPercent : 0;
-  const inPrepCount = typeof summary.inPrepCount === "number" ? summary.inPrepCount : (widgetData?.kpi?.value || 0);
-  const atPassCount = typeof summary.atPassCount === "number" ? summary.atPassCount : 0;
+  const capacityPercent =
+    typeof summary.capacityPercent === "number" ? summary.capacityPercent : 0;
+  const inPrepCount =
+    typeof summary.inPrepCount === "number"
+      ? summary.inPrepCount
+      : widgetData?.kpi?.value || 0;
+  const atPassCount =
+    typeof summary.atPassCount === "number" ? summary.atPassCount : 0;
   const rows = widgetData?.table?.rows || [];
 
   return (
@@ -51,7 +56,9 @@ export function KdsLiveOrdersWidget({
               Streaming
             </span>
           </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">Live Kitchen Orders</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">
+            Live Kitchen Orders
+          </h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
@@ -64,7 +71,9 @@ export function KdsLiveOrdersWidget({
             Workstation Traffic
           </span>
           <span className="font-label-sm text-label-sm font-semibold">
-            {capacityPercent > 0 ? `${capacityPercent}% Capacity` : "Normal Pace"}
+            {capacityPercent > 0
+              ? `${capacityPercent}% Capacity`
+              : "Normal Pace"}
           </span>
         </div>
 
@@ -77,26 +86,36 @@ export function KdsLiveOrdersWidget({
 
         <div className="grid grid-cols-2 gap-space-sm pt-space-xs">
           <div className="bg-surface-container-lowest p-space-sm rounded-DEFAULT flex flex-col">
-            <span className="font-label-sm text-label-sm text-secondary uppercase tracking-wider">In Prep</span>
+            <span className="font-label-sm text-label-sm text-secondary uppercase tracking-wider">
+              In Prep
+            </span>
             <span className="font-headline-md text-headline-md text-on-surface mt-0.5">
               {String(inPrepCount).padStart(2, "0")}
             </span>
-            <span className="font-body-sm text-body-sm text-secondary">Active tickets</span>
+            <span className="font-body-sm text-body-sm text-secondary">
+              Active tickets
+            </span>
           </div>
 
           <div className="bg-surface-container-lowest p-space-sm rounded-DEFAULT flex flex-col">
-            <span className="font-label-sm text-label-sm text-secondary uppercase tracking-wider">At Pass</span>
+            <span className="font-label-sm text-label-sm text-secondary uppercase tracking-wider">
+              At Pass
+            </span>
             <span className="font-headline-md text-headline-md text-on-surface mt-0.5">
               {String(atPassCount).padStart(2, "0")}
             </span>
-            <span className="font-body-sm text-body-sm text-secondary">Ready to serve</span>
+            <span className="font-body-sm text-body-sm text-secondary">
+              Ready to serve
+            </span>
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between text-body-sm font-body-sm text-secondary pt-1 border-t border-surface-container/60">
         <span className="text-label-sm font-label-sm text-outline">
-          {rows.length > 0 ? `${rows.length} Tickets in Stream` : "0 Active Tickets"}
+          {rows.length > 0
+            ? `${rows.length} Tickets in Stream`
+            : "0 Active Tickets"}
         </span>
         <span className="flex items-center gap-1 text-on-surface text-label-sm font-label-sm">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -125,7 +144,10 @@ export function KdsPendingTicketsWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const pendingCount = typeof summary.pendingCount === "number" ? summary.pendingCount : (widgetData?.kpi?.value || 0);
+  const pendingCount =
+    typeof summary.pendingCount === "number"
+      ? summary.pendingCount
+      : widgetData?.kpi?.value || 0;
   const oldestElapsed = summary.oldestElapsed || "--";
   const attentionRequired = summary.statusTag === "Attention";
 
@@ -138,11 +160,15 @@ export function KdsPendingTicketsWidget({
               KPI
             </span>
             <span className="font-label-sm text-[11px] text-on-tertiary-container flex items-center gap-1 font-medium">
-              <span className="material-symbols-outlined text-[13px]">timer</span>
+              <span className="material-symbols-outlined text-[13px]">
+                timer
+              </span>
               Hold Queue
             </span>
           </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">Pending Kitchen Orders</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">
+            Pending Kitchen Orders
+          </h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
@@ -167,14 +193,18 @@ export function KdsPendingTicketsWidget({
                 : "bg-surface-container-lowest text-secondary"
             }`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full ${attentionRequired ? "bg-on-tertiary-fixed" : "bg-primary"}`} />
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${attentionRequired ? "bg-on-tertiary-fixed" : "bg-primary"}`}
+            />
             {attentionRequired ? "Attention" : "Optimal"}
           </div>
         </div>
 
         <div className="bg-surface-container-lowest p-space-sm rounded-DEFAULT flex items-center justify-between">
           <div className="flex items-center gap-space-xs text-on-surface-variant">
-            <span className="material-symbols-outlined text-[18px]">history</span>
+            <span className="material-symbols-outlined text-[18px]">
+              history
+            </span>
             <span className="font-body-sm text-body-sm">Oldest in buffer</span>
           </div>
           <span className="font-label-md text-label-md text-on-surface font-semibold">
@@ -184,9 +214,11 @@ export function KdsPendingTicketsWidget({
       </div>
 
       <div className="flex items-center justify-between text-body-sm font-body-sm text-secondary pt-1 border-t border-surface-container/60">
-        <span className="text-label-sm font-label-sm text-outline">Widget ID: kds_pending_tickets</span>
+        <span className="text-label-sm font-label-sm text-outline">
+          Kitchen Display
+        </span>
         <span className="flex items-center gap-1 text-on-surface text-label-sm font-label-sm">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
           <span>Online</span>
         </span>
       </div>
@@ -214,9 +246,13 @@ export function KdsStationQueueWidget({
   const summary = (widgetData as any)?.summary || {};
   const stationName = summary.stationName || "Tandoor & Clay Oven";
   const stationTag = summary.stationTag || "Stn 02";
-  const stationTickets = typeof summary.ticketsCount === "number" ? summary.ticketsCount : (widgetData?.kpi?.value || 0);
+  const stationTickets =
+    typeof summary.ticketsCount === "number"
+      ? summary.ticketsCount
+      : widgetData?.kpi?.value || 0;
   const stationAvgPrep = summary.avgPrepText || "--";
-  const stationLoadPercent = typeof summary.loadPercent === "number" ? summary.loadPercent : 0;
+  const stationLoadPercent =
+    typeof summary.loadPercent === "number" ? summary.loadPercent : 0;
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -226,9 +262,13 @@ export function KdsStationQueueWidget({
             <span className="px-space-xs py-0.5 rounded-full bg-surface-variant text-on-surface-variant font-label-sm text-[10px] tracking-widest uppercase">
               CONFIGURABLE
             </span>
-            <span className="font-label-sm text-[11px] text-secondary font-medium">Station Filtered</span>
+            <span className="font-label-sm text-[11px] text-secondary font-medium">
+              Station Filtered
+            </span>
           </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">Specific KDS Station</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">
+            Specific KDS Station
+          </h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
@@ -237,7 +277,9 @@ export function KdsStationQueueWidget({
 
       <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-auto">
         <div className="flex items-center justify-between bg-surface-container-lowest px-space-sm py-1.5 rounded-full">
-          <span className="font-label-sm text-label-sm text-on-surface font-semibold truncate">{stationName}</span>
+          <span className="font-label-sm text-label-sm text-on-surface font-semibold truncate">
+            {stationName}
+          </span>
           <span className="font-label-sm text-label-sm px-2 py-0.5 rounded-full bg-surface-container-high text-secondary">
             {stationTag}
           </span>
@@ -245,26 +287,38 @@ export function KdsStationQueueWidget({
 
         <div className="grid grid-cols-3 gap-space-xs text-center pt-1">
           <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT">
-            <span className="font-label-sm text-label-sm text-secondary block">Tickets</span>
+            <span className="font-label-sm text-label-sm text-secondary block">
+              Tickets
+            </span>
             <span className="font-headline-md text-headline-md text-on-surface">
               {String(stationTickets).padStart(2, "0")}
             </span>
           </div>
 
           <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT">
-            <span className="font-label-sm text-label-sm text-secondary block">Avg Prep</span>
-            <span className="font-headline-md text-headline-md text-on-surface">{stationAvgPrep}</span>
+            <span className="font-label-sm text-label-sm text-secondary block">
+              Avg Prep
+            </span>
+            <span className="font-headline-md text-headline-md text-on-surface">
+              {stationAvgPrep}
+            </span>
           </div>
 
           <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT">
-            <span className="font-label-sm text-label-sm text-secondary block">Load</span>
-            <span className="font-headline-md text-headline-md text-on-surface">{stationLoadPercent}%</span>
+            <span className="font-label-sm text-label-sm text-secondary block">
+              Load
+            </span>
+            <span className="font-headline-md text-headline-md text-on-surface">
+              {stationLoadPercent}%
+            </span>
           </div>
         </div>
       </div>
 
       <div className="flex items-center justify-between text-body-sm font-body-sm text-secondary pt-1 border-t border-surface-container/60">
-        <span className="text-label-sm font-label-sm text-outline">Station: {stationName}</span>
+        <span className="text-label-sm font-label-sm text-outline">
+          Station: {stationName}
+        </span>
         <span className="flex items-center gap-1 text-on-surface text-label-sm font-label-sm">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           <span>Online</span>
@@ -296,7 +350,10 @@ export function KdsStatusBreakdownWidget({
   const bReady = typeof summary.ready === "number" ? summary.ready : 0;
   const bHeld = typeof summary.held === "number" ? summary.held : 0;
   const bOverdue = typeof summary.overdue === "number" ? summary.overdue : 0;
-  const bTotal = typeof summary.total === "number" ? summary.total : (bInPrep + bReady + bHeld + bOverdue);
+  const bTotal =
+    typeof summary.total === "number"
+      ? summary.total
+      : bInPrep + bReady + bHeld + bOverdue;
 
   const donutInPrep = bTotal > 0 ? (bInPrep / bTotal) * 88 : 0;
   const donutReady = bTotal > 0 ? (bReady / bTotal) * 88 : 0;
@@ -311,9 +368,13 @@ export function KdsStatusBreakdownWidget({
             <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase">
               CHART
             </span>
-            <span className="font-label-sm text-[11px] text-secondary">Real-time Split</span>
+            <span className="font-label-sm text-[11px] text-secondary">
+              Real-time Split
+            </span>
           </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">Kitchen Status Breakdown</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">
+            Kitchen Status Breakdown
+          </h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
@@ -379,8 +440,12 @@ export function KdsStatusBreakdownWidget({
           </svg>
 
           <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="font-headline-sm text-headline-sm text-on-surface leading-none">{bTotal}</span>
-            <span className="font-label-sm text-[9px] text-secondary uppercase">Total</span>
+            <span className="font-headline-sm text-headline-sm text-on-surface leading-none">
+              {bTotal}
+            </span>
+            <span className="font-label-sm text-[9px] text-secondary uppercase">
+              Total
+            </span>
           </div>
         </div>
 
@@ -421,7 +486,9 @@ export function KdsStatusBreakdownWidget({
       </div>
 
       <div className="flex items-center justify-between text-body-sm font-body-sm text-secondary pt-1 border-t border-surface-container/60">
-        <span className="text-label-sm font-label-sm text-outline">Distribution: {bTotal} Tickets</span>
+        <span className="text-label-sm font-label-sm text-outline">
+          Distribution: {bTotal} Tickets
+        </span>
         <span className="flex items-center gap-1 text-on-surface text-label-sm font-label-sm">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           <span>Online</span>
@@ -449,12 +516,32 @@ export function KdsAvgPrepTimeWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const avgPrepMins = typeof summary.avgPrepMins === "number" ? summary.avgPrepMins : (typeof widgetData?.kpi?.value === "number" ? widgetData.kpi.value : 0);
-  const deltaText = summary.deltaText || (avgPrepMins > 0 ? (avgPrepMins <= 20 ? `${(20 - avgPrepMins).toFixed(1)}m faster` : `${(avgPrepMins - 20).toFixed(1)}m over SLA`) : "Within SLA");
+  const avgPrepMins =
+    typeof summary.avgPrepMins === "number"
+      ? summary.avgPrepMins
+      : typeof widgetData?.kpi?.value === "number"
+        ? widgetData.kpi.value
+        : 0;
+  const deltaText =
+    summary.deltaText ||
+    (avgPrepMins > 0
+      ? avgPrepMins <= 20
+        ? `${(20 - avgPrepMins).toFixed(1)}m faster`
+        : `${(avgPrepMins - 20).toFixed(1)}m over SLA`
+      : "Within SLA");
   const stationBars = summary.stationBars || [
-    { name: "Grill", prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.8).toFixed(1)}m` : "--" },
-    { name: "Clay Oven", prep: avgPrepMins > 0 ? `${(avgPrepMins * 1.05).toFixed(1)}m` : "--" },
-    { name: "Pantry", prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.4).toFixed(1)}m` : "--" },
+    {
+      name: "Grill",
+      prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.8).toFixed(1)}m` : "--",
+    },
+    {
+      name: "Clay Oven",
+      prep: avgPrepMins > 0 ? `${(avgPrepMins * 1.05).toFixed(1)}m` : "--",
+    },
+    {
+      name: "Pantry",
+      prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.4).toFixed(1)}m` : "--",
+    },
   ];
 
   return (
@@ -465,9 +552,13 @@ export function KdsAvgPrepTimeWidget({
             <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase">
               KPI
             </span>
-            <span className="font-label-sm text-[11px] text-secondary font-medium">Daily Metrics</span>
+            <span className="font-label-sm text-[11px] text-secondary font-medium">
+              Daily Metrics
+            </span>
           </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">Average Kitchen Prep Time</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">
+            Average Kitchen Prep Time
+          </h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
@@ -480,18 +571,26 @@ export function KdsAvgPrepTimeWidget({
             <span className="font-display-sm text-display-sm text-on-surface">
               {avgPrepMins > 0 ? avgPrepMins : "--"}
             </span>
-            <span className="font-headline-sm text-headline-sm text-secondary">mins</span>
+            <span className="font-headline-sm text-headline-sm text-secondary">
+              mins
+            </span>
           </div>
 
           <div className="flex items-center gap-1 text-on-surface-variant font-label-sm text-label-sm">
-            <span className="material-symbols-outlined text-[16px]">trending_down</span>
+            <span className="material-symbols-outlined text-[16px]">
+              trending_down
+            </span>
             <span>{deltaText}</span>
           </div>
         </div>
 
         <div className="bg-surface-container-lowest px-space-sm py-1.5 rounded-DEFAULT flex items-center justify-between text-on-surface-variant">
-          <span className="font-label-sm text-label-sm uppercase tracking-wider">Service SLA Goal</span>
-          <span className="font-label-sm text-label-sm font-semibold">&lt; 20.0 min</span>
+          <span className="font-label-sm text-label-sm uppercase tracking-wider">
+            Service SLA Goal
+          </span>
+          <span className="font-label-sm text-label-sm font-semibold">
+            &lt; 20.0 min
+          </span>
         </div>
 
         <div className="flex flex-col gap-1 pt-1">
@@ -511,7 +610,9 @@ export function KdsAvgPrepTimeWidget({
       </div>
 
       <div className="flex items-center justify-between text-body-sm font-body-sm text-secondary pt-1 border-t border-surface-container/60">
-        <span className="text-label-sm font-label-sm text-outline">Target: &lt; 20.0 min</span>
+        <span className="text-label-sm font-label-sm text-outline">
+          Target: &lt; 20.0 min
+        </span>
         <span className="flex items-center gap-1 text-on-surface text-label-sm font-label-sm">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           <span>Online</span>
@@ -538,7 +639,8 @@ export function KdsDelayAlertsWidget({
     toTimestamp,
   });
 
-  const alertCount = widgetData?.alert?.count ?? widgetData?.alert?.alertCount ?? 0;
+  const alertCount =
+    widgetData?.alert?.count ?? widgetData?.alert?.alertCount ?? 0;
   const delayedItems = (widgetData?.alert as any)?.delayedItems || [];
   const primaryDelayed = delayedItems.length > 0 ? delayedItems[0] : null;
 
@@ -555,7 +657,9 @@ export function KdsDelayAlertsWidget({
               Live Escalation
             </span>
           </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">Kitchen Delay Alerts</h3>
+          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-1">
+            Kitchen Delay Alerts
+          </h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
@@ -586,11 +690,14 @@ export function KdsDelayAlertsWidget({
 
             <div className="bg-surface-container-lowest/80 p-space-xs rounded-DEFAULT flex items-center justify-between mt-1">
               <span className="font-label-sm text-label-sm text-error font-medium flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px]">warning</span>
+                <span className="material-symbols-outlined text-[15px]">
+                  warning
+                </span>
                 {primaryDelayed.elapsedMinutes || 22}m elapsed time
               </span>
               <span className="font-label-sm text-label-sm text-secondary">
-                +{Math.max(1, (primaryDelayed.elapsedMinutes || 22) - 20)}m past SLA
+                +{Math.max(1, (primaryDelayed.elapsedMinutes || 22) - 20)}m past
+                SLA
               </span>
             </div>
           </div>
@@ -598,10 +705,14 @@ export function KdsDelayAlertsWidget({
           <div className="bg-surface-container rounded-DEFAULT p-space-md flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-emerald-500/10 text-emerald-700 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                <span className="material-symbols-outlined text-[18px]">
+                  check_circle
+                </span>
               </div>
               <div className="flex flex-col">
-                <span className="font-label-md text-label-md text-on-surface font-semibold">0 Delayed Orders</span>
+                <span className="font-label-md text-label-md text-on-surface font-semibold">
+                  0 Delayed Orders
+                </span>
                 <span className="font-body-sm text-body-sm text-secondary">
                   All kitchen stations operating within 20m SLA threshold
                 </span>

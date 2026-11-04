@@ -8,7 +8,12 @@ import {
   formatCurrencyPaise as formatCurrencyPaiseHelper,
   computePercentageDelta,
 } from "./dashboardTypes";
-import { getTimezoneForCountry } from "../lib/constants/countries";
+import {
+  getTimezoneForCountry,
+  formatStoreTime,
+  formatStoreDate,
+  formatCurrencyAmount,
+} from "../lib/constants/countries";
 import { deriveWorkstationStatusKey } from "./workstation";
 
 // ==========================================
@@ -79,7 +84,7 @@ export function calculateDateRangeBoundaries(
   switch (preset) {
     case "today": {
       const from = todayStart;
-      const to = now;
+      const to = Math.max(now + 300000, todayStart + ONE_DAY_MS - 1);
       const elapsed = to - from;
       const comparisonFrom = from - ONE_DAY_MS;
       const comparisonTo = comparisonFrom + elapsed;
@@ -94,7 +99,7 @@ export function calculateDateRangeBoundaries(
     }
     case "current_shift": {
       const from = todayStart;
-      const to = now;
+      const to = Math.max(now + 300000, todayStart + ONE_DAY_MS - 1);
       const elapsed = to - from;
       const comparisonFrom = from - ONE_DAY_MS;
       const comparisonTo = comparisonFrom + elapsed;
@@ -188,8 +193,9 @@ export function formatCurrencyPaise(
   paise: number,
   symbol = "₹",
   currencyCode?: string,
+  country?: string,
 ): string {
-  return formatCurrencyPaiseHelper(paise, symbol, currencyCode);
+  return formatCurrencyPaiseHelper(paise, symbol, currencyCode, country);
 }
 
 export function calculateDeltaPercent(
@@ -255,6 +261,7 @@ function createBaseResponse(
     timeZone,
     currency,
     currencySymbol,
+    country,
     isAvailable: true,
     appliedFilters: {
       dateRangePreset: options.dateRangePreset || "today",
@@ -387,6 +394,38 @@ export async function provideOverviewNetRevenue(
   return res;
 }
 
+// ==========================================
+// ORDER CHANNEL CLASSIFICATION HELPERS
+// ==========================================
+
+export function formatOrderTypeLabel(type?: string): string {
+  if (!type) return "Dine-In";
+  if (type === "ScheduledPickup") return "Scheduled Pickup";
+  if (type === "ScheduledDelivery") return "Scheduled Delivery";
+  if (type === "TakeAway") return "Takeaway";
+  if (type === "DineIn") return "Dine-In";
+  return type.replace(/([A-Z])/g, " $1").trim();
+}
+
+export function isDineInOrder(o: { orderType?: string; tableId?: any }): boolean {
+  if (o.tableId) return true;
+  if (!o.orderType) return true;
+  const norm = o.orderType.toLowerCase().replace(/[-_\s]/g, "");
+  return norm.includes("dine");
+}
+
+export function isTakeawayOrder(o: { orderType?: string }): boolean {
+  if (!o.orderType) return false;
+  const norm = o.orderType.toLowerCase().replace(/[-_\s]/g, "");
+  return norm.includes("takeaway") || norm.includes("pickup");
+}
+
+export function isDeliveryOrder(o: { orderType?: string }): boolean {
+  if (!o.orderType) return false;
+  const norm = o.orderType.toLowerCase().replace(/[-_\s]/g, "");
+  return norm.includes("delivery");
+}
+
 export async function provideOverviewTotalOrders(
   ctx: QueryCtx,
   org: Doc<"organizations">,
@@ -426,17 +465,9 @@ export async function provideOverviewTotalOrders(
   );
   const validPrev = prevOrders.filter((o) => isValidActiveOrCompletedOrder(o));
 
-  const dineInCount = validCurrent.filter((o) =>
-    (o.orderType || "").toLowerCase().includes("dine"),
-  ).length;
-  const takeawayCount = validCurrent.filter(
-    (o) =>
-      (o.orderType || "").toLowerCase().includes("takeaway") ||
-      (o.orderType || "").toLowerCase().includes("take_away"),
-  ).length;
-  const deliveryCount = validCurrent.filter((o) =>
-    (o.orderType || "").toLowerCase().includes("delivery"),
-  ).length;
+  const dineInCount = validCurrent.filter((o) => isDineInOrder(o)).length;
+  const takeawayCount = validCurrent.filter((o) => isTakeawayOrder(o)).length;
+  const deliveryCount = validCurrent.filter((o) => isDeliveryOrder(o)).length;
 
   const delta = computePercentageDelta(validCurrent.length, validPrev.length);
 
@@ -719,46 +750,76 @@ export async function provideOverviewOrderStatusDistribution(
     options.toTimestamp,
   );
 
+  const isToday = (options.dateRangePreset || "today") === "today";
+  const toBoundary = isToday ? Math.max(timeRange.to, Date.now() + 120000) : timeRange.to;
+
   const orders = await ctx.db
     .query("orders")
     .withIndex("by_created_at", (q) =>
       q
         .eq("organizationId", org._id)
         .gte("createdAt", timeRange.from)
-        .lte("createdAt", timeRange.to),
+        .lte("createdAt", toBoundary),
     )
     .collect();
 
-  const statusCounts: Record<string, number> = {
-    "Completed / Served": 0,
-    "In Kitchen / Prep": 0,
-    "Ready at Pass": 0,
-    "Pending / Unpaid": 0,
-    "Cancelled / Void": 0,
-  };
+  // Load configured Order Processes from Settings -> Order Process (organizationOrderProcesses)
+  const rawProcesses = await ctx.db
+    .query("organizationOrderProcesses")
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+
+  // Sequence stages first (e.g. Accepted, In progress, Ready to deliver, Delivered), then non-sequence (Created, Modify, Reject)
+  rawProcesses.sort((a, b) => {
+    if (a.isSequence && !b.isSequence) return -1;
+    if (!a.isSequence && b.isSequence) return 1;
+    return a.position - b.position;
+  });
+
+  const defaultPalette = ["#262626", "#EA9C1B", "#FC8019", "#219653", "#7c604f", "#8b5cf6", "#ef4444"];
+  const statusCounts: Record<string, { count: number; color: string }> = {};
+
+  for (let i = 0; i < rawProcesses.length; i++) {
+    const p = rawProcesses[i];
+    statusCounts[p.name] = {
+      count: 0,
+      color: p.processColor || defaultPalette[i % defaultPalette.length],
+    };
+  }
 
   for (const o of orders) {
     if (o.isRejected) {
-      statusCounts["Cancelled / Void"]++;
-    } else if (
-      o.isCompleted ||
-      o.orderStatusName === "Completed" ||
-      o.orderStatusName === "Delivered"
-    ) {
-      statusCounts["Completed / Served"]++;
-    } else if (o.orderStatusName?.toLowerCase().includes("ready")) {
-      statusCounts["Ready at Pass"]++;
-    } else if (o.paymentStatus === "Pending") {
-      statusCounts["Pending / Unpaid"]++;
+      if (!statusCounts["Reject"]) {
+        statusCounts["Reject"] = { count: 0, color: "#ef4444" };
+      }
+      statusCounts["Reject"].count++;
+      continue;
+    }
+
+    // Match by process ID or by process name from Settings -> Order Process
+    const matchingProc = rawProcesses.find(
+      (p) =>
+        (o.orderStatusId && p._id === o.orderStatusId) ||
+        p.name.toLowerCase().trim() === (o.orderStatusName || "").toLowerCase().trim(),
+    );
+
+    if (matchingProc) {
+      statusCounts[matchingProc.name].count++;
     } else {
-      statusCounts["In Kitchen / Prep"]++;
+      const fallbackName = o.orderStatusName || (o.isCompleted ? "Delivered" : "Accepted");
+      if (!statusCounts[fallbackName]) {
+        statusCounts[fallbackName] = { count: 0, color: "#645d58" };
+      }
+      statusCounts[fallbackName].count++;
     }
   }
 
-  const statusSeries = Object.entries(statusCounts).map(([label, value]) => ({
+  const statusSeries = Object.entries(statusCounts).map(([label, meta]) => ({
     label,
-    value,
+    value: meta.count,
+    color: meta.color,
   }));
+
   res.chart = {
     chartType: "donut",
     type: "donut",
@@ -777,7 +838,9 @@ export async function provideOverviewOrderStatusDistribution(
     secondaryMetrics: statusSeries,
   };
 
-  res.summary = statusCounts;
+  res.summary = Object.fromEntries(
+    Object.entries(statusCounts).map(([k, v]) => [k, v.count]),
+  );
 
   return res;
 }
@@ -877,32 +940,65 @@ export async function provideOrdersLiveFeed(
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
 
-  const orders = await ctx.db
-    .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .order("desc")
-    .take(15);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
-  const rows = orders.map((o) => ({
-    id: o._id,
-    orderNumber: o.orderNumber
-      ? `#${o.orderNumber}`
-      : `#ORD-${o._id.slice(-4)}`,
-    type: o.orderType || "DineIn",
-    customer: o.customerName || `${o.orderType || "Order"} Guest`,
-    amount: formatCurrencyPaise(
-      o.totalAmount || 0,
-      res.currencySymbol,
-      res.currency,
-    ),
-    status: o.isRejected
-      ? "Cancelled"
-      : o.isCompleted
-        ? "Completed"
-        : o.orderStatusName || "Active",
-    payment: o.paymentStatus || "Pending",
-    time: formatRelativeTime(o.createdAt, now),
-  }));
+  const rangeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
+    .collect();
+
+  let targetOrders = rangeOrders.filter((o) => isValidActiveOrCompletedOrder(o));
+  if (targetOrders.length === 0 && (!options.dateRangePreset || options.dateRangePreset === "today")) {
+    const recent = await ctx.db
+      .query("orders")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .order("desc")
+      .take(15);
+    targetOrders = recent.filter((o) => isValidActiveOrCompletedOrder(o));
+  }
+
+  targetOrders.sort((a, b) => b.createdAt - a.createdAt);
+  const displayOrders = targetOrders.slice(0, 15);
+
+  const rows = displayOrders.map((o) => {
+    const rawNumber = o.orderNumber || (o._id ? `ORD-${o._id.slice(-4)}` : "ORD-001");
+    const displayNum = rawNumber.startsWith("#") ? rawNumber : `#${rawNumber}`;
+    const tokenDisplay = o.tokenNumber ? `Token #${o.tokenNumber}` : "";
+    const typeLabel = formatOrderTypeLabel(o.orderType);
+
+    return {
+      id: o._id,
+      orderNumber: displayNum,
+      orderNum: displayNum,
+      ticket: displayNum,
+      tokenNumber: tokenDisplay,
+      type: typeLabel,
+      customer: o.customerName || (typeLabel === "Dine-In" ? "Dine-In Guest" : "Guest Customer"),
+      amount: formatCurrencyPaise(
+        o.totalAmount || 0,
+        res.currencySymbol,
+        res.currency,
+        res.country,
+      ),
+      status: o.isRejected
+        ? "Cancelled"
+        : o.isCompleted
+          ? "Completed"
+          : o.orderStatusName || "Accepted",
+      payment: o.paymentStatus || "Pending",
+      time: formatRelativeTime(o.createdAt, now),
+    };
+  });
 
   res.table = {
     columns: [
@@ -919,19 +1015,25 @@ export async function provideOrdersLiveFeed(
   };
 
   res.liveFeed = {
-    items: orders.map((o) => ({
-      id: o._id,
-      title: o.orderNumber ? `#${o.orderNumber}` : `#ORD-${o._id.slice(-4)}`,
-      subtitle: `${o.orderType || "Order"}${o.customerName ? ` • ${o.customerName}` : ""}`,
-      badge: {
-        text: o.isRejected
-          ? "Cancelled"
-          : o.isCompleted
-            ? "Completed"
-            : o.orderStatusName || "Active",
-      },
-      timeAgo: formatRelativeTime(o.createdAt, now),
-    })),
+    items: displayOrders.map((o) => {
+      const rawNumber = o.orderNumber || (o._id ? `ORD-${o._id.slice(-4)}` : "ORD-001");
+      const displayNum = rawNumber.startsWith("#") ? rawNumber : `#${rawNumber}`;
+      const typeLabel = formatOrderTypeLabel(o.orderType);
+
+      return {
+        id: o._id,
+        title: displayNum,
+        subtitle: `${typeLabel}${o.customerName ? ` • ${o.customerName}` : ""}${o.tableId ? " • Table" : ""}`,
+        badge: {
+          text: o.isRejected
+            ? "Cancelled"
+            : o.isCompleted
+              ? "Completed"
+              : o.orderStatusName || "Accepted",
+        },
+        timeAgo: formatRelativeTime(o.createdAt, now),
+      };
+    }),
   };
 
   return res;
@@ -944,7 +1046,8 @@ export async function provideOrdersHighValue(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const thresholdPaise = options.configuration?.thresholdPaise || 200000; // default ₹2,000.00 / $20.00
+  // Default threshold: ₹1,000.00 (100,000 paise) so orders exceeding ₹1,000 appear immediately
+  const thresholdPaise = options.configuration?.thresholdPaise || 100000;
   const timeRange = calculateDateRangeBoundaries(
     options.dateRangePreset || "today",
     res.timeZone,
@@ -957,42 +1060,59 @@ export async function provideOrdersHighValue(
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
+  // If today is selected, ensure boundary includes current day orders regardless of server/client clock drift
+  const isToday = !options.dateRangePreset || options.dateRangePreset === "today";
+  const toBoundary = isToday ? Math.max(timeRange.to, Date.now() + 300000) : timeRange.to;
+
   // Filter within selected time range if applicable
   const inRangeOrders = orders.filter(
-    (o) => o.createdAt >= timeRange.from && o.createdAt <= timeRange.to,
+    (o) => o.createdAt >= timeRange.from && o.createdAt <= toBoundary,
   );
   // Fall back to all-time top if no orders in specific slice to keep view informative
   const pool = inRangeOrders.length > 0 ? inRangeOrders : orders;
 
   const highValue = pool
-    .filter(
-      (o) =>
-        isValidActiveOrCompletedOrder(o) &&
-        (o.totalAmount || 0) >= thresholdPaise,
-    )
+    .filter((o) => {
+      if (!isValidActiveOrCompletedOrder(o)) return false;
+      const amt = o.totalAmount || 0;
+      // Handle both minor units (paise >= 100000) and major units (rupees >= 1000)
+      const amtPaise = amt > 0 && amt < 5000 ? Math.round(amt * 100) : amt;
+      return amtPaise >= thresholdPaise;
+    })
     .sort((a, b) => (b.totalAmount || 0) - (a.totalAmount || 0))
     .slice(0, 10);
 
-  const rows = highValue.map((o) => ({
-    id: o._id,
-    orderNumber: o.orderNumber
-      ? `#${o.orderNumber}`
-      : `#ORD-${o._id.slice(-4)}`,
-    customer: o.customerName || "VIP Guest",
-    label: `${o.orderType || "Order"} #${o.orderNumber || o._id.slice(-4)}${o.customerName ? ` • ${o.customerName}` : ""}`,
-    channel: o.orderType || "DineIn",
-    amount: formatCurrencyPaise(
-      o.totalAmount || 0,
-      res.currencySymbol,
-      res.currency,
-    ),
-    paymentStatus: o.paymentStatus || "Paid",
-    status: o.isRejected
-      ? "Cancelled"
-      : o.isCompleted
-        ? "Completed"
-        : o.orderStatusName || "Active",
-  }));
+  const rows = highValue.map((o) => {
+    const rawNumber = o.orderNumber || (o._id ? `ORD-${o._id.slice(-4)}` : "ORD-001");
+    const displayNum = rawNumber.startsWith("#") ? rawNumber : `#${rawNumber}`;
+    const typeLabel = formatOrderTypeLabel(o.orderType);
+
+    return {
+      id: o._id,
+      orderNumber: displayNum,
+      orderNum: displayNum,
+      ticket: displayNum,
+      customer: o.customerName || (typeLabel === "Dine-In" ? "Dine-In Guest" : "Guest Customer"),
+      label: `${typeLabel} ${displayNum}${o.customerName ? ` • ${o.customerName}` : ""}`,
+      channel: typeLabel,
+      amount: formatCurrencyPaise(
+        o.totalAmount || 0,
+        res.currencySymbol,
+        res.currency,
+        res.country,
+      ),
+      paymentStatus: o.paymentStatus || "Paid",
+      status: o.isRejected
+        ? "Cancelled"
+        : o.isCompleted
+          ? "Completed"
+          : o.orderStatusName || "Active",
+      statusBg:
+        o.paymentStatus === "Paid"
+          ? "bg-emerald-50 text-emerald-800"
+          : "bg-[#eee8e2] text-stone-800",
+    };
+  });
 
   res.table = {
     columns: [
@@ -1018,27 +1138,64 @@ export async function provideOrdersDelayedAlerts(
   const res = createBaseResponse(widgetDef, org, options);
   const thresholdMinutes = options.configuration?.delayMinutes || 15;
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
-  const active = await ctx.db
+  const allOrders = await ctx.db
     .query("orders")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const delayed = active.filter((o) => {
+  // Only consider orders placed within the selected timeframe (e.g. today's service)
+  const isToday = (options.dateRangePreset || "today") === "today";
+  const toBoundary = isToday ? Math.max(timeRange.to, now + 120000) : timeRange.to;
+
+  const currentShiftOrders = allOrders.filter(
+    (o) => o.createdAt >= timeRange.from && o.createdAt <= toBoundary,
+  );
+
+  // Filter for ACTIVE unfulfilled tickets exceeding kitchen/service turnaround SLA
+  const delayed = currentShiftOrders.filter((o) => {
+    // If order is completed, delivered, or rejected, it is NOT delayed
     if (o.isCompleted || o.isRejected) return false;
+    const st = (o.orderStatusName || "").toLowerCase().trim();
+    if (
+      st.includes("deliver") ||
+      st.includes("complete") ||
+      st.includes("served") ||
+      st.includes("cancel") ||
+      st.includes("reject") ||
+      st.includes("settle")
+    ) {
+      return false;
+    }
     const elapsedMinutes = Math.floor((now - o.createdAt) / 60000);
     return elapsedMinutes > thresholdMinutes;
   });
 
-  const delayedItems = delayed.slice(0, 3).map((o) => ({
-    id: o._id,
-    orderNumber: o.orderNumber
-      ? `#${o.orderNumber}`
-      : `#ORD-${o._id.slice(-4)}`,
-    label: `${o.orderType || "Order"} #${o.orderNumber || o._id.slice(-4)}${o.customerName ? ` • ${o.customerName}` : ""}`,
-    elapsedMinutes: Math.floor((now - o.createdAt) / 60000),
-    station: "Kitchen Pass",
-  }));
+  const delayedItems = delayed.slice(0, 5).map((o) => {
+    const rawNumber = o.orderNumber || (o._id ? `ORD-${o._id.slice(-4)}` : "ORD-001");
+    const displayNum = rawNumber.startsWith("#") ? rawNumber : `#${rawNumber}`;
+    const elapsedMinutes = Math.floor((now - o.createdAt) / 60000);
+    const typeLabel = formatOrderTypeLabel(o.orderType);
+
+    return {
+      id: o._id,
+      orderNumber: displayNum,
+      orderNum: displayNum,
+      ticket: displayNum,
+      label: `${typeLabel}${o.customerName ? ` • ${o.customerName}` : ""}${o.tableId ? " • Table" : ""}`,
+      delay: `+${Math.max(1, elapsedMinutes - thresholdMinutes)}m Over`,
+      elapsed: `${elapsedMinutes}m ago`,
+      elapsedMinutes,
+      station: "Kitchen Pass",
+      note: `Kitchen turnaround exceeded ${thresholdMinutes}m SLA target`,
+    };
+  });
 
   res.alert = {
     count: delayed.length,
@@ -1048,14 +1205,26 @@ export async function provideOrdersDelayedAlerts(
     title:
       delayed.length > 0
         ? `${delayed.length} Orders Delayed Beyond SLA`
-        : "All Orders Within Service Target",
+        : "All Orders Within SLA Target",
     message:
       delayed.length > 0
         ? `Highest elapsed time: ${Math.floor((now - Math.min(...delayed.map((d) => d.createdAt))) / 60000)} mins`
-        : "Average kitchen ticket turn is running smoothly.",
+        : "All active kitchen and floor orders are within turnaround SLA.",
     actionUrl: "/orders?filter=delayed",
     delayedOrders: delayedItems,
+    items: delayedItems,
   } as any;
+
+  res.table = {
+    columns: [
+      { key: "orderNumber", label: "Order #" },
+      { key: "label", label: "Channel / Table" },
+      { key: "elapsed", label: "Elapsed Time" },
+      { key: "delay", label: "SLA Overrun" },
+    ],
+    rows: delayedItems,
+    totalCount: delayed.length,
+  };
 
   return res;
 }
@@ -1129,40 +1298,57 @@ export async function provideOrdersVolumeOverTime(
       totalValue: validOrders.length,
     } as any;
   } else {
-    const hourlyLabels = [
-      "11a",
-      "12p",
-      "1p",
-      "2p",
-      "3p",
-      "4p",
-      "5p",
-      "6p",
-      "7p",
-      "8p",
-      "9p",
-      "10p",
+    // Single Day (e.g. Today): Group by hour in the store's configured timezone
+    const hourFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: res.timeZone,
+      hour: "numeric",
+      hour12: false,
+    });
+
+    const displayHours = [
+      { hour24: 9, label: "9a" },
+      { hour24: 10, label: "10a" },
+      { hour24: 11, label: "11a" },
+      { hour24: 12, label: "12p" },
+      { hour24: 13, label: "1p" },
+      { hour24: 14, label: "2p" },
+      { hour24: 15, label: "3p" },
+      { hour24: 16, label: "4p" },
+      { hour24: 17, label: "5p" },
+      { hour24: 18, label: "6p" },
+      { hour24: 19, label: "7p" },
+      { hour24: 20, label: "8p" },
+      { hour24: 21, label: "9p" },
+      { hour24: 22, label: "10p" },
+      { hour24: 23, label: "11p" },
     ];
-    const hourlyCounts: Record<string, number> = {};
-    for (const h of hourlyLabels) {
-      hourlyCounts[h] = 0;
+
+    const hourlyCounts: Record<number, number> = {};
+    for (const h of displayHours) {
+      hourlyCounts[h.hour24] = 0;
     }
 
     for (const o of validOrders) {
-      const d = new Date(o.createdAt);
-      const h = d.getHours();
-      const hStr = h % 12 === 0 ? "12" : String(h % 12);
-      const ampm = h < 12 ? "a" : "p";
-      const key = `${hStr}${ampm}`;
-      if (hourlyCounts[key] !== undefined) {
-        hourlyCounts[key]++;
+      try {
+        const hourStr = hourFormatter.format(new Date(o.createdAt));
+        const hourNum = parseInt(hourStr, 10);
+        if (hourlyCounts[hourNum] !== undefined) {
+          hourlyCounts[hourNum]++;
+        } else {
+          hourlyCounts[hourNum] = (hourlyCounts[hourNum] || 0) + 1;
+        }
+      } catch {
+        const d = new Date(o.createdAt);
+        const h = d.getHours();
+        if (hourlyCounts[h] !== undefined) hourlyCounts[h]++;
       }
     }
 
-    const series = hourlyLabels.map((label) => ({
-      label,
-      value: hourlyCounts[label] || 0,
+    const series = displayHours.map((h) => ({
+      label: h.label,
+      value: hourlyCounts[h.hour24] || 0,
     }));
+
     const peak = series.reduce((max, s) => (s.value > max.value ? s : max), {
       label: "N/A",
       value: 0,
@@ -2546,7 +2732,7 @@ export async function provideCashierShiftSummary(
       res.currencySymbol,
       res.currency,
     ),
-    drawerVariance: "+₹ 0.00 Balanced",
+    drawerVariance: `+${res.currencySymbol} 0.00 Balanced`,
   };
 
   res.kpi = {
@@ -3534,8 +3720,8 @@ export async function provideCaptainPerformanceSummary(
         name: "Rahul S.",
         sales:
           totalRev > 0
-            ? `₹${Math.round(totalRev * 0.42).toLocaleString()}`
-            : "₹0",
+            ? `${res.currencySymbol} ${formatCurrencyAmount(Math.round(totalRev * 0.42), res.country)}`
+            : `${res.currencySymbol} 0.00`,
         turnRate: completed.length > 0 ? "94% SLA" : "--",
         rank: "Top Performer",
       },
@@ -3543,8 +3729,8 @@ export async function provideCaptainPerformanceSummary(
         name: "Amina K.",
         sales:
           totalRev > 0
-            ? `₹${Math.round(totalRev * 0.35).toLocaleString()}`
-            : "₹0",
+            ? `${res.currencySymbol} ${formatCurrencyAmount(Math.round(totalRev * 0.35), res.country)}`
+            : `${res.currencySymbol} 0.00`,
         turnRate: completed.length > 0 ? "91% SLA" : "--",
         rank: "Pacing Lead",
       },
@@ -3552,8 +3738,8 @@ export async function provideCaptainPerformanceSummary(
         name: "Vikram P.",
         sales:
           totalRev > 0
-            ? `₹${Math.round(totalRev * 0.23).toLocaleString()}`
-            : "₹0",
+            ? `${res.currencySymbol} ${formatCurrencyAmount(Math.round(totalRev * 0.23), res.country)}`
+            : `${res.currencySymbol} 0.00`,
         turnRate: completed.length > 0 ? "88% SLA" : "--",
         rank: "Standard",
       },
@@ -3579,11 +3765,7 @@ export async function provideCaptainOrderActivity(
 
   const sorted = orders.sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
   const events = sorted.map((o, idx) => {
-    const d = new Date(o.createdAt);
-    const timeStr = d.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const timeStr = formatStoreTime(o.createdAt, res.timeZone, res.country);
     const captains = ["Amina Khan", "Rahul Sharma", "Vikram Patel"];
     const captainName = captains[idx % captains.length];
     return {
@@ -3786,11 +3968,7 @@ export async function provideQueueRecentCallouts(
     .slice(0, 6);
 
   const calledList = sorted.map((q) => {
-    const d = new Date(q.updatedAt || q.createdAt);
-    const timeStr = d.toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    const timeStr = formatStoreTime(q.updatedAt || q.createdAt, res.timeZone, res.country);
     let statusText = "Seated at Table T-04";
     let statusColor = "text-emerald-700";
     if (q.queueStatus.includes("cancel") || q.queueStatus === "rejected") {
@@ -4364,7 +4542,7 @@ export async function provideMenuModifierPopularity(
       priceAddon:
         data.pricePaise > 0
           ? `+${formatCurrencyPaise(data.pricePaise, res.currencySymbol, res.currency)}`
-          : "+₹0",
+          : `+${res.currencySymbol} 0.00`,
     }));
 
   const chartData = sortedMods.map((m) => ({ label: m.name, value: m.hits }));
@@ -4589,7 +4767,7 @@ export async function provideCustomersReturning(
     rawRetention: retentionPercent,
     visitsCount: `${returningPatrons.length} Visits`,
     rawVisits: returningPatrons.length,
-    redeemedFormatted: "₹ 48,200 redeemed",
+    redeemedFormatted: `${res.currencySymbol} ${formatCurrencyAmount(48200, res.country)} redeemed`,
     avgFrequency: "3.2x / mo",
   };
 
@@ -4865,7 +5043,7 @@ export async function provideSurveysAverageRating(
   if (numericRatings.length === 0) {
     res.kpi = {
       value: 0,
-      displayValue: "0.00 / 5.0 ★",
+      displayValue: "No ratings yet",
       label: "Overall Guest Satisfaction",
       trend: "neutral",
       secondaryMetrics: [
@@ -4975,7 +5153,7 @@ export async function provideSurveysSatisfactionTrends(
   const scoresByDay: Record<string, { sum: number; count: number }> = {};
   for (const a of answers) {
     if (a.numericValue === undefined) continue;
-    const dateStr = new Date(a.createdAt).toLocaleDateString("en-US", {
+    const dateStr = formatStoreDate(a.createdAt, res.country, res.timeZone, {
       month: "short",
       day: "numeric",
     });
@@ -5334,7 +5512,11 @@ export async function provideReportsHourlyVelocity(
   widgetDef: WidgetDefinition,
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
-  return provideOverviewSalesTrends(ctx, org, widgetDef, options);
+  const res = await provideOrdersVolumeOverTime(ctx, org, widgetDef, options);
+  return {
+    ...res,
+    widgetId: widgetDef.widgetId,
+  };
 }
 
 export async function provideReportsPaymentReconciliation(

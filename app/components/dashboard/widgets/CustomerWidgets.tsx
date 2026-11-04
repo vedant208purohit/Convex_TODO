@@ -4,6 +4,7 @@ import React from "react";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 interface WidgetProps {
   organizationId: Id<"organizations">;
@@ -178,9 +179,10 @@ export function CustomerReturningWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
   const retentionPercent = summary.retentionPercent ?? "0%";
   const visitsCount = summary.visitsCount ?? "0 Visits";
-  const redeemedFormatted = summary.redeemedFormatted ?? "₹ 48,200 redeemed";
+  const redeemedFormatted = summary.redeemedFormatted ?? `${formatPriceWithSymbol(48200, currencySymbol)} redeemed`;
   const avgFrequency = summary.avgFrequency ?? "3.2x / mo";
 
   return (

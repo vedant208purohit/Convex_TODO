@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { getCurrencyForCountry, formatCurrencyAmount } from "../lib/constants/countries";
 
 // ==========================================
 // 1. WIDGET CATEGORIES & TYPES
@@ -207,6 +208,7 @@ export interface WidgetDataResponse {
   timeZone: string;
   currency: string;
   currencySymbol: string;
+  country?: string;
   isAvailable: boolean;
   unavailableReason?: string;
   appliedFilters: {
@@ -292,17 +294,31 @@ export function validateWidgetConfiguration(
 export function resolveStoreCurrency(org?: {
   defaultCurrency?: string;
   defaultCurrencySymbol?: string;
+  currencyCode?: string;
+  currencySymbol?: string;
   country?: string;
 } | null): { currency: string; currencySymbol: string } {
   if (!org) {
     return { currency: "USD", currencySymbol: "$" };
   }
-  const code = (org.defaultCurrency || "").trim().toUpperCase();
-  const symbol = (org.defaultCurrencySymbol || "").trim();
+  const code = (org.defaultCurrency || org.currencyCode || "").trim().toUpperCase();
+  const symbol = (org.defaultCurrencySymbol || org.currencySymbol || "").trim();
 
   if (code && symbol) {
     return { currency: code, currencySymbol: symbol };
   }
+
+  // Dynamically resolve currency definition from countries.ts
+  if (org.country) {
+    const meta = getCurrencyForCountry(org.country);
+    if (meta && meta.code) {
+      return {
+        currency: code || meta.code,
+        currencySymbol: symbol || meta.symbol,
+      };
+    }
+  }
+
   if (code === "INR" || symbol === "₹") {
     return { currency: "INR", currencySymbol: "₹" };
   }
@@ -319,17 +335,6 @@ export function resolveStoreCurrency(org?: {
     return { currency: "AED", currencySymbol: "AED" };
   }
 
-  const country = (org.country || "").trim().toLowerCase();
-  if (country === "india" || country === "in") {
-    return { currency: code || "INR", currencySymbol: symbol || "₹" };
-  }
-  if (country === "united states" || country === "usa" || country === "us") {
-    return { currency: code || "USD", currencySymbol: symbol || "$" };
-  }
-  if (country === "united arab emirates" || country === "uae") {
-    return { currency: code || "AED", currencySymbol: symbol || "AED" };
-  }
-
   return {
     currency: code || "USD",
     currencySymbol: symbol || "$",
@@ -339,19 +344,13 @@ export function resolveStoreCurrency(org?: {
 export function formatCurrencyPaise(
   paise: number,
   symbol?: string,
-  currencyCode?: string
+  currencyCode?: string,
+  country?: string
 ): string {
   const amount = (paise || 0) / 100;
   const sym = symbol !== undefined ? symbol : "₹";
-  const locale = (currencyCode || "").toUpperCase() === "INR" ? "en-IN" : "en-US";
-  try {
-    return `${sym} ${amount.toLocaleString(locale, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  } catch {
-    return `${sym} ${amount.toFixed(2)}`;
-  }
+  const formatted = formatCurrencyAmount(amount, country || (currencyCode === "INR" ? "India" : undefined));
+  return `${sym} ${formatted}`;
 }
 
 export function computePercentageDelta(

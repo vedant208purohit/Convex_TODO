@@ -45,15 +45,32 @@ import {
   SURVEY_CATALOG_WIDGETS,
   renderSurveyDrawerCard,
 } from "./drawerCards/SurveyDrawerCards";
+import {
+  OVERVIEW_CATALOG_WIDGETS,
+  renderOverviewDrawerCard,
+} from "./drawerCards/OverviewDrawerCards";
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   organizationId: Id<"organizations">;
   placedWidgetIds: Set<string>;
-  placements?: Array<{ widgetId: string; gridRow: number; gridCol: number; width: number }>;
+  placements?: Array<{
+    widgetId: string;
+    gridRow: number;
+    gridCol: number;
+    width: number;
+  }>;
   onAddWidget: (widgetId: string, defaultWidth?: number) => void;
-  dateRangePreset?: "today" | "yesterday" | "last_7_days" | "last_30_days" | "this_month" | "last_month" | "custom" | string;
+  dateRangePreset?:
+    | "today"
+    | "yesterday"
+    | "last_7_days"
+    | "last_30_days"
+    | "this_month"
+    | "last_month"
+    | "custom"
+    | string;
   fromTimestamp?: number;
   toTimestamp?: number;
 }
@@ -73,85 +90,81 @@ const MODULE_CATEGORIES: ModuleCategory[] = [
     name: "Overview",
     icon: "grid_view",
     count: 8,
-    description: "High-level restaurant health, real-time sales trends, table turns, and guest metrics.",
+    description:
+      "High-level restaurant health, real-time sales trends, table turns, and guest metrics.",
   },
   {
     id: "Orders",
     name: "Orders",
     icon: "receipt_long",
-    count: 12,
-    description: "Monitor order volume, status, fulfilment, and orders that need attention. Curate the live station ledger to reflect kitchen and dining floor tempo.",
+    count: 6,
+    description:
+      "Monitor order volume, status, fulfilment, and orders that need attention. Curate the live station ledger to reflect kitchen and dining floor tempo.",
   },
   {
     id: "Workstation",
     name: "Workstation",
     icon: "desktop_windows",
     count: 8,
-    description: "Terminal telemetry, hardware peripherals, offline queues, and local sync latency.",
+    description:
+      "Terminal telemetry, hardware peripherals, offline queues, and local sync latency.",
   },
   {
     id: "KDS",
     name: "KDS (Kitchen)",
     icon: "soup_kitchen",
-    count: 12,
+    count: 6,
     tag: "CONFIGURABLE STATIONS",
-    description: "Kitchen display line tempo, cook times, prep station routing, and bottleneck alerts.",
+    description:
+      "Kitchen display line tempo, cook times, prep station routing, and bottleneck alerts.",
   },
   {
     id: "Cashier",
     name: "Cashier",
     icon: "point_of_sale",
     count: 8,
-    description: "Drawer cash reconciliation, tip distributions, payment method breakdowns, and refunds.",
+    description:
+      "Drawer cash reconciliation, tip distributions, payment method breakdowns, and refunds.",
   },
   {
     id: "Captain",
     name: "Captain",
     icon: "table_restaurant",
     count: 7,
-    description: "Floor section occupancy, waiter assignment pacing, turnaround times, and VIP covers.",
+    description:
+      "Floor section occupancy, waiter assignment pacing, turnaround times, and VIP covers.",
   },
   {
     id: "Queue",
     name: "Queue",
     icon: "people_alt",
     count: 6,
-    description: "Guest waitlist flow, estimated seat times, no-show latency, and queue abandonment.",
+    description:
+      "Guest waitlist flow, estimated seat times, no-show latency, and queue abandonment.",
   },
   {
     id: "Menu",
     name: "Menu",
     icon: "restaurant_menu",
     count: 8,
-    description: "Item popularity, 86'd inventory counts, modifier attachment, and margin analysis.",
-  },
-  {
-    id: "Inventory",
-    name: "Inventory",
-    icon: "inventory_2",
-    count: 7,
-    description: "Critical ingredient depletion, minimum threshold warnings, and wastage tracking.",
-  },
-  {
-    id: "Reports",
-    name: "Reports",
-    icon: "query_stats",
-    count: 8,
-    description: "Consolidated sales velocities, hourly cover reports, and ledger exports.",
+    description:
+      "Item popularity, 86'd inventory counts, modifier attachment, and margin analysis.",
   },
   {
     id: "Customers",
     name: "Customers",
     icon: "contacts",
     count: 6,
-    description: "Guest loyalty tiers, average lifetime value, repeat frequency, and dining folios.",
+    description:
+      "Guest loyalty tiers, average lifetime value, repeat frequency, and dining folios.",
   },
   {
     id: "Surveys",
     name: "Surveys",
     icon: "rate_review",
     count: 6,
-    description: "Guest CSAT feedback, NPS score trajectory, table review streams, and service escalation alerts.",
+    description:
+      "Guest CSAT feedback, NPS score trajectory, table review streams, and service escalation alerts.",
   },
 ];
 
@@ -194,7 +207,8 @@ const ORDERS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Live Orders Feed",
     type: "LIVE",
     typeBadgeBg: "bg-[#fde9dc] text-[#9b4419]",
-    description: "See incoming orders and their current status in real time without opening the full Orders screen.",
+    description:
+      "See incoming orders and their current status in real time without opening the full Orders screen.",
     defaultWidth: 6,
   },
   {
@@ -205,7 +219,8 @@ const ORDERS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Order Status Breakdown",
     type: "CHART",
     typeBadgeBg: "bg-[#ece6e0] text-stone-700",
-    description: "Understand the distribution of orders by status across Dine-In, Delivery, and Takeaway.",
+    description:
+      "Understand the distribution of orders by status across Dine-In, Delivery, and Takeaway.",
     defaultWidth: 6,
   },
   {
@@ -215,7 +230,8 @@ const ORDERS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Top Orders by Value",
     type: "TABLE",
     typeBadgeBg: "bg-[#ece6e0] text-stone-700",
-    description: "Track highest-value dining folios and banquet orders in real time.",
+    description:
+      "Track highest-value dining folios and banquet orders in real time.",
     defaultWidth: 6,
   },
   {
@@ -225,7 +241,8 @@ const ORDERS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Delayed Orders Alert",
     type: "ALERT",
     typeBadgeBg: "bg-[#fce8e6] text-[#b3261e]",
-    description: "Identify orders that exceed configured service and preparation time thresholds.",
+    description:
+      "Identify orders that exceed configured service and preparation time thresholds.",
     defaultWidth: 6,
   },
   {
@@ -235,7 +252,8 @@ const ORDERS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Orders Over Time",
     type: "CHART",
     typeBadgeBg: "bg-[#ece6e0] text-stone-700",
-    description: "Identify changes in order volume and dispatch pacing throughout service shifts.",
+    description:
+      "Identify changes in order volume and dispatch pacing throughout service shifts.",
     defaultWidth: 6,
   },
 ];
@@ -249,7 +267,8 @@ const KDS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Live Kitchen Orders",
     type: "LIVE",
     typeBadgeBg: "bg-black text-white",
-    description: "Monitor active kitchen orders across all stations in real time.",
+    description:
+      "Monitor active kitchen orders across all stations in real time.",
     defaultWidth: 6,
   },
   {
@@ -259,7 +278,8 @@ const KDS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Pending Kitchen Orders",
     type: "KPI",
     typeBadgeBg: "bg-[#eae1da] text-[#6a635e]",
-    description: "See how many orders are waiting for kitchen processing and ticket fire.",
+    description:
+      "See how many orders are waiting for kitchen processing and ticket fire.",
     defaultWidth: 4,
   },
   {
@@ -269,7 +289,8 @@ const KDS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Specific KDS Station",
     type: "CONFIGURABLE",
     typeBadgeBg: "bg-[#e9e1dd] text-[#4d4541]",
-    description: "Monitor a selected kitchen display station (e.g. Clay Oven, Grill, Beverage, Dessert).",
+    description:
+      "Monitor a selected kitchen display station (e.g. Clay Oven, Grill, Beverage, Dessert).",
     defaultWidth: 4,
   },
   {
@@ -279,7 +300,8 @@ const KDS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Kitchen Order Status Breakdown",
     type: "CHART",
     typeBadgeBg: "bg-[#eae1da] text-[#6a635e]",
-    description: "Understand the kitchen's current workload across preparation stages.",
+    description:
+      "Understand the kitchen's current workload across preparation stages.",
     defaultWidth: 6,
   },
   {
@@ -289,7 +311,8 @@ const KDS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Average Kitchen Prep Time",
     type: "KPI",
     typeBadgeBg: "bg-[#eae1da] text-[#6a635e]",
-    description: "Understand kitchen preparation performance against the 20-minute restaurant SLA.",
+    description:
+      "Understand kitchen preparation performance against the 20-minute restaurant SLA.",
     defaultWidth: 4,
   },
   {
@@ -299,7 +322,8 @@ const KDS_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Kitchen Delay Alerts",
     type: "ALERT",
     typeBadgeBg: "bg-[#ffdad6] text-[#ba1a1a]",
-    description: "Highlight kitchen orders that exceed the 20-minute preparation threshold.",
+    description:
+      "Highlight kitchen orders that exceed the 20-minute preparation threshold.",
     defaultWidth: 6,
   },
 ];
@@ -327,7 +351,7 @@ export function AddWidgetDrawer({
           organizationId,
           category: selectedCategory === "All" ? undefined : selectedCategory,
         }
-      : "skip"
+      : "skip",
   );
   const otherWidgets = useMemo(() => catalogQuery || [], [catalogQuery]);
 
@@ -341,151 +365,213 @@ export function AddWidgetDrawer({
 
   const totalOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_total_volume", ...queryArgs } : "skip"
+    organizationId ? { widgetId: "orders_total_volume", ...queryArgs } : "skip",
   );
   const liveOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_live_feed", ...queryArgs } : "skip"
+    organizationId ? { widgetId: "orders_live_feed", ...queryArgs } : "skip",
   );
   const statusDistributionData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_by_status", ...queryArgs } : "skip"
+    organizationId ? { widgetId: "orders_by_status", ...queryArgs } : "skip",
   );
   const highValueOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_high_value", ...queryArgs } : "skip"
+    organizationId ? { widgetId: "orders_high_value", ...queryArgs } : "skip",
   );
   const delayedOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_delayed_alerts", ...queryArgs } : "skip"
+    organizationId
+      ? { widgetId: "orders_delayed_alerts", ...queryArgs }
+      : "skip",
   );
   const ordersOverTimeData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_volume_over_time", ...queryArgs } : "skip"
+    organizationId
+      ? { widgetId: "orders_volume_over_time", ...queryArgs }
+      : "skip",
   );
 
   // Real widget telemetry for KDS parameterized by the active dashboard date range
   const kdsLiveOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS" ? { widgetId: "kds_live_orders", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "KDS"
+      ? { widgetId: "kds_live_orders", ...queryArgs }
+      : "skip",
   );
   const kdsPendingTicketsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS" ? { widgetId: "kds_pending_tickets", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "KDS"
+      ? { widgetId: "kds_pending_tickets", ...queryArgs }
+      : "skip",
   );
   const kdsStationQueueData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS" ? { widgetId: "kds_station_queue", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "KDS"
+      ? { widgetId: "kds_station_queue", ...queryArgs }
+      : "skip",
   );
   const kdsStatusBreakdownData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS" ? { widgetId: "kds_status_breakdown", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "KDS"
+      ? { widgetId: "kds_status_breakdown", ...queryArgs }
+      : "skip",
   );
   const kdsAvgPrepTimeData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS" ? { widgetId: "kds_avg_prep_time", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "KDS"
+      ? { widgetId: "kds_avg_prep_time", ...queryArgs }
+      : "skip",
   );
   const kdsDelayAlertsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS" ? { widgetId: "kds_delay_alerts", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "KDS"
+      ? { widgetId: "kds_delay_alerts", ...queryArgs }
+      : "skip",
   );
 
   // Real widget telemetry for Workstation parameterized by active date range
   const wsOrderSummaryData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_order_summary", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_order_summary", ...queryArgs }
+      : "skip",
   );
   const wsOrdersByWsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_orders_by_workstation", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_orders_by_workstation", ...queryArgs }
+      : "skip",
   );
   const wsActiveTasksData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_active_tasks", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_active_tasks", ...queryArgs }
+      : "skip",
   );
   const wsQueueData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_queue", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_queue", ...queryArgs }
+      : "skip",
   );
   const wsPrepTimeData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_prep_time", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_prep_time", ...queryArgs }
+      : "skip",
   );
   const wsDelayedOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_delayed_orders", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_delayed_orders", ...queryArgs }
+      : "skip",
   );
   const wsPerformanceData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_performance", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_performance", ...queryArgs }
+      : "skip",
   );
   const wsAvailabilityData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation" ? { widgetId: "workstation_availability", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Workstation"
+      ? { widgetId: "workstation_availability", ...queryArgs }
+      : "skip",
   );
 
   // Real widget telemetry for Captain parameterized by active date range
   const capActiveOrdersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_active_orders", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_active_orders", ...queryArgs }
+      : "skip",
   );
   const capTableServiceStatusData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_table_service_status", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_table_service_status", ...queryArgs }
+      : "skip",
   );
   const capAssignedTablesData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_assigned_tables", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_assigned_tables", ...queryArgs }
+      : "skip",
   );
   const capServiceTimeData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_service_time", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_service_time", ...queryArgs }
+      : "skip",
   );
   const capOrdersAwaitingServiceData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_orders_awaiting_service", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_orders_awaiting_service", ...queryArgs }
+      : "skip",
   );
   const capPerformanceSummaryData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_performance_summary", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_performance_summary", ...queryArgs }
+      : "skip",
   );
   const capOrderActivityData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain" ? { widgetId: "captain_order_activity", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Captain"
+      ? { widgetId: "captain_order_activity", ...queryArgs }
+      : "skip",
   );
 
   // Real widget telemetry for Menu parameterized by active date range
   const menuTopSellingData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_top_selling", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_top_selling", ...queryArgs }
+      : "skip",
   );
   const menuCategoriesData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_most_ordered_categories", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_most_ordered_categories", ...queryArgs }
+      : "skip",
   );
   const menuBestsellingData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_bestselling_items", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_bestselling_items", ...queryArgs }
+      : "skip",
   );
   const menuLowPerformingData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_low_performing", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_low_performing", ...queryArgs }
+      : "skip",
   );
   const menuAvailabilityData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_product_availability", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_product_availability", ...queryArgs }
+      : "skip",
   );
   const menuStockoutAlertsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_out_of_stock_alerts", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_out_of_stock_alerts", ...queryArgs }
+      : "skip",
   );
   const menuModifierData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_modifier_popularity", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_modifier_popularity", ...queryArgs }
+      : "skip",
   );
   const menuPerformanceData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu" ? { widgetId: "menu_performance_summary", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Menu"
+      ? { widgetId: "menu_performance_summary", ...queryArgs }
+      : "skip",
   );
 
   const menuDataMap = useMemo(() => {
@@ -513,35 +599,51 @@ export function AddWidgetDrawer({
   // Real widget telemetry for Cashier parameterized by active date range
   const cashierShiftSummaryData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_shift_summary", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_shift_summary", ...queryArgs }
+      : "skip",
   );
   const cashierTotalTxnsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_total_transactions", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_total_transactions", ...queryArgs }
+      : "skip",
   );
   const cashierCashSalesData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_cash_sales", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_cash_sales", ...queryArgs }
+      : "skip",
   );
   const cashierDigitalSalesData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_digital_sales", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_digital_sales", ...queryArgs }
+      : "skip",
   );
   const cashierPaymentBreakdownData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_payment_breakdown", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_payment_breakdown", ...queryArgs }
+      : "skip",
   );
   const cashierRefundSummaryData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_refund_summary", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_refund_summary", ...queryArgs }
+      : "skip",
   );
   const cashierTxnHistoryData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_transaction_history", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_transaction_history", ...queryArgs }
+      : "skip",
   );
   const cashierOpenSessionsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier" ? { widgetId: "cashier_open_sessions", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Cashier"
+      ? { widgetId: "cashier_open_sessions", ...queryArgs }
+      : "skip",
   );
 
   const cashierDataMap = useMemo(() => {
@@ -569,27 +671,39 @@ export function AddWidgetDrawer({
   // Real widget telemetry for Queue parameterized by active date range
   const queueLengthData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue" ? { widgetId: "queue_length", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Queue"
+      ? { widgetId: "queue_length", ...queryArgs }
+      : "skip",
   );
   const queueWaitingCustomersData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue" ? { widgetId: "queue_waiting_customers", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Queue"
+      ? { widgetId: "queue_waiting_customers", ...queryArgs }
+      : "skip",
   );
   const queueAvgWaitTimeData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue" ? { widgetId: "queue_avg_wait_time", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Queue"
+      ? { widgetId: "queue_avg_wait_time", ...queryArgs }
+      : "skip",
   );
   const queueRecentCalloutsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue" ? { widgetId: "queue_recent_callouts", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Queue"
+      ? { widgetId: "queue_recent_callouts", ...queryArgs }
+      : "skip",
   );
   const queueStatusBreakdownData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue" ? { widgetId: "queue_status_breakdown", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Queue"
+      ? { widgetId: "queue_status_breakdown", ...queryArgs }
+      : "skip",
   );
   const queueWaitTimeAlertsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue" ? { widgetId: "queue_wait_time_alerts", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Queue"
+      ? { widgetId: "queue_wait_time_alerts", ...queryArgs }
+      : "skip",
   );
 
   const queueDataMap = useMemo(() => {
@@ -613,27 +727,39 @@ export function AddWidgetDrawer({
   // Real widget telemetry for Customers parameterized by active date range
   const customersTotalData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers" ? { widgetId: "customers_total", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Customers"
+      ? { widgetId: "customers_total", ...queryArgs }
+      : "skip",
   );
   const customersNewData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers" ? { widgetId: "customers_new", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Customers"
+      ? { widgetId: "customers_new", ...queryArgs }
+      : "skip",
   );
   const customersReturningData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers" ? { widgetId: "customers_returning", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Customers"
+      ? { widgetId: "customers_returning", ...queryArgs }
+      : "skip",
   );
   const customersRecentData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers" ? { widgetId: "customers_recent", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Customers"
+      ? { widgetId: "customers_recent", ...queryArgs }
+      : "skip",
   );
   const customersMostFrequentData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers" ? { widgetId: "customers_most_frequent", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Customers"
+      ? { widgetId: "customers_most_frequent", ...queryArgs }
+      : "skip",
   );
   const customersOrderFrequencyData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers" ? { widgetId: "customers_order_frequency", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Customers"
+      ? { widgetId: "customers_order_frequency", ...queryArgs }
+      : "skip",
   );
 
   const customerDataMap = useMemo(() => {
@@ -657,27 +783,39 @@ export function AddWidgetDrawer({
   // Real widget telemetry for Surveys parameterized by active date range
   const surveysResponseCountsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys" ? { widgetId: "surveys_response_counts", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Surveys"
+      ? { widgetId: "surveys_response_counts", ...queryArgs }
+      : "skip",
   );
   const surveysAverageRatingData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys" ? { widgetId: "surveys_average_rating", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Surveys"
+      ? { widgetId: "surveys_average_rating", ...queryArgs }
+      : "skip",
   );
   const surveysRecentFeedbackData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys" ? { widgetId: "surveys_recent_feedback", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Surveys"
+      ? { widgetId: "surveys_recent_feedback", ...queryArgs }
+      : "skip",
   );
   const surveysSatisfactionTrendsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys" ? { widgetId: "surveys_satisfaction_trends", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Surveys"
+      ? { widgetId: "surveys_satisfaction_trends", ...queryArgs }
+      : "skip",
   );
   const surveysLowRatingAlertsData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys" ? { widgetId: "surveys_low_rating_alerts", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Surveys"
+      ? { widgetId: "surveys_low_rating_alerts", ...queryArgs }
+      : "skip",
   );
   const surveysResponseRatesData = useQuery(
     api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys" ? { widgetId: "surveys_response_rates", ...queryArgs } : "skip"
+    organizationId && selectedCategory === "Surveys"
+      ? { widgetId: "surveys_response_rates", ...queryArgs }
+      : "skip",
   );
 
   const surveyDataMap = useMemo(() => {
@@ -701,6 +839,62 @@ export function AddWidgetDrawer({
     surveysResponseRatesData,
   ]);
 
+  // Real widget telemetry for Overview parameterized by active date range
+  const ovNetRevenueData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_net_revenue", ...queryArgs } : "skip"
+  );
+  const ovTotalOrdersData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_total_orders", ...queryArgs } : "skip"
+  );
+  const ovAovData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_average_order_value", ...queryArgs } : "skip"
+  );
+  const ovActiveOrdersData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_active_orders", ...queryArgs } : "skip"
+  );
+  const ovPendingOrdersData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_pending_orders", ...queryArgs } : "skip"
+  );
+  const ovSalesTrendsData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_sales_trends", ...queryArgs } : "skip"
+  );
+  const ovOrderStatusData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_order_status_distribution", ...queryArgs } : "skip"
+  );
+  const ovBusinessSummaryData = useQuery(
+    api.dashboards.getWidgetData,
+    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_business_summary", ...queryArgs } : "skip"
+  );
+
+  const overviewDataMap = useMemo(() => {
+    const map = new Map<string, any>();
+    map.set("overview_net_revenue", ovNetRevenueData);
+    map.set("overview_total_orders", ovTotalOrdersData);
+    map.set("overview_average_order_value", ovAovData);
+    map.set("overview_active_orders", ovActiveOrdersData);
+    map.set("overview_pending_orders", ovPendingOrdersData);
+    map.set("overview_sales_trends", ovSalesTrendsData);
+    map.set("overview_order_status_distribution", ovOrderStatusData);
+    map.set("overview_business_summary", ovBusinessSummaryData);
+    return map;
+  }, [
+    ovNetRevenueData,
+    ovTotalOrdersData,
+    ovAovData,
+    ovActiveOrdersData,
+    ovPendingOrdersData,
+    ovSalesTrendsData,
+    ovOrderStatusData,
+    ovBusinessSummaryData,
+  ]);
+
   // Placements map for slot coordinate lookup
   const placedMap = useMemo(() => {
     const map = new Map<string, { gridRow: number; gridCol: number }>();
@@ -709,6 +903,19 @@ export function AddWidgetDrawer({
     }
     return map;
   }, [placements]);
+
+  // Filter 8 Overview widgets by search
+  const filteredOverviewWidgets = useMemo(() => {
+    if (!searchQuery.trim()) return OVERVIEW_CATALOG_WIDGETS;
+    const q = searchQuery.toLowerCase();
+    return OVERVIEW_CATALOG_WIDGETS.filter(
+      (w) =>
+        w.title.toLowerCase().includes(q) ||
+        w.description.toLowerCase().includes(q) ||
+        w.categoryTrack.toLowerCase().includes(q) ||
+        w.type.toLowerCase().includes(q),
+    );
+  }, [searchQuery]);
 
   // Filter 6 Orders widgets by search
   const filteredOrdersWidgets = useMemo(() => {
@@ -719,7 +926,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -732,7 +939,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -745,7 +952,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -758,7 +965,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -771,7 +978,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -784,7 +991,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -797,7 +1004,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -810,7 +1017,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -823,7 +1030,7 @@ export function AddWidgetDrawer({
         w.title.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
         w.categoryTrack.toLowerCase().includes(q) ||
-        w.type.toLowerCase().includes(q)
+        w.type.toLowerCase().includes(q),
     );
   }, [searchQuery]);
 
@@ -835,9 +1042,17 @@ export function AddWidgetDrawer({
       (w) =>
         w.name.toLowerCase().includes(q) ||
         w.description.toLowerCase().includes(q) ||
-        w.category.toLowerCase().includes(q)
+        w.category.toLowerCase().includes(q),
     );
   }, [otherWidgets, searchQuery]);
+
+  const overviewPlacedCount = useMemo(() => {
+    let count = 0;
+    for (const w of OVERVIEW_CATALOG_WIDGETS) {
+      if (placedWidgetIds.has(w.id)) count++;
+    }
+    return count;
+  }, [placedWidgetIds]);
 
   const ordersPlacedCount = useMemo(() => {
     let count = 0;
@@ -944,7 +1159,9 @@ export function AddWidgetDrawer({
   React.useEffect(() => {
     const updateSidebarState = () => {
       if (typeof window !== "undefined") {
-        setIsMainSidebarCollapsed(localStorage.getItem("pos_main_sidebar_collapsed") === "true");
+        setIsMainSidebarCollapsed(
+          localStorage.getItem("pos_main_sidebar_collapsed") === "true",
+        );
       }
     };
     updateSidebarState();
@@ -1012,13 +1229,15 @@ export function AddWidgetDrawer({
                         >
                           {category.icon}
                         </span>
-                        <span className="text-xs font-medium leading-none">{category.name}</span>
+                        <span className="text-xs font-medium leading-none">
+                          {category.name}
+                        </span>
                       </div>
 
                       {/* Pill Badge */}
                       {isSelected ? (
                         <span className="bg-black text-white px-2 py-0.5 rounded-full text-[10px] font-bold">
-                          {category.id === "Orders" ? 12 : category.count}
+                          {category.count}
                         </span>
                       ) : (
                         <span className="text-xs text-stone-400 font-normal">
@@ -1069,7 +1288,9 @@ export function AddWidgetDrawer({
                   className="w-8 h-8 rounded-full bg-[#f0eae3] hover:bg-[#e4ddd5] text-stone-700 flex items-center justify-center transition-colors cursor-pointer"
                   title="Close Drawer"
                 >
-                  <span className="material-symbols-outlined text-[18px]">close</span>
+                  <span className="material-symbols-outlined text-[18px]">
+                    close
+                  </span>
                 </button>
               </div>
 
@@ -1091,47 +1312,51 @@ export function AddWidgetDrawer({
                 <div className="inline-flex items-center gap-2 bg-[#f0eae3] px-3 py-1 rounded-full self-start sm:self-auto shadow-xs">
                   <span className="w-1.5 h-1.5 rounded-full bg-stone-900" />
                   <span className="text-[10.5px] font-bold text-stone-800 uppercase tracking-wider">
-                    {selectedCategory === "Orders"
-                      ? "6 WIDGETS AVAILABLE"
-                      : selectedCategory === "KDS"
-                      ? "6 WIDGETS AVAILABLE"
-                      : selectedCategory === "Workstation"
+                    {selectedCategory === "Overview"
                       ? "8 WIDGETS AVAILABLE"
-                      : selectedCategory === "Captain"
-                      ? "7 WIDGETS AVAILABLE"
-                      : selectedCategory === "Menu"
-                      ? "8 WIDGETS AVAILABLE"
-                      : selectedCategory === "Cashier"
-                      ? "8 WIDGETS AVAILABLE"
-                      : selectedCategory === "Queue"
-                      ? "6 WIDGETS AVAILABLE"
-                      : selectedCategory === "Customers"
-                      ? "6 WIDGETS AVAILABLE"
-                      : selectedCategory === "Surveys"
-                      ? "6 WIDGETS AVAILABLE"
-                      : `${otherWidgets.length} WIDGETS AVAILABLE`}
+                      : selectedCategory === "Orders"
+                        ? "6 WIDGETS AVAILABLE"
+                        : selectedCategory === "KDS"
+                          ? "6 WIDGETS AVAILABLE"
+                          : selectedCategory === "Workstation"
+                            ? "8 WIDGETS AVAILABLE"
+                            : selectedCategory === "Captain"
+                              ? "7 WIDGETS AVAILABLE"
+                              : selectedCategory === "Menu"
+                                ? "8 WIDGETS AVAILABLE"
+                                : selectedCategory === "Cashier"
+                                  ? "8 WIDGETS AVAILABLE"
+                                  : selectedCategory === "Queue"
+                                    ? "6 WIDGETS AVAILABLE"
+                                    : selectedCategory === "Customers"
+                                      ? "6 WIDGETS AVAILABLE"
+                                      : selectedCategory === "Surveys"
+                                        ? "6 WIDGETS AVAILABLE"
+                                        : `${otherWidgets.length} WIDGETS AVAILABLE`}
                   </span>
                   <span className="text-stone-400 text-xs">•</span>
                   <span className="text-[10.5px] font-medium text-stone-600">
-                    {selectedCategory === "Orders"
-                      ? ordersPlacedCount
-                      : selectedCategory === "KDS"
-                      ? kdsPlacedCount
-                      : selectedCategory === "Workstation"
-                      ? workstationPlacedCount
-                      : selectedCategory === "Captain"
-                      ? captainPlacedCount
-                      : selectedCategory === "Menu"
-                      ? menuPlacedCount
-                      : selectedCategory === "Cashier"
-                      ? cashierPlacedCount
-                      : selectedCategory === "Queue"
-                      ? queuePlacedCount
-                      : selectedCategory === "Customers"
-                      ? customerPlacedCount
-                      : selectedCategory === "Surveys"
-                      ? surveyPlacedCount
-                      : otherPlacedCount}{" "}
+                    {selectedCategory === "Overview"
+                      ? overviewPlacedCount
+                      : selectedCategory === "Orders"
+                        ? ordersPlacedCount
+                        : selectedCategory === "KDS"
+                          ? kdsPlacedCount
+                          : selectedCategory === "Workstation"
+                            ? workstationPlacedCount
+                            : selectedCategory === "Captain"
+                              ? captainPlacedCount
+                              : selectedCategory === "Menu"
+                                ? menuPlacedCount
+                                : selectedCategory === "Cashier"
+                                  ? cashierPlacedCount
+                                  : selectedCategory === "Queue"
+                                    ? queuePlacedCount
+                                    : selectedCategory === "Customers"
+                                      ? customerPlacedCount
+                                      : selectedCategory === "Surveys"
+                                        ? surveyPlacedCount
+                                        : otherPlacedCount}{" "}
                     on Dashboard
                   </span>
                 </div>
@@ -1140,7 +1365,39 @@ export function AddWidgetDrawer({
 
             {/* Scrollable Content Area */}
             <div className="flex-1 overflow-y-auto px-5 sm:px-7 py-5">
-              {selectedCategory === "Orders" ? (
+              {selectedCategory === "Overview" ? (
+                /* ========================================================= */
+                /* 8 PREST OVERVIEW WIDGETS (Matches User Design Exact)      */
+                /* ========================================================= */
+                filteredOverviewWidgets.length === 0 ? (
+                  <div className="h-64 flex flex-col items-center justify-center text-center">
+                    <span className="material-symbols-outlined text-4xl text-stone-400 mb-2">
+                      search_off
+                    </span>
+                    <p className="text-stone-600 font-medium">
+                      No Overview widgets match &ldquo;{searchQuery}&rdquo;
+                    </p>
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="mt-3 text-xs text-stone-800 underline hover:text-black font-semibold cursor-pointer"
+                    >
+                      Clear Search
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {filteredOverviewWidgets.map((w) =>
+                      renderOverviewDrawerCard(
+                        w,
+                        placedWidgetIds.has(w.id),
+                        placedMap.get(w.id),
+                        () => onAddWidget(w.id, w.defaultWidth),
+                        overviewDataMap.get(w.id),
+                      ),
+                    )}
+                  </div>
+                )
+              ) : selectedCategory === "Orders" ? (
                 /* ========================================================= */
                 /* 6 PREST ORDERS WIDGETS (Matches User Design Exact)        */
                 /* ========================================================= */
@@ -1162,7 +1419,9 @@ export function AddWidgetDrawer({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Card 1: Total Orders */}
-                    {filteredOrdersWidgets.some((w) => w.id === "orders_total_volume") && (
+                    {filteredOrdersWidgets.some(
+                      (w) => w.id === "orders_total_volume",
+                    ) && (
                       <DrawerTotalOrdersCard
                         widget={ORDERS_CATALOG_WIDGETS[0]}
                         isPlaced={
@@ -1179,7 +1438,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 2: Live Orders Feed */}
-                    {filteredOrdersWidgets.some((w) => w.id === "orders_live_feed") && (
+                    {filteredOrdersWidgets.some(
+                      (w) => w.id === "orders_live_feed",
+                    ) && (
                       <DrawerLiveFeedCard
                         widget={ORDERS_CATALOG_WIDGETS[1]}
                         isPlaced={placedWidgetIds.has("orders_live_feed")}
@@ -1190,13 +1451,17 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 3: Order Status Breakdown */}
-                    {filteredOrdersWidgets.some((w) => w.id === "orders_by_status") && (
+                    {filteredOrdersWidgets.some(
+                      (w) => w.id === "orders_by_status",
+                    ) && (
                       <DrawerStatusBreakdownCard
                         widget={ORDERS_CATALOG_WIDGETS[2]}
                         isPlaced={
                           placedWidgetIds.has("orders_by_status") ||
                           placedWidgetIds.has("orders_status_distribution") ||
-                          placedWidgetIds.has("overview_order_status_distribution")
+                          placedWidgetIds.has(
+                            "overview_order_status_distribution",
+                          )
                         }
                         placement={
                           placedMap.get("orders_by_status") ||
@@ -1209,7 +1474,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 4: Top Orders by Value */}
-                    {filteredOrdersWidgets.some((w) => w.id === "orders_high_value") && (
+                    {filteredOrdersWidgets.some(
+                      (w) => w.id === "orders_high_value",
+                    ) && (
                       <DrawerHighValueCard
                         widget={ORDERS_CATALOG_WIDGETS[3]}
                         isPlaced={
@@ -1226,7 +1493,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 5: Delayed Orders Alert */}
-                    {filteredOrdersWidgets.some((w) => w.id === "orders_delayed_alerts") && (
+                    {filteredOrdersWidgets.some(
+                      (w) => w.id === "orders_delayed_alerts",
+                    ) && (
                       <DrawerDelayedOrdersCard
                         widget={ORDERS_CATALOG_WIDGETS[4]}
                         isPlaced={
@@ -1243,7 +1512,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 6: Orders Over Time */}
-                    {filteredOrdersWidgets.some((w) => w.id === "orders_volume_over_time") && (
+                    {filteredOrdersWidgets.some(
+                      (w) => w.id === "orders_volume_over_time",
+                    ) && (
                       <DrawerVolumeOverTimeCard
                         widget={ORDERS_CATALOG_WIDGETS[5]}
                         isPlaced={
@@ -1282,7 +1553,9 @@ export function AddWidgetDrawer({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Card 1: Live Kitchen Orders */}
-                    {filteredKdsWidgets.some((w) => w.id === "kds_live_orders") && (
+                    {filteredKdsWidgets.some(
+                      (w) => w.id === "kds_live_orders",
+                    ) && (
                       <DrawerKdsLiveOrdersCard
                         widget={KDS_CATALOG_WIDGETS[0]}
                         isPlaced={placedWidgetIds.has("kds_live_orders")}
@@ -1293,7 +1566,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 2: Pending Kitchen Orders */}
-                    {filteredKdsWidgets.some((w) => w.id === "kds_pending_tickets") && (
+                    {filteredKdsWidgets.some(
+                      (w) => w.id === "kds_pending_tickets",
+                    ) && (
                       <DrawerKdsPendingTicketsCard
                         widget={KDS_CATALOG_WIDGETS[1]}
                         isPlaced={placedWidgetIds.has("kds_pending_tickets")}
@@ -1304,7 +1579,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 3: Specific KDS Station */}
-                    {filteredKdsWidgets.some((w) => w.id === "kds_station_queue") && (
+                    {filteredKdsWidgets.some(
+                      (w) => w.id === "kds_station_queue",
+                    ) && (
                       <DrawerKdsStationQueueCard
                         widget={KDS_CATALOG_WIDGETS[2]}
                         isPlaced={placedWidgetIds.has("kds_station_queue")}
@@ -1315,7 +1592,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 4: Kitchen Order Status Breakdown */}
-                    {filteredKdsWidgets.some((w) => w.id === "kds_status_breakdown") && (
+                    {filteredKdsWidgets.some(
+                      (w) => w.id === "kds_status_breakdown",
+                    ) && (
                       <DrawerKdsStatusBreakdownCard
                         widget={KDS_CATALOG_WIDGETS[3]}
                         isPlaced={placedWidgetIds.has("kds_status_breakdown")}
@@ -1326,7 +1605,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 5: Average Kitchen Prep Time */}
-                    {filteredKdsWidgets.some((w) => w.id === "kds_avg_prep_time") && (
+                    {filteredKdsWidgets.some(
+                      (w) => w.id === "kds_avg_prep_time",
+                    ) && (
                       <DrawerKdsAvgPrepTimeCard
                         widget={KDS_CATALOG_WIDGETS[4]}
                         isPlaced={placedWidgetIds.has("kds_avg_prep_time")}
@@ -1337,7 +1618,9 @@ export function AddWidgetDrawer({
                     )}
 
                     {/* Card 6: Kitchen Delay Alerts */}
-                    {filteredKdsWidgets.some((w) => w.id === "kds_delay_alerts") && (
+                    {filteredKdsWidgets.some(
+                      (w) => w.id === "kds_delay_alerts",
+                    ) && (
                       <DrawerKdsDelayAlertsCard
                         widget={KDS_CATALOG_WIDGETS[5]}
                         isPlaced={placedWidgetIds.has("kds_delay_alerts")}
@@ -1370,37 +1653,57 @@ export function AddWidgetDrawer({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Card 1: Order Summary */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_order_summary") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_order_summary",
+                    ) && (
                       <DrawerWorkstationOrderSummaryCard
                         widget={WORKSTATION_CATALOG_WIDGETS[0]}
-                        isPlaced={placedWidgetIds.has("workstation_order_summary")}
+                        isPlaced={placedWidgetIds.has(
+                          "workstation_order_summary",
+                        )}
                         placement={placedMap.get("workstation_order_summary")}
-                        onAdd={() => onAddWidget("workstation_order_summary", 4)}
+                        onAdd={() =>
+                          onAddWidget("workstation_order_summary", 4)
+                        }
                         data={wsOrderSummaryData}
                       />
                     )}
                     {/* Card 2: Orders by Workstation */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_orders_by_workstation") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_orders_by_workstation",
+                    ) && (
                       <DrawerWorkstationOrdersByWorkstationCard
                         widget={WORKSTATION_CATALOG_WIDGETS[1]}
-                        isPlaced={placedWidgetIds.has("workstation_orders_by_workstation")}
-                        placement={placedMap.get("workstation_orders_by_workstation")}
-                        onAdd={() => onAddWidget("workstation_orders_by_workstation", 4)}
+                        isPlaced={placedWidgetIds.has(
+                          "workstation_orders_by_workstation",
+                        )}
+                        placement={placedMap.get(
+                          "workstation_orders_by_workstation",
+                        )}
+                        onAdd={() =>
+                          onAddWidget("workstation_orders_by_workstation", 4)
+                        }
                         data={wsOrdersByWsData}
                       />
                     )}
                     {/* Card 3: Active Tasks */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_active_tasks") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_active_tasks",
+                    ) && (
                       <DrawerWorkstationActiveTasksCard
                         widget={WORKSTATION_CATALOG_WIDGETS[2]}
-                        isPlaced={placedWidgetIds.has("workstation_active_tasks")}
+                        isPlaced={placedWidgetIds.has(
+                          "workstation_active_tasks",
+                        )}
                         placement={placedMap.get("workstation_active_tasks")}
                         onAdd={() => onAddWidget("workstation_active_tasks", 4)}
                         data={wsActiveTasksData}
                       />
                     )}
                     {/* Card 4: Workstation Queue */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_queue") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_queue",
+                    ) && (
                       <DrawerWorkstationQueueCard
                         widget={WORKSTATION_CATALOG_WIDGETS[3]}
                         isPlaced={placedWidgetIds.has("workstation_queue")}
@@ -1410,7 +1713,9 @@ export function AddWidgetDrawer({
                       />
                     )}
                     {/* Card 5: Preparation Time */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_prep_time") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_prep_time",
+                    ) && (
                       <DrawerWorkstationPrepTimeCard
                         widget={WORKSTATION_CATALOG_WIDGETS[4]}
                         isPlaced={placedWidgetIds.has("workstation_prep_time")}
@@ -1420,30 +1725,44 @@ export function AddWidgetDrawer({
                       />
                     )}
                     {/* Card 6: Delayed Orders */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_delayed_orders") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_delayed_orders",
+                    ) && (
                       <DrawerWorkstationDelayedOrdersCard
                         widget={WORKSTATION_CATALOG_WIDGETS[5]}
-                        isPlaced={placedWidgetIds.has("workstation_delayed_orders")}
+                        isPlaced={placedWidgetIds.has(
+                          "workstation_delayed_orders",
+                        )}
                         placement={placedMap.get("workstation_delayed_orders")}
-                        onAdd={() => onAddWidget("workstation_delayed_orders", 4)}
+                        onAdd={() =>
+                          onAddWidget("workstation_delayed_orders", 4)
+                        }
                         data={wsDelayedOrdersData}
                       />
                     )}
                     {/* Card 7: Workstation Performance */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_performance") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_performance",
+                    ) && (
                       <DrawerWorkstationPerformanceCard
                         widget={WORKSTATION_CATALOG_WIDGETS[6]}
-                        isPlaced={placedWidgetIds.has("workstation_performance")}
+                        isPlaced={placedWidgetIds.has(
+                          "workstation_performance",
+                        )}
                         placement={placedMap.get("workstation_performance")}
                         onAdd={() => onAddWidget("workstation_performance", 4)}
                         data={wsPerformanceData}
                       />
                     )}
                     {/* Card 8: Workstation Availability */}
-                    {filteredWorkstationWidgets.some((w) => w.id === "workstation_availability") && (
+                    {filteredWorkstationWidgets.some(
+                      (w) => w.id === "workstation_availability",
+                    ) && (
                       <DrawerWorkstationAvailabilityCard
                         widget={WORKSTATION_CATALOG_WIDGETS[7]}
-                        isPlaced={placedWidgetIds.has("workstation_availability")}
+                        isPlaced={placedWidgetIds.has(
+                          "workstation_availability",
+                        )}
                         placement={placedMap.get("workstation_availability")}
                         onAdd={() => onAddWidget("workstation_availability", 4)}
                         data={wsAvailabilityData}
@@ -1473,7 +1792,9 @@ export function AddWidgetDrawer({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {/* Card 1: Active Orders by Captain */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_active_orders") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_active_orders",
+                    ) && (
                       <DrawerCaptainActiveOrdersCard
                         widget={CAPTAIN_CATALOG_WIDGETS[0]}
                         isPlaced={placedWidgetIds.has("captain_active_orders")}
@@ -1483,27 +1804,41 @@ export function AddWidgetDrawer({
                       />
                     )}
                     {/* Card 2: Table Service Status */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_table_service_status") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_table_service_status",
+                    ) && (
                       <DrawerCaptainTableServiceStatusCard
                         widget={CAPTAIN_CATALOG_WIDGETS[1]}
-                        isPlaced={placedWidgetIds.has("captain_table_service_status")}
-                        placement={placedMap.get("captain_table_service_status")}
-                        onAdd={() => onAddWidget("captain_table_service_status", 4)}
+                        isPlaced={placedWidgetIds.has(
+                          "captain_table_service_status",
+                        )}
+                        placement={placedMap.get(
+                          "captain_table_service_status",
+                        )}
+                        onAdd={() =>
+                          onAddWidget("captain_table_service_status", 4)
+                        }
                         data={capTableServiceStatusData}
                       />
                     )}
                     {/* Card 3: Assigned Tables */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_assigned_tables") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_assigned_tables",
+                    ) && (
                       <DrawerCaptainAssignedTablesCard
                         widget={CAPTAIN_CATALOG_WIDGETS[2]}
-                        isPlaced={placedWidgetIds.has("captain_assigned_tables")}
+                        isPlaced={placedWidgetIds.has(
+                          "captain_assigned_tables",
+                        )}
                         placement={placedMap.get("captain_assigned_tables")}
                         onAdd={() => onAddWidget("captain_assigned_tables", 4)}
                         data={capAssignedTablesData}
                       />
                     )}
                     {/* Card 4: Service Time */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_service_time") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_service_time",
+                    ) && (
                       <DrawerCaptainServiceTimeCard
                         widget={CAPTAIN_CATALOG_WIDGETS[3]}
                         isPlaced={placedWidgetIds.has("captain_service_time")}
@@ -1513,27 +1848,43 @@ export function AddWidgetDrawer({
                       />
                     )}
                     {/* Card 5: Orders Awaiting Service */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_orders_awaiting_service") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_orders_awaiting_service",
+                    ) && (
                       <DrawerCaptainOrdersAwaitingServiceCard
                         widget={CAPTAIN_CATALOG_WIDGETS[4]}
-                        isPlaced={placedWidgetIds.has("captain_orders_awaiting_service")}
-                        placement={placedMap.get("captain_orders_awaiting_service")}
-                        onAdd={() => onAddWidget("captain_orders_awaiting_service", 4)}
+                        isPlaced={placedWidgetIds.has(
+                          "captain_orders_awaiting_service",
+                        )}
+                        placement={placedMap.get(
+                          "captain_orders_awaiting_service",
+                        )}
+                        onAdd={() =>
+                          onAddWidget("captain_orders_awaiting_service", 4)
+                        }
                         data={capOrdersAwaitingServiceData}
                       />
                     )}
                     {/* Card 6: Captain Performance Summary */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_performance_summary") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_performance_summary",
+                    ) && (
                       <DrawerCaptainPerformanceSummaryCard
                         widget={CAPTAIN_CATALOG_WIDGETS[5]}
-                        isPlaced={placedWidgetIds.has("captain_performance_summary")}
+                        isPlaced={placedWidgetIds.has(
+                          "captain_performance_summary",
+                        )}
                         placement={placedMap.get("captain_performance_summary")}
-                        onAdd={() => onAddWidget("captain_performance_summary", 4)}
+                        onAdd={() =>
+                          onAddWidget("captain_performance_summary", 4)
+                        }
                         data={capPerformanceSummaryData}
                       />
                     )}
                     {/* Card 7: Captain Order Activity */}
-                    {filteredCaptainWidgets.some((w) => w.id === "captain_order_activity") && (
+                    {filteredCaptainWidgets.some(
+                      (w) => w.id === "captain_order_activity",
+                    ) && (
                       <DrawerCaptainOrderActivityCard
                         widget={CAPTAIN_CATALOG_WIDGETS[6]}
                         isPlaced={placedWidgetIds.has("captain_order_activity")}
@@ -1571,8 +1922,8 @@ export function AddWidgetDrawer({
                         placedWidgetIds.has(w.id),
                         placedMap.get(w.id),
                         () => onAddWidget(w.id, w.defaultWidth),
-                        menuDataMap.get(w.id)
-                      )
+                        menuDataMap.get(w.id),
+                      ),
                     )}
                   </div>
                 )
@@ -1603,8 +1954,8 @@ export function AddWidgetDrawer({
                         placedWidgetIds.has(w.id),
                         placedMap.get(w.id),
                         () => onAddWidget(w.id, w.defaultWidth),
-                        cashierDataMap.get(w.id)
-                      )
+                        cashierDataMap.get(w.id),
+                      ),
                     )}
                   </div>
                 )
@@ -1636,7 +1987,7 @@ export function AddWidgetDrawer({
                         placement: placedMap.get(w.id),
                         onAdd: () => onAddWidget(w.id, w.defaultWidth),
                         data: queueDataMap.get(w.id),
-                      })
+                      }),
                     )}
                   </div>
                 )
@@ -1668,7 +2019,7 @@ export function AddWidgetDrawer({
                         placement: placedMap.get(w.id),
                         onAdd: () => onAddWidget(w.id, w.defaultWidth),
                         data: customerDataMap.get(w.id),
-                      })
+                      }),
                     )}
                   </div>
                 )
@@ -1700,96 +2051,102 @@ export function AddWidgetDrawer({
                         placement: placedMap.get(w.id),
                         onAdd: () => onAddWidget(w.id, w.defaultWidth),
                         data: surveyDataMap.get(w.id),
-                      })
+                      }),
                     )}
                   </div>
                 )
+              ) : /* ========================================================= */
+              /* OTHER MODULES VIEW (Overview, KDS, Cashier, etc.)         */
+              /* ========================================================= */
+              filteredOtherWidgets.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-center">
+                  <span className="material-symbols-outlined text-4xl text-stone-400 mb-2">
+                    inventory_2
+                  </span>
+                  <p className="text-stone-600 font-medium">
+                    No widgets available for &ldquo;{currentModule.name}&rdquo;
+                  </p>
+                </div>
               ) : (
-                /* ========================================================= */
-                /* OTHER MODULES VIEW (Overview, KDS, Cashier, etc.)         */
-                /* ========================================================= */
-                filteredOtherWidgets.length === 0 ? (
-                  <div className="h-64 flex flex-col items-center justify-center text-center">
-                    <span className="material-symbols-outlined text-4xl text-stone-400 mb-2">
-                      inventory_2
-                    </span>
-                    <p className="text-stone-600 font-medium">
-                      No widgets available for &ldquo;{currentModule.name}&rdquo;
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {filteredOtherWidgets.map((widget) => {
-                      const isPlaced = placedWidgetIds.has(widget.widgetId);
-                      const defaultW = widget.defaultDimensions?.width || 4;
-                      const placement = placedMap.get(widget.widgetId);
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredOtherWidgets.map((widget) => {
+                    const isPlaced = placedWidgetIds.has(widget.widgetId);
+                    const defaultW = widget.defaultDimensions?.width || 4;
+                    const placement = placedMap.get(widget.widgetId);
 
-                      return (
-                        <article
-                          key={widget.widgetId}
-                          className="bg-white rounded-xl p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group"
-                        >
-                          <div className="flex flex-col gap-3">
-                            <div className="flex items-start justify-between">
-                              <div className="flex flex-col">
-                                <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
-                                  {widget.subcategory || widget.category}
-                                </span>
-                                <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">
-                                  {widget.name}
-                                </h3>
-                              </div>
-                              <span className="text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase bg-[#ece6e0] text-stone-700">
-                                {widget.widgetType}
+                    return (
+                      <article
+                        key={widget.widgetId}
+                        className="bg-white rounded-xl p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group"
+                      >
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-start justify-between">
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+                                {widget.subcategory || widget.category}
                               </span>
+                              <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">
+                                {widget.name}
+                              </h3>
                             </div>
-
-                            <p className="text-xs text-stone-500 leading-relaxed min-h-[32px]">
-                              {widget.description}
-                            </p>
-
-                            <div className="bg-[#fcf8f5] rounded-lg p-3 flex items-center justify-between border border-[#f3ede6]">
-                              <div className="flex items-center gap-2 text-stone-700">
-                                <span className="material-symbols-outlined text-[17px] text-stone-500">
-                                  {currentModule.icon}
-                                </span>
-                                <span className="text-xs font-medium">Default: {defaultW} Cols</span>
-                              </div>
-                              <span className="text-[10px] text-stone-400 font-mono">
-                                Live Telemetry
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="pt-4 flex items-center justify-between">
-                            <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-                              {isPlaced && placement
-                                ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
-                                : `SIZE: ${defaultW} COLS`}
+                            <span className="text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase bg-[#ece6e0] text-stone-700">
+                              {widget.widgetType}
                             </span>
-                            {isPlaced ? (
-                              <button
-                                disabled
-                                className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3.5 py-1.5 rounded-full cursor-default shadow-xs"
-                              >
-                                <span>Added</span>
-                                <span className="material-symbols-outlined text-[15px]">check</span>
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => onAddWidget(widget.widgetId, defaultW)}
-                                className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
-                              >
-                                <span className="material-symbols-outlined text-[15px]">add</span>
-                                <span>Add Widget</span>
-                              </button>
-                            )}
                           </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )
+
+                          <p className="text-xs text-stone-500 leading-relaxed min-h-[32px]">
+                            {widget.description}
+                          </p>
+
+                          <div className="bg-[#fcf8f5] rounded-lg p-3 flex items-center justify-between border border-[#f3ede6]">
+                            <div className="flex items-center gap-2 text-stone-700">
+                              <span className="material-symbols-outlined text-[17px] text-stone-500">
+                                {currentModule.icon}
+                              </span>
+                              <span className="text-xs font-medium">
+                                Default: {defaultW} Cols
+                              </span>
+                            </div>
+                            <span className="text-[10px] text-stone-400 font-mono">
+                              Live Telemetry
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="pt-4 flex items-center justify-between">
+                          <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
+                            {isPlaced && placement
+                              ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+                              : `SIZE: ${defaultW} COLS`}
+                          </span>
+                          {isPlaced ? (
+                            <button
+                              disabled
+                              className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3.5 py-1.5 rounded-full cursor-default shadow-xs"
+                            >
+                              <span>Added</span>
+                              <span className="material-symbols-outlined text-[15px]">
+                                check
+                              </span>
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() =>
+                                onAddWidget(widget.widgetId, defaultW)
+                              }
+                              className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+                            >
+                              <span className="material-symbols-outlined text-[15px]">
+                                add
+                              </span>
+                              <span>Add Widget</span>
+                            </button>
+                          )}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
               )}
             </div>
 
@@ -1799,49 +2156,53 @@ export function AddWidgetDrawer({
                 <span className="text-xs sm:text-sm text-stone-600">
                   Showing{" "}
                   <strong className="text-stone-900 font-semibold">
-                    {selectedCategory === "Orders"
-                      ? filteredOrdersWidgets.length
-                      : selectedCategory === "KDS"
-                      ? filteredKdsWidgets.length
-                      : selectedCategory === "Workstation"
-                      ? filteredWorkstationWidgets.length
-                      : selectedCategory === "Captain"
-                      ? filteredCaptainWidgets.length
-                      : selectedCategory === "Menu"
-                      ? filteredMenuWidgets.length
-                      : selectedCategory === "Cashier"
-                      ? filteredCashierWidgets.length
-                      : selectedCategory === "Queue"
-                      ? filteredQueueWidgets.length
-                      : selectedCategory === "Customers"
-                      ? filteredCustomerWidgets.length
-                      : selectedCategory === "Surveys"
-                      ? filteredSurveyWidgets.length
-                      : filteredOtherWidgets.length}{" "}
+                    {selectedCategory === "Overview"
+                      ? filteredOverviewWidgets.length
+                      : selectedCategory === "Orders"
+                        ? filteredOrdersWidgets.length
+                        : selectedCategory === "KDS"
+                          ? filteredKdsWidgets.length
+                          : selectedCategory === "Workstation"
+                            ? filteredWorkstationWidgets.length
+                            : selectedCategory === "Captain"
+                              ? filteredCaptainWidgets.length
+                              : selectedCategory === "Menu"
+                                ? filteredMenuWidgets.length
+                                : selectedCategory === "Cashier"
+                                  ? filteredCashierWidgets.length
+                                  : selectedCategory === "Queue"
+                                    ? filteredQueueWidgets.length
+                                    : selectedCategory === "Customers"
+                                      ? filteredCustomerWidgets.length
+                                      : selectedCategory === "Surveys"
+                                        ? filteredSurveyWidgets.length
+                                        : filteredOtherWidgets.length}{" "}
                     widgets
                   </strong>
                 </span>
                 <span className="text-stone-400">·</span>
                 <span className="text-xs text-stone-500">
-                  {selectedCategory === "Orders"
-                    ? ordersPlacedCount
-                    : selectedCategory === "KDS"
-                    ? kdsPlacedCount
-                    : selectedCategory === "Workstation"
-                    ? workstationPlacedCount
-                    : selectedCategory === "Captain"
-                    ? captainPlacedCount
-                    : selectedCategory === "Menu"
-                    ? menuPlacedCount
-                    : selectedCategory === "Cashier"
-                    ? cashierPlacedCount
-                    : selectedCategory === "Queue"
-                    ? queuePlacedCount
-                    : selectedCategory === "Customers"
-                    ? customerPlacedCount
-                    : selectedCategory === "Surveys"
-                    ? surveyPlacedCount
-                    : otherPlacedCount}{" "}
+                  {selectedCategory === "Overview"
+                    ? overviewPlacedCount
+                    : selectedCategory === "Orders"
+                      ? ordersPlacedCount
+                      : selectedCategory === "KDS"
+                        ? kdsPlacedCount
+                        : selectedCategory === "Workstation"
+                          ? workstationPlacedCount
+                          : selectedCategory === "Captain"
+                            ? captainPlacedCount
+                            : selectedCategory === "Menu"
+                              ? menuPlacedCount
+                              : selectedCategory === "Cashier"
+                                ? cashierPlacedCount
+                                : selectedCategory === "Queue"
+                                  ? queuePlacedCount
+                                  : selectedCategory === "Customers"
+                                    ? customerPlacedCount
+                                    : selectedCategory === "Surveys"
+                                      ? surveyPlacedCount
+                                      : otherPlacedCount}{" "}
                   placed on current dashboard view
                 </span>
               </div>
@@ -1857,7 +2218,9 @@ export function AddWidgetDrawer({
                   onClick={onClose}
                   className="bg-black hover:bg-stone-800 text-white px-5 py-1.5 rounded-full text-xs font-semibold shadow-sm hover:shadow transition-all flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
-                  <span className="material-symbols-outlined text-[15px]">check</span>
+                  <span className="material-symbols-outlined text-[15px]">
+                    check
+                  </span>
                   <span>Done Adding</span>
                 </button>
               </div>
@@ -1873,16 +2236,40 @@ export function AddWidgetDrawer({
 // DRAWER CARD COMPONENTS FOR 6 ORDERS WIDGETS
 // ==========================================
 
-function DrawerTotalOrdersCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerTotalOrdersCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const count =
-    data?.kpi?.value !== undefined && data.kpi.value !== null ? data.kpi.value : 0;
+    data?.kpi?.value !== undefined && data.kpi.value !== null
+      ? data.kpi.value
+      : 0;
   const delta =
     data?.kpi?.deltaLabel ||
     (data?.kpi?.deltaPercent !== undefined
       ? `${data.kpi.deltaPercent >= 0 ? "+" : ""}${data.kpi.deltaPercent}%`
       : "+0.0%");
-  const dineInCount = data?.summary?.dineIn ?? 0;
-  const digitalCount = data?.summary?.digital ?? 0;
+  const dineInCount =
+    data?.summary?.dineIn ??
+    data?.kpi?.secondaryMetrics?.find((m: any) =>
+      String(m.label || "").toLowerCase().includes("dine"),
+    )?.value ??
+    0;
+  const digitalCount =
+    data?.summary?.digital ??
+    (Number(
+      data?.kpi?.secondaryMetrics?.find((m: any) =>
+        String(m.label || "").toLowerCase().includes("takeaway"),
+      )?.value || 0,
+    ) +
+      Number(
+        data?.kpi?.secondaryMetrics?.find((m: any) =>
+          String(m.label || "").toLowerCase().includes("delivery"),
+        )?.value || 0,
+      ));
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -1915,10 +2302,14 @@ function DrawerTotalOrdersCard({ widget, isPlaced, placement, onAdd, data }: Dra
               <span className="font-serif text-2xl sm:text-3xl text-stone-900 font-normal tracking-tight">
                 {count}
               </span>
-              <span className="text-xs font-sans text-stone-500 font-normal">Tkts</span>
+              <span className="text-xs font-sans text-stone-500 font-normal">
+                Tkts
+              </span>
             </div>
             <div className="inline-flex items-center gap-1 bg-[#ede6df] px-2 py-0.5 rounded-full text-[11px] font-semibold text-stone-800">
-              <span className="material-symbols-outlined text-[13px]">trending_up</span>
+              <span className="material-symbols-outlined text-[13px]">
+                trending_up
+              </span>
               <span>{delta}</span>
             </div>
           </div>
@@ -1964,20 +2355,29 @@ function DrawerTotalOrdersCard({ widget, isPlaced, placement, onAdd, data }: Dra
   );
 }
 
-
-function DrawerLiveFeedCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerLiveFeedCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const feedItems =
     data?.liveFeed?.items && data.liveFeed.items.length > 0
       ? data.liveFeed.items.slice(0, 3)
       : data?.table?.rows && data.table.rows.length > 0
-      ? data.table.rows.slice(0, 3).map((r: any) => ({
-          id: r.id || r._id,
-          title: r.orderNum || r.ticket || `#ORD-${String(r.id || "").slice(-4)}`,
-          subtitle: r.label || r.customer || "Table Service",
-          badge: { text: r.status || "Live" },
-          timeAgo: r.elapsed || "now",
-        }))
-      : [];
+        ? data.table.rows.slice(0, 3).map((r: any) => ({
+            id: r.id || r._id,
+            title:
+              r.orderNumber ||
+              r.orderNum ||
+              r.ticket ||
+              (r.id ? `#ORD-${String(r.id).slice(-4)}` : "#ORD-001"),
+            subtitle: r.label || r.customer || "Dine-In",
+            badge: { text: r.status || "Live" },
+            timeAgo: r.time || r.elapsed || "now",
+          }))
+        : [];
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -2006,9 +2406,15 @@ function DrawerLiveFeedCard({ widget, isPlaced, placement, onAdd, data }: Drawer
         {/* Visual Inset Preview */}
         {feedItems.length === 0 ? (
           <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col items-center justify-center min-h-[96px] text-center border border-[#f3ede6]">
-            <span className="material-symbols-outlined text-stone-400 text-xl mb-1">receipt_long</span>
-            <span className="text-xs font-medium text-stone-700">No incoming orders in this timeframe</span>
-            <span className="text-[10px] text-stone-400">Live order feed updates dynamically</span>
+            <span className="material-symbols-outlined text-stone-400 text-xl mb-1">
+              receipt_long
+            </span>
+            <span className="text-xs font-medium text-stone-700">
+              No incoming orders in this timeframe
+            </span>
+            <span className="text-[10px] text-stone-400">
+              Live order feed updates dynamically
+            </span>
           </div>
         ) : (
           <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-2 border border-[#f3ede6]">
@@ -2033,7 +2439,9 @@ function DrawerLiveFeedCard({ widget, isPlaced, placement, onAdd, data }: Drawer
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${badgeBg}`}>
+                    <span
+                      className={`text-[10px] font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${badgeBg}`}
+                    >
                       {item.badge?.text || "Cooking"}
                     </span>
                     <span className="text-[10px] text-stone-400 font-mono shrink-0 whitespace-nowrap">
@@ -2076,19 +2484,63 @@ function DrawerLiveFeedCard({ widget, isPlaced, placement, onAdd, data }: Drawer
   );
 }
 
+function DrawerStatusBreakdownCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
+  const chartItems: Array<{ label: string; value: number; color?: string }> =
+    data?.chart?.data || [];
+  const total = Number(
+    data?.chart?.totalValue ??
+    data?.kpi?.value ??
+    chartItems.reduce((sum, item) => sum + Number(item.value || 0), 0)
+  ) || 0;
 
-function DrawerStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
-  const chartItems: Array<{ label: string; value: number }> = data?.chart?.data || [];
-  const total = data?.chart?.totalValue ?? data?.kpi?.value ?? (chartItems.reduce((sum, item) => sum + Number(item.value || 0), 0));
-  const completed = chartItems.find((d) => d.label.toLowerCase().includes("complete"))?.value ?? 0;
-  const billed = chartItems.find((d) => d.label.toLowerCase().includes("bill") || d.label.toLowerCase().includes("paid"))?.value ?? 0;
-  const inPrep = chartItems.find((d) => d.label.toLowerCase().includes("prep") || d.label.toLowerCase().includes("cook"))?.value ?? 0;
-  const newOther = total > 0 ? Math.max(0, total - completed - billed - inPrep) : 0;
+  const defaultPalette = [
+    "#262626", // Accepted
+    "#EA9C1B", // In progress
+    "#FC8019", // Ready to deliver
+    "#219653", // Delivered
+    "#7c604f", // Created
+    "#8b5cf6", // Modify
+    "#ef4444", // Reject
+  ];
 
-  const compPct = total > 0 ? Math.round((completed / total) * 100) : 0;
-  const billedPct = total > 0 ? Math.round((billed / total) * 100) : 0;
-  const prepPct = total > 0 ? Math.round((inPrep / total) * 100) : 0;
-  const otherPct = total > 0 ? Math.max(0, 100 - compPct - billedPct - prepPct) : 0;
+  // Dynamic segments for SVG Donut
+  let cumulative = 0;
+  const segments =
+    total > 0
+      ? chartItems
+          .filter((d) => Number(d.value) > 0)
+          .map((d, idx) => {
+            const pct = Math.round((Number(d.value) / total) * 100);
+            const offset = cumulative;
+            cumulative += pct;
+            return {
+              label: d.label,
+              value: Number(d.value),
+              color: d.color || defaultPalette[idx % defaultPalette.length],
+              pct,
+              offset,
+            };
+          })
+      : [];
+
+  const displayItems =
+    chartItems.length > 0
+      ? [
+          ...chartItems.filter((d) => Number(d.value) > 0),
+          ...chartItems.filter((d) => Number(d.value) === 0),
+        ].slice(0, 4)
+      : [
+          { label: "Accepted", value: 0, color: "#262626" },
+          { label: "In progress", value: 0, color: "#EA9C1B" },
+          { label: "Ready to deliver", value: 0, color: "#FC8019" },
+          { label: "Delivered", value: 0, color: "#219653" },
+        ];
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -2114,61 +2566,36 @@ function DrawerStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data }:
           {widget.description}
         </p>
 
-        {/* Visual Inset Preview: Donut Chart with Legend (Optimized spacing) */}
+        {/* Visual Inset Preview: Dynamic Donut Chart with Process Legend from Settings */}
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 sm:p-3 flex items-center justify-between gap-2.5 border border-[#f3ede6]">
           {/* Donut Chart: 72x72 */}
           <div className="relative w-[72px] h-[72px] shrink-0 flex items-center justify-center">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
               {/* Background ring */}
-              <circle cx="18" cy="18" fill="none" r="14" stroke="#f0ece6" strokeWidth="4.5" />
-              {total > 0 && (
-                <>
-                  {/* Completed */}
+              <circle
+                cx="18"
+                cy="18"
+                fill="none"
+                r="14"
+                pathLength="100"
+                stroke="#f0ece6"
+                strokeWidth="4.5"
+              />
+              {total > 0 &&
+                segments.map((s, idx) => (
                   <circle
+                    key={idx}
                     cx="18"
                     cy="18"
                     fill="none"
                     r="14"
-                    stroke="#2a2522"
-                    strokeDasharray={`${compPct} 100`}
-                    strokeDashoffset="0"
+                    pathLength="100"
+                    stroke={s.color}
+                    strokeDasharray={`${s.pct} 100`}
+                    strokeDashoffset={-s.offset}
                     strokeWidth="4.5"
                   />
-                  {/* Billed */}
-                  <circle
-                    cx="18"
-                    cy="18"
-                    fill="none"
-                    r="14"
-                    stroke="#7c604f"
-                    strokeDasharray={`${billedPct} 100`}
-                    strokeDashoffset={`-${compPct}`}
-                    strokeWidth="4.5"
-                  />
-                  {/* In-Prep */}
-                  <circle
-                    cx="18"
-                    cy="18"
-                    fill="none"
-                    r="14"
-                    stroke="#b6673b"
-                    strokeDasharray={`${prepPct} 100`}
-                    strokeDashoffset={`-${compPct + billedPct}`}
-                    strokeWidth="4.5"
-                  />
-                  {/* New/Other */}
-                  <circle
-                    cx="18"
-                    cy="18"
-                    fill="none"
-                    r="14"
-                    stroke="#ded5cd"
-                    strokeDasharray={`${otherPct} 100`}
-                    strokeDashoffset={`-${compPct + billedPct + prepPct}`}
-                    strokeWidth="4.5"
-                  />
-                </>
-              )}
+                ))}
             </svg>
             <div className="absolute flex flex-col items-center justify-center text-center">
               <span className="font-serif text-base text-stone-900 font-normal leading-none">
@@ -2182,42 +2609,26 @@ function DrawerStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data }:
 
           {/* Legend list */}
           <div className="flex flex-col gap-1 flex-1 min-w-0">
-            <div className="flex items-center justify-between text-[11px] gap-1">
-              <span className="flex items-center gap-1.5 text-stone-700 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#2a2522] shrink-0" />
-                <span className="truncate">Completed</span>
-              </span>
-              <span className="font-semibold text-stone-900 font-mono shrink-0 whitespace-nowrap ml-1">
-                {completed}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] gap-1">
-              <span className="flex items-center gap-1.5 text-stone-700 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#7c604f] shrink-0" />
-                <span className="truncate">Billed</span>
-              </span>
-              <span className="font-semibold text-stone-900 font-mono shrink-0 whitespace-nowrap ml-1">
-                {billed}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] gap-1">
-              <span className="flex items-center gap-1.5 text-stone-700 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#b6673b] shrink-0" />
-                <span className="truncate">In-Prep</span>
-              </span>
-              <span className="font-semibold text-stone-900 font-mono shrink-0 whitespace-nowrap ml-1">
-                {inPrep}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-[11px] gap-1">
-              <span className="flex items-center gap-1.5 text-stone-700 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ded5cd] shrink-0" />
-                <span className="truncate whitespace-nowrap">New/Other</span>
-              </span>
-              <span className="font-semibold text-stone-900 font-mono shrink-0 whitespace-nowrap ml-1">
-                {newOther}
-              </span>
-            </div>
+            {displayItems.map((item, idx) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between text-[11px] gap-1"
+              >
+                <span className="flex items-center gap-1.5 text-stone-700 truncate">
+                  <span
+                    className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{
+                      backgroundColor:
+                        item.color || defaultPalette[idx % defaultPalette.length],
+                    }}
+                  />
+                  <span className="truncate">{item.label}</span>
+                </span>
+                <span className="font-semibold text-stone-900 font-mono shrink-0 whitespace-nowrap ml-1">
+                  {item.value}
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -2251,8 +2662,13 @@ function DrawerStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data }:
   );
 }
 
-
-function DrawerHighValueCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerHighValueCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const rows =
     data?.table?.rows && data.table.rows.length > 0
       ? data.table.rows.slice(0, 3)
@@ -2285,9 +2701,15 @@ function DrawerHighValueCard({ widget, isPlaced, placement, onAdd, data }: Drawe
         {/* Visual Inset Preview */}
         {rows.length === 0 ? (
           <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col items-center justify-center min-h-[96px] text-center border border-[#f3ede6]">
-            <span className="material-symbols-outlined text-stone-400 text-xl mb-1">payments</span>
-            <span className="text-xs font-medium text-stone-700">No high-value orders in this timeframe</span>
-            <span className="text-[10px] text-stone-400">Orders exceeding ₹1,000 appear here</span>
+            <span className="material-symbols-outlined text-stone-400 text-xl mb-1">
+              payments
+            </span>
+            <span className="text-xs font-medium text-stone-700">
+              No high-value orders in this timeframe
+            </span>
+            <span className="text-[10px] text-stone-400">
+              Orders exceeding ₹1,000 appear here
+            </span>
           </div>
         ) : (
           <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-2 border border-[#f3ede6]">
@@ -2297,12 +2719,23 @@ function DrawerHighValueCard({ widget, isPlaced, placement, onAdd, data }: Drawe
                 className="bg-white rounded-md px-2.5 py-1.5 flex items-center justify-between border border-stone-100 shadow-xs gap-1.5 min-w-0"
               >
                 <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-[11px] font-bold text-stone-900 whitespace-nowrap">{row.orderNum || row.ticket || `#ORD-${String(row.id || "").slice(-4)}`}</span>
-                  <span className="text-[10.5px] text-stone-500 truncate">{row.label || row.customer || "Dine-In"}</span>
+                  <span className="text-[11px] font-bold text-stone-900 whitespace-nowrap">
+                    {row.orderNumber ||
+                      row.orderNum ||
+                      row.ticket ||
+                      `#ORD-${String(row.id || "").slice(-4)}`}
+                  </span>
+                  <span className="text-[10.5px] text-stone-500 truncate">
+                    {row.label || row.customer || "Dine-In"}
+                  </span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[11px] font-bold text-stone-900 font-mono whitespace-nowrap">{row.amount || "₹0.00"}</span>
-                  <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${row.statusBg || "bg-[#eee8e2] text-stone-800"}`}>
+                  <span className="text-[11px] font-bold text-stone-900 font-mono whitespace-nowrap">
+                    {row.amount || "₹0.00"}
+                  </span>
+                  <span
+                    className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${row.statusBg || "bg-[#eee8e2] text-stone-800"}`}
+                  >
                     {row.status || "Paid"}
                   </span>
                 </div>
@@ -2341,10 +2774,20 @@ function DrawerHighValueCard({ widget, isPlaced, placement, onAdd, data }: Drawe
   );
 }
 
-
-function DrawerDelayedOrdersCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerDelayedOrdersCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const delayedCount = data?.alert?.count ?? data?.table?.rows?.length ?? 0;
-  const delayedOrder = data?.table?.rows?.[0];
+  const delayedOrder =
+    data?.alert?.delayedOrders?.[0] ||
+    data?.table?.rows?.[0] ||
+    data?.alert?.items?.[0];
+
+  const hasDelayedOrders = delayedCount > 0 && Boolean(delayedOrder && (delayedOrder.orderNumber || delayedOrder.orderNum || delayedOrder.ticket));
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -2372,30 +2815,50 @@ function DrawerDelayedOrdersCard({ widget, isPlaced, placement, onAdd, data }: D
 
         {/* Visual Inset Preview */}
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 border border-[#f3ede6]">
-          {delayedCount === 0 ? (
+          {!hasDelayedOrders ? (
             <div className="bg-[#f0f9f1] border border-[#cbe8cf] rounded-md p-2.5 flex flex-col items-center justify-center gap-1 text-center">
-              <span className="material-symbols-outlined text-[#256334] text-xl">check_circle</span>
-              <span className="text-xs font-bold text-[#256334]">All Orders Within SLA Target</span>
-              <span className="text-[10px] text-stone-500">0 delayed kitchen or dispatch orders</span>
+              <span className="material-symbols-outlined text-[#256334] text-xl">
+                check_circle
+              </span>
+              <span className="text-xs font-bold text-[#256334]">
+                All Orders Within SLA Target
+              </span>
+              <span className="text-[10px] text-stone-500">
+                0 delayed kitchen or dispatch orders
+              </span>
             </div>
           ) : (
             <div className="bg-[#fff4f2] border border-[#fed7d2] rounded-md p-2.5 flex flex-col gap-1.5">
               <div className="flex items-center justify-between gap-1">
                 <div className="flex items-center gap-1.5 text-[#b3261e] min-w-0">
-                  <span className="material-symbols-outlined text-[15px] shrink-0">warning</span>
-                  <span className="text-xs font-bold truncate">Order Exceeding Target</span>
+                  <span className="material-symbols-outlined text-[15px] shrink-0">
+                    warning
+                  </span>
+                  <span className="text-xs font-bold truncate">
+                    Order Exceeding Target
+                  </span>
                 </div>
                 <span className="bg-white/90 text-[#b3261e] text-[9.5px] font-bold px-1.5 py-0.5 rounded-full border border-[#fec5bd] shrink-0 whitespace-nowrap">
-                  {delayedOrder?.delay || "+10m Over"}
+                  {delayedOrder?.delay || "+15m Over"}
                 </span>
               </div>
               <div className="flex items-center justify-between pt-0.5">
-                <span className="text-xs font-semibold text-stone-900">{delayedOrder?.orderNum || "#ORD-Active"} • {delayedOrder?.label || "Floor Table"}</span>
-                <span className="text-[10.5px] text-stone-500 font-mono">{delayedOrder?.elapsed || "delayed"}</span>
+                <span className="text-xs font-semibold text-stone-900">
+                  {delayedOrder?.orderNumber || delayedOrder?.orderNum || delayedOrder?.ticket || "Delayed Ticket"} •{" "}
+                  {delayedOrder?.label || "Kitchen Pass"}
+                </span>
+                <span className="text-[10.5px] text-stone-500 font-mono">
+                  {delayedOrder?.elapsed || "delayed"}
+                </span>
               </div>
               <div className="flex items-center gap-1 text-[10.5px] text-stone-600 pt-0.5">
-                <span className="material-symbols-outlined text-[13px] shrink-0">soup_kitchen</span>
-                <span className="truncate">{delayedOrder?.note || "Kitchen station SLA threshold exceeded"}</span>
+                <span className="material-symbols-outlined text-[13px] shrink-0">
+                  soup_kitchen
+                </span>
+                <span className="truncate">
+                  {delayedOrder?.note ||
+                    "Kitchen station SLA threshold exceeded"}
+                </span>
               </div>
             </div>
           )}
@@ -2431,29 +2894,62 @@ function DrawerDelayedOrdersCard({ widget, isPlaced, placement, onAdd, data }: D
   );
 }
 
-
-function DrawerVolumeOverTimeCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerVolumeOverTimeCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const chartData = data?.chart?.data || [];
-  const maxVal = Math.max(...chartData.map((d: any) => Number(d.value) || 0), 0);
-  const hours = chartData.length > 0
-    ? chartData.slice(-7).map((d: any) => {
-        const val = Number(d.value) || 0;
-        const pct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
-        return {
-          label: d.label,
-          height: `${pct}%`,
-          isPeak: val === maxVal && maxVal > 0,
-        };
-      })
-    : [
-        { label: "11a", height: "0%", isPeak: false },
-        { label: "12p", height: "0%", isPeak: false },
-        { label: "1p", height: "0%", isPeak: false },
-        { label: "2p", height: "0%", isPeak: false },
-        { label: "7p", height: "0%", isPeak: false },
-        { label: "8p", height: "0%", isPeak: false },
-        { label: "9p", height: "0%", isPeak: false },
-      ];
+  const maxVal = Math.max(
+    ...chartData.map((d: any) => Number(d.value) || 0),
+    0,
+  );
+  let selectedItems = chartData;
+  if (chartData.length > 7) {
+    const activeIndices = chartData
+      .map((d: any, idx: number) => (Number(d.value) > 0 ? idx : -1))
+      .filter((idx: number) => idx !== -1);
+    if (activeIndices.length > 0) {
+      const minIdx = Math.max(0, Math.min(...activeIndices) - 1);
+      const maxIdx = Math.min(chartData.length, minIdx + 7);
+      const adjustedMin = Math.max(0, maxIdx - 7);
+      selectedItems = chartData.slice(adjustedMin, adjustedMin + 7);
+    } else {
+      selectedItems = [
+        chartData[1] || chartData[0],
+        chartData[3] || chartData[1],
+        chartData[5] || chartData[2],
+        chartData[7] || chartData[3],
+        chartData[9] || chartData[4],
+        chartData[11] || chartData[5],
+        chartData[13] || chartData[6],
+      ].filter(Boolean);
+    }
+  }
+
+  const hours =
+    selectedItems.length > 0
+      ? selectedItems.map((d: any) => {
+          const val = Number(d.value) || 0;
+          const pct = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
+          return {
+            label: d.label,
+            height: `${Math.max(pct, val > 0 ? 15 : 0)}%`,
+            isPeak: val === maxVal && maxVal > 0,
+            value: val,
+          };
+        })
+      : [
+          { label: "10a", height: "0%", isPeak: false, value: 0 },
+          { label: "12p", height: "0%", isPeak: false, value: 0 },
+          { label: "2p", height: "0%", isPeak: false, value: 0 },
+          { label: "4p", height: "0%", isPeak: false, value: 0 },
+          { label: "6p", height: "0%", isPeak: false, value: 0 },
+          { label: "8p", height: "0%", isPeak: false, value: 0 },
+          { label: "10p", height: "0%", isPeak: false, value: 0 },
+        ];
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -2480,29 +2976,40 @@ function DrawerVolumeOverTimeCard({ widget, isPlaced, placement, onAdd, data }: 
         </p>
 
         {/* Visual Inset Preview: Bar Histogram */}
-        <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col justify-between border border-[#f3ede6]">
-          <div className="flex items-end justify-between h-18 px-1 gap-1.5">
-            {hours.map((h: any, i: number) => (
-              <div key={i} className="flex flex-col items-center gap-1 flex-1 h-full justify-end group/bar">
+        <div className="bg-[#fcf8f5] rounded-lg p-2.5 sm:p-3 flex flex-col justify-between border border-[#f3ede6] overflow-hidden">
+          <div className="flex items-end justify-between h-18 px-0.5 gap-1 w-full overflow-hidden">
+            {hours.map((h: any, i: number) => {
+              const cleanLabel = String(h.label || "").replace(/^0/, "");
+              return (
                 <div
-                  className={`w-full rounded-t-sm transition-all ${
-                    h.isPeak ? "bg-stone-900" : "bg-[#ded6ce] group-hover/bar:bg-stone-900"
-                  }`}
-                  style={{ height: h.height }}
-                />
-                <span
-                  className={`text-[9.5px] font-sans ${
-                    h.isPeak ? "text-stone-900 font-bold" : "text-stone-400"
-                  }`}
+                  key={i}
+                  className="flex flex-col items-center gap-1 flex-1 min-w-0 h-full justify-end group/bar overflow-hidden"
                 >
-                  {h.label}
-                </span>
-              </div>
-            ))}
+                  <div
+                    className={`w-full rounded-t-sm transition-all ${
+                      h.isPeak
+                        ? "bg-stone-900"
+                        : "bg-[#ded6ce] group-hover/bar:bg-stone-900"
+                    }`}
+                    style={{ height: h.height }}
+                  />
+                  <span
+                    className={`text-[8px] sm:text-[9px] font-sans truncate text-center w-full block ${
+                      h.isPeak ? "text-stone-900 font-bold" : "text-stone-400"
+                    }`}
+                    title={cleanLabel}
+                  >
+                    {cleanLabel}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           <div className="flex items-center justify-between text-xs text-stone-600 pt-2 border-t border-stone-200/50 mt-1 gap-1">
             <span className="text-[11px] truncate">Service Velocity</span>
-            <span className="font-semibold text-stone-900 text-xs shrink-0 whitespace-nowrap">{maxVal > 0 ? `${maxVal} tkts/peak` : "0 tkts/hr"}</span>
+            <span className="font-semibold text-stone-900 text-xs shrink-0 whitespace-nowrap">
+              {maxVal > 0 ? `${maxVal} ${maxVal === 1 ? "tkt" : "tkts"}/peak` : "0 tkts/hr"}
+            </span>
           </div>
         </div>
       </div>
@@ -2540,11 +3047,22 @@ function DrawerVolumeOverTimeCard({ widget, isPlaced, placement, onAdd, data }: 
 // DRAWER CARD COMPONENTS FOR 6 KDS WIDGETS
 // ==========================================
 
-function DrawerKdsLiveOrdersCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerKdsLiveOrdersCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const summary = data?.summary || {};
-  const capacityPercent = typeof summary.capacityPercent === "number" ? summary.capacityPercent : 0;
-  const inPrepCount = typeof summary.inPrepCount === "number" ? summary.inPrepCount : (data?.kpi?.value || 0);
-  const atPassCount = typeof summary.atPassCount === "number" ? summary.atPassCount : 0;
+  const capacityPercent =
+    typeof summary.capacityPercent === "number" ? summary.capacityPercent : 0;
+  const inPrepCount =
+    typeof summary.inPrepCount === "number"
+      ? summary.inPrepCount
+      : data?.kpi?.value || 0;
+  const atPassCount =
+    typeof summary.atPassCount === "number" ? summary.atPassCount : 0;
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -2558,7 +3076,9 @@ function DrawerKdsLiveOrdersCard({ widget, isPlaced, placement, onAdd, data }: D
               {widget.title}
             </h3>
           </div>
-          <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}>
+          <span
+            className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}
+          >
             {widget.type}
           </span>
         </div>
@@ -2569,27 +3089,47 @@ function DrawerKdsLiveOrdersCard({ widget, isPlaced, placement, onAdd, data }: D
 
         <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-2.5 border border-[#f3ede6]">
           <div className="flex items-center justify-between text-stone-900">
-            <span className="text-[11px] uppercase tracking-wider font-semibold text-stone-600">Workstation Traffic</span>
-            <span className="text-xs font-semibold">{capacityPercent > 0 ? `${capacityPercent}% Capacity` : "Normal Pace"}</span>
+            <span className="text-[11px] uppercase tracking-wider font-semibold text-stone-600">
+              Workstation Traffic
+            </span>
+            <span className="text-xs font-semibold">
+              {capacityPercent > 0
+                ? `${capacityPercent}% Capacity`
+                : "Normal Pace"}
+            </span>
           </div>
 
           <div className="w-full h-1.5 bg-[#eae2d9] rounded-full overflow-hidden">
             <div
               className="h-full bg-stone-900 rounded-full transition-all duration-700"
-              style={{ width: `${Math.max(4, Math.min(100, capacityPercent))}%` }}
+              style={{
+                width: `${Math.max(4, Math.min(100, capacityPercent))}%`,
+              }}
             />
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-1">
             <div className="bg-white p-2 rounded-lg flex flex-col border border-stone-100">
-              <span className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">In Prep</span>
-              <span className="font-serif text-xl text-stone-900 mt-0.5 font-normal">{String(inPrepCount).padStart(2, "0")}</span>
-              <span className="text-[10.5px] text-stone-400">Active tickets</span>
+              <span className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">
+                In Prep
+              </span>
+              <span className="font-serif text-xl text-stone-900 mt-0.5 font-normal">
+                {String(inPrepCount).padStart(2, "0")}
+              </span>
+              <span className="text-[10.5px] text-stone-400">
+                Active tickets
+              </span>
             </div>
             <div className="bg-white p-2 rounded-lg flex flex-col border border-stone-100">
-              <span className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">At Pass</span>
-              <span className="font-serif text-xl text-stone-900 mt-0.5 font-normal">{String(atPassCount).padStart(2, "0")}</span>
-              <span className="text-[10.5px] text-stone-400">Ready to serve</span>
+              <span className="text-[10px] text-stone-500 uppercase tracking-wider font-semibold">
+                At Pass
+              </span>
+              <span className="font-serif text-xl text-stone-900 mt-0.5 font-normal">
+                {String(atPassCount).padStart(2, "0")}
+              </span>
+              <span className="text-[10.5px] text-stone-400">
+                Ready to serve
+              </span>
             </div>
           </div>
         </div>
@@ -2597,15 +3137,23 @@ function DrawerKdsLiveOrdersCard({ widget, isPlaced, placement, onAdd, data }: D
 
       <div className="pt-4 flex items-center justify-between">
         <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-          {isPlaced && placement ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}` : "LAYOUT: 2×2 SLATE"}
+          {isPlaced && placement
+            ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+            : "LAYOUT: 2×2 SLATE"}
         </span>
         {isPlaced ? (
-          <button disabled className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs"
+          >
             <span>Added</span>
             <span className="material-symbols-outlined text-[15px]">check</span>
           </button>
         ) : (
-          <button onClick={onAdd} className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95">
+          <button
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+          >
             <span className="material-symbols-outlined text-[15px]">add</span>
             <span>Add Widget</span>
           </button>
@@ -2615,9 +3163,18 @@ function DrawerKdsLiveOrdersCard({ widget, isPlaced, placement, onAdd, data }: D
   );
 }
 
-function DrawerKdsPendingTicketsCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerKdsPendingTicketsCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const summary = data?.summary || {};
-  const pendingCount = typeof summary.pendingCount === "number" ? summary.pendingCount : (data?.kpi?.value || 0);
+  const pendingCount =
+    typeof summary.pendingCount === "number"
+      ? summary.pendingCount
+      : data?.kpi?.value || 0;
   const oldestElapsed = summary.oldestElapsed || "--";
   const attentionRequired = summary.statusTag === "Attention";
 
@@ -2633,7 +3190,9 @@ function DrawerKdsPendingTicketsCard({ widget, isPlaced, placement, onAdd, data 
               {widget.title}
             </h3>
           </div>
-          <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}>
+          <span
+            className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}
+          >
             {widget.type}
           </span>
         </div>
@@ -2645,36 +3204,56 @@ function DrawerKdsPendingTicketsCard({ widget, isPlaced, placement, onAdd, data 
         <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col justify-between gap-3 border border-[#f3ede6]">
           <div className="flex items-start justify-between">
             <div>
-              <span className="font-serif text-3xl sm:text-4xl text-stone-900 font-normal leading-none">{pendingCount}</span>
-              <p className="text-[10.5px] uppercase tracking-wider font-semibold text-stone-500 mt-1">Tickets Pending Fire</p>
+              <span className="font-serif text-3xl sm:text-4xl text-stone-900 font-normal leading-none">
+                {pendingCount}
+              </span>
+              <p className="text-[10.5px] uppercase tracking-wider font-semibold text-stone-500 mt-1">
+                Tickets Pending Fire
+              </p>
             </div>
-            <div className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 ${attentionRequired ? "bg-[#fed7aa] text-[#9a3412]" : "bg-white text-stone-600 border border-stone-200"}`}>
-              <span className={`w-1.5 h-1.5 rounded-full ${attentionRequired ? "bg-[#ea580c]" : "bg-stone-900"}`} />
+            <div
+              className={`px-2 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1 ${attentionRequired ? "bg-[#fed7aa] text-[#9a3412]" : "bg-white text-stone-600 border border-stone-200"}`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${attentionRequired ? "bg-[#ea580c]" : "bg-stone-900"}`}
+              />
               {attentionRequired ? "Attention" : "Optimal"}
             </div>
           </div>
 
           <div className="bg-white p-2 rounded-lg flex items-center justify-between border border-stone-100">
             <div className="flex items-center gap-1.5 text-stone-600">
-              <span className="material-symbols-outlined text-[16px] text-stone-400">history</span>
+              <span className="material-symbols-outlined text-[16px] text-stone-400">
+                history
+              </span>
               <span className="text-xs">Oldest in buffer</span>
             </div>
-            <span className="text-xs font-semibold text-stone-900">{oldestElapsed}</span>
+            <span className="text-xs font-semibold text-stone-900">
+              {oldestElapsed}
+            </span>
           </div>
         </div>
       </div>
 
       <div className="pt-4 flex items-center justify-between">
         <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-          {isPlaced && placement ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}` : "LAYOUT: 1×2 MINI"}
+          {isPlaced && placement
+            ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+            : "LAYOUT: 1×2 MINI"}
         </span>
         {isPlaced ? (
-          <button disabled className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs"
+          >
             <span>Added</span>
             <span className="material-symbols-outlined text-[15px]">check</span>
           </button>
         ) : (
-          <button onClick={onAdd} className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95">
+          <button
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+          >
             <span className="material-symbols-outlined text-[15px]">add</span>
             <span>Add Widget</span>
           </button>
@@ -2684,13 +3263,23 @@ function DrawerKdsPendingTicketsCard({ widget, isPlaced, placement, onAdd, data 
   );
 }
 
-function DrawerKdsStationQueueCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerKdsStationQueueCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const summary = data?.summary || {};
   const stationName = summary.stationName || "Tandoor & Clay Oven";
   const stationTag = summary.stationTag || "Stn 02";
-  const stationTickets = typeof summary.ticketsCount === "number" ? summary.ticketsCount : (data?.kpi?.value || 0);
+  const stationTickets =
+    typeof summary.ticketsCount === "number"
+      ? summary.ticketsCount
+      : data?.kpi?.value || 0;
   const stationAvgPrep = summary.avgPrepText || "--";
-  const stationLoadPercent = typeof summary.loadPercent === "number" ? summary.loadPercent : 0;
+  const stationLoadPercent =
+    typeof summary.loadPercent === "number" ? summary.loadPercent : 0;
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -2704,7 +3293,9 @@ function DrawerKdsStationQueueCard({ widget, isPlaced, placement, onAdd, data }:
               {widget.title}
             </h3>
           </div>
-          <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}>
+          <span
+            className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}
+          >
             {widget.type}
           </span>
         </div>
@@ -2715,22 +3306,38 @@ function DrawerKdsStationQueueCard({ widget, isPlaced, placement, onAdd, data }:
 
         <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-2 border border-[#f3ede6]">
           <div className="flex items-center justify-between bg-white px-2.5 py-1.5 rounded-full border border-stone-100">
-            <span className="text-xs font-semibold text-stone-900 truncate">{stationName}</span>
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f0eae3] text-stone-600">{stationTag}</span>
+            <span className="text-xs font-semibold text-stone-900 truncate">
+              {stationName}
+            </span>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[#f0eae3] text-stone-600">
+              {stationTag}
+            </span>
           </div>
 
           <div className="grid grid-cols-3 gap-1.5 text-center pt-1">
             <div className="bg-white p-1.5 rounded-lg border border-stone-100">
-              <span className="text-[10px] text-stone-400 block font-medium">Tickets</span>
-              <span className="font-serif text-lg text-stone-900">{String(stationTickets).padStart(2, "0")}</span>
+              <span className="text-[10px] text-stone-400 block font-medium">
+                Tickets
+              </span>
+              <span className="font-serif text-lg text-stone-900">
+                {String(stationTickets).padStart(2, "0")}
+              </span>
             </div>
             <div className="bg-white p-1.5 rounded-lg border border-stone-100">
-              <span className="text-[10px] text-stone-400 block font-medium">Avg Prep</span>
-              <span className="font-serif text-lg text-stone-900">{stationAvgPrep}</span>
+              <span className="text-[10px] text-stone-400 block font-medium">
+                Avg Prep
+              </span>
+              <span className="font-serif text-lg text-stone-900">
+                {stationAvgPrep}
+              </span>
             </div>
             <div className="bg-white p-1.5 rounded-lg border border-stone-100">
-              <span className="text-[10px] text-stone-400 block font-medium">Load</span>
-              <span className="font-serif text-lg text-stone-900">{stationLoadPercent}%</span>
+              <span className="text-[10px] text-stone-400 block font-medium">
+                Load
+              </span>
+              <span className="font-serif text-lg text-stone-900">
+                {stationLoadPercent}%
+              </span>
             </div>
           </div>
         </div>
@@ -2738,16 +3345,26 @@ function DrawerKdsStationQueueCard({ widget, isPlaced, placement, onAdd, data }:
 
       <div className="pt-4 flex items-center justify-between">
         <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-          {isPlaced && placement ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}` : "CONFIG REQUIRED"}
+          {isPlaced && placement
+            ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+            : "CONFIG REQUIRED"}
         </span>
         {isPlaced ? (
-          <button disabled className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs"
+          >
             <span>Added</span>
             <span className="material-symbols-outlined text-[15px]">check</span>
           </button>
         ) : (
-          <button onClick={onAdd} className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95">
-            <span className="material-symbols-outlined text-[15px]">settings</span>
+          <button
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+          >
+            <span className="material-symbols-outlined text-[15px]">
+              settings
+            </span>
             <span>Configure & Add</span>
           </button>
         )}
@@ -2756,13 +3373,22 @@ function DrawerKdsStationQueueCard({ widget, isPlaced, placement, onAdd, data }:
   );
 }
 
-function DrawerKdsStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerKdsStatusBreakdownCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const summary = data?.summary || {};
   const bInPrep = typeof summary.inPrep === "number" ? summary.inPrep : 0;
   const bReady = typeof summary.ready === "number" ? summary.ready : 0;
   const bHeld = typeof summary.held === "number" ? summary.held : 0;
   const bOverdue = typeof summary.overdue === "number" ? summary.overdue : 0;
-  const bTotal = typeof summary.total === "number" ? summary.total : (bInPrep + bReady + bHeld + bOverdue);
+  const bTotal =
+    typeof summary.total === "number"
+      ? summary.total
+      : bInPrep + bReady + bHeld + bOverdue;
 
   const donutInPrep = bTotal > 0 ? (bInPrep / bTotal) * 88 : 0;
   const donutReady = bTotal > 0 ? (bReady / bTotal) * 88 : 0;
@@ -2781,7 +3407,9 @@ function DrawerKdsStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data
               {widget.title}
             </h3>
           </div>
-          <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}>
+          <span
+            className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}
+          >
             {widget.type}
           </span>
         </div>
@@ -2793,37 +3421,96 @@ function DrawerKdsStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data
         <div className="bg-[#fcf8f5] rounded-lg p-3 flex items-center justify-between gap-3 border border-[#f3ede6]">
           <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-              <circle className="stroke-[#eae2d9]" cx="18" cy="18" fill="none" r="14" strokeWidth="3.5" />
+              <circle
+                className="stroke-[#eae2d9]"
+                cx="18"
+                cy="18"
+                fill="none"
+                r="14"
+                strokeWidth="3.5"
+              />
               {bTotal > 0 ? (
                 <>
-                  <circle className="stroke-stone-900" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${donutInPrep} 88`} strokeDashoffset="0" strokeWidth="3.5" />
-                  <circle className="stroke-stone-600" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${donutReady} 88`} strokeDashoffset={`-${donutInPrep}`} strokeWidth="3.5" />
-                  <circle className="stroke-stone-400" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${donutHeld} 88`} strokeDashoffset={`-${donutInPrep + donutReady}`} strokeWidth="3.5" />
-                  <circle className="stroke-red-600" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${donutOverdue} 88`} strokeDashoffset={`-${donutInPrep + donutReady + donutHeld}`} strokeWidth="3.5" />
+                  <circle
+                    className="stroke-stone-900"
+                    cx="18"
+                    cy="18"
+                    fill="none"
+                    r="14"
+                    strokeDasharray={`${donutInPrep} 88`}
+                    strokeDashoffset="0"
+                    strokeWidth="3.5"
+                  />
+                  <circle
+                    className="stroke-stone-600"
+                    cx="18"
+                    cy="18"
+                    fill="none"
+                    r="14"
+                    strokeDasharray={`${donutReady} 88`}
+                    strokeDashoffset={`-${donutInPrep}`}
+                    strokeWidth="3.5"
+                  />
+                  <circle
+                    className="stroke-stone-400"
+                    cx="18"
+                    cy="18"
+                    fill="none"
+                    r="14"
+                    strokeDasharray={`${donutHeld} 88`}
+                    strokeDashoffset={`-${donutInPrep + donutReady}`}
+                    strokeWidth="3.5"
+                  />
+                  <circle
+                    className="stroke-red-600"
+                    cx="18"
+                    cy="18"
+                    fill="none"
+                    r="14"
+                    strokeDasharray={`${donutOverdue} 88`}
+                    strokeDashoffset={`-${donutInPrep + donutReady + donutHeld}`}
+                    strokeWidth="3.5"
+                  />
                 </>
               ) : null}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="font-serif text-lg text-stone-900 font-normal leading-none">{bTotal}</span>
-              <span className="text-[8px] uppercase font-bold text-stone-400">Total</span>
+              <span className="font-serif text-lg text-stone-900 font-normal leading-none">
+                {bTotal}
+              </span>
+              <span className="text-[8px] uppercase font-bold text-stone-400">
+                Total
+              </span>
             </div>
           </div>
 
           <div className="flex flex-col gap-1 w-full text-xs">
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-stone-600"><span className="w-2 h-2 rounded-full bg-stone-900" />In Prep</span>
+              <span className="flex items-center gap-1.5 text-stone-600">
+                <span className="w-2 h-2 rounded-full bg-stone-900" />
+                In Prep
+              </span>
               <span className="font-semibold text-stone-900">{bInPrep}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-stone-600"><span className="w-2 h-2 rounded-full bg-stone-600" />Ready</span>
+              <span className="flex items-center gap-1.5 text-stone-600">
+                <span className="w-2 h-2 rounded-full bg-stone-600" />
+                Ready
+              </span>
               <span className="font-semibold text-stone-900">{bReady}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 text-stone-600"><span className="w-2 h-2 rounded-full bg-stone-400" />Held</span>
+              <span className="flex items-center gap-1.5 text-stone-600">
+                <span className="w-2 h-2 rounded-full bg-stone-400" />
+                Held
+              </span>
               <span className="font-semibold text-stone-900">{bHeld}</span>
             </div>
             <div className="flex items-center justify-between text-red-600 font-medium">
-              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-600" />Overdue</span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-600" />
+                Overdue
+              </span>
               <span className="font-semibold">{bOverdue}</span>
             </div>
           </div>
@@ -2832,15 +3519,23 @@ function DrawerKdsStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data
 
       <div className="pt-4 flex items-center justify-between">
         <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-          {isPlaced && placement ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}` : "LAYOUT: 2×2 SLATE"}
+          {isPlaced && placement
+            ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+            : "LAYOUT: 2×2 SLATE"}
         </span>
         {isPlaced ? (
-          <button disabled className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs"
+          >
             <span>Added</span>
             <span className="material-symbols-outlined text-[15px]">check</span>
           </button>
         ) : (
-          <button onClick={onAdd} className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95">
+          <button
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+          >
             <span className="material-symbols-outlined text-[15px]">add</span>
             <span>Add Widget</span>
           </button>
@@ -2850,14 +3545,40 @@ function DrawerKdsStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data
   );
 }
 
-function DrawerKdsAvgPrepTimeCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerKdsAvgPrepTimeCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const summary = data?.summary || {};
-  const avgPrepMins = typeof summary.avgPrepMins === "number" ? summary.avgPrepMins : (typeof data?.kpi?.value === "number" ? data.kpi.value : 0);
-  const deltaText = summary.deltaText || (avgPrepMins > 0 ? (avgPrepMins <= 20 ? `${(20 - avgPrepMins).toFixed(1)}m faster` : `${(avgPrepMins - 20).toFixed(1)}m over SLA`) : "Within SLA");
+  const avgPrepMins =
+    typeof summary.avgPrepMins === "number"
+      ? summary.avgPrepMins
+      : typeof data?.kpi?.value === "number"
+        ? data.kpi.value
+        : 0;
+  const deltaText =
+    summary.deltaText ||
+    (avgPrepMins > 0
+      ? avgPrepMins <= 20
+        ? `${(20 - avgPrepMins).toFixed(1)}m faster`
+        : `${(avgPrepMins - 20).toFixed(1)}m over SLA`
+      : "Within SLA");
   const stationBars = summary.stationBars || [
-    { name: "Grill", prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.8).toFixed(1)}m` : "--" },
-    { name: "Clay Oven", prep: avgPrepMins > 0 ? `${(avgPrepMins * 1.05).toFixed(1)}m` : "--" },
-    { name: "Pantry", prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.4).toFixed(1)}m` : "--" },
+    {
+      name: "Grill",
+      prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.8).toFixed(1)}m` : "--",
+    },
+    {
+      name: "Clay Oven",
+      prep: avgPrepMins > 0 ? `${(avgPrepMins * 1.05).toFixed(1)}m` : "--",
+    },
+    {
+      name: "Pantry",
+      prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.4).toFixed(1)}m` : "--",
+    },
   ];
 
   return (
@@ -2872,7 +3593,9 @@ function DrawerKdsAvgPrepTimeCard({ widget, isPlaced, placement, onAdd, data }: 
               {widget.title}
             </h3>
           </div>
-          <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}>
+          <span
+            className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}
+          >
             {widget.type}
           </span>
         </div>
@@ -2884,24 +3607,32 @@ function DrawerKdsAvgPrepTimeCard({ widget, isPlaced, placement, onAdd, data }: 
         <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-2.5 border border-[#f3ede6]">
           <div className="flex items-baseline justify-between">
             <div className="flex items-baseline gap-1">
-              <span className="font-serif text-3xl text-stone-900 font-normal">{avgPrepMins > 0 ? avgPrepMins : "--"}</span>
+              <span className="font-serif text-3xl text-stone-900 font-normal">
+                {avgPrepMins > 0 ? avgPrepMins : "--"}
+              </span>
               <span className="font-serif text-sm text-stone-500">mins</span>
             </div>
             <div className="flex items-center gap-1 text-[11px] font-semibold text-stone-800 bg-[#ede6df] px-2 py-0.5 rounded-full">
-              <span className="material-symbols-outlined text-[13px]">trending_down</span>
+              <span className="material-symbols-outlined text-[13px]">
+                trending_down
+              </span>
               <span>{deltaText}</span>
             </div>
           </div>
 
           <div className="bg-white px-2.5 py-1.5 rounded-lg flex items-center justify-between text-stone-600 border border-stone-100 text-xs">
-            <span className="uppercase tracking-wider text-[10px] text-stone-400 font-semibold">Service SLA Goal</span>
+            <span className="uppercase tracking-wider text-[10px] text-stone-400 font-semibold">
+              Service SLA Goal
+            </span>
             <span className="font-semibold text-stone-900">&lt; 20.0 min</span>
           </div>
 
           <div className="flex flex-col gap-1 pt-0.5">
             <div className="flex items-center justify-between text-[10.5px] text-stone-500">
               {stationBars.map((bar: any, idx: number) => (
-                <span key={idx}>{bar.name}: {bar.prep}</span>
+                <span key={idx}>
+                  {bar.name}: {bar.prep}
+                </span>
               ))}
             </div>
             <div className="grid grid-cols-3 gap-1">
@@ -2915,15 +3646,23 @@ function DrawerKdsAvgPrepTimeCard({ widget, isPlaced, placement, onAdd, data }: 
 
       <div className="pt-4 flex items-center justify-between">
         <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-          {isPlaced && placement ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}` : "LAYOUT: 1×2 MINI"}
+          {isPlaced && placement
+            ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+            : "LAYOUT: 1×2 MINI"}
         </span>
         {isPlaced ? (
-          <button disabled className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs"
+          >
             <span>Added</span>
             <span className="material-symbols-outlined text-[15px]">check</span>
           </button>
         ) : (
-          <button onClick={onAdd} className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95">
+          <button
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+          >
             <span className="material-symbols-outlined text-[15px]">add</span>
             <span>Add Widget</span>
           </button>
@@ -2933,7 +3672,13 @@ function DrawerKdsAvgPrepTimeCard({ widget, isPlaced, placement, onAdd, data }: 
   );
 }
 
-function DrawerKdsDelayAlertsCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
+function DrawerKdsDelayAlertsCard({
+  widget,
+  isPlaced,
+  placement,
+  onAdd,
+  data,
+}: DrawerCardProps) {
   const alertCount = data?.alert?.count ?? data?.alert?.alertCount ?? 0;
   const delayedItems = data?.alert?.delayedItems || [];
   const primaryDelayed = delayedItems.length > 0 ? delayedItems[0] : null;
@@ -2950,7 +3695,9 @@ function DrawerKdsDelayAlertsCard({ widget, isPlaced, placement, onAdd, data }: 
               {widget.title}
             </h3>
           </div>
-          <span className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}>
+          <span
+            className={`text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase ${widget.typeBadgeBg}`}
+          >
             {widget.type}
           </span>
         </div>
@@ -2964,10 +3711,16 @@ function DrawerKdsDelayAlertsCard({ widget, isPlaced, placement, onAdd, data }: 
             <div className="flex items-start justify-between">
               <div>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-stone-900">{primaryDelayed.orderNumber || "#ORD-1038"}</span>
-                  <span className="text-[11px] text-stone-500">• {primaryDelayed.label || "Table T-04"}</span>
+                  <span className="text-xs font-semibold text-stone-900">
+                    {primaryDelayed.orderNumber || "#ORD-1038"}
+                  </span>
+                  <span className="text-[11px] text-stone-500">
+                    • {primaryDelayed.label || "Table T-04"}
+                  </span>
                 </div>
-                <p className="text-xs text-stone-700 font-medium mt-0.5">{primaryDelayed.station || "Kitchen Line Delay"}</p>
+                <p className="text-xs text-stone-700 font-medium mt-0.5">
+                  {primaryDelayed.station || "Kitchen Line Delay"}
+                </p>
               </div>
               <span className="px-2 py-0.5 rounded-full bg-[#b3261e] text-white text-[9.5px] font-semibold uppercase tracking-wider">
                 Expedite
@@ -2976,21 +3729,32 @@ function DrawerKdsDelayAlertsCard({ widget, isPlaced, placement, onAdd, data }: 
 
             <div className="bg-white/80 p-2 rounded flex items-center justify-between text-xs">
               <span className="text-red-700 font-medium flex items-center gap-1">
-                <span className="material-symbols-outlined text-[14px]">warning</span>
+                <span className="material-symbols-outlined text-[14px]">
+                  warning
+                </span>
                 {primaryDelayed.elapsedMinutes || 22}m elapsed
               </span>
-              <span className="text-stone-500">+{Math.max(1, (primaryDelayed.elapsedMinutes || 22) - 20)}m past SLA</span>
+              <span className="text-stone-500">
+                +{Math.max(1, (primaryDelayed.elapsedMinutes || 22) - 20)}m past
+                SLA
+              </span>
             </div>
           </div>
         ) : (
           <div className="bg-[#fcf8f5] rounded-lg p-3 flex items-center justify-between gap-2.5 border border-[#f3ede6]">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                <span className="material-symbols-outlined text-[16px]">
+                  check_circle
+                </span>
               </div>
               <div className="flex flex-col">
-                <span className="text-xs font-semibold text-stone-900">0 Delayed Orders</span>
-                <span className="text-[11px] text-stone-500">All stations within 20m SLA</span>
+                <span className="text-xs font-semibold text-stone-900">
+                  0 Delayed Orders
+                </span>
+                <span className="text-[11px] text-stone-500">
+                  All stations within 20m SLA
+                </span>
               </div>
             </div>
             <span className="px-2 py-0.5 rounded-full bg-[#f0eae3] text-stone-600 text-[10px] font-medium shrink-0">
@@ -3002,15 +3766,23 @@ function DrawerKdsDelayAlertsCard({ widget, isPlaced, placement, onAdd, data }: 
 
       <div className="pt-4 flex items-center justify-between">
         <span className="text-[10.5px] font-sans font-medium text-stone-400 uppercase tracking-wider">
-          {isPlaced && placement ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}` : "LAYOUT: 2×1 STRIP"}
+          {isPlaced && placement
+            ? `SLOT: ROW ${placement.gridRow + 1} COL ${placement.gridCol + 1}`
+            : "LAYOUT: 2×1 STRIP"}
         </span>
         {isPlaced ? (
-          <button disabled className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 bg-[#eee8e2] text-stone-700 font-medium text-xs px-3 py-1.5 rounded-full cursor-default shadow-xs"
+          >
             <span>Added</span>
             <span className="material-symbols-outlined text-[15px]">check</span>
           </button>
         ) : (
-          <button onClick={onAdd} className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95">
+          <button
+            onClick={onAdd}
+            className="inline-flex items-center gap-1 bg-black hover:bg-stone-800 text-white font-medium text-xs px-3.5 py-1.5 rounded-full shadow-sm cursor-pointer transition-transform active:scale-95"
+          >
             <span className="material-symbols-outlined text-[15px]">add</span>
             <span>Add Widget</span>
           </button>

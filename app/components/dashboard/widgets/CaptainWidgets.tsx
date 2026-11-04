@@ -4,6 +4,7 @@ import React from "react";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 interface WidgetProps {
   organizationId: Id<"organizations">;
@@ -72,7 +73,7 @@ export function CaptainActiveOrdersWidget({
                 </div>
               </div>
               <span className="font-semibold text-on-surface">
-                ₹ {c.amount.toLocaleString()}
+                {formatPriceWithSymbol(c.amount, (widgetData as any)?.currencySymbol || "$")}
               </span>
             </div>
           ))

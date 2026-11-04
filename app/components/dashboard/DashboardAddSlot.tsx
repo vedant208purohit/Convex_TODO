@@ -65,15 +65,14 @@ export function DashboardAddSlot({
         </div>
       ) : (
         <>
-          <div className="w-14 h-14 rounded-full bg-surface-container-highest group-hover:bg-primary group-hover:text-on-primary transition-all flex items-center justify-center text-on-surface shadow-sm mb-space-md">
-            <span className="material-symbols-outlined text-[28px]">add_circle</span>
+          <div className="w-12 h-12 rounded-full bg-surface-container-highest group-hover:bg-primary group-hover:text-on-primary transition-all flex items-center justify-center text-on-surface shadow-xs mb-space-sm">
+            <span className="material-symbols-outlined text-[24px]">add</span>
           </div>
-          <h3 className="font-headline-md text-headline-md text-on-surface">
-            Append New Custom Widget Slot
+          <h3 className="font-headline-sm text-headline-sm text-on-surface">
+            Add Widget to Canvas
           </h3>
-          <p className="font-body-sm text-body-sm text-secondary max-w-md mt-1 mb-space-lg">
-            Select from PREST enterprise telemetry components: Guest CRM Analytics, Captain Dispatch
-            Matrix, Real-Time P&amp;L, or IoT Oven Thermostat telemetry.
+          <p className="font-body-sm text-body-sm text-secondary max-w-md mt-0.5 mb-space-md">
+            Click to browse all widgets or quick-add a popular component below
           </p>
 
           {/* Quick insert pills */}
@@ -91,11 +90,11 @@ export function DashboardAddSlot({
             </button>
             <button
               type="button"
-              onClick={() => onQuickAdd("iot_cold_storage", 4)}
+              onClick={() => onQuickAdd("menu_top_selling", 6)}
               className="flex items-center gap-1.5 px-space-md py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface text-label-md font-label-md transition-colors shadow-sm cursor-pointer active:scale-95"
             >
-              <span className="material-symbols-outlined text-[16px]">heat_pump</span>
-              <span>+ Cold Storage IoT</span>
+              <span className="material-symbols-outlined text-[16px]">restaurant_menu</span>
+              <span>+ Top Selling Dishes</span>
             </button>
             <button
               type="button"
@@ -107,7 +106,7 @@ export function DashboardAddSlot({
             </button>
             <button
               type="button"
-              onClick={() => onQuickAdd("kds_expeditor_dispatch", 6)}
+              onClick={() => onQuickAdd("orders_live_feed", 6)}
               className="flex items-center gap-1.5 px-space-md py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface text-label-md font-label-md transition-colors shadow-sm cursor-pointer active:scale-95"
             >
               <span className="material-symbols-outlined text-[16px]">delivery_dining</span>

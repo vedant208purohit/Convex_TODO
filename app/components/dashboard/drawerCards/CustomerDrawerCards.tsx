@@ -2,6 +2,7 @@
 
 import React from "react";
 import { OrdersCatalogWidget } from "../AddWidgetDrawer";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 export interface DrawerCardProps {
   widget: OrdersCatalogWidget;
@@ -203,7 +204,8 @@ export function DrawerCustomerReturningCard({ widget, isPlaced, placement, onAdd
   const summary = data?.summary || {};
   const retentionPercent = summary.retentionPercent ?? "0%";
   const visitsCount = summary.visitsCount ?? "0 Visits";
-  const redeemedFormatted = summary.redeemedFormatted ?? "₹ 48,200 redeemed";
+  const currencySymbol = data?.currencySymbol || "$";
+  const redeemedFormatted = summary.redeemedFormatted ?? `${formatPriceWithSymbol(48200, currencySymbol)} redeemed`;
   const avgFrequency = summary.avgFrequency ?? "3.2x / mo";
 
   return (

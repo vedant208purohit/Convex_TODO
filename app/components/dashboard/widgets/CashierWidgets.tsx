@@ -4,6 +4,7 @@ import React from "react";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 interface WidgetProps {
   organizationId: Id<"organizations">;
@@ -33,6 +34,8 @@ export function CashierShiftSummaryWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -57,19 +60,19 @@ export function CashierShiftSummaryWidget({
         <div className="flex justify-between items-baseline">
           <span className="font-label-sm text-label-sm text-secondary uppercase">Gross Intake</span>
           <span className="font-label-md text-label-md font-semibold text-on-surface">
-            {summary.grossIntake || "₹ 0.00"}
+            {summary.grossIntake || zeroFormatted}
           </span>
         </div>
         <div className="flex justify-between items-baseline">
           <span className="font-label-sm text-label-sm text-secondary uppercase">Float Cash</span>
           <span className="font-label-md text-label-md text-on-surface">
-            {summary.floatCash || "₹ 0.00"}
+            {summary.floatCash || zeroFormatted}
           </span>
         </div>
         <div className="pt-space-xs flex justify-between items-baseline border-t border-outline-variant/20">
           <span className="font-label-sm text-label-sm text-secondary uppercase">Drawer Variance</span>
           <span className="font-label-sm text-label-sm font-semibold text-on-surface bg-surface-container-highest px-space-xs py-0.5 rounded-full">
-            {summary.drawerVariance || "+₹ 0.00 Balanced"}
+            {summary.drawerVariance || `+${zeroFormatted} Balanced`}
           </span>
         </div>
       </div>
@@ -100,6 +103,8 @@ export function CashierTotalTransactionsWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -161,6 +166,8 @@ export function CashierCashSalesWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -184,7 +191,7 @@ export function CashierCashSalesWidget({
       <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col justify-center my-auto min-h-[110px]">
         <div className="flex items-baseline justify-between">
           <span className="font-headline-lg text-headline-lg text-on-surface font-normal">
-            {summary.cashVolume || "₹ 0.00"}
+            {summary.cashVolume || zeroFormatted}
           </span>
           <span className="font-label-sm text-label-sm text-secondary">
             {summary.txnCount || "0 Transactions"}
@@ -229,6 +236,8 @@ export function CashierDigitalSalesWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -252,7 +261,7 @@ export function CashierDigitalSalesWidget({
       <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col justify-center my-auto min-h-[110px]">
         <div className="flex items-baseline justify-between">
           <span className="font-headline-lg text-headline-lg text-on-surface font-normal">
-            {summary.digitalVolume || "₹ 0.00"}
+            {summary.digitalVolume || zeroFormatted}
           </span>
           <span className="font-label-sm text-label-sm text-on-surface bg-surface-container-highest px-space-xs py-0.5 rounded-full">
             {summary.deltaPercent || "▲ 0.0%"}
@@ -289,6 +298,8 @@ export function CashierPaymentBreakdownWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -326,7 +337,7 @@ export function CashierPaymentBreakdownWidget({
               UPI ({summary.upiPercent || "0%"})
             </span>
             <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-              {summary.upiAmount || "₹0"}
+              {summary.upiAmount || zeroFormatted}
             </span>
           </div>
           <div className="flex justify-between items-center font-body-sm text-body-sm">
@@ -335,7 +346,7 @@ export function CashierPaymentBreakdownWidget({
               Cards ({summary.cardsPercent || "0%"})
             </span>
             <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-              {summary.cardsAmount || "₹0"}
+              {summary.cardsAmount || zeroFormatted}
             </span>
           </div>
           <div className="flex justify-between items-center font-body-sm text-body-sm">
@@ -344,7 +355,7 @@ export function CashierPaymentBreakdownWidget({
               Cash ({summary.cashPercent || "0%"})
             </span>
             <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-              {summary.cashAmount || "₹0"}
+              {summary.cashAmount || zeroFormatted}
             </span>
           </div>
         </div>
@@ -376,6 +387,8 @@ export function CashierRefundSummaryWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -399,7 +412,7 @@ export function CashierRefundSummaryWidget({
       <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-space-xs my-auto min-h-[110px] justify-center">
         <div className="flex items-baseline justify-between">
           <span className="font-headline-lg text-headline-lg text-on-surface font-normal">
-            {summary.refundTotal || "₹ 0.00"}
+            {summary.refundTotal || zeroFormatted}
           </span>
           <span className="font-label-sm text-label-sm text-secondary">
             {summary.refundCount || "0 Refunds Settled"}
@@ -408,7 +421,7 @@ export function CashierRefundSummaryWidget({
         <div className="flex justify-between items-center text-body-sm font-body-sm text-on-surface-variant">
           <span>Void Count: {summary.voidCount || "0 Items"}</span>
           <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-            {summary.voidTotal || "₹ 0.00"}
+            {summary.voidTotal || zeroFormatted}
           </span>
         </div>
         <span className="font-label-sm text-label-sm text-outline">

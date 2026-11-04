@@ -6,7 +6,6 @@ import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
 import { DashboardControlBar } from "../components/dashboard/DashboardControlBar";
-import { DashboardSubBar } from "../components/dashboard/DashboardSubBar";
 import { DashboardWidgetCard, DashboardPlacementItem } from "../components/dashboard/DashboardWidgetCard";
 import { DashboardAddSlot } from "../components/dashboard/DashboardAddSlot";
 import { DashboardPresetTray } from "../components/dashboard/DashboardPresetTray";
@@ -32,37 +31,37 @@ const DEFAULT_STAGING_PLACEMENTS: DashboardPlacementItem[] = [
     isEnabled: true,
   },
   {
-    widgetId: "iot_beverage_pour_rate",
+    widgetId: "queue_waiting_customers",
     gridRow: 1,
-    gridCol: 4,
+    gridCol: 8,
     width: 4,
     height: 1,
     displayOrder: 3,
     isEnabled: true,
   },
   {
-    widgetId: "queue_waiting_customers",
-    gridRow: 1,
-    gridCol: 8,
+    widgetId: "kds_station_queue",
+    gridRow: 2,
+    gridCol: 0,
     width: 4,
     height: 1,
     displayOrder: 4,
     isEnabled: true,
   },
   {
-    widgetId: "inventory_critical_reorder",
+    widgetId: "overview_order_status_distribution",
     gridRow: 2,
-    gridCol: 0,
-    width: 6,
+    gridCol: 4,
+    width: 4,
     height: 1,
     displayOrder: 5,
     isEnabled: true,
   },
   {
-    widgetId: "reports_hourly_velocity",
+    widgetId: "captain_active_orders",
     gridRow: 2,
-    gridCol: 6,
-    width: 6,
+    gridCol: 8,
+    width: 4,
     height: 1,
     displayOrder: 6,
     isEnabled: true,
@@ -124,6 +123,87 @@ function reorderWithPlacement(
   result.splice(insertIndex, 0, movedItem);
 
   return pack12ColumnGrid(result);
+}
+
+const WIDGET_DISPLAY_NAMES: Record<string, string> = {
+  overview_sales_trends: "Revenue & Velocity Stream",
+  overview_net_revenue: "Net Sales",
+  overview_total_orders: "Total Orders Volume",
+  overview_average_order_value: "Average Order Value",
+  overview_active_orders: "Active Orders",
+  overview_pending_orders: "Pending Orders",
+  overview_order_status_distribution: "Order Status Summary",
+  overview_business_summary: "Business Performance Summary",
+  orders_total_volume: "Total Orders",
+  orders_live_feed: "Live Orders Feed",
+  orders_by_status: "Order Status Breakdown",
+  orders_high_value: "Top Orders by Value",
+  orders_delayed_alerts: "Delayed Orders Alert",
+  orders_volume_over_time: "Orders Over Time",
+  orders_dinein_occupancy: "Floor Occupancy",
+  kds_live_orders: "Live Kitchen Orders",
+  kds_pending_tickets: "Pending Kitchen Orders",
+  kds_station_queue: "Kitchen Express KDS",
+  kds_status_breakdown: "Kitchen Status Breakdown",
+  kds_avg_prep_time: "Average Prep Time",
+  kds_delay_alerts: "Kitchen Delay Alerts",
+  workstation_order_summary: "Workstation Order Summary",
+  workstation_orders_by_workstation: "Orders by Workstation",
+  workstation_active_tasks: "Active Workstation Tasks",
+  workstation_queue: "Workstation Queue",
+  workstation_prep_time: "Preparation Time",
+  workstation_delayed_orders: "Delayed Workstation Orders",
+  workstation_performance: "Workstation Performance",
+  workstation_availability: "Terminal Telemetry & Health",
+  captain_active_orders: "Active Orders by Captain",
+  captain_table_service_status: "Table Service Status",
+  captain_assigned_tables: "Captain Floor Allocation",
+  captain_service_time: "Service Pacing Tempo",
+  captain_orders_awaiting_service: "Orders Awaiting Service",
+  captain_performance_summary: "Captain Shift Scorecard",
+  captain_order_activity: "Floor Order Audit Trail",
+  queue_length: "Queue Line Metrics",
+  queue_waiting_customers: "Waitlist & Walk-ins",
+  queue_avg_wait_time: "Average Waiting Velocity",
+  queue_recent_callouts: "Recent Queue Callouts",
+  queue_status_breakdown: "Waitlist Partitioning",
+  queue_wait_time_alerts: "Wait Time SLA Alerts",
+  menu_top_selling: "Top Velocity Dishes",
+  menu_most_ordered_categories: "Category Revenue Velocity",
+  menu_bestselling_items: "High Contribution Stars",
+  menu_low_performing: "Underperforming Menu Items",
+  menu_product_availability: "86'd Out-of-Stock Items",
+  menu_out_of_stock_alerts: "Critical 86 Depletions",
+  menu_modifier_popularity: "Modifier Attachment Velocity",
+  menu_performance_summary: "Menu Profitability Matrix",
+  cashier_shift_summary: "Cashier Shift Reconciled",
+  cashier_total_transactions: "Register Transaction Volume",
+  cashier_cash_sales: "Tendered Cash Audit",
+  cashier_digital_sales: "Digital & UPI Velocity",
+  cashier_payment_breakdown: "Settlement Mode Ledger",
+  cashier_refund_summary: "Reversals & Void Audit",
+  cashier_transaction_history: "Live Register Audit Stream",
+  cashier_open_sessions: "Active Drawer Status",
+  customers_total: "Customer Base Reach",
+  customers_new: "New Guest Acquisition",
+  customers_returning: "Returning Loyalty Rate",
+  customers_recent: "Recent Guest Register",
+  customers_most_frequent: "VIP Dining Club Members",
+  customers_order_frequency: "Dining Cohort Velocity",
+  surveys_response_counts: "Survey Engagement Volume",
+  surveys_average_rating: "Average CSAT Rating",
+  surveys_recent_feedback: "Live Guest Review Stream",
+  surveys_satisfaction_trends: "NPS & CSAT Trajectory",
+  surveys_low_rating_alerts: "Service Escalation Alerts",
+  surveys_response_rates: "Table Feedback Capture Rate",
+};
+
+function getWidgetTitle(widgetId: string): string {
+  if (WIDGET_DISPLAY_NAMES[widgetId]) return WIDGET_DISPLAY_NAMES[widgetId];
+  return widgetId
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
 export default function DashboardPage() {
@@ -225,16 +305,26 @@ export default function DashboardPage() {
     position: "before" | "after";
   } | null>(null);
 
+  // Widget Removal Confirmation Modal state
+  const [widgetToRemove, setWidgetToRemove] = useState<{ widgetId: string; title: string } | null>(null);
+
   // Track initial sync from backend
   const hasLoadedInitialPlacements = useRef(false);
 
   useEffect(() => {
+    const isValidWidget = (wId: string) =>
+      !wId.startsWith("inventory_") &&
+      !wId.startsWith("reports_") &&
+      !wId.startsWith("iot_");
+
     // Priority: draft -> saved dashboard placements -> default fallback
     if (draftData?.placements && draftData.placements.length > 0) {
-      setPlacements(draftData.placements);
+      const filtered = draftData.placements.filter((p) => isValidWidget(p.widgetId));
+      setPlacements(filtered);
       hasLoadedInitialPlacements.current = true;
     } else if (dashboardData?.placements && dashboardData.placements.length > 0) {
-      const mapped = dashboardData.placements.map((p, idx) => ({
+      const filtered = dashboardData.placements.filter((p) => isValidWidget(p.widgetId));
+      const mapped = filtered.map((p, idx) => ({
         widgetId: p.widgetId,
         gridRow: p.gridRow,
         gridCol: p.gridCol,
@@ -263,7 +353,12 @@ export default function DashboardPage() {
   // Baseline placements from saved dashboard
   const baselinePlacements = useMemo(() => {
     if (dashboardData?.placements && dashboardData.placements.length > 0) {
-      return dashboardData.placements;
+      return dashboardData.placements.filter(
+        (p) =>
+          !p.widgetId.startsWith("inventory_") &&
+          !p.widgetId.startsWith("reports_") &&
+          !p.widgetId.startsWith("iot_")
+      );
     }
     return DEFAULT_STAGING_PLACEMENTS;
   }, [dashboardData?.placements]);
@@ -316,11 +411,19 @@ export default function DashboardPage() {
   };
 
   // Actions
-  const handleRemoveWidget = (widgetId: string) => {
-    const updated = placements.filter((p) => p.widgetId !== widgetId);
+  const handleRequestRemoveWidget = (widgetId: string) => {
+    const title = getWidgetTitle(widgetId);
+    setWidgetToRemove({ widgetId, title });
+  };
+
+  const handleConfirmRemoveWidget = () => {
+    if (!widgetToRemove) return;
+    const targetId = widgetToRemove.widgetId;
+    const updated = placements.filter((p) => p.widgetId !== targetId);
     const packed = pack12ColumnGrid(updated);
     setPlacements(packed);
     persistDraft(packed);
+    setWidgetToRemove(null);
   };
 
   const handleResizeWidget = (widgetId: string, nextWidth: number) => {
@@ -562,9 +665,9 @@ export default function DashboardPage() {
       : "General Manager";
 
   return (
-    <PosShell title="Executive Workstation" subtitle="Floor Operations & Live Velocity">
+    <PosShell title="Dashboard">
       <div className="flex flex-col w-full min-h-screen bg-surface">
-        {/* Sticky Control Bar */}
+        {/* Sticky Control Bar: Unified Compact Bar with Calendar, Guides, Add Widget, Reset & Apply */}
         <DashboardControlBar
           modificationCount={modificationCount}
           onOpenAddDrawer={() => setIsAddDrawerOpen(true)}
@@ -572,16 +675,6 @@ export default function DashboardPage() {
           onDiscard={handleDiscard}
           onApply={handleApplyCanvas}
           isSaving={isSaving}
-        />
-
-        {/* Editorial Sub-Bar with Global Timeframe Range Picker */}
-        <DashboardSubBar
-          userName={userName}
-          userRole={userRole}
-          gridResolution={gridResolution}
-          onResolutionChange={handleResolutionChange}
-          autoAlign={autoAlign}
-          onToggleAutoAlign={handleToggleAutoAlign}
           startDate={startDate}
           endDate={endDate}
           datePreset={selectedPreset}
@@ -625,7 +718,7 @@ export default function DashboardPage() {
                   organizationId={activeOrg?._id as Id<"organizations">}
                   placement={placement}
                   index={index}
-                  onRemove={handleRemoveWidget}
+                  onRemove={handleRequestRemoveWidget}
                   onResize={handleResizeWidget}
                   onDragStart={handleDragStart}
                   onDragOver={handleDragOverCard}
@@ -677,6 +770,49 @@ export default function DashboardPage() {
             fromTimestamp={selectedPreset === "Custom Range" ? startDate.getTime() : undefined}
             toTimestamp={selectedPreset === "Custom Range" ? endDate.getTime() : undefined}
           />
+        )}
+
+        {/* Remove Widget Confirmation Dialog (Matches Menu Delete Item Design) */}
+        {widgetToRemove && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs font-sans">
+            <div
+              className="fixed inset-0"
+              onClick={() => setWidgetToRemove(null)}
+            />
+            <div className="relative w-full max-w-sm bg-white rounded-xl shadow-2xl p-6 z-10 space-y-4 border border-gray-200 animate-in zoom-in-95 duration-150">
+              <div className="w-10 h-10 rounded-full bg-red-50 text-red-600 flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px] text-red-600">
+                  warning
+                </span>
+              </div>
+              <div>
+                <h4 className="text-base font-bold text-gray-900">
+                  Remove widget?
+                </h4>
+                <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">
+                  Are you sure you want to remove{" "}
+                  <strong className="text-gray-900">{widgetToRemove.title}</strong>{" "}
+                  from your dashboard canvas? You can add it back anytime from the Add Widget menu.
+                </p>
+              </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setWidgetToRemove(null)}
+                  className="px-3.5 py-2 border border-gray-300 text-gray-700 bg-white hover:bg-gray-50 rounded-md text-xs font-semibold transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmRemoveWidget}
+                  className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-md text-xs font-semibold shadow-xs transition cursor-pointer"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </PosShell>

@@ -4,6 +4,7 @@ import React from "react";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 interface WidgetProps {
   organizationId: Id<"organizations">;
@@ -32,11 +33,17 @@ export function RevenueVelocityWidget({
   });
 
   const payload = (widgetData as any)?.payload;
-  const netRevenueFormatted = widgetData?.kpi?.displayValue || payload?.netRevenueFormatted || "₹0";
+  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const netRevenueFormatted =
+    widgetData?.kpi?.displayValue ||
+    payload?.netRevenueFormatted ||
+    formatPriceWithSymbol(0, currencySymbol);
   const deltaPercent = widgetData?.kpi?.deltaPercent ?? payload?.deltaPercent ?? 0;
   const deltaLabel = widgetData?.kpi?.deltaLabel || payload?.deltaLabel || "+0.0% vs Last Cycle";
   const coversCount = (widgetData?.kpi?.secondaryMetrics?.find((m) => m.label.includes("Paid"))?.value as number) ?? payload?.coversCount ?? payload?.totalOrders ?? 0;
-  const averageCheckFormatted = payload?.averageCheckFormatted || "₹0.00";
+  const averageCheckFormatted =
+    payload?.averageCheckFormatted ||
+    formatPriceWithSymbol(0, currencySymbol);
   const avgPacingMinutes = coversCount > 0 ? (payload?.avgPacingMinutes ?? 0) : null;
   const chartPoints: Array<{ label: string; value: number }> =
     widgetData?.chart?.data?.map((d: any) => ({ label: d.label, value: Number(d.value) })) ||
@@ -132,10 +139,10 @@ export function RevenueVelocityWidget({
         </svg>
 
         <div className="flex justify-between items-center text-label-sm font-label-sm text-outline mt-2 pt-2 bg-surface-container-low/40 rounded px-space-sm">
-          <span>16:00 (Prep)</span>
-          <span>18:00 (Sunset Rush)</span>
-          <span>20:00 (Peak Dinner)</span>
-          <span>22:00 (Last Call)</span>
+          <span>16:00</span>
+          <span>18:00</span>
+          <span>20:00</span>
+          <span>22:00</span>
         </div>
       </div>
 

@@ -4,10 +4,20 @@ import React from "react";
 import { Id } from "../../../convex/_generated/dataModel";
 import { RevenueVelocityWidget } from "./widgets/RevenueVelocityWidget";
 import { FloorOccupancyWidget } from "./widgets/FloorOccupancyWidget";
-import { BeveragePullRateWidget } from "./widgets/BeveragePullRateWidget";
-import { WaitlistWidget } from "./widgets/WaitlistWidget";
-import { InventoryGuardWidget } from "./widgets/InventoryGuardWidget";
-import { LaborArchitectureWidget } from "./widgets/LaborArchitectureWidget";
+import {
+  OrdersTotalVolumeWidget,
+  OrdersLiveFeedWidget,
+  OrdersByStatusWidget,
+  OrdersHighValueWidget,
+  OrdersDelayedAlertsWidget,
+  OrdersVolumeOverTimeWidget,
+} from "./widgets/OrdersWidgets";
+import {
+  OverviewAovWidget,
+  OverviewActiveOrdersWidget,
+  OverviewPendingOrdersWidget,
+  OverviewBusinessSummaryWidget,
+} from "./widgets/OverviewWidgets";
 import {
   KdsLiveOrdersWidget,
   KdsPendingTicketsWidget,
@@ -115,15 +125,39 @@ export function DashboardWidgetRenderer({
     case "overview_sales_trends":
     case "overview_net_revenue":
       return <RevenueVelocityWidget {...commonProps} />;
+    case "overview_total_orders":
+      return <OrdersTotalVolumeWidget {...commonProps} />;
+    case "overview_average_order_value":
+      return <OverviewAovWidget {...commonProps} />;
+    case "overview_active_orders":
+      return <OverviewActiveOrdersWidget {...commonProps} />;
+    case "overview_pending_orders":
+      return <OverviewPendingOrdersWidget {...commonProps} />;
+    case "overview_order_status_distribution":
+      return <OrdersByStatusWidget {...commonProps} />;
+    case "overview_business_summary":
+      return <OverviewBusinessSummaryWidget {...commonProps} />;
     case "orders_dinein_occupancy":
       return <FloorOccupancyWidget {...commonProps} />;
-    case "iot_beverage_pour_rate":
-      return <BeveragePullRateWidget {...commonProps} />;
-    case "inventory_critical_reorder":
-    case "inventory_low_stock":
-      return <InventoryGuardWidget {...commonProps} />;
+
+    // Orders Widgets (6)
+    case "orders_total_volume":
+    case "orders_channel_breakdown":
+      return <OrdersTotalVolumeWidget {...commonProps} widgetId="orders_total_volume" />;
+    case "orders_live_feed":
+      return <OrdersLiveFeedWidget {...commonProps} widgetId="orders_live_feed" />;
+    case "orders_by_status":
+    case "orders_status_distribution":
+      return <OrdersByStatusWidget {...commonProps} widgetId="orders_by_status" />;
+    case "orders_high_value":
+    case "orders_high_value_ledger":
+      return <OrdersHighValueWidget {...commonProps} widgetId="orders_high_value" />;
+    case "orders_delayed_alerts":
+    case "kds_delayed_orders_alert":
+      return <OrdersDelayedAlertsWidget {...commonProps} widgetId="orders_delayed_alerts" />;
+    case "orders_volume_over_time":
     case "reports_hourly_velocity":
-      return <LaborArchitectureWidget {...commonProps} />;
+      return <OrdersVolumeOverTimeWidget {...commonProps} widgetId="orders_volume_over_time" />;
 
     // KDS Widgets (6)
     case "kds_live_orders":

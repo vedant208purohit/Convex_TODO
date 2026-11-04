@@ -425,7 +425,13 @@ export const getDashboard = query({
       .first();
 
     const activePlacements = placements
-      .filter((p) => p.isEnabled)
+      .filter(
+        (p) =>
+          p.isEnabled &&
+          !p.widgetId.startsWith("inventory_") &&
+          !p.widgetId.startsWith("reports_") &&
+          !p.widgetId.startsWith("iot_")
+      )
       .sort((a, b) => a.displayOrder - b.displayOrder);
 
     return {
@@ -893,7 +899,7 @@ export const getDraft = query({
     const dashboard = await ctx.db.get(args.dashboardId);
     if (!dashboard) return null;
 
-    return await ctx.db
+    const draft = await ctx.db
       .query("dashboardDrafts")
       .withIndex("by_org_user_dashboard", (q) =>
         q
@@ -902,6 +908,17 @@ export const getDraft = query({
           .eq("dashboardId", dashboard._id)
       )
       .first();
+
+    if (!draft) return null;
+    return {
+      ...draft,
+      placements: draft.placements.filter(
+        (p) =>
+          !p.widgetId.startsWith("inventory_") &&
+          !p.widgetId.startsWith("reports_") &&
+          !p.widgetId.startsWith("iot_")
+      ),
+    };
   },
 });
 

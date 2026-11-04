@@ -15,6 +15,24 @@ interface WidgetProps {
   dateLabel?: string;
 }
 
+const OVERRIDE_NAMES: Record<string, string> = {
+  orders_total_volume: "Total Orders",
+  overview_total_orders: "Total Orders",
+  orders_live_feed: "Live Orders Feed",
+  orders_by_status: "Order Status Breakdown",
+  overview_order_status_distribution: "Order Status Breakdown",
+  orders_high_value: "Top Orders by Value",
+  orders_high_value_ledger: "Top Orders by Value",
+  orders_delayed_alerts: "Delayed Orders Alert",
+  kds_delayed_orders_alert: "Delayed Orders Alert",
+  orders_volume_over_time: "Orders Over Time",
+  reports_hourly_velocity: "Orders Over Time",
+  overview_average_order_value: "Average Order Value",
+  overview_active_orders: "Active Orders",
+  overview_pending_orders: "Pending Orders",
+  overview_business_summary: "Business Performance Summary",
+};
+
 export function GenericWidget({
   organizationId,
   widgetId,
@@ -33,7 +51,10 @@ export function GenericWidget({
 
   const widgetDef = useQuery(api.dashboards.getWidgetDefinitionById, { widgetId });
 
-  const title = widgetDef?.name || widgetId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const title =
+    OVERRIDE_NAMES[widgetId] ||
+    widgetDef?.name ||
+    widgetId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const category = widgetDef?.category || "Overview";
   const payload = (widgetData as any)?.payload;
 
@@ -84,9 +105,9 @@ export function GenericWidget({
       </div>
 
       <div className="flex items-center justify-between text-body-sm font-body-sm text-secondary pt-1 border-t border-surface-container/60">
-        <span className="text-label-sm font-label-sm text-outline">Widget ID: {widgetId}</span>
+        <span className="text-label-sm font-label-sm text-outline">Live Telemetry</span>
         <span className="flex items-center gap-1 text-on-surface text-label-sm font-label-sm">
-          <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
+          <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
           <span>Online</span>
         </span>
       </div>
