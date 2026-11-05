@@ -97,12 +97,12 @@ export function DrawerCustomerTotalCard({ widget, isPlaced, placement, onAdd, da
         <p className="text-xs text-stone-500 min-h-[32px]">{widget.description}</p>
 
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1.5 border border-[#f3ede6] min-h-[95px] justify-center text-xs">
-          <div className="flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-baseline gap-1 whitespace-nowrap">
               <span className="font-serif text-2xl font-bold text-stone-900">{totalGuests}</span>
               <span className="text-stone-500 text-xs">Guests</span>
             </div>
-            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
+            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
               {deltaPercent}
             </span>
           </div>

@@ -62,12 +62,12 @@ export function CustomerTotalWidget({
       </div>
 
       <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-space-xs my-auto min-h-[110px] justify-center">
-        <div className="flex items-baseline justify-between">
-          <div>
+        <div className="flex items-baseline justify-between gap-2">
+          <div className="whitespace-nowrap flex items-baseline gap-1.5">
             <span className="font-serif text-3xl font-bold text-on-surface">{totalGuests}</span>
-            <span className="text-xs text-secondary font-medium ml-1.5">Guests</span>
+            <span className="text-xs text-secondary font-medium">Guests</span>
           </div>
-          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full">
+          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full shrink-0 whitespace-nowrap">
             {deltaPercent}
           </span>
         </div>

@@ -16,6 +16,14 @@ interface WidgetProps {
   dateLabel?: string;
 }
 
+// Helper to strip redundant period suffix from delta strings in compact card pills
+function formatCleanDelta(delta?: string): string {
+  if (!delta) return "+0.0%";
+  const match = delta.match(/^[+-]?\d+(?:\.\d+)?%/);
+  if (match) return match[0];
+  return delta.replace(/\s*vs\s+.*$/i, "").trim();
+}
+
 // 1. Net Sales Widget
 export function OverviewNetSalesWidget({
   organizationId,
@@ -39,6 +47,7 @@ export function OverviewNetSalesWidget({
     widgetData?.kpi?.displayValue ||
     formatPriceWithSymbol(0, currencySymbol, country);
   const delta = widgetData?.kpi?.deltaFormatted || "+0.0% vs yesterday";
+  const cleanDelta = formatCleanDelta(delta);
   const isPos = !delta.includes("-");
   const settledCount = (widgetData as any)?.summary?.settledCount ?? 0;
   const openCount = (widgetData as any)?.summary?.openCount ?? 0;
@@ -61,10 +70,12 @@ export function OverviewNetSalesWidget({
 
       <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-1 border border-[#f3ede6] my-auto">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-serif text-2xl text-stone-900 font-normal">{displayVal}</span>
-          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-0.5">
+          <span className="font-serif text-2xl sm:text-[26px] text-stone-900 font-normal tracking-tight whitespace-nowrap">
+            {displayVal}
+          </span>
+          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap">
             <span className="material-symbols-outlined text-[13px]">{isPos ? "trending_up" : "trending_down"}</span>
-            {delta}
+            <span>{cleanDelta}</span>
           </span>
         </div>
         <div className="flex items-center justify-between text-stone-500 pt-1 text-[11px]">
@@ -103,6 +114,7 @@ export function OverviewTotalOrdersWidget({
 
   const value = widgetData?.kpi?.value ?? 0;
   const delta = widgetData?.kpi?.deltaFormatted || "+0.0%";
+  const cleanDelta = formatCleanDelta(delta);
   const isPos = !delta.includes("-");
   const dineInCount = (widgetData as any)?.summary?.dineInCount ?? 0;
   const onlineCount = (widgetData as any)?.summary?.onlineCount ?? 0;
@@ -125,12 +137,17 @@ export function OverviewTotalOrdersWidget({
 
       <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-1 border border-[#f3ede6] my-auto">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-serif text-2xl text-stone-900 font-normal">
-            {value} <span className="font-serif text-sm text-stone-500">Tkts</span>
-          </span>
-          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-0.5">
-            <span className="material-symbols-outlined text-[13px]">{isPos ? "arrow_upward" : "arrow_downward"}</span>
-            {delta}
+          <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+            <span className="font-serif text-2xl sm:text-[26px] text-stone-900 font-normal tracking-tight">
+              {value}
+            </span>
+            <span className="text-xs font-sans text-stone-500 font-normal">
+              Tkts
+            </span>
+          </div>
+          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <span className="material-symbols-outlined text-[13px]">{isPos ? "trending_up" : "trending_down"}</span>
+            <span>{cleanDelta}</span>
           </span>
         </div>
         <div className="flex items-center justify-between text-stone-500 pt-1 text-[11px]">
@@ -176,6 +193,8 @@ export function OverviewAovWidget({
     (widgetData?.kpi?.deltaPercent !== undefined
       ? `${widgetData.kpi.deltaPercent >= 0 ? "+" : ""}${widgetData.kpi.deltaPercent}% vs 7d avg`
       : "+0.0% vs 7d avg");
+  const cleanDelta = formatCleanDelta(delta);
+  const isPos = !delta.includes("-");
   const topTicket = (widgetData as any)?.summary?.topTicket || formatPriceWithSymbol(0, currencySymbol, country);
 
   return (
@@ -196,10 +215,12 @@ export function OverviewAovWidget({
 
       <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-1 border border-[#f3ede6] my-auto">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-serif text-2xl text-stone-900 font-normal">{displayVal}</span>
-          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-0.5">
-            <span className="material-symbols-outlined text-[13px]">trending_up</span>
-            {delta}
+          <span className="font-serif text-2xl sm:text-[26px] text-stone-900 font-normal tracking-tight whitespace-nowrap">
+            {displayVal}
+          </span>
+          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap">
+            <span className="material-symbols-outlined text-[13px]">{isPos ? "trending_up" : "trending_down"}</span>
+            <span>{cleanDelta}</span>
           </span>
         </div>
         <div className="flex items-center justify-between text-stone-500 pt-1 text-[11px]">
@@ -260,10 +281,15 @@ export function OverviewActiveOrdersWidget({
 
       <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-2 border border-[#f3ede6] my-auto">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-serif text-2xl text-stone-900 font-normal">
-            {value} <span className="font-serif text-sm text-stone-500">Orders</span>
-          </span>
-          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1">
+          <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+            <span className="font-serif text-2xl sm:text-[26px] text-stone-900 font-normal tracking-tight">
+              {value}
+            </span>
+            <span className="text-xs font-sans text-stone-500 font-normal">
+              Orders
+            </span>
+          </div>
+          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-1 shrink-0 whitespace-nowrap">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
             Active Now
           </span>
@@ -327,10 +353,15 @@ export function OverviewPendingOrdersWidget({
 
       <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-1.5 border border-[#f3ede6] my-auto">
         <div className="flex items-baseline justify-between gap-2">
-          <span className="font-serif text-2xl text-stone-900 font-normal">
-            {value} <span className="font-serif text-sm text-stone-500">Tickets</span>
-          </span>
-          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold">
+          <div className="flex items-baseline gap-1.5 whitespace-nowrap">
+            <span className="font-serif text-2xl sm:text-[26px] text-stone-900 font-normal tracking-tight">
+              {value}
+            </span>
+            <span className="text-xs font-sans text-stone-500 font-normal">
+              Tickets
+            </span>
+          </div>
+          <span className="bg-[#ede6df] text-stone-800 text-[11px] px-2 py-0.5 rounded-full font-semibold shrink-0 whitespace-nowrap">
             Hold Queue
           </span>
         </div>

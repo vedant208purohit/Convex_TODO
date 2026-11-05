@@ -2244,6 +2244,13 @@ export function AddWidgetDrawer({
 // DRAWER CARD COMPONENTS FOR 6 ORDERS WIDGETS
 // ==========================================
 
+function formatCleanDelta(delta?: string): string {
+  if (!delta) return "+0.0%";
+  const match = delta.match(/^[+-]?\d+(?:\.\d+)?%/);
+  if (match) return match[0];
+  return delta.replace(/\s*vs\s+.*$/i, "").trim();
+}
+
 function DrawerTotalOrdersCard({
   widget,
   isPlaced,
@@ -2260,6 +2267,7 @@ function DrawerTotalOrdersCard({
     (data?.kpi?.deltaPercent !== undefined
       ? `${data.kpi.deltaPercent >= 0 ? "+" : ""}${data.kpi.deltaPercent}%`
       : "+0.0%");
+  const cleanDelta = formatCleanDelta(delta);
   const dineInCount =
     data?.summary?.dineIn ??
     data?.kpi?.secondaryMetrics?.find((m: any) =>
@@ -2305,8 +2313,8 @@ function DrawerTotalOrdersCard({
 
         {/* Visual Inset Preview */}
         <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-2.5 border border-[#f3ede6]">
-          <div className="flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1.5">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="flex items-baseline gap-1.5 whitespace-nowrap">
               <span className="font-serif text-2xl sm:text-3xl text-stone-900 font-normal tracking-tight">
                 {count}
               </span>
@@ -2314,11 +2322,11 @@ function DrawerTotalOrdersCard({
                 Tkts
               </span>
             </div>
-            <div className="inline-flex items-center gap-1 bg-[#ede6df] px-2 py-0.5 rounded-full text-[11px] font-semibold text-stone-800">
+            <div className="inline-flex items-center gap-1 bg-[#ede6df] px-2 py-0.5 rounded-full text-[11px] font-semibold text-stone-800 shrink-0 whitespace-nowrap">
               <span className="material-symbols-outlined text-[13px]">
                 trending_up
               </span>
-              <span>{delta}</span>
+              <span>{cleanDelta}</span>
             </div>
           </div>
 
