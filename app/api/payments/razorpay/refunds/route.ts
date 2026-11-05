@@ -229,7 +229,62 @@ export async function POST(req: NextRequest) {
       finalAmountMinor = txnEligibility.refundableBalanceMinor;
     }
 
-    // 2. Resolve credentials for gateway connection
+    // Generate or resolve a stable, deterministic idempotency key for this refund
+    const idempotencyKey = (
+      req.headers.get("idempotency-key") ||
+      body.idempotencyKey ||
+      body.receipt ||
+      `ref_${paymentId}_${finalAmountMinor}`
+    ).trim();
+
+    // 2. Pre-reserve refund in database: enforces balance check, race protection & idempotency
+    let reservation: any;
+    try {
+      reservation = await storeContext.storeConvexClient.mutation(
+        api.paymentGateways.reserveRefund,
+        {
+          organizationId: storeContext.orgId,
+          connectionId: txnEligibility.connectionId,
+          providerPaymentId: paymentId,
+          amountMinor: finalAmountMinor,
+          idempotencyKey,
+          reason: notes?.reason || notes?.comment,
+          speed: speed === "optimum" ? "optimum" : "normal",
+        }
+      );
+    } catch (reserveErr: any) {
+      const msg = reserveErr?.message || "Refund reservation failed.";
+      if (msg.includes("REFUND_IN_PROGRESS")) {
+        return NextResponse.json(
+          { success: false, code: "REFUND_IN_PROGRESS", error: msg },
+          { status: 409 }
+        );
+      }
+      if (msg.includes("REFUND_AMOUNT_EXCEEDS_BALANCE")) {
+        return NextResponse.json(
+          { success: false, code: "REFUND_AMOUNT_EXCEEDS_BALANCE", error: msg },
+          { status: 400 }
+        );
+      }
+      throw reserveErr;
+    }
+
+    // If this refund was already processed under this idempotency key, return idempotent success
+    if (reservation?.alreadyProcessed) {
+      return NextResponse.json({
+        success: true,
+        message: "Refund already processed.",
+        refund: {
+          id: reservation.refundId,
+          providerRefundId: reservation.providerRefundId,
+          amountMinor: reservation.amountMinor,
+          status: reservation.status,
+        },
+        idempotent: true,
+      });
+    }
+
+    // 3. Resolve credentials for gateway connection
     const connection = await storeContext.storeConvexClient.query(
       api.paymentGateways.getConnectionCredentials,
       {
@@ -239,6 +294,16 @@ export async function POST(req: NextRequest) {
     );
 
     if (!connection || connection.status !== "connected") {
+      // Free reservation
+      if (reservation?.refundId) {
+        await storeContext.storeConvexClient
+          .mutation(api.paymentGateways.cancelReservedRefund, {
+            refundId: reservation.refundId,
+            errorCode: "CONNECTION_NOT_ACTIVE",
+            errorMessage: "Associated Razorpay gateway connection is not active.",
+          })
+          .catch(() => {});
+      }
       return NextResponse.json(
         {
           success: false,
@@ -251,19 +316,35 @@ export async function POST(req: NextRequest) {
 
     const decrypted = await decryptCredentials(connection.encryptedCredentials!);
 
-    // 3. Call Razorpay API to execute the refund
+    // 4. Call Razorpay API to execute the refund with stable idempotency receipt
     const adapter = getPaymentAdapter("razorpay");
-    const refundResult = await adapter.createRefund(
-      { keyId: decrypted.keyId || "", keySecret: decrypted.keySecret || "" },
-      paymentId,
-      {
-        amount: finalAmountMinor,
-        speed: speed === "optimum" ? "optimum" : "normal",
-        notes,
+    let refundResult: any;
+    try {
+      refundResult = await adapter.createRefund(
+        { keyId: decrypted.keyId || "", keySecret: decrypted.keySecret || "" },
+        paymentId,
+        {
+          amount: finalAmountMinor,
+          speed: speed === "optimum" ? "optimum" : "normal",
+          receipt: idempotencyKey,
+          notes: { ...notes, idempotencyKey },
+        }
+      );
+    } catch (createErr: any) {
+      // Cancel reservation on external API failure to unblock refundable balance
+      if (reservation?.refundId) {
+        await storeContext.storeConvexClient
+          .mutation(api.paymentGateways.cancelReservedRefund, {
+            refundId: reservation.refundId,
+            errorCode: createErr?.code || "API_ERROR",
+            errorMessage: createErr?.message,
+          })
+          .catch(() => {});
       }
-    );
+      throw createErr;
+    }
 
-    // 4. Record refund in database and update transaction state
+    // 5. Reconcile refund in database and update transaction state
     const recordResult = await storeContext.storeConvexClient.mutation(
       api.paymentGateways.recordRefund,
       {
@@ -281,7 +362,10 @@ export async function POST(req: NextRequest) {
         processedAt: refundResult.processedAt,
         errorCode: refundResult.errorCode,
         errorMessage: refundResult.errorMessage,
-        metadata: refundResult.metadata,
+        metadata: {
+          ...refundResult.metadata,
+          idempotencyKey,
+        },
       }
     );
 

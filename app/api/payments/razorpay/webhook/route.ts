@@ -33,11 +33,62 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get("x-razorpay-signature") || "";
 
-    // 2. Initialize store-isolated Convex client
-    const convexUrl =
+    // 2. Resolve target store's Convex deployment URL
+    const { searchParams } = new URL(req.url);
+    const storeSlug =
+      searchParams.get("store") ||
+      searchParams.get("slug") ||
+      req.headers.get("x-store-slug") ||
+      undefined;
+
+    let convexUrl =
       process.env.NEXT_PUBLIC_CONVEX_URL ||
       process.env.CONVEX_URL ||
-      "https://gregarious-chicken-229.convex.cloud";
+      (process.env.NODE_ENV !== "production" ? "https://mock-store.convex.cloud" : undefined);
+
+    // In a shared multi-store deployment, if a store slug is provided, resolve via pos-master bridge
+    const bridgeSecret = process.env.BRIDGE_SECRET;
+    const masterBaseUrl =
+      process.env.MASTER_POS_URL ||
+      process.env.NEXT_PUBLIC_MASTER_POS_URL;
+
+    if (storeSlug && bridgeSecret && masterBaseUrl) {
+      try {
+        const resolveTimestamp = Date.now();
+        const resolveSignature = crypto
+          .createHmac("sha256", bridgeSecret)
+          .update(`webhook:${storeSlug}:${resolveTimestamp}`)
+          .digest("hex");
+
+        const res = await fetch(
+          `${masterBaseUrl.replace(/\/$/, "")}/api/bridge/resolve-store`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-bridge-signature": resolveSignature,
+              "x-bridge-timestamp": resolveTimestamp.toString(),
+            },
+            body: JSON.stringify({ slug: storeSlug }),
+            cache: "no-store",
+          }
+        );
+        const resData = await res.json().catch(() => ({}));
+        if (res.ok && resData.deployment?.url) {
+          convexUrl = resData.deployment.url;
+        }
+      } catch (bridgeErr) {
+        console.warn("[Razorpay Webhook Bridge Warning]: Failed resolving store deployment:", bridgeErr);
+      }
+    }
+
+    if (!convexUrl) {
+      console.error("[Razorpay Webhook Error]: No Convex deployment configured for store.");
+      return NextResponse.json(
+        { success: false, error: "Server misconfiguration: No Convex deployment target found." },
+        { status: 500 }
+      );
+    }
 
     const convexClient = new ConvexHttpClient(convexUrl);
 
@@ -63,12 +114,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Validate signature if secret or signature is configured
-    const isMock = webhookSecret.includes("mock") || process.env.NODE_ENV === "test";
-    const signatureVerified =
-      !webhookSecret || isMock || Boolean(signature && verifySignature(rawBody, signature, webhookSecret));
+    // 4. Validate signature - mandatory when secret is present or in production
+    const isMock = webhookSecret === "mock" || process.env.BYPASS_WEBHOOK_SIGNATURE === "true";
+    const signatureVerified = Boolean(
+      signature && webhookSecret && verifySignature(rawBody, signature, webhookSecret)
+    );
 
-    if (webhookSecret && !isMock && (!signature || !signatureVerified)) {
+    if (webhookSecret && !isMock && !signatureVerified) {
       console.warn("[Razorpay Webhook Warning]: Invalid or missing webhook signature.");
       return NextResponse.json(
         { success: false, error: "Invalid webhook signature" },

@@ -10,6 +10,7 @@
 
 import type * as assetResolver from "../assetResolver.js";
 import type * as chefPrepPreferences from "../chefPrepPreferences.js";
+import type * as crons from "../crons.js";
 import type * as customers from "../customers.js";
 import type * as dashboardCatalog from "../dashboardCatalog.js";
 import type * as dashboardDataProviders from "../dashboardDataProviders.js";
@@ -80,6 +81,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   assetResolver: typeof assetResolver;
   chefPrepPreferences: typeof chefPrepPreferences;
+  crons: typeof crons;
   customers: typeof customers;
   dashboardCatalog: typeof dashboardCatalog;
   dashboardDataProviders: typeof dashboardDataProviders;

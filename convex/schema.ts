@@ -2002,7 +2002,9 @@ postpaidOrderRequests: defineTable({
     .index("by_created_at", ["createdAt"])
     .index("by_connection_and_provider_payment", ["connectionId", "providerPaymentId"])
     .index("by_provider_and_payment_id", ["provider", "providerPaymentId"])
-    .index("by_org_and_created_at", ["organizationId", "createdAt"]),
+    .index("by_org_and_created_at", ["organizationId", "createdAt"])
+    .index("by_connection_and_created_at", ["connectionId", "createdAt"])
+    .index("by_connection_and_status", ["connectionId", "status"]),
 
   payment_refunds: defineTable({
     organizationId: v.id("organizations"),
@@ -2038,7 +2040,9 @@ postpaidOrderRequests: defineTable({
     .index("by_provider_payment_id", ["providerPaymentId"])
     .index("by_status", ["status"])
     .index("by_connection_and_provider_refund", ["connectionId", "providerRefundId"])
-    .index("by_org_and_initiated_at", ["organizationId", "initiatedAt"]),
+    .index("by_org_and_initiated_at", ["organizationId", "initiatedAt"])
+    .index("by_connection_and_initiated_at", ["connectionId", "initiatedAt"])
+    .index("by_connection_and_status", ["connectionId", "status"]),
 
   payment_settlements: defineTable({
     organizationId: v.id("organizations"),
@@ -2069,7 +2073,9 @@ postpaidOrderRequests: defineTable({
     .index("by_provider_settlement_id", ["providerSettlementId"])
     .index("by_settlement_date", ["settlementDate"])
     .index("by_status", ["status"])
-    .index("by_connection_and_provider_settlement", ["connectionId", "providerSettlementId"]),
+    .index("by_connection_and_provider_settlement", ["connectionId", "providerSettlementId"])
+    .index("by_connection_and_settlement_date", ["connectionId", "settlementDate"])
+    .index("by_connection_and_status", ["connectionId", "status"]),
 
   payment_webhook_events: defineTable({
     organizationId: v.id("organizations"),

@@ -454,26 +454,44 @@ export const recordRefund = mutation({
     const organizationId = txn?.organizationId || conn.organizationId;
     const now = Date.now();
 
-    // Enforce idempotency
-    const existing = await ctx.db
+    // Enforce idempotency & match existing reservation if present
+    const idempotencyKey = args.metadata?.idempotencyKey;
+    let existing = await ctx.db
       .query("payment_refunds")
       .withIndex("by_connection_and_provider_refund", (q) =>
         q.eq("connectionId", args.connectionId).eq("providerRefundId", args.providerRefundId)
       )
       .first();
 
+    if (!existing && idempotencyKey) {
+      const existingRefunds = await ctx.db
+        .query("payment_refunds")
+        .withIndex("by_provider_payment_id", (q) => q.eq("providerPaymentId", providerPaymentId))
+        .collect();
+      existing = existingRefunds.find(
+        (r) => r.metadata?.idempotencyKey === idempotencyKey
+      ) || null;
+    }
+
     if (existing) {
-      await ctx.db.patch(existing._id, {
+      const shouldUpdateStatus = canTransitionRefund(existing.status, args.status);
+      const patchData: any = {
         transactionId: resolvedTransactionId ?? existing.transactionId,
         providerPaymentId: providerPaymentId || existing.providerPaymentId,
-        status: args.status,
+        providerRefundId: args.providerRefundId, // Reconcile pending reservation ID with real Razorpay ID
         providerStatus: args.providerStatus,
         speed: args.speed ?? existing.speed,
-        processedAt: args.processedAt ?? existing.processedAt,
+        processedAt: args.processedAt ?? (args.status === "processed" ? now : existing.processedAt),
         errorCode: args.errorCode,
         errorMessage: args.errorMessage,
         updatedAt: now,
-      });
+      };
+
+      if (shouldUpdateStatus) {
+        patchData.status = args.status;
+      }
+
+      await ctx.db.patch(existing._id, patchData);
 
       // Update aggregate refunded amount on the parent transaction if resolved
       if (resolvedTransactionId && (args.status === "processed" || existing.status === "processed")) {
@@ -483,7 +501,7 @@ export const recordRefund = mutation({
           .collect();
 
         const totalRefunded = allRefunds
-          .filter((r) => r.status === "processed")
+          .filter((r) => r.status === "processed" || (r._id === existing._id && args.status === "processed"))
           .reduce((sum, r) => sum + r.amountMinor, 0);
 
         const currentTxn = txn || (await ctx.db.get(resolvedTransactionId));
@@ -514,7 +532,7 @@ export const recordRefund = mutation({
       providerStatus: args.providerStatus,
       speed: args.speed,
       initiatedAt: args.initiatedAt ?? now,
-      processedAt: args.processedAt,
+      processedAt: args.processedAt ?? (args.status === "processed" ? now : undefined),
       errorCode: args.errorCode,
       errorMessage: args.errorMessage,
       metadata: args.metadata,
@@ -545,6 +563,148 @@ export const recordRefund = mutation({
     }
 
     return { refundId, alreadyExists: false };
+  },
+});
+
+/**
+ * Durable refund reservation mutation.
+ * Reserves a refund before sending request to Razorpay, preventing concurrent duplicate submissions.
+ */
+export const reserveRefund = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.id("payment_gateway_connections"),
+    providerPaymentId: v.string(),
+    amountMinor: v.number(),
+    idempotencyKey: v.string(),
+    reason: v.optional(v.string()),
+    speed: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const now = Date.now();
+
+    // 1. Check existing refunds for this payment
+    const existingRefunds = await ctx.db
+      .query("payment_refunds")
+      .withIndex("by_provider_payment_id", (q) =>
+        q.eq("providerPaymentId", args.providerPaymentId)
+      )
+      .collect();
+
+    // Look for duplicate idempotency key
+    const matching = existingRefunds.find(
+      (r) => r.metadata?.idempotencyKey === args.idempotencyKey
+    );
+
+    if (matching) {
+      if (matching.status === "processed") {
+        return {
+          alreadyProcessed: true,
+          refundId: matching._id,
+          providerRefundId: matching.providerRefundId,
+          amountMinor: matching.amountMinor,
+          status: matching.status,
+        };
+      }
+      // If pending reservation exists and is < 60 seconds old, block concurrent duplicate
+      if (matching.status === "pending" && now - (matching.createdAt || 0) < 60 * 1000) {
+        throw new Error(
+          "REFUND_IN_PROGRESS: A refund request for this payment is currently being processed. Please wait."
+        );
+      }
+      // If older than 60s and still pending, allow reuse
+      return {
+        alreadyProcessed: false,
+        refundId: matching._id,
+        idempotencyKey: args.idempotencyKey,
+        reused: true,
+      };
+    }
+
+    // 2. Validate transaction & balance
+    const txn = await ctx.db
+      .query("payment_transactions")
+      .withIndex("by_provider_and_payment_id", (q) =>
+        q.eq("provider", "razorpay").eq("providerPaymentId", args.providerPaymentId)
+      )
+      .first();
+
+    if (!txn || txn.organizationId !== org._id) {
+      throw new Error("Payment not found for this store.");
+    }
+
+    if (txn.status !== "captured" && txn.status !== "partially_refunded") {
+      throw new Error(`Payment is not eligible for refund (current status: "${txn.status}").`);
+    }
+
+    // Sum all processed refunds + active pending reservations (within last 60s)
+    const activeRefunds = existingRefunds.filter(
+      (r) => r.status === "processed" || (r.status === "pending" && now - (r.createdAt || 0) < 60 * 1000)
+    );
+    const totalCommittedOrReserved = activeRefunds.reduce((sum, r) => sum + r.amountMinor, 0);
+    const remainingBalance = txn.amountMinor - totalCommittedOrReserved;
+
+    if (args.amountMinor > remainingBalance) {
+      throw new Error(
+        `REFUND_AMOUNT_EXCEEDS_BALANCE: Remaining refundable balance is ₹${(remainingBalance / 100).toFixed(2)}.`
+      );
+    }
+
+    // 3. Create durable pending reservation
+    const reservationId = await ctx.db.insert("payment_refunds", {
+      organizationId: org._id,
+      connectionId: args.connectionId,
+      transactionId: txn._id,
+      provider: "razorpay",
+      providerRefundId: `res_${args.idempotencyKey}`,
+      providerPaymentId: args.providerPaymentId,
+      amountMinor: args.amountMinor,
+      currency: txn.currency || "INR",
+      reason: args.reason,
+      speed: args.speed || "normal",
+      status: "pending",
+      providerStatus: "reserved",
+      initiatedAt: now,
+      metadata: {
+        idempotencyKey: args.idempotencyKey,
+        isReservation: true,
+        reservedAt: now,
+      },
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return {
+      alreadyProcessed: false,
+      refundId: reservationId,
+      idempotencyKey: args.idempotencyKey,
+    };
+  },
+});
+
+/**
+ * Cancels a pending refund reservation if Razorpay API call fails.
+ */
+export const cancelReservedRefund = mutation({
+  args: {
+    refundId: v.id("payment_refunds"),
+    errorCode: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const refund = await ctx.db.get(args.refundId);
+    if (!refund) return;
+    if (refund.status === "pending") {
+      await ctx.db.patch(args.refundId, {
+        status: "failed",
+        providerStatus: "reservation_failed",
+        errorCode: args.errorCode,
+        errorMessage: args.errorMessage,
+        updatedAt: Date.now(),
+      });
+    }
   },
 });
 
@@ -832,16 +992,38 @@ export const listTransactions = query({
     const org = await resolveStoreOrganization(ctx, args.organizationId);
 
     let records: any[] = [];
-    if (args.connectionId) {
+    if (args.connectionId && args.status) {
       records = await ctx.db
         .query("payment_transactions")
-        .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId!))
+        .withIndex("by_connection_and_status", (q) =>
+          q.eq("connectionId", args.connectionId!).eq("status", args.status as any)
+        )
+        .order("desc")
         .collect();
+    } else if (args.connectionId) {
+      let q = ctx.db
+        .query("payment_transactions")
+        .withIndex("by_connection_and_created_at", (q: any) => {
+          let builder: any = q.eq("connectionId", args.connectionId!);
+          if (args.from !== undefined) {
+            builder = builder.gte("createdAt", args.from);
+          }
+          return builder;
+        })
+        .order("desc");
+      records = await q.collect();
     } else {
-      records = await ctx.db
+      let q = ctx.db
         .query("payment_transactions")
-        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-        .collect();
+        .withIndex("by_org_and_created_at", (q: any) => {
+          let builder: any = q.eq("organizationId", org._id);
+          if (args.from !== undefined) {
+            builder = builder.gte("createdAt", args.from);
+          }
+          return builder;
+        })
+        .order("desc");
+      records = await q.collect();
     }
 
     // Filter within store boundary
@@ -911,16 +1093,38 @@ export const listRefunds = query({
     const org = await resolveStoreOrganization(ctx, args.organizationId);
 
     let records: any[] = [];
-    if (args.connectionId) {
+    if (args.connectionId && args.status) {
       records = await ctx.db
         .query("payment_refunds")
-        .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId!))
+        .withIndex("by_connection_and_status", (q) =>
+          q.eq("connectionId", args.connectionId!).eq("status", args.status as any)
+        )
+        .order("desc")
         .collect();
+    } else if (args.connectionId) {
+      let q = ctx.db
+        .query("payment_refunds")
+        .withIndex("by_connection_and_initiated_at", (q: any) => {
+          let builder: any = q.eq("connectionId", args.connectionId!);
+          if (args.from !== undefined) {
+            builder = builder.gte("initiatedAt", args.from);
+          }
+          return builder;
+        })
+        .order("desc");
+      records = await q.collect();
     } else {
-      records = await ctx.db
+      let q = ctx.db
         .query("payment_refunds")
-        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-        .collect();
+        .withIndex("by_org_and_initiated_at", (q: any) => {
+          let builder: any = q.eq("organizationId", org._id);
+          if (args.from !== undefined) {
+            builder = builder.gte("initiatedAt", args.from);
+          }
+          return builder;
+        })
+        .order("desc");
+      records = await q.collect();
     }
 
     records = records.filter((r) => r.organizationId === org._id);
@@ -985,16 +1189,32 @@ export const listSettlements = query({
     const org = await resolveStoreOrganization(ctx, args.organizationId);
 
     let records: any[] = [];
-    if (args.connectionId) {
+    if (args.connectionId && args.status) {
       records = await ctx.db
         .query("payment_settlements")
-        .withIndex("by_connection", (q) => q.eq("connectionId", args.connectionId!))
+        .withIndex("by_connection_and_status", (q) =>
+          q.eq("connectionId", args.connectionId!).eq("status", args.status as any)
+        )
+        .order("desc")
         .collect();
+    } else if (args.connectionId) {
+      let q = ctx.db
+        .query("payment_settlements")
+        .withIndex("by_connection_and_settlement_date", (q: any) => {
+          let builder: any = q.eq("connectionId", args.connectionId!);
+          if (args.from !== undefined) {
+            builder = builder.gte("settlementDate", args.from);
+          }
+          return builder;
+        })
+        .order("desc");
+      records = await q.collect();
     } else {
-      records = await ctx.db
+      let q = ctx.db
         .query("payment_settlements")
         .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-        .collect();
+        .order("desc");
+      records = await q.collect();
     }
 
     records = records.filter((r) => r.organizationId === org._id);
@@ -1144,8 +1364,22 @@ function canTransitionTransaction(currentStatus: string, newStatus: string): boo
 }
 
 /**
+ * State transition safety matrix for refunds:
+ * Terminal/processed states must not regress if delayed events arrive out-of-order.
+ */
+function canTransitionRefund(currentStatus: string, newStatus: string): boolean {
+  if (currentStatus === newStatus) return true;
+  // If already processed, never regress to pending, failed, or cancelled
+  if (currentStatus === "processed") return false;
+  // If failed or cancelled, do not regress to pending
+  if ((currentStatus === "failed" || currentStatus === "cancelled") && newStatus === "pending") return false;
+  return true;
+}
+
+/**
  * Retrieves aggregate payment analytics for the dashboard.
  * Evaluates metrics safely per currency, using store timezone calendar boundaries.
+ * Optimized to query only relevant current-month date ranges using compound indexes.
  */
 export const getDashboardAnalytics = query({
   args: {
@@ -1162,27 +1396,48 @@ export const getDashboardAnalytics = query({
     const org = await resolveStoreOrganization(ctx, args.organizationId);
     const provider = args.provider || "razorpay";
 
-    // 1. Fetch transactions for this store organization
-    let txns = await ctx.db
-      .query("payment_transactions")
-      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-      .collect();
-
+    // 1. Fetch transactions for this store organization within the current month date range
+    const queryStartMs = Math.min(args.startOfMonthMs, args.startOfTodayMs) - 24 * 60 * 60 * 1000;
+    let txns: any[];
     if (args.connectionId) {
-      txns = txns.filter((t) => t.connectionId === args.connectionId);
-    } else if (provider) {
+      txns = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_connection_and_created_at", (q) =>
+          q.eq("connectionId", args.connectionId!).gte("createdAt", queryStartMs)
+        )
+        .collect();
+    } else {
+      txns = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_org_and_created_at", (q) =>
+          q.eq("organizationId", org._id).gte("createdAt", queryStartMs)
+        )
+        .collect();
+    }
+
+    if (provider) {
       txns = txns.filter((t) => t.provider === provider);
     }
 
-    // 2. Fetch refunds for this store organization
-    let refunds = await ctx.db
-      .query("payment_refunds")
-      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-      .collect();
-
+    // 2. Fetch refunds for this store organization within the current month date range
+    let refunds: any[];
     if (args.connectionId) {
-      refunds = refunds.filter((r) => r.connectionId === args.connectionId);
-    } else if (provider) {
+      refunds = await ctx.db
+        .query("payment_refunds")
+        .withIndex("by_connection_and_initiated_at", (q) =>
+          q.eq("connectionId", args.connectionId!).gte("initiatedAt", queryStartMs)
+        )
+        .collect();
+    } else {
+      refunds = await ctx.db
+        .query("payment_refunds")
+        .withIndex("by_org_and_initiated_at", (q) =>
+          q.eq("organizationId", org._id).gte("initiatedAt", queryStartMs)
+        )
+        .collect();
+    }
+
+    if (provider) {
       refunds = refunds.filter((r) => r.provider === provider);
     }
 
@@ -1512,7 +1767,11 @@ export const processWebhookEvent = mutation({
             }
           }
         }
-      } else if (eventType === "refund.created" || eventType === "refund.processed") {
+      } else if (
+        eventType === "refund.created" ||
+        eventType === "refund.processed" ||
+        eventType === "refund.failed"
+      ) {
         const refund =
           parsedPayload.payload?.refund?.entity ||
           parsedPayload.refund?.entity ||
@@ -1526,10 +1785,10 @@ export const processWebhookEvent = mutation({
         const providerRefundId = refund.id;
         const providerPaymentId = refund.payment_id;
         const refundStatus: "processed" | "pending" | "failed" | "cancelled" =
-          refund.status === "processed"
-            ? "processed"
-            : refund.status === "failed"
+          eventType === "refund.failed" || refund.status === "failed"
             ? "failed"
+            : eventType === "refund.processed" || refund.status === "processed"
+            ? "processed"
             : refund.status === "cancelled"
             ? "cancelled"
             : "pending";
@@ -1546,22 +1805,50 @@ export const processWebhookEvent = mutation({
           throw new Error(`Cannot process refund: No connection found for provider ${args.provider}`);
         }
 
-        const existingRefund = await ctx.db
+        let existingRefund = await ctx.db
           .query("payment_refunds")
           .withIndex("by_connection_and_provider_refund", (q) =>
             q.eq("connectionId", resolvedConnectionId).eq("providerRefundId", providerRefundId)
           )
           .first();
 
+        // Check if an existing reservation matches by idempotencyKey
+        const idempotencyKey = refund.notes?.idempotencyKey || refund.receipt;
+        if (!existingRefund && idempotencyKey) {
+          const allPaymentRefunds = await ctx.db
+            .query("payment_refunds")
+            .withIndex("by_provider_payment_id", (q) =>
+              q.eq("providerPaymentId", providerPaymentId)
+            )
+            .collect();
+          existingRefund = allPaymentRefunds.find(
+            (r) => r.metadata?.idempotencyKey === idempotencyKey
+          ) || null;
+        }
+
         let refundDocId = existingRefund?._id;
         if (existingRefund) {
-          await ctx.db.patch(existingRefund._id, {
-            status: refundStatus,
+          const shouldUpdateStatus = canTransitionRefund(existingRefund.status, refundStatus);
+          const patchData: any = {
+            providerRefundId, // reconcile reservation ID if previously pending
             providerStatus: refund.status || refundStatus,
             speed: refund.speed_processed || refund.speed_requested || existingRefund.speed,
-            processedAt: refundStatus === "processed" ? now : existingRefund.processedAt,
             updatedAt: now,
-          });
+          };
+
+          if (shouldUpdateStatus) {
+            patchData.status = refundStatus;
+            if (refundStatus === "processed") {
+              patchData.processedAt = refund.created_at ? refund.created_at * 1000 : now;
+            }
+          }
+
+          if (refund.error_code || refund.error_description) {
+            patchData.errorCode = refund.error_code;
+            patchData.errorMessage = refund.error_description;
+          }
+
+          await ctx.db.patch(existingRefund._id, patchData);
         } else {
           refundDocId = await ctx.db.insert("payment_refunds", {
             organizationId: org._id,
@@ -1577,7 +1864,9 @@ export const processWebhookEvent = mutation({
             providerStatus: refund.status || refundStatus,
             speed: refund.speed_processed || refund.speed_requested || "normal",
             initiatedAt: refund.created_at ? refund.created_at * 1000 : now,
-            processedAt: refundStatus === "processed" ? now : undefined,
+            processedAt: refundStatus === "processed" ? (refund.created_at ? refund.created_at * 1000 : now) : undefined,
+            errorCode: refund.error_code,
+            errorMessage: refund.error_description,
             metadata: refund.notes,
             createdAt: now,
             updatedAt: now,
@@ -1604,7 +1893,7 @@ export const processWebhookEvent = mutation({
           const isFullyRefunded = totalRefunded >= txn.amountMinor;
           await ctx.db.patch(txn._id, {
             refundedAmountMinor: totalRefunded,
-            status: isFullyRefunded ? "refunded" : "partially_refunded",
+            status: isFullyRefunded ? "refunded" : totalRefunded > 0 ? "partially_refunded" : txn.status,
             updatedAt: now,
           });
         }
@@ -2057,57 +2346,73 @@ async function syncScheduledEntityResource(params: {
     const fromSec = Math.floor(from / 1000);
     const toSec = Math.floor(Date.now() / 1000);
 
-    const fullUrl = `${params.url}?count=50&from=${fromSec}&to=${toSec}`;
-
-    // Retry with exponential backoff on 429 / 5xx
-    let response: any = null;
-    let attempt = 0;
-    while (attempt < 3) {
-      attempt++;
-      try {
-        const res = await fetch(fullUrl, {
-          method: "GET",
-          headers: {
-            Authorization: `Basic ${params.basicAuth}`,
-            Accept: "application/json",
-            "User-Agent": "PREST-POS-ScheduledSync/1.0",
-          },
-        });
-        if (res.status === 200) {
-          response = await res.json();
-          break;
-        } else if (res.status === 429 || res.status >= 500) {
-          if (attempt >= 3) {
-            throw new Error(`HTTP ${res.status} after ${attempt} attempts`);
-          }
-          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
-        } else {
-          const errBody = await res.json().catch(() => ({}));
-          throw new Error(errBody.error?.description || `HTTP ${res.status}`);
-        }
-      } catch (err: any) {
-        if (attempt >= 3) throw err;
-        await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
-      }
-    }
-
-    const items = response?.items || [];
+    const count = 50;
+    let skip = 0;
+    const maxRecordsToSync = 500; // Bounded ceiling per 15-minute cron run
     let maxSeenTimestamp = from;
 
-    for (const item of items) {
-      fetchedTotal++;
-      const args = params.mapItemToMutation(item);
-      const res = await params.ctx.runMutation(params.recordMutation, args);
-      if (res?.alreadyExists) {
-        updatedTotal++;
-      } else {
-        createdTotal++;
+    while (fetchedTotal < maxRecordsToSync) {
+      const pageUrl = `${params.url}?count=${count}&skip=${skip}&from=${fromSec}&to=${toSec}`;
+
+      // Retry with exponential backoff on 429 / 5xx
+      let response: any = null;
+      let attempt = 0;
+      while (attempt < 3) {
+        attempt++;
+        try {
+          const res = await fetch(pageUrl, {
+            method: "GET",
+            headers: {
+              Authorization: `Basic ${params.basicAuth}`,
+              Accept: "application/json",
+              "User-Agent": "PREST-POS-ScheduledSync/1.0",
+            },
+          });
+          if (res.status === 200) {
+            response = await res.json();
+            break;
+          } else if (res.status === 429 || res.status >= 500) {
+            if (attempt >= 3) {
+              throw new Error(`HTTP ${res.status} after ${attempt} attempts`);
+            }
+            await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+          } else {
+            const errBody = await res.json().catch(() => ({}));
+            throw new Error(errBody.error?.description || `HTTP ${res.status}`);
+          }
+        } catch (err: any) {
+          if (attempt >= 3) throw err;
+          await new Promise((r) => setTimeout(r, 500 * Math.pow(2, attempt - 1)));
+        }
       }
 
-      const itemTime = item.created_at ? item.created_at * 1000 : Date.now();
-      if (itemTime > maxSeenTimestamp) {
-        maxSeenTimestamp = itemTime;
+      const items = response?.items || [];
+      if (items.length === 0) {
+        break;
       }
+
+      for (const item of items) {
+        fetchedTotal++;
+        const args = params.mapItemToMutation(item);
+        const res = await params.ctx.runMutation(params.recordMutation, args);
+        if (res?.alreadyExists) {
+          updatedTotal++;
+        } else {
+          createdTotal++;
+        }
+
+        const itemTime = item.created_at ? item.created_at * 1000 : Date.now();
+        if (itemTime > maxSeenTimestamp) {
+          maxSeenTimestamp = itemTime;
+        }
+      }
+
+      // If fewer items returned than page size, all items in window have been retrieved
+      if (items.length < count) {
+        break;
+      }
+
+      skip += items.length;
     }
 
     if (maxSeenTimestamp > from) {
