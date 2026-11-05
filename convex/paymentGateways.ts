@@ -1257,6 +1257,46 @@ export const listSettlements = query({
 });
 
 /**
+ * Retrieves a single settlement record by ID or providerSettlementId, scoped to the caller's store.
+ */
+export const getSettlement = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    settlementId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+
+    // 1. Try finding by document _id
+    let record: any = null;
+    try {
+      record = await ctx.db.get(args.settlementId as any);
+      if (record && record.organizationId !== org._id) {
+        record = null;
+      }
+    } catch {
+      // not a document id, proceed
+    }
+
+    // 2. Try finding by providerSettlementId
+    if (!record) {
+      record = await ctx.db
+        .query("payment_settlements")
+        .withIndex("by_provider_settlement_id", (q) =>
+          q.eq("providerSettlementId", args.settlementId)
+        )
+        .first();
+      if (record && record.organizationId !== org._id) {
+        record = null;
+      }
+    }
+
+    return record;
+  },
+});
+
+/**
  * Validates a payment transaction for refund eligibility and computes the remaining refundable balance.
  */
 export const getTransactionForRefund = query({
@@ -2274,6 +2314,85 @@ export const getIntegrationHealthData = query({
       }
     }
 
+    // 4. Recent Activity Telemetry
+    const recentActivity: any[] = [];
+    if (conn) {
+      if (conn.lastVerifiedAt) {
+        recentActivity.push({
+          id: `verify_${conn.lastVerifiedAt}`,
+          type: "verification",
+          title: "Connection Verified",
+          description: "Manual verification check completed successfully.",
+          timestamp: conn.lastVerifiedAt,
+          status: "success",
+        });
+      }
+
+      for (const ev of webhookEvents.slice(0, 5)) {
+        recentActivity.push({
+          id: `wh_${ev._id}`,
+          type: "webhook",
+          title: "Webhook Processed",
+          description: `${ev.eventType || "event.payment"} received and acknowledged.`,
+          timestamp: ev.processedAt || ev.receivedAt,
+          status: ev.processingStatus === "failed" ? "failed" : "success",
+        });
+      }
+
+      const txs = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .order("desc")
+        .take(5);
+
+      for (const tx of txs) {
+        recentActivity.push({
+          id: `tx_${tx._id}`,
+          type: "payment",
+          title: tx.status === "captured" ? "Payment Captured" : tx.status === "failed" ? "Payment Failed" : "Payment Initiated",
+          description: `Order #${tx.providerOrderId || tx.providerPaymentId} was successfully processed via API.`,
+          timestamp: tx.paidAt || tx.createdAt,
+          status: tx.status === "captured" ? "success" : tx.status === "failed" ? "failed" : "pending",
+        });
+      }
+
+      const stls = await ctx.db
+        .query("payment_settlements")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .order("desc")
+        .take(5);
+
+      for (const stl of stls) {
+        recentActivity.push({
+          id: `stl_${stl._id}`,
+          type: "settlement",
+          title: "Settlement Synced",
+          description: `Daily settlement batch #${stl.providerSettlementId} has been acknowledged.`,
+          timestamp: stl.settlementDate || stl.createdAt,
+          status: stl.status === "processed" ? "success" : "pending",
+        });
+      }
+
+      const rfs = await ctx.db
+        .query("payment_refunds")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .order("desc")
+        .take(5);
+
+      for (const rf of rfs) {
+        recentActivity.push({
+          id: `rf_${rf._id}`,
+          type: "refund",
+          title: "Refund Processed",
+          description: `Refund #${rf.providerRefundId} of ${(rf.amountMinor / 100).toFixed(2)} processed.`,
+          timestamp: rf.processedAt || rf.initiatedAt || rf.createdAt,
+          status: rf.status === "processed" ? "success" : "pending",
+        });
+      }
+
+      recentActivity.sort((a, b) => b.timestamp - a.timestamp);
+    }
+
     return {
       connection: publicConn,
       webhook: {
@@ -2286,6 +2405,7 @@ export const getIntegrationHealthData = query({
         totalEvents,
       },
       sync: syncStatus,
+      recentActivity: recentActivity.slice(0, 10),
       checkedAt: now,
     };
   },

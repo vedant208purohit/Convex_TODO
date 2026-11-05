@@ -130,6 +130,39 @@ export interface CreateRefundOptions {
   receipt?: string;
 }
 
+export interface RequestSettlementOptions {
+  amountMinor: number; // minor units (paise/cents)
+  currency?: string;
+  description?: string;
+  notes?: Record<string, any>;
+}
+
+export interface SettlementEligibilityResult {
+  success: boolean;
+  supportsManualSettlement: boolean;
+  isBalanceAvailable: boolean;
+  availableBalanceMinor: number | null;
+  currency: string;
+  settlementDestination: {
+    bankName: string;
+    maskedAccount: string;
+    isDefault: boolean;
+    isVerified: boolean;
+  } | null;
+  minAmountMinor?: number;
+  maxAmountMinor?: number;
+  explanation?: string;
+  code?: string;
+  error?: string;
+}
+
+export interface SettlementRequestResult {
+  success: boolean;
+  settlement?: NormalizedSettlement;
+  code?: string;
+  error?: string;
+}
+
 export interface FetchResult<T> {
   items: T[];
   totalCount?: number;
@@ -138,12 +171,43 @@ export interface FetchResult<T> {
   skip: number;
 }
 
+export interface CreatePaymentOrderOptions {
+  amountMinor: number; // minor units (paise/cents)
+  currency: string;    // ISO 4217 code (e.g. "INR")
+  receipt?: string;
+  notes?: Record<string, string>;
+  internalOrderId?: string;
+}
+
+export interface PaymentOrderResult {
+  success: boolean;
+  orderId: string;
+  amountMinor: number;
+  currency: string;
+  receipt?: string;
+  providerStatus?: string;
+  code?: string;
+  error?: string;
+}
+
+export interface VerifyPaymentSignatureOptions {
+  orderId: string;
+  paymentId: string;
+  signature: string;
+  secret: string;
+}
+
 /**
  * Universal Provider Adapter Interface
  * All payment gateways (Razorpay, Stripe, PayPal) must adhere to this contract.
  */
 export interface PaymentProviderAdapter {
   readonly provider: string;
+
+  /**
+   * Returns list of supported capability identifiers for this provider.
+   */
+  getSupportedCapabilities?(): string[];
 
   /**
    * Detects whether credentials belong to a test or live environment.
@@ -175,6 +239,38 @@ export interface PaymentProviderAdapter {
   ): Promise<FetchResult<NormalizedTransaction>>;
 
   /**
+   * Fetches a single payment record by provider payment ID.
+   */
+  fetchPayment?(
+    credentials: PaymentCredentials,
+    paymentId: string
+  ): Promise<NormalizedTransaction>;
+
+  /**
+   * Creates a payment order for POS checkout flow.
+   */
+  createPaymentOrder?(
+    credentials: PaymentCredentials,
+    options: CreatePaymentOrderOptions
+  ): Promise<PaymentOrderResult>;
+
+  /**
+   * Verifies the cryptographic payment completion signature returned by checkout widget.
+   */
+  verifyPaymentSignature?(
+    options: VerifyPaymentSignatureOptions
+  ): boolean;
+
+  /**
+   * Verifies incoming webhook HMAC signature.
+   */
+  verifyWebhookSignature?(
+    rawBody: string,
+    signature: string,
+    secret: string
+  ): boolean;
+
+  /**
    * Fetches refunds from provider REST API.
    */
   fetchRefunds(
@@ -198,6 +294,21 @@ export interface PaymentProviderAdapter {
     credentials: PaymentCredentials,
     options?: FetchOptions
   ): Promise<FetchResult<NormalizedSettlement>>;
+
+  /**
+   * Fetches real-time settlement balance and eligibility from provider if supported.
+   */
+  fetchSettlementEligibility?(
+    credentials: PaymentCredentials
+  ): Promise<SettlementEligibilityResult>;
+
+  /**
+   * Requests a manual or on-demand settlement payout via provider REST API.
+   */
+  requestSettlement?(
+    credentials: PaymentCredentials,
+    options: RequestSettlementOptions
+  ): Promise<SettlementRequestResult>;
 
   /**
    * Normalizes provider-specific error codes into standardized platform error representations.

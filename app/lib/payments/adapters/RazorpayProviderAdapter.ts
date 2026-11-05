@@ -1,5 +1,7 @@
+import crypto from "crypto";
 import {
   AccountMode,
+  CreatePaymentOrderOptions,
   CreateRefundOptions,
   CredentialVerificationResult,
   FetchOptions,
@@ -13,7 +15,12 @@ import {
   NormalizedTransaction,
   NormalizedTransactionStatus,
   PaymentCredentials,
+  PaymentOrderResult,
   PaymentProviderAdapter,
+  RequestSettlementOptions,
+  SettlementEligibilityResult,
+  SettlementRequestResult,
+  VerifyPaymentSignatureOptions,
 } from "../types";
 
 export class RazorpayProviderAdapter implements PaymentProviderAdapter {
@@ -22,6 +29,23 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
 
   constructor(baseUrl = "https://api.razorpay.com/v1") {
     this.baseUrl = baseUrl.replace(/\/$/, "");
+  }
+
+  getSupportedCapabilities(): string[] {
+    return [
+      "verify_credentials",
+      "fetch_profile",
+      "fetch_transactions",
+      "fetch_payment",
+      "create_payment_order",
+      "verify_payment_signature",
+      "verify_webhook_signature",
+      "fetch_refunds",
+      "create_refund",
+      "fetch_settlements",
+      "fetch_settlement_eligibility",
+      "request_settlement",
+    ];
   }
 
   detectAccountMode(keyId: string): AccountMode {
@@ -381,6 +405,151 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
     };
   }
 
+  async fetchPayment(
+    credentials: PaymentCredentials,
+    paymentId: string
+  ): Promise<NormalizedTransaction> {
+    const basicAuth = this.getBasicAuth(credentials);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(`${this.baseUrl}/payments/${paymentId}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${basicAuth}`,
+        Accept: "application/json",
+      },
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      throw new Error(errBody?.error?.description || `Razorpay API returned status ${response.status}`);
+    }
+
+    const item = await response.json();
+    let status: NormalizedTransactionStatus = "created";
+    if (item.status === "captured") status = "captured";
+    else if (item.status === "authorized") status = "authorized";
+    else if (item.status === "failed") status = "failed";
+    else if (item.status === "refunded") status = "refunded";
+
+    const amountMinor = Math.round(Number(item.amount || 0));
+    const refundedAmountMinor = item.amount_refunded
+      ? Math.round(Number(item.amount_refunded))
+      : 0;
+
+    if (refundedAmountMinor > 0 && refundedAmountMinor < amountMinor && status !== "refunded") {
+      status = "partially_refunded";
+    }
+
+    const createdAtMs = this.toEpochMilliseconds(item.created_at);
+
+    return {
+      providerPaymentId: item.id,
+      providerOrderId: item.order_id || undefined,
+      amountMinor,
+      currency: (item.currency || "INR").toUpperCase(),
+      paymentMethod: (item.method || "card").toLowerCase(),
+      status,
+      providerStatus: item.status || "created",
+      paidAt: item.captured ? createdAtMs : undefined,
+      failedAt: item.status === "failed" ? createdAtMs : undefined,
+      errorCode: item.error_code || undefined,
+      errorMessage: item.error_description || undefined,
+      refundedAmountMinor,
+      customerEmail: item.email || undefined,
+      customerPhone: item.contact || undefined,
+      customerName: item.notes?.customer_name || undefined,
+      metadata: item.notes || {},
+      createdAt: createdAtMs,
+    };
+  }
+
+  async createPaymentOrder(
+    credentials: PaymentCredentials,
+    options: CreatePaymentOrderOptions
+  ): Promise<PaymentOrderResult> {
+    const basicAuth = this.getBasicAuth(credentials);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+    const payload: any = {
+      amount: options.amountMinor,
+      currency: (options.currency || "INR").toUpperCase(),
+      receipt: options.receipt || `rcpt_${Date.now().toString().slice(-8)}`,
+      notes: {
+        ...(options.notes || {}),
+        internalOrderId: options.internalOrderId || "",
+      },
+    };
+
+    const response = await fetch(`${this.baseUrl}/orders`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basicAuth}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        orderId: "",
+        amountMinor: options.amountMinor,
+        currency: options.currency || "INR",
+        code: errBody?.error?.code || "ORDER_CREATION_FAILED",
+        error: errBody?.error?.description || `Razorpay order creation failed with status ${response.status}`,
+      };
+    }
+
+    const orderData = await response.json();
+    return {
+      success: true,
+      orderId: orderData.id,
+      amountMinor: Number(orderData.amount || options.amountMinor),
+      currency: orderData.currency || "INR",
+      receipt: orderData.receipt,
+      providerStatus: orderData.status,
+    };
+  }
+
+  verifyPaymentSignature(options: VerifyPaymentSignatureOptions): boolean {
+    const { orderId, paymentId, signature, secret } = options;
+    if (!orderId || !paymentId || !signature || !secret) return false;
+    try {
+      const text = `${orderId}|${paymentId}`;
+      const expected = crypto.createHmac("sha256", secret).update(text).digest("hex");
+      const sigBuf = Buffer.from(signature, "utf8");
+      const expBuf = Buffer.from(expected, "utf8");
+      if (sigBuf.length !== expBuf.length) return false;
+      return crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch {
+      return false;
+    }
+  }
+
+  verifyWebhookSignature(rawBody: string, signature: string, secret: string): boolean {
+    if (!rawBody || !signature || !secret) return false;
+    try {
+      const expected = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+      const sigBuf = Buffer.from(signature, "utf8");
+      const expBuf = Buffer.from(expected, "utf8");
+      if (sigBuf.length !== expBuf.length) return false;
+      return crypto.timingSafeEqual(sigBuf, expBuf);
+    } catch {
+      return false;
+    }
+  }
+
   async fetchRefunds(
     credentials: PaymentCredentials,
     options?: FetchOptions
@@ -644,6 +813,221 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
     };
   }
 
+  async fetchSettlementEligibility(
+    credentials: PaymentCredentials
+  ): Promise<SettlementEligibilityResult> {
+    const basicAuth = this.getBasicAuth(credentials);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+      // Probe ondemand settlements endpoint to check merchant account configuration
+      const response = await fetch(`${this.baseUrl}/settlements/ondemand`, {
+        method: "GET",
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          Accept: "application/json",
+          "User-Agent": "PREST-POS-Gateway/1.0",
+        },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (response.ok) {
+        // Merchant has Instant / On-Demand Settlements enabled
+        return {
+          success: true,
+          supportsManualSettlement: true,
+          isBalanceAvailable: false, // Razorpay standard PG API keys do not expose live GET balance
+          availableBalanceMinor: null,
+          currency: "INR",
+          settlementDestination: null,
+          explanation:
+            "Instant Settlements is enabled on your Razorpay account. Balance clearing is processed according to your bank eligibility.",
+        };
+      }
+
+      if (response.status === 400 || response.status === 403 || response.status === 404) {
+        const errData = await response.json().catch(() => ({}));
+        const desc = errData?.error?.description || "";
+        const isNotEnabled =
+          desc.toLowerCase().includes("not enabled") ||
+          desc.toLowerCase().includes("instant settlement") ||
+          response.status === 404;
+
+        return {
+          success: true,
+          supportsManualSettlement: !isNotEnabled,
+          isBalanceAvailable: false,
+          availableBalanceMinor: null,
+          currency: "INR",
+          settlementDestination: null,
+          explanation: isNotEnabled
+            ? "Instant Settlement is not enabled on your Razorpay merchant account. Standard payouts are deposited automatically according to your T+2 schedule."
+            : desc || "Real-time settlement balance is managed automatically via scheduled clearing cycles.",
+        };
+      }
+
+      return {
+        success: true,
+        supportsManualSettlement: false,
+        isBalanceAvailable: false,
+        availableBalanceMinor: null,
+        currency: "INR",
+        settlementDestination: null,
+        explanation:
+          "Razorpay settlement service returned an unexpected response. Standard automated clearing remains active.",
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        supportsManualSettlement: false,
+        isBalanceAvailable: false,
+        availableBalanceMinor: null,
+        currency: "INR",
+        settlementDestination: null,
+        error: err.message || "Failed to reach Razorpay settlement service.",
+      };
+    }
+  }
+
+  async requestSettlement(
+    credentials: PaymentCredentials,
+    options: RequestSettlementOptions
+  ): Promise<SettlementRequestResult> {
+    const { amountMinor, currency = "INR", description, notes } = options;
+
+    if (
+      !amountMinor ||
+      typeof amountMinor !== "number" ||
+      amountMinor <= 0 ||
+      !Number.isInteger(amountMinor)
+    ) {
+      return {
+        success: false,
+        code: "INVALID_AMOUNT",
+        error: "Settlement amount must be a positive integer in minor units.",
+      };
+    }
+
+    const basicAuth = this.getBasicAuth(credentials);
+
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(`${this.baseUrl}/settlements/ondemand`, {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${basicAuth}`,
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": "PREST-POS-Gateway/1.0",
+        },
+        body: JSON.stringify({
+          amount: amountMinor,
+          settle_full_balance: false,
+          description: description || "PREST Marketplace Settlement Request",
+          notes: notes || undefined,
+        }),
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        const desc = data?.error?.description || "";
+        const code = data?.error?.code || "";
+
+        if (
+          desc.toLowerCase().includes("not enabled") ||
+          desc.toLowerCase().includes("instant settlement")
+        ) {
+          return {
+            success: false,
+            code: "INSTANT_SETTLEMENT_NOT_ENABLED",
+            error:
+              "Instant Settlement is not enabled on your Razorpay merchant account. Please request Instant Settlements activation from your Razorpay Dashboard.",
+          };
+        }
+
+        if (
+          desc.toLowerCase().includes("exceeds") ||
+          desc.toLowerCase().includes("balance") ||
+          desc.toLowerCase().includes("insufficient")
+        ) {
+          return {
+            success: false,
+            code: "INSUFFICIENT_SETTLEMENT_BALANCE",
+            error:
+              desc || "The requested settlement amount exceeds your current available Razorpay balance.",
+          };
+        }
+
+        return {
+          success: false,
+          code: code || "RAZORPAY_SETTLEMENT_ERROR",
+          error: desc || `Razorpay rejected the settlement request (HTTP ${response.status}).`,
+        };
+      }
+
+      // Successful response
+      const settlementDateMs = data.created_at
+        ? this.toEpochMilliseconds(data.created_at)
+        : Date.now();
+      const grossAmountMinor =
+        typeof data.amount === "number" ? data.amount : amountMinor;
+      const feesMinor = typeof data.fees === "number" ? data.fees : undefined;
+      const taxMinor = typeof data.tax === "number" ? data.tax : undefined;
+      const netAmountMinor =
+        typeof data.amount_settled === "number" ? data.amount_settled : grossAmountMinor;
+
+      let status: NormalizedSettlementStatus = "pending";
+      if (data.status === "processed") status = "processed";
+      else if (data.status === "failed") status = "failed";
+      else if (data.status === "partially_processed") status = "partially_processed";
+
+      const settlement: NormalizedSettlement = {
+        providerSettlementId: data.id || `setlod_${Date.now()}`,
+        amountMinor: grossAmountMinor,
+        currency: data.currency || currency,
+        feesMinor,
+        taxMinor,
+        netAmountMinor,
+        status,
+        providerStatus: data.status || "created",
+        settlementDate: settlementDateMs,
+        utrOrReference: data.utr || data.reference_id || undefined,
+        metadata: data,
+      };
+
+      return {
+        success: true,
+        settlement,
+      };
+    } catch (err: any) {
+      if (err.name === "AbortError" || err.message?.includes("aborted")) {
+        return {
+          success: false,
+          code: "NETWORK_TIMEOUT",
+          error: "Connection to Razorpay settlement endpoint timed out.",
+        };
+      }
+
+      return {
+        success: false,
+        code: "RAZORPAY_UNAVAILABLE",
+        error: err.message || "Failed to establish network connection with Razorpay.",
+      };
+    }
+  }
+
   normalizeError(error: any): NormalizedError {
     const raw = error?.code || error?.message || "";
     if (raw.includes("INVALID_CREDENTIALS") || raw.includes("401")) {
@@ -706,6 +1090,24 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
       return {
         code: "REFUND_REJECTED",
         message: error?.message || "Razorpay rejected the refund request.",
+        httpStatus: 400,
+      };
+    }
+    if (raw.includes("INSTANT_SETTLEMENT_NOT_ENABLED")) {
+      return {
+        code: "INSTANT_SETTLEMENT_NOT_ENABLED",
+        message:
+          error?.message ||
+          "Instant Settlement is not enabled on your Razorpay merchant account.",
+        httpStatus: 400,
+      };
+    }
+    if (raw.includes("INSUFFICIENT_SETTLEMENT_BALANCE")) {
+      return {
+        code: "INSUFFICIENT_SETTLEMENT_BALANCE",
+        message:
+          error?.message ||
+          "Requested settlement amount exceeds your available Razorpay balance.",
         httpStatus: 400,
       };
     }

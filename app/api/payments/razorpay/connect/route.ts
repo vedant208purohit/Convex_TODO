@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPaymentAdapter } from "../../../../lib/payments/registry";
 import { requireStoreAdminContext } from "../../../../lib/payments/authHelper";
+import { PaymentSyncEngine } from "../../../../lib/payments/syncEngine";
 import { api } from "../../../../../convex/_generated/api";
 
 export const dynamic = "force-dynamic";
@@ -129,7 +130,39 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString();
 
-    // 7. Safe Public Response
+    // 7. Automatically start Initial Synchronization in background
+    const credentials = {
+      keyId: key_id.trim(),
+      keySecret: key_secret.trim(),
+    };
+
+    Promise.allSettled([
+      PaymentSyncEngine.syncTransactions({
+        convexClient: storeContext.storeConvexClient,
+        connectionId,
+        adapter,
+        credentials,
+        syncType: "initial",
+      }),
+      PaymentSyncEngine.syncRefunds({
+        convexClient: storeContext.storeConvexClient,
+        connectionId,
+        adapter,
+        credentials,
+        syncType: "initial",
+      }),
+      PaymentSyncEngine.syncSettlements({
+        convexClient: storeContext.storeConvexClient,
+        connectionId,
+        adapter,
+        credentials,
+        syncType: "initial",
+      }),
+    ]).catch((syncErr) => {
+      console.warn("[Initial Sync Background Error]:", syncErr);
+    });
+
+    // 8. Safe Public Response
     return NextResponse.json({
       success: true,
       provider: "razorpay",
@@ -140,6 +173,7 @@ export async function POST(req: NextRequest) {
       merchantId: profileResult.merchant_id || null,
       connectedAt: now,
       connectionId,
+      initialSyncStarted: true,
     });
   } catch (err: any) {
     const adapter = getPaymentAdapter("razorpay");
