@@ -383,7 +383,7 @@ export default function CashierCatalogPage() {
                       Current Shift Summary
                     </h3>
                     <p className="font-body-sm text-body-sm text-on-surface-variant mt-space-xs">
-                      Real-time aggregated gross intake, cash in drawer, and variance status for active shift.
+                      Real-time aggregated gross intake, cash in hand, and digital settlements for active shift.
                     </p>
                   </div>
 
@@ -396,15 +396,15 @@ export default function CashierCatalogPage() {
                       </span>
                     </div>
                     <div className="flex justify-between items-baseline">
-                      <span className="font-label-sm text-label-sm text-secondary uppercase">Float Cash</span>
-                      <span className="font-label-md text-label-md text-on-surface">
-                        {shiftSummaryData?.summary?.floatCash || "₹ 0.00"}
+                      <span className="font-label-sm text-label-sm text-secondary uppercase">Cash Collected</span>
+                      <span className="font-label-md text-label-md font-semibold text-on-surface">
+                        {shiftSummaryData?.summary?.cashCollected || "₹ 0.00"}
                       </span>
                     </div>
                     <div className="pt-space-xs flex justify-between items-baseline border-t border-outline-variant/20">
-                      <span className="font-label-sm text-label-sm text-secondary uppercase">Drawer Variance</span>
+                      <span className="font-label-sm text-label-sm text-secondary uppercase">Digital & UPI</span>
                       <span className="font-label-sm text-label-sm font-semibold text-on-surface bg-surface-container-highest px-space-xs py-0.5 rounded-full">
-                        {shiftSummaryData?.summary?.drawerVariance || "+₹ 0.00 Balanced"}
+                        {shiftSummaryData?.summary?.digitalCollected || "₹ 0.00"}
                       </span>
                     </div>
                   </div>
@@ -648,40 +648,89 @@ export default function CashierCatalogPage() {
                     <div className="w-16 h-16 relative flex items-center justify-center flex-shrink-0">
                       <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
                         <circle className="text-surface-container-highest" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeWidth="4" />
-                        <circle className="text-primary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
-                        <circle className="text-secondary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
-                        <circle className="text-outline" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
+                        {paymentBreakdownData?.summary?.breakdown && paymentBreakdownData.summary.breakdown.length > 0 ? (
+                          (() => {
+                            let accumulated = 0;
+                            const strokeColors = ["text-primary", "text-secondary", "text-outline", "text-amber-600", "text-emerald-600"];
+                            return paymentBreakdownData.summary.breakdown.map((item: any, idx: number) => {
+                              const pct = Math.max(0, Math.min(100, item.percentNum || parseInt(item.percent, 10) || 0));
+                              const offset = accumulated;
+                              accumulated += pct;
+                              if (pct === 0) return null;
+                              return (
+                                <circle
+                                  key={idx}
+                                  className={strokeColors[idx % strokeColors.length]}
+                                  cx="18"
+                                  cy="18"
+                                  fill="none"
+                                  r="14"
+                                  stroke="currentColor"
+                                  strokeDasharray={`${pct} 100`}
+                                  strokeDashoffset={offset === 0 ? "0" : `-${offset}`}
+                                  strokeWidth="4"
+                                />
+                              );
+                            });
+                          })()
+                        ) : (
+                          <>
+                            <circle className="text-primary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
+                            <circle className="text-secondary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
+                            <circle className="text-outline" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
+                          </>
+                        )}
                       </svg>
                       <span className="absolute font-label-sm text-label-sm font-semibold text-on-surface">POS</span>
                     </div>
                     <div className="flex flex-col gap-0.5 flex-1 min-w-0 text-on-surface-variant">
-                      <div className="flex justify-between items-center font-body-sm text-body-sm">
-                        <span className="flex items-center gap-1 truncate">
-                          <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
-                          UPI ({paymentBreakdownData?.summary?.upiPercent || "0%"})
-                        </span>
-                        <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-                          {paymentBreakdownData?.summary?.upiAmount || "₹0"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center font-body-sm text-body-sm">
-                        <span className="flex items-center gap-1 truncate">
-                          <span className="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
-                          Cards ({paymentBreakdownData?.summary?.cardsPercent || "0%"})
-                        </span>
-                        <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-                          {paymentBreakdownData?.summary?.cardsAmount || "₹0"}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center font-body-sm text-body-sm">
-                        <span className="flex items-center gap-1 truncate">
-                          <span className="w-2 h-2 rounded-full bg-outline flex-shrink-0"></span>
-                          Cash ({paymentBreakdownData?.summary?.cashPercent || "0%"})
-                        </span>
-                        <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-                          {paymentBreakdownData?.summary?.cashAmount || "₹0"}
-                        </span>
-                      </div>
+                      {paymentBreakdownData?.summary?.breakdown && paymentBreakdownData.summary.breakdown.length > 0 ? (
+                        paymentBreakdownData.summary.breakdown.map((item: any, idx: number) => {
+                          const colors = ["bg-primary", "bg-secondary", "bg-outline", "bg-amber-600", "bg-emerald-600"];
+                          const color = colors[idx % colors.length];
+                          return (
+                            <div key={idx} className="flex justify-between items-center font-body-sm text-body-sm">
+                              <span className="flex items-center gap-1 truncate">
+                                <span className={`w-2 h-2 rounded-full ${color} flex-shrink-0`}></span>
+                                {item.name} ({item.percent})
+                              </span>
+                              <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                                {item.amount}
+                              </span>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <>
+                          <div className="flex justify-between items-center font-body-sm text-body-sm">
+                            <span className="flex items-center gap-1 truncate">
+                              <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+                              UPI ({paymentBreakdownData?.summary?.upiPercent || "0%"})
+                            </span>
+                            <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                              {paymentBreakdownData?.summary?.upiAmount || "₹0"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center font-body-sm text-body-sm">
+                            <span className="flex items-center gap-1 truncate">
+                              <span className="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
+                              Cards ({paymentBreakdownData?.summary?.cardsPercent || "0%"})
+                            </span>
+                            <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                              {paymentBreakdownData?.summary?.cardsAmount || "₹0"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center font-body-sm text-body-sm">
+                            <span className="flex items-center gap-1 truncate">
+                              <span className="w-2 h-2 rounded-full bg-outline flex-shrink-0"></span>
+                              Cash ({paymentBreakdownData?.summary?.cashPercent || "0%"})
+                            </span>
+                            <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                              {paymentBreakdownData?.summary?.cashAmount || "₹0"}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -802,9 +851,8 @@ export default function CashierCatalogPage() {
                       transactionHistoryData.summary.recentTxns.map((txn: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between py-1 font-body-sm text-body-sm border-b border-outline-variant/10 last:border-b-0">
                           <span className="font-label-md text-label-md text-on-surface font-semibold">
-                            {txn.billNumber}
+                            {txn.orderNumber || txn.billNumber}
                           </span>
-                          <span className="text-on-surface-variant">{txn.location}</span>
                           <span className="font-label-md text-label-md text-on-surface font-semibold">
                             {txn.amount}
                           </span>

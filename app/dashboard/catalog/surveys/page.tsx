@@ -647,7 +647,7 @@ export default function SurveysCatalogPage() {
                         <p className="text-xs text-stone-800 italic line-clamp-1">{alertSummary.alerts[0]?.quote || "“Food arrived lukewarm”"}</p>
                         <div className="flex items-center justify-between pt-1 border-t border-rose-200/40 text-[10px]">
                           <span className="px-1.5 py-0.2 bg-rose-200 text-rose-900 rounded font-semibold">Callback Requested</span>
-                          <span className="text-stone-500">{alertSummary.alerts[0]?.staff || "Assigned: Amina K."}</span>
+                          <span className="text-stone-500">{alertSummary.alerts[0]?.staff || "Guest Feedback"}</span>
                         </div>
                       </div>
                     )}

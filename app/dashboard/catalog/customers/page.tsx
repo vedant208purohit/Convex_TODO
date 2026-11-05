@@ -213,7 +213,7 @@ export default function CustomersCatalogPage() {
       title: "Returning Customers",
       track: "Retention & Loyalty",
       badge: "KPI",
-      desc: "Repeat patrons with 2 or more historical dining visits and active loyalty points balance.",
+      desc: "Repeat patrons with 2 or more historical dining visits.",
       width: 4,
     },
     {
@@ -227,17 +227,17 @@ export default function CustomersCatalogPage() {
     {
       id: "customers_most_frequent",
       title: "Most Frequent Customers",
-      track: "VIP Dining Club",
+      track: "Top Patrons",
       badge: "TABLE",
-      desc: "Ranked guest leaderboard by visit frequency, lifetime spend, and table reservation priority.",
+      desc: "Ranked guest leaderboard by visit frequency and cumulative spend.",
       width: 4,
     },
     {
       id: "customers_order_frequency",
       title: "Customer Order Frequency",
-      track: "Cohort Velocity",
+      track: "Visit Frequency",
       badge: "CHART",
-      desc: "Distribution of customer visits per month across one-time, occasional, and core regular diners.",
+      desc: "Distribution of customer visit counts across one-time, occasional, and frequent diners.",
       width: 4,
     },
   ];
@@ -363,12 +363,12 @@ export default function CustomersCatalogPage() {
 
                     <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden flex">
                       <div className="bg-black h-full" style={{ width: `${totSummary.dineInPercent ?? 67}%` }}></div>
-                      <div className="bg-stone-400 h-full" style={{ width: `${totSummary.onlinePercent ?? 33}%` }}></div>
+                      <div className="bg-stone-400 h-full" style={{ width: `${totSummary.secondaryChannelPercent ?? totSummary.onlinePercent ?? 33}%` }}></div>
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-stone-500 pt-0.5">
                       <span>Dine-In: {totSummary.dineInPercent ?? 67}%</span>
-                      <span>Online: {totSummary.onlinePercent ?? 33}%</span>
+                      <span>{totSummary.secondaryChannelLabel || (totSummary.takeawayCount > 0 ? "Takeaway" : totSummary.deliveryCount > 0 ? "Delivery" : totSummary.onlineCount > 0 ? "Online" : "Takeaway")}: {totSummary.secondaryChannelPercent ?? totSummary.onlinePercent ?? 33}%</span>
                     </div>
                   </div>
                 </div>
@@ -504,8 +504,8 @@ export default function CustomersCatalogPage() {
                     </div>
 
                     <div className="flex items-center justify-between px-2.5 py-1.5 rounded bg-stone-100 text-[11px]">
-                      <span className="text-stone-500">Loyalty Redemptions:</span>
-                      <span className="font-semibold text-stone-900">{retSummary.redeemedFormatted || "₹ 48,200"}</span>
+                      <span className="text-stone-500">Repeat Visitors:</span>
+                      <span className="font-semibold text-stone-900">{retSummary.redeemedFormatted || "0 repeat visitors"}</span>
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-stone-500 pt-0.5">
@@ -570,10 +570,7 @@ export default function CustomersCatalogPage() {
                       (recSummary.recentGuests || []).slice(0, 3).map((g: any, idx: number) => (
                         <div key={idx} className="p-1.5 rounded bg-white border border-[#f0eae3] flex items-center justify-between">
                           <div className="flex flex-col min-w-0 pr-2">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-stone-900 text-xs truncate">{g.name}</span>
-                              <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 text-[9px] font-semibold">{g.tier}</span>
-                            </div>
+                            <span className="font-bold text-stone-900 text-xs truncate">{g.name}</span>
                             <span className="text-[10px] text-stone-400 mt-0.5">{g.table} • {g.time}</span>
                           </div>
                           <span className="font-bold text-stone-900 text-xs shrink-0">{g.spend}</span>
@@ -614,7 +611,7 @@ export default function CustomersCatalogPage() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
-                      VIP Dining Club
+                      Top Patrons
                     </span>
                     <span className="text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase bg-[#ece6e0] text-stone-700">
                       TABLE
@@ -624,7 +621,7 @@ export default function CustomersCatalogPage() {
                   <div>
                     <h3 className="font-serif text-lg text-stone-900 font-normal">Most Frequent Customers</h3>
                     <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">
-                      Ranked guest leaderboard by visit frequency, lifetime spend, and table reservation priority.
+                      Ranked guest leaderboard by visit frequency and cumulative spend.
                     </p>
                   </div>
 
@@ -643,7 +640,7 @@ export default function CustomersCatalogPage() {
                             </span>
                             <div className="flex flex-col min-w-0">
                               <span className="font-bold text-stone-900 text-xs truncate">{g.name}</span>
-                              <span className="text-[10px] text-stone-400">{g.visits} • {g.tier}</span>
+                              <span className="text-[10px] text-stone-400">{g.visits}</span>
                             </div>
                           </div>
                           <span className="font-bold text-stone-900 text-xs shrink-0">{g.spend}</span>
@@ -684,7 +681,7 @@ export default function CustomersCatalogPage() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
-                      Cohort Velocity
+                      Visit Frequency
                     </span>
                     <span className="text-[9.5px] font-bold px-2 py-0.5 rounded tracking-wider uppercase bg-[#ece6e0] text-stone-700">
                       CHART
@@ -694,16 +691,16 @@ export default function CustomersCatalogPage() {
                   <div>
                     <h3 className="font-serif text-lg text-stone-900 font-normal">Customer Order Frequency</h3>
                     <p className="text-xs text-stone-500 mt-0.5 line-clamp-2">
-                      Distribution of customer visits per month across one-time, occasional, and core regular diners.
+                      Distribution of customer visit counts across one-time, occasional, and frequent diners.
                     </p>
                   </div>
 
                   {/* Preview Box */}
                   <div className="bg-[#fcf8f5] rounded-lg p-3 flex flex-col gap-2 border border-[#f3ede6] min-h-[110px] justify-center">
                     {(cohortSummary.cohorts || [
-                      { label: "1 Visit / Mo (Discovery)", percent: 38 },
-                      { label: "2-3 Visits (Core Regulars)", percent: 44 },
-                      { label: "4+ Visits (VIP Club)", percent: 18 },
+                      { label: "1 Visit", percent: 0 },
+                      { label: "2 - 3 Visits", percent: 0 },
+                      { label: "4+ Visits", percent: 0 },
                     ]).map((c: any, idx: number) => (
                       <div key={idx} className="flex flex-col gap-1">
                         <div className="flex justify-between text-[11px]">

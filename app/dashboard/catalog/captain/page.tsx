@@ -7,6 +7,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { PosShell } from "../../../components/PosShell";
 import { OrderDateRangePicker } from "../../../components/OrderDateRangePicker";
+import { formatPriceWithSymbol } from "@/lib/constants/countries";
 
 function getStartOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0, 0);
@@ -439,7 +440,13 @@ export default function CaptainCatalogPage() {
                                   </div>
                                 </div>
                                 <span className="font-label-md text-label-md text-on-surface font-semibold">
-                                  ₹ {c.amount.toLocaleString()}
+                                  {c.amountFormatted ||
+                                    formatPriceWithSymbol(
+                                      c.amount,
+                                      activeOrdersData?.currencySymbol || activeOrg?.defaultCurrencySymbol || "₹",
+                                      activeOrdersData?.country || activeOrg?.country,
+                                      true,
+                                    )}
                                 </span>
                               </div>
                             ))
@@ -532,7 +539,7 @@ export default function CaptainCatalogPage() {
                           <div className="flex justify-between items-center text-xs text-outline font-label-sm">
                             <span>Fastest Floor:</span>
                             <span className="font-semibold text-on-surface">
-                              {widget.data?.summary?.fastestSection ?? "Terrace"}
+                              {widget.data?.summary?.fastestSection ?? "--"}
                             </span>
                           </div>
                         </div>

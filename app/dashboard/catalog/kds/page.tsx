@@ -314,16 +314,24 @@ export default function KdsCatalogPage() {
 
   // Widget 4: Kitchen Order Status Breakdown
   const breakdownSummary = statusBreakdownData?.summary || {};
+  const bAccepted =
+    typeof breakdownSummary.accepted === "number"
+      ? breakdownSummary.accepted
+      : typeof breakdownSummary.held === "number"
+        ? breakdownSummary.held
+        : 0;
   const bInPrep = typeof breakdownSummary.inPrep === "number" ? breakdownSummary.inPrep : 0;
   const bReady = typeof breakdownSummary.ready === "number" ? breakdownSummary.ready : 0;
-  const bHeld = typeof breakdownSummary.held === "number" ? breakdownSummary.held : 0;
   const bOverdue = typeof breakdownSummary.overdue === "number" ? breakdownSummary.overdue : 0;
-  const bTotal = typeof breakdownSummary.total === "number" ? breakdownSummary.total : (bInPrep + bReady + bHeld + bOverdue);
+  const bTotal =
+    typeof breakdownSummary.total === "number"
+      ? breakdownSummary.total
+      : bAccepted + bInPrep + bReady + bOverdue;
 
   // Compute Donut SVG parameters (Circumference of r=14 is 2 * PI * 14 ≈ 87.96 -> 88)
+  const donutAccepted = bTotal > 0 ? (bAccepted / bTotal) * 88 : 0;
   const donutInPrep = bTotal > 0 ? (bInPrep / bTotal) * 88 : 0;
   const donutReady = bTotal > 0 ? (bReady / bTotal) * 88 : 0;
-  const donutHeld = bTotal > 0 ? (bHeld / bTotal) * 88 : 0;
   const donutOverdue = bTotal > 0 ? (bOverdue / bTotal) * 88 : 0;
 
   // Widget 5: Average Kitchen Prep Time
@@ -736,6 +744,17 @@ export default function KdsCatalogPage() {
                           />
                           {bTotal > 0 ? (
                             <>
+                              {/* Accepted */}
+                              <circle
+                                className="stroke-stone-900"
+                                cx="18"
+                                cy="18"
+                                fill="none"
+                                r="14"
+                                strokeDasharray={`${donutAccepted} 88`}
+                                strokeDashoffset="0"
+                                strokeWidth="3.5"
+                              />
                               {/* In Prep */}
                               <circle
                                 className="stroke-primary"
@@ -744,7 +763,7 @@ export default function KdsCatalogPage() {
                                 fill="none"
                                 r="14"
                                 strokeDasharray={`${donutInPrep} 88`}
-                                strokeDashoffset="0"
+                                strokeDashoffset={`-${donutAccepted}`}
                                 strokeWidth="3.5"
                               />
                               {/* Ready */}
@@ -755,18 +774,7 @@ export default function KdsCatalogPage() {
                                 fill="none"
                                 r="14"
                                 strokeDasharray={`${donutReady} 88`}
-                                strokeDashoffset={`-${donutInPrep}`}
-                                strokeWidth="3.5"
-                              />
-                              {/* Held */}
-                              <circle
-                                className="stroke-outline"
-                                cx="18"
-                                cy="18"
-                                fill="none"
-                                r="14"
-                                strokeDasharray={`${donutHeld} 88`}
-                                strokeDashoffset={`-${donutInPrep + donutReady}`}
+                                strokeDashoffset={`-${donutAccepted + donutInPrep}`}
                                 strokeWidth="3.5"
                               />
                               {/* Overdue */}
@@ -777,7 +785,7 @@ export default function KdsCatalogPage() {
                                 fill="none"
                                 r="14"
                                 strokeDasharray={`${donutOverdue} 88`}
-                                strokeDashoffset={`-${donutInPrep + donutReady + donutHeld}`}
+                                strokeDashoffset={`-${donutAccepted + donutInPrep + donutReady}`}
                                 strokeWidth="3.5"
                               />
                             </>
@@ -796,6 +804,14 @@ export default function KdsCatalogPage() {
                       <div className="flex flex-col gap-1 w-full text-left font-body-sm text-body-sm">
                         <div className="flex items-center justify-between">
                           <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-stone-900" />
+                            Accepted
+                          </span>
+                          <span className="font-semibold text-on-surface">{bAccepted}</span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-1.5">
                             <span className="w-2 h-2 rounded-full bg-primary" />
                             In Prep
                           </span>
@@ -808,14 +824,6 @@ export default function KdsCatalogPage() {
                             Ready
                           </span>
                           <span className="font-semibold text-on-surface">{bReady}</span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-outline" />
-                            Held
-                          </span>
-                          <span className="font-semibold text-on-surface">{bHeld}</span>
                         </div>
 
                         <div className="flex items-center justify-between text-error font-medium">

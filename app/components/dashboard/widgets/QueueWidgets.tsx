@@ -39,6 +39,12 @@ export function QueueLengthWidget({
   const outdoorCount = summary.outdoorCount ?? "00";
   const statusTag = summary.statusTag ?? "Nominal Flow";
 
+  const indoorNum = Number(indoorCount) || 0;
+  const outdoorNum = Number(outdoorCount) || 0;
+  const totalNum = indoorNum + outdoorNum;
+  const indoorPct = totalNum > 0 ? Math.round((indoorNum / totalNum) * 100) : 0;
+  const outdoorPct = totalNum > 0 ? 100 - indoorPct : 0;
+
   return (
     <div className="flex flex-col justify-between h-full">
       <div className="flex items-start justify-between mb-space-xs">
@@ -71,8 +77,14 @@ export function QueueLengthWidget({
         </div>
 
         <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden flex mt-1">
-          <div className="bg-primary h-full w-[65%]"></div>
-          <div className="bg-secondary h-full w-[35%] opacity-60"></div>
+          {totalNum > 0 ? (
+            <>
+              <div className="bg-primary h-full transition-all" style={{ width: `${indoorPct}%` }}></div>
+              <div className="bg-secondary h-full opacity-60 transition-all" style={{ width: `${outdoorPct}%` }}></div>
+            </>
+          ) : (
+            <div className="bg-surface-container-high h-full w-full opacity-30"></div>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-secondary pt-0.5">
@@ -344,9 +356,9 @@ export function QueueStatusBreakdownWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const totalPax = summary.totalPax ?? 0;
-  const couplesPercent = summary.couplesPercent ?? 42;
-  const familiesPercent = summary.familiesPercent ?? 40;
-  const largePercent = summary.largePercent ?? 18;
+  const couplesPercent = summary.couplesPercent ?? 0;
+  const familiesPercent = summary.familiesPercent ?? 0;
+  const largePercent = summary.largePercent ?? 0;
 
   return (
     <div className="flex flex-col justify-between h-full">

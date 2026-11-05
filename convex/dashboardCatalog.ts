@@ -937,7 +937,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "cashier_shift_summary",
     name: "Current Shift Summary",
-    description: "Real-time aggregated gross intake, cash in drawer, and variance status for active shift.",
+    description: "Real-time aggregated gross intake, cash in hand, and digital settlements for active shift.",
     category: "Cashier",
     subcategory: "Shift Telemetry",
     widgetType: "kpi",
@@ -1478,7 +1478,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "menu_product_availability",
     name: "Product Availability & 86'd Items",
-    description: "Inventory stockout status, portion caps, and 86'd menu items.",
+    description: "Inventory stockout status and recipe-backed menu item availability.",
     category: "Menu",
     subcategory: "Availability",
     widgetType: "table",
@@ -1602,7 +1602,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "customers_returning",
     name: "Returning Customers & Retention",
-    description: "Repeat patrons with 2 or more historical dining visits and active loyalty points balance.",
+    description: "Repeat patrons with 2 or more historical dining visits.",
     category: "Customers",
     subcategory: "Retention & Loyalty",
     widgetType: "kpi",
@@ -1643,9 +1643,9 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "customers_most_frequent",
     name: "Most Frequent Customers",
-    description: "Ranked guest leaderboard by visit frequency, lifetime spend, and table reservation priority.",
+    description: "Ranked guest leaderboard by visit frequency and cumulative spend.",
     category: "Customers",
-    subcategory: "VIP Dining Club",
+    subcategory: "Top Patrons",
     widgetType: "table",
     dataProviderKey: "provider_customers_most_frequent",
     supportedSizes: [
@@ -1663,9 +1663,9 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "customers_order_frequency",
     name: "Customer Order Frequency",
-    description: "Distribution of customer visits per month across one-time, occasional, and core regular diners.",
+    description: "Distribution of customer visit counts across one-time, occasional, and frequent diners.",
     category: "Customers",
-    subcategory: "Cohort Velocity",
+    subcategory: "Visit Frequency",
     widgetType: "chart",
     dataProviderKey: "provider_customers_order_frequency",
     supportedSizes: [

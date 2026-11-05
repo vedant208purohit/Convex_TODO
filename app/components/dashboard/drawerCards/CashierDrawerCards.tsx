@@ -90,8 +90,8 @@ export const CASHIER_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
 // 1. Current Shift Summary
 export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currencySymbol = data?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -107,7 +107,9 @@ export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onA
             {widget.type}
           </span>
         </div>
-        <p className="text-xs text-stone-500 min-h-[32px]">{widget.description}</p>
+        <p className="text-xs text-stone-500 min-h-[32px]">
+          Real-time aggregated gross intake, cash in hand, and digital settlements for active shift.
+        </p>
 
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] min-h-[95px] justify-center text-xs">
           <div className="flex justify-between items-baseline">
@@ -115,13 +117,13 @@ export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onA
             <span className="font-bold text-stone-900">{summary.grossIntake || zeroFormatted}</span>
           </div>
           <div className="flex justify-between items-baseline">
-            <span className="text-stone-500 uppercase text-[10px] font-bold">Float Cash</span>
-            <span className="text-stone-700 font-medium">{summary.floatCash || zeroFormatted}</span>
+            <span className="text-stone-500 uppercase text-[10px] font-bold">Cash Collected</span>
+            <span className="font-semibold text-stone-800">{summary.cashCollected || zeroFormatted}</span>
           </div>
           <div className="pt-1 flex justify-between items-baseline border-t border-[#f0eae3]">
-            <span className="text-stone-500 uppercase text-[10px] font-bold">Variance</span>
+            <span className="text-stone-500 uppercase text-[10px] font-bold">Digital & UPI</span>
             <span className="font-semibold text-stone-800 bg-stone-100 px-2 py-0.5 rounded text-[10px]">
-              {summary.drawerVariance || `+${zeroFormatted} Balanced`}
+              {summary.digitalCollected || zeroFormatted}
             </span>
           </div>
         </div>
@@ -150,8 +152,8 @@ export function DrawerCashierShiftSummaryCard({ widget, isPlaced, placement, onA
 // 2. Total Transactions
 export function DrawerCashierTotalTransactionsCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currencySymbol = data?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -206,8 +208,8 @@ export function DrawerCashierTotalTransactionsCard({ widget, isPlaced, placement
 // 3. Cash Sales
 export function DrawerCashierCashSalesCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currencySymbol = data?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -262,8 +264,8 @@ export function DrawerCashierCashSalesCard({ widget, isPlaced, placement, onAdd,
 // 4. Digital Payment Sales
 export function DrawerCashierDigitalSalesCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currencySymbol = data?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -317,8 +319,8 @@ export function DrawerCashierDigitalSalesCard({ widget, isPlaced, placement, onA
 // 5. Payment Method Breakdown
 export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currencySymbol = data?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -340,25 +342,65 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
           <div className="w-12 h-12 relative flex items-center justify-center shrink-0">
             <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
               <circle className="text-stone-200" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeWidth="4" />
-              <circle className="text-stone-900" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
-              <circle className="text-stone-500" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
-              <circle className="text-stone-300" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
+              {summary.breakdown && summary.breakdown.length > 0 ? (
+                (() => {
+                  let accumulated = 0;
+                  const strokeColors = ["text-stone-900", "text-stone-600", "text-stone-400", "text-amber-700", "text-emerald-700"];
+                  return summary.breakdown.map((item: any, idx: number) => {
+                    const pct = Math.max(0, Math.min(100, item.percentNum || parseInt(item.percent, 10) || 0));
+                    const offset = accumulated;
+                    accumulated += pct;
+                    if (pct === 0) return null;
+                    return (
+                      <circle
+                        key={idx}
+                        className={strokeColors[idx % strokeColors.length]}
+                        cx="18"
+                        cy="18"
+                        fill="none"
+                        r="14"
+                        stroke="currentColor"
+                        strokeDasharray={`${pct} 100`}
+                        strokeDashoffset={offset === 0 ? "0" : `-${offset}`}
+                        strokeWidth="4"
+                      />
+                    );
+                  });
+                })()
+              ) : (
+                <>
+                  <circle className="text-stone-900" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
+                  <circle className="text-stone-500" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
+                  <circle className="text-stone-300" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
+                </>
+              )}
             </svg>
             <span className="absolute text-[8px] font-bold text-stone-800">POS</span>
           </div>
           <div className="flex flex-col gap-0.5 flex-1 min-w-0 text-[10px]">
-            <div className="flex justify-between items-center">
-              <span className="truncate">UPI ({summary.upiPercent || "0%"})</span>
-              <span className="font-bold text-stone-900">{summary.upiAmount || zeroFormatted}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="truncate">Cards ({summary.cardsPercent || "0%"})</span>
-              <span className="font-bold text-stone-900">{summary.cardsAmount || zeroFormatted}</span>
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="truncate">Cash ({summary.cashPercent || "0%"})</span>
-              <span className="font-bold text-stone-900">{summary.cashAmount || zeroFormatted}</span>
-            </div>
+            {summary.breakdown && summary.breakdown.length > 0 ? (
+              summary.breakdown.map((item: any, idx: number) => (
+                <div key={idx} className="flex justify-between items-center">
+                  <span className="truncate">{item.name} ({item.percent})</span>
+                  <span className="font-bold text-stone-900">{item.amount}</span>
+                </div>
+              ))
+            ) : (
+              <>
+                <div className="flex justify-between items-center">
+                  <span className="truncate">UPI ({summary.upiPercent || "0%"})</span>
+                  <span className="font-bold text-stone-900">{summary.upiAmount || zeroFormatted}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="truncate">Cards ({summary.cardsPercent || "0%"})</span>
+                  <span className="font-bold text-stone-900">{summary.cardsAmount || zeroFormatted}</span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="truncate">Cash ({summary.cashPercent || "0%"})</span>
+                  <span className="font-bold text-stone-900">{summary.cashAmount || zeroFormatted}</span>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -386,8 +428,8 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
 // 6. Refund Summary
 export function DrawerCashierRefundSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currencySymbol = data?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -461,8 +503,7 @@ export function DrawerCashierTransactionHistoryCard({ widget, isPlaced, placemen
           {txns.length > 0 ? (
             txns.slice(0, 3).map((txn: any, idx: number) => (
               <div key={idx} className="flex items-center justify-between text-xs py-0.5 border-b border-[#f3ede6] last:border-b-0">
-                <span className="font-bold text-stone-800">{txn.billNumber}</span>
-                <span className="text-stone-500 text-[10px]">{txn.location}</span>
+                <span className="font-bold text-stone-800">{txn.orderNumber || txn.billNumber}</span>
                 <span className="font-semibold text-stone-900">{txn.amount}</span>
                 <span className="text-[9px] bg-stone-100 px-1.5 py-0.5 rounded text-stone-700">{txn.mode}</span>
               </div>

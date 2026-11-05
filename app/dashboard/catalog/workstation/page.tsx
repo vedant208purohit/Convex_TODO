@@ -425,47 +425,50 @@ export default function WorkstationCatalogPage() {
                       </p>
 
                       {/* Live Telemetry Preview Box matching mockup */}
-                      {widget.id === "workstation_order_summary" && (
-                        <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="font-label-sm text-label-sm text-outline uppercase font-semibold">
-                              Active Lane Volume
-                            </span>
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                          </div>
-                          <div className="grid grid-cols-3 gap-space-xs text-center py-space-xs">
-                            <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
-                              <span className="font-label-sm text-label-sm text-outline">Main POS</span>
-                              <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                                {widget.data?.summary?.mainPosLane ?? (widget.data?.kpi?.value ? Math.round(Number(widget.data.kpi.value) * 0.7) : 0)}
+                      {widget.id === "workstation_order_summary" && (() => {
+                        const lanes = widget.data?.summary?.lanes && widget.data.summary.lanes.length > 0
+                          ? widget.data.summary.lanes
+                          : [{ name: "Main", count: Number(widget.data?.kpi?.value ?? 0) }];
+                        return (
+                          <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-label-sm text-label-sm text-outline uppercase font-semibold">
+                                Active Lane Volume
+                              </span>
+                              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+                            </div>
+                            <div
+                              className={`grid gap-space-xs text-center py-space-xs ${
+                                lanes.length === 1
+                                  ? "grid-cols-1"
+                                  : lanes.length === 2
+                                  ? "grid-cols-2"
+                                  : "grid-cols-3"
+                              }`}
+                            >
+                              {lanes.map((lane: any, idx: number) => (
+                                <div key={idx} className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
+                                  <span className="font-label-sm text-label-sm text-outline truncate">{lane.name}</span>
+                                  <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                                    {lane.count}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center justify-between bg-surface-container-high px-space-sm py-space-xs rounded-full">
+                              <span className="font-body-sm text-body-sm text-on-surface">Total Spool Pool</span>
+                              <span className="font-label-md text-label-md text-on-surface font-semibold">
+                                {widget.data?.kpi?.value ?? 0} Active Tasks
                               </span>
                             </div>
-                            <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
-                              <span className="font-label-sm text-label-sm text-outline">Bar Lane</span>
-                              <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                                {widget.data?.summary?.barLane ?? 0}
-                              </span>
-                            </div>
-                            <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
-                              <span className="font-label-sm text-label-sm text-outline">Dessert</span>
-                              <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">
-                                {widget.data?.summary?.dessertStation ?? 0}
-                              </span>
-                            </div>
                           </div>
-                          <div className="flex items-center justify-between bg-surface-container-high px-space-sm py-space-xs rounded-full">
-                            <span className="font-body-sm text-body-sm text-on-surface">Total Spool Pool</span>
-                            <span className="font-label-md text-label-md text-on-surface font-semibold">
-                              {widget.data?.kpi?.value ?? 0} Active Tasks
-                            </span>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {widget.id === "workstation_orders_by_workstation" && (
                         <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
                           <div className="flex justify-between items-center text-outline font-label-sm text-label-sm uppercase">
-                            <span>Counter Register</span>
+                            <span>Workstation</span>
                             <span>Tkts</span>
                           </div>
                           <div className="flex flex-col gap-space-xs">
@@ -486,7 +489,7 @@ export default function WorkstationCatalogPage() {
                               ))
                             ) : (
                               <div className="py-4 text-center text-secondary text-xs font-label-sm">
-                                0 Orders processed at counter terminals
+                                0 Orders processed across workstations
                               </div>
                             )}
                           </div>
@@ -525,63 +528,65 @@ export default function WorkstationCatalogPage() {
                         </div>
                       )}
 
-                      {widget.id === "workstation_queue" && (
-                        <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
-                          <div className="flex items-center justify-between">
-                            <span className="font-display-sm text-display-sm text-on-surface font-normal">
-                              {widget.data?.kpi?.value ?? 0}
-                            </span>
-                            <span className="bg-surface-container-highest font-label-sm text-label-sm px-space-sm py-0.5 rounded-full text-secondary font-semibold">
-                              {widget.data?.summary?.spoolStatus ?? "Nominal Spool"}
-                            </span>
-                          </div>
-                          <div className="space-y-space-xs text-body-sm pt-space-xs border-t border-surface-container-high/60">
-                            <div className="flex justify-between">
-                              <span className="text-secondary">Buffer Depth</span>
-                              <span className="font-semibold text-on-surface">
-                                {widget.data?.kpi?.value ?? 0} Orders
+                      {widget.id === "workstation_queue" && (() => {
+                        const depth = widget.data?.kpi?.value ?? (widget.data?.summary?.bufferDepth ?? 0);
+                        return (
+                          <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="font-display-sm text-display-sm text-on-surface font-normal">
+                                {depth}
+                              </span>
+                              <span className="bg-surface-container-highest font-label-sm text-label-sm px-space-sm py-0.5 rounded-full text-secondary font-semibold">
+                                {widget.data?.summary?.spoolStatus ?? (depth > 0 ? "Nominal Spool" : "Queue Idle")}
                               </span>
                             </div>
-                            <div className="flex justify-between">
-                              <span className="text-secondary">Oldest Waiting Task</span>
-                              <span className="font-semibold text-on-surface">
-                                {widget.data?.summary?.oldestWaiting ?? "--"}
-                              </span>
+                            <div className="space-y-space-xs text-body-sm pt-space-xs border-t border-surface-container-high/60">
+                              <div className="flex justify-between">
+                                <span className="text-secondary">Buffer Depth</span>
+                                <span className="font-semibold text-on-surface">
+                                  {depth} Orders
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-secondary">Oldest Waiting Task</span>
+                                <span className="font-semibold text-on-surface">
+                                  {widget.data?.summary?.oldestWaiting ?? "--"}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
-                      {widget.id === "workstation_prep_time" && (
-                        <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
-                          <div className="flex items-baseline justify-between">
-                            <span className="font-display-sm text-display-sm text-on-surface font-normal">
-                              {widget.data?.summary?.displayValue ?? "--"}
-                            </span>
-                            <span className="font-label-sm text-label-sm text-secondary">
-                              Target: {widget.data?.summary?.slaGoal ?? "< 20.0m"}
-                            </span>
-                          </div>
-                          <div className="flex items-end justify-between h-12 pt-2 px-4 border-b border-surface-container-high">
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="w-5 bg-primary rounded-t-sm h-8"></div>
-                              <span className="text-[10px] text-outline">Grill</span>
+                      {widget.id === "workstation_prep_time" && (() => {
+                        const prepBars = widget.data?.summary?.stationBars && widget.data.summary.stationBars.length > 0
+                          ? widget.data.summary.stationBars
+                          : [{ name: "Main", prep: widget.data?.summary?.displayValue ? `${widget.data.summary.displayValue}m` : "--" }];
+                        return (
+                          <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-space-xs">
+                            <div className="flex items-baseline justify-between">
+                              <span className="font-display-sm text-display-sm text-on-surface font-normal">
+                                {widget.data?.summary?.displayValue ?? "--"}
+                              </span>
+                              <span className="font-label-sm text-label-sm text-secondary">
+                                Target: {widget.data?.summary?.slaGoal ?? "< 20.0m"}
+                              </span>
                             </div>
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="w-5 bg-secondary rounded-t-sm h-10"></div>
-                              <span className="text-[10px] text-outline">Oven</span>
+                            <div className="flex items-end justify-around h-12 pt-2 px-4 border-b border-surface-container-high">
+                              {prepBars.map((sb: any, idx: number) => (
+                                <div key={idx} className="flex flex-col items-center gap-1">
+                                  <div className={`w-5 rounded-t-sm h-8 ${idx === 0 ? "bg-primary" : idx === 1 ? "bg-secondary" : "bg-surface-container-highest"}`}></div>
+                                  <span className="text-[10px] text-outline truncate max-w-[70px]">{sb.name}</span>
+                                </div>
+                              ))}
                             </div>
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="w-5 bg-surface-container-highest rounded-t-sm h-5"></div>
-                              <span className="text-[10px] text-outline">Bar</span>
+                            <div className="flex justify-between items-center text-xs text-outline font-label-sm">
+                              <span>Efficiency Delta:</span>
+                              <span className="font-semibold text-on-surface">{widget.data?.summary?.deltaText ?? "Within SLA"}</span>
                             </div>
                           </div>
-                          <div className="flex justify-between items-center text-xs text-outline font-label-sm">
-                            <span>Efficiency Delta:</span>
-                            <span className="font-semibold text-on-surface">{widget.data?.summary?.deltaText ?? "Within SLA"}</span>
-                          </div>
-                        </div>
-                      )}
+                        );
+                      })()}
 
                       {widget.id === "workstation_delayed_orders" && (
                         <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-xs my-space-xs">

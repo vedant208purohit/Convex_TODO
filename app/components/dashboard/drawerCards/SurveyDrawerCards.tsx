@@ -72,9 +72,9 @@ export const SURVEY_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
 export function DrawerSurveyResponseCountCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const totalResponses = summary.totalResponses ?? "0";
-  const deltaPercent = summary.deltaPercent ?? "▲ +18.2%";
-  const qrReceiptPercent = summary.qrReceiptPercent ?? 68;
-  const cfdPercent = summary.cfdPercent ?? 32;
+  const deltaPercent = summary.deltaPercent ?? "+0.0%";
+  const qrReceiptPercent = summary.qrReceiptPercent ?? 0;
+  const cfdPercent = summary.cfdPercent ?? 0;
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -103,8 +103,14 @@ export function DrawerSurveyResponseCountCard({ widget, isPlaced, placement, onA
             </span>
           </div>
           <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden flex">
-            <div className="bg-black h-full" style={{ width: `${qrReceiptPercent}%` }}></div>
-            <div className="bg-stone-400 h-full" style={{ width: `${cfdPercent}%` }}></div>
+            {qrReceiptPercent + cfdPercent > 0 ? (
+              <>
+                <div className="bg-black h-full" style={{ width: `${qrReceiptPercent}%` }}></div>
+                <div className="bg-stone-400 h-full" style={{ width: `${cfdPercent}%` }}></div>
+              </>
+            ) : (
+              <div className="bg-stone-300 h-full w-full opacity-40"></div>
+            )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5">
             <span>QR Receipt: {qrReceiptPercent}%</span>
@@ -137,9 +143,9 @@ export function DrawerSurveyResponseCountCard({ widget, isPlaced, placement, onA
 export function DrawerSurveyAverageRatingCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const avgScore = summary.avgScore ?? "0.00";
-  const positivePercent = summary.positivePercent ?? 92;
-  const neutralPercent = summary.neutralPercent ?? 6;
-  const negativePercent = summary.negativePercent ?? 2;
+  const positivePercent = summary.positivePercent ?? 0;
+  const neutralPercent = summary.neutralPercent ?? 0;
+  const negativePercent = summary.negativePercent ?? 0;
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -169,9 +175,15 @@ export function DrawerSurveyAverageRatingCard({ widget, isPlaced, placement, onA
             </div>
           </div>
           <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden flex">
-            <div className="bg-emerald-600 h-full" style={{ width: `${positivePercent}%` }}></div>
-            <div className="bg-amber-500 h-full" style={{ width: `${neutralPercent}%` }}></div>
-            <div className="bg-rose-500 h-full" style={{ width: `${negativePercent}%` }}></div>
+            {positivePercent + neutralPercent + negativePercent > 0 ? (
+              <>
+                <div className="bg-emerald-600 h-full" style={{ width: `${positivePercent}%` }}></div>
+                <div className="bg-amber-500 h-full" style={{ width: `${neutralPercent}%` }}></div>
+                <div className="bg-rose-500 h-full" style={{ width: `${negativePercent}%` }}></div>
+              </>
+            ) : (
+              <div className="bg-stone-300 h-full w-full opacity-40"></div>
+            )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5">
             <span className="text-emerald-700 font-medium">Pos: {positivePercent}%</span>
@@ -262,7 +274,7 @@ export function DrawerSurveyRecentFeedbackCard({ widget, isPlaced, placement, on
 // 4. Satisfaction Trend
 export function DrawerSurveySatisfactionTrendCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const currentRating = summary.currentRating ?? "4.8";
+  const currentRating = summary.currentRating ?? "--";
   const slaTarget = summary.slaTarget ?? "SLA: 4.5+";
 
   return (
@@ -364,7 +376,7 @@ export function DrawerSurveyLowRatingAlertsCard({ widget, isPlaced, placement, o
               <p className="text-[10px] text-stone-800 italic line-clamp-1">{topAlert?.quote || "“Food arrived lukewarm”"}</p>
               <div className="flex items-center justify-between pt-0.5 border-t border-rose-200/40 text-[9px]">
                 <span className="px-1 py-0.2 bg-rose-200 text-rose-900 rounded font-semibold">Callback Requested</span>
-                <span className="text-stone-500">{topAlert?.staff || "Assigned: Amina K."}</span>
+                <span className="text-stone-500">{topAlert?.staff || "Guest Feedback"}</span>
               </div>
             </div>
           )}

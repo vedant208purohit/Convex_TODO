@@ -33,17 +33,18 @@ export function RevenueVelocityWidget({
   });
 
   const payload = (widgetData as any)?.payload;
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const country = (widgetData as any)?.country;
   const netRevenueFormatted =
     widgetData?.kpi?.displayValue ||
     payload?.netRevenueFormatted ||
-    formatPriceWithSymbol(0, currencySymbol);
+    formatPriceWithSymbol(0, currencySymbol, country);
   const deltaPercent = widgetData?.kpi?.deltaPercent ?? payload?.deltaPercent ?? 0;
   const deltaLabel = widgetData?.kpi?.deltaLabel || payload?.deltaLabel || "+0.0% vs Last Cycle";
   const coversCount = (widgetData?.kpi?.secondaryMetrics?.find((m) => m.label.includes("Paid"))?.value as number) ?? payload?.coversCount ?? payload?.totalOrders ?? 0;
   const averageCheckFormatted =
     payload?.averageCheckFormatted ||
-    formatPriceWithSymbol(0, currencySymbol);
+    formatPriceWithSymbol(0, currencySymbol, country);
   const avgPacingMinutes = coversCount > 0 ? (payload?.avgPacingMinutes ?? 0) : null;
   const chartPoints: Array<{ label: string; value: number }> =
     widgetData?.chart?.data?.map((d: any) => ({ label: d.label, value: Number(d.value) })) ||

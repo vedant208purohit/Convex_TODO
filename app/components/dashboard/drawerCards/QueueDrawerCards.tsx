@@ -77,6 +77,12 @@ export function DrawerQueueLengthCard({ widget, isPlaced, placement, onAdd, data
   const outdoorCount = summary.outdoorCount ?? "00";
   const statusTag = summary.statusTag ?? "Nominal Flow";
 
+  const indoorNum = Number(indoorCount) || 0;
+  const outdoorNum = Number(outdoorCount) || 0;
+  const totalNum = indoorNum + outdoorNum;
+  const indoorPct = totalNum > 0 ? Math.round((indoorNum / totalNum) * 100) : 0;
+  const outdoorPct = totalNum > 0 ? 100 - indoorPct : 0;
+
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
       <div className="flex flex-col gap-2.5">
@@ -105,8 +111,14 @@ export function DrawerQueueLengthCard({ widget, isPlaced, placement, onAdd, data
             </div>
           </div>
           <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden flex">
-            <div className="bg-black h-full w-[65%]"></div>
-            <div className="bg-stone-400 h-full w-[35%]"></div>
+            {totalNum > 0 ? (
+              <>
+                <div className="bg-black h-full transition-all" style={{ width: `${indoorPct}%` }}></div>
+                <div className="bg-stone-400 h-full transition-all" style={{ width: `${outdoorPct}%` }}></div>
+              </>
+            ) : (
+              <div className="bg-stone-300 h-full w-full opacity-40"></div>
+            )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5">
             <span>Indoor: {indoorCount}</span>
@@ -328,9 +340,9 @@ export function DrawerQueueRecentCalloutsCard({ widget, isPlaced, placement, onA
 export function DrawerQueueStatusBreakdownCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const totalPax = summary.totalPax ?? 0;
-  const couplesPercent = summary.couplesPercent ?? 42;
-  const familiesPercent = summary.familiesPercent ?? 40;
-  const largePercent = summary.largePercent ?? 18;
+  const couplesPercent = summary.couplesPercent ?? 0;
+  const familiesPercent = summary.familiesPercent ?? 0;
+  const largePercent = summary.largePercent ?? 0;
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">

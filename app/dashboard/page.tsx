@@ -8,7 +8,6 @@ import { Id } from "../../convex/_generated/dataModel";
 import { DashboardControlBar } from "../components/dashboard/DashboardControlBar";
 import { DashboardWidgetCard, DashboardPlacementItem } from "../components/dashboard/DashboardWidgetCard";
 import { DashboardAddSlot } from "../components/dashboard/DashboardAddSlot";
-import { DashboardPresetTray } from "../components/dashboard/DashboardPresetTray";
 import { AddWidgetDrawer } from "../components/dashboard/AddWidgetDrawer";
 
 const DEFAULT_STAGING_PLACEMENTS: DashboardPlacementItem[] = [
@@ -188,8 +187,8 @@ const WIDGET_DISPLAY_NAMES: Record<string, string> = {
   customers_new: "New Guest Acquisition",
   customers_returning: "Returning Loyalty Rate",
   customers_recent: "Recent Guest Register",
-  customers_most_frequent: "VIP Dining Club Members",
-  customers_order_frequency: "Dining Cohort Velocity",
+  customers_most_frequent: "Most Frequent Customers",
+  customers_order_frequency: "Customer Order Frequency",
   surveys_response_counts: "Survey Engagement Volume",
   surveys_average_rating: "Average CSAT Rating",
   surveys_recent_feedback: "Live Guest Review Stream",
@@ -749,13 +748,6 @@ export default function DashboardPage() {
             />
           </div>
         </div>
-
-        {/* Bottom Presets Tray */}
-        <DashboardPresetTray
-          activeTemplateKey={dashboardData?.dashboard?.templateKey || "executive_dinner_peak"}
-          onSelectTemplate={handleSelectTemplate}
-          isLoading={isSaving}
-        />
 
         {/* Slide-Over Add Widget Drawer */}
         {activeOrg && (

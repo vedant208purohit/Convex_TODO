@@ -34,10 +34,13 @@ export function CustomerTotalWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const totalGuests = summary.totalGuests ?? "0";
-  const deltaPercent = summary.deltaPercent ?? "▲ +12.4%";
-  const dineInPercent = summary.dineInPercent ?? 67;
-  const onlinePercent = summary.onlinePercent ?? 33;
+  const totalGuests = summary.totalGuests ?? (widgetData?.kpi?.value != null ? String(widgetData.kpi.value) : "0");
+  const deltaPercent = summary.deltaPercent ?? "+0.0%";
+  const dineInPercent = summary.dineInPercent ?? 0;
+  const secondaryLabel =
+    summary.secondaryChannelLabel ||
+    (summary.takeawayCount > 0 ? "Takeaway" : summary.deliveryCount > 0 ? "Delivery" : summary.onlineCount > 0 ? "Online" : "Takeaway");
+  const secondaryPercent = summary.secondaryChannelPercent ?? summary.onlinePercent ?? 0;
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -70,13 +73,19 @@ export function CustomerTotalWidget({
         </div>
 
         <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden flex mt-1">
-          <div className="bg-primary h-full" style={{ width: `${dineInPercent}%` }}></div>
-          <div className="bg-secondary h-full opacity-60" style={{ width: `${onlinePercent}%` }}></div>
+          {dineInPercent + secondaryPercent > 0 ? (
+            <>
+              <div className="bg-primary h-full transition-all" style={{ width: `${dineInPercent}%` }}></div>
+              <div className="bg-secondary h-full opacity-60 transition-all" style={{ width: `${secondaryPercent}%` }}></div>
+            </>
+          ) : (
+            <div className="bg-surface-container-high h-full w-full opacity-30"></div>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-secondary pt-0.5">
           <span>Dine-In: {dineInPercent}%</span>
-          <span>Online: {onlinePercent}%</span>
+          <span>{secondaryLabel}: {secondaryPercent}%</span>
         </div>
       </div>
 
@@ -179,11 +188,10 @@ export function CustomerReturningWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
   const retentionPercent = summary.retentionPercent ?? "0%";
   const visitsCount = summary.visitsCount ?? "0 Visits";
-  const redeemedFormatted = summary.redeemedFormatted ?? `${formatPriceWithSymbol(48200, currencySymbol)} redeemed`;
-  const avgFrequency = summary.avgFrequency ?? "3.2x / mo";
+  const redeemedFormatted = summary.redeemedFormatted ?? "0 repeat visitors";
+  const avgFrequency = summary.avgFrequency ?? "0.0x / patron";
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -217,8 +225,8 @@ export function CustomerReturningWidget({
 
         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-DEFAULT bg-surface-container-highest text-[11px]">
           <div className="flex items-center gap-1 text-secondary">
-            <span className="material-symbols-outlined text-[15px] text-amber-600">loyalty</span>
-            <span>Redemptions:</span>
+            <span className="material-symbols-outlined text-[15px] text-primary">repeat</span>
+            <span>Repeat Visitors:</span>
           </div>
           <span className="font-semibold text-on-surface">{redeemedFormatted}</span>
         </div>
@@ -288,12 +296,7 @@ export function CustomerRecentWidget({
               className="p-1.5 rounded-DEFAULT bg-surface-container-lowest flex items-center justify-between shadow-2xs"
             >
               <div className="flex flex-col min-w-0 pr-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-semibold text-on-surface truncate">{g.name}</span>
-                  <span className="px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 text-[9px] font-semibold">
-                    {g.tier}
-                  </span>
-                </div>
+                <span className="text-xs font-semibold text-on-surface truncate">{g.name}</span>
                 <span className="text-[10px] text-secondary mt-0.5">
                   {g.table} • {g.time}
                 </span>
@@ -340,7 +343,7 @@ export function CustomerMostFrequentWidget({
             <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
               TABLE
             </span>
-            <span className="font-label-sm text-[11px] text-secondary">VIP DINING CLUB</span>
+            <span className="font-label-sm text-[11px] text-secondary">TOP PATRONS</span>
           </div>
           <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5 font-semibold">
             Most Frequent Customers
@@ -369,7 +372,7 @@ export function CustomerMostFrequentWidget({
                 <div className="flex flex-col min-w-0">
                   <span className="text-xs font-semibold text-on-surface truncate">{g.name}</span>
                   <span className="text-[10px] text-secondary">
-                    {g.visits} • {g.tier}
+                    {g.visits}
                   </span>
                 </div>
               </div>
@@ -380,7 +383,7 @@ export function CustomerMostFrequentWidget({
       </div>
 
       <div className="flex items-center justify-between text-outline text-[11px] pt-space-xs border-t border-outline-variant/10">
-        <span>VIP Leaderboard</span>
+        <span>Leaderboard</span>
         <span>Cumulative Spend</span>
       </div>
     </div>
@@ -406,9 +409,9 @@ export function CustomerOrderFrequencyWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const cohorts = summary.cohorts || [
-    { label: "1 Visit / Mo (Discovery)", percent: 38 },
-    { label: "2-3 Visits (Core Regulars)", percent: 44 },
-    { label: "4+ Visits (VIP Club)", percent: 18 },
+    { label: "1 Visit", percent: 0 },
+    { label: "2 - 3 Visits", percent: 0 },
+    { label: "4+ Visits", percent: 0 },
   ];
 
   return (
@@ -419,7 +422,7 @@ export function CustomerOrderFrequencyWidget({
             <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
               CHART
             </span>
-            <span className="font-label-sm text-[11px] text-secondary">COHORT VELOCITY</span>
+            <span className="font-label-sm text-[11px] text-secondary">VISIT FREQUENCY</span>
           </div>
           <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5 font-semibold">
             Customer Order Frequency
@@ -450,8 +453,8 @@ export function CustomerOrderFrequencyWidget({
       </div>
 
       <div className="flex items-center justify-between text-outline text-[11px] pt-space-xs border-t border-outline-variant/10">
-        <span>Cohort Velocity</span>
-        <span>Monthly Pace</span>
+        <span>Visit Frequency</span>
+        <span>Order Volume</span>
       </div>
     </div>
   );

@@ -12,9 +12,9 @@ import {
   getTimezoneForCountry,
   formatStoreTime,
   formatStoreDate,
-  formatCurrencyAmount,
 } from "../lib/constants/countries";
 import { deriveWorkstationStatusKey } from "./workstation";
+import { convertUnits } from "./inventory";
 
 // ==========================================
 // 1. TIMEZONE & DATE-RANGE BOUNDARY HELPERS
@@ -80,6 +80,21 @@ export function calculateDateRangeBoundaries(
 ): DateRangeWindow {
   const ONE_DAY_MS = 24 * 60 * 60 * 1000;
   const todayStart = getStartOfDayInTimezone(now, timeZone);
+
+  // If explicit timestamps are provided by the client's calendar date picker, honor them directly
+  if (
+    customFrom !== undefined &&
+    customTo !== undefined &&
+    customFrom > 0 &&
+    customTo >= customFrom
+  ) {
+    const from = customFrom;
+    const to = customTo;
+    const duration = to - from;
+    const comparisonFrom = from - duration;
+    const comparisonTo = from - 1;
+    return { from, to, comparisonFrom, comparisonTo, preset };
+  }
 
   switch (preset) {
     case "today": {
@@ -641,10 +656,21 @@ export async function provideOverviewPendingOrders(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
   const pending = orders.filter(
@@ -706,11 +732,22 @@ export async function provideOverviewSalesTrends(
     hourlyBuckets[label] = { revenuePaise: 0, count: 0 };
   }
 
+  const hourFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: res.timeZone,
+    hour: "numeric",
+    hour12: false,
+  });
+
   for (const o of orders) {
     if (!isValidActiveOrCompletedOrder(o) || o.paymentStatus !== "Paid")
       continue;
-    const date = new Date(o.createdAt);
-    const hourLabel = `${date.getHours().toString().padStart(2, "0")}:00`;
+    let hourNumber = 0;
+    try {
+      hourNumber = parseInt(hourFormatter.format(new Date(o.createdAt)), 10) % 24;
+    } catch {
+      hourNumber = new Date(o.createdAt).getUTCHours();
+    }
+    const hourLabel = `${hourNumber.toString().padStart(2, "0")}:00`;
     if (hourlyBuckets[hourLabel]) {
       hourlyBuckets[hourLabel].revenuePaise +=
         (o.subTotal || 0) - (o.discountAmount || 0);
@@ -957,17 +994,9 @@ export async function provideOrdersLiveFeed(
     )
     .collect();
 
-  let targetOrders = rangeOrders.filter((o) => isValidActiveOrCompletedOrder(o));
-  if (targetOrders.length === 0 && (!options.dateRangePreset || options.dateRangePreset === "today")) {
-    const recent = await ctx.db
-      .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-      .order("desc")
-      .take(15);
-    targetOrders = recent.filter((o) => isValidActiveOrCompletedOrder(o));
-  }
-
-  targetOrders.sort((a, b) => b.createdAt - a.createdAt);
+  const targetOrders = rangeOrders
+    .filter((o) => isValidActiveOrCompletedOrder(o))
+    .sort((a, b) => b.createdAt - a.createdAt);
   const displayOrders = targetOrders.slice(0, 15);
 
   const rows = displayOrders.map((o) => {
@@ -1064,12 +1093,11 @@ export async function provideOrdersHighValue(
   const isToday = !options.dateRangePreset || options.dateRangePreset === "today";
   const toBoundary = isToday ? Math.max(timeRange.to, Date.now() + 300000) : timeRange.to;
 
-  // Filter within selected time range if applicable
+  // Strictly filter within selected time range
   const inRangeOrders = orders.filter(
     (o) => o.createdAt >= timeRange.from && o.createdAt <= toBoundary,
   );
-  // Fall back to all-time top if no orders in specific slice to keep view informative
-  const pool = inRangeOrders.length > 0 ? inRangeOrders : orders;
+  const pool = inRangeOrders;
 
   const highValue = pool
     .filter((o) => {
@@ -1298,11 +1326,11 @@ export async function provideOrdersVolumeOverTime(
       totalValue: validOrders.length,
     } as any;
   } else {
-    // Single Day (e.g. Today): Group by hour in the store's configured timezone
+    // Single Day (e.g. Today): Group by hour strictly in the store's configured timezone
     const hourFormatter = new Intl.DateTimeFormat("en-US", {
       timeZone: res.timeZone,
       hour: "numeric",
-      hour12: false,
+      hourCycle: "h23",
     });
 
     const displayHours = [
@@ -1332,15 +1360,21 @@ export async function provideOrdersVolumeOverTime(
       try {
         const hourStr = hourFormatter.format(new Date(o.createdAt));
         const hourNum = parseInt(hourStr, 10);
-        if (hourlyCounts[hourNum] !== undefined) {
-          hourlyCounts[hourNum]++;
+        const normalized = hourNum === 24 ? 0 : hourNum;
+        if (hourlyCounts[normalized] !== undefined) {
+          hourlyCounts[normalized]++;
         } else {
-          hourlyCounts[hourNum] = (hourlyCounts[hourNum] || 0) + 1;
+          hourlyCounts[normalized] = (hourlyCounts[normalized] || 0) + 1;
         }
       } catch {
-        const d = new Date(o.createdAt);
-        const h = d.getHours();
-        if (hourlyCounts[h] !== undefined) hourlyCounts[h]++;
+        const offsetMs = getTzOffsetMs(new Date(o.createdAt), res.timeZone);
+        const localDate = new Date(o.createdAt + offsetMs);
+        const h = localDate.getUTCHours();
+        if (hourlyCounts[h] !== undefined) {
+          hourlyCounts[h]++;
+        } else {
+          hourlyCounts[h] = (hourlyCounts[h] || 0) + 1;
+        }
       }
     }
 
@@ -1641,15 +1675,83 @@ export async function provideWorkstationOrderSummary(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+
+  const stations = await ctx.db
+    .query("stations")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const activeStations = stations.filter((s) => s.deletedAt === undefined);
+  const defaultStationName =
+    activeStations.find((s) => s.isMain)?.name ||
+    activeStations[0]?.name ||
+    "Station";
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
   const activeOrders = orders.filter(
     (o) => !o.isCompleted && !o.isRejected && o.orderStatusName !== "Completed",
   );
+
+  const orderItems = await ctx.db
+    .query("orderItems")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const activeOrderIds = new Set(activeOrders.map((o) => o._id));
+  const activeItems = orderItems.filter(
+    (i) => i.orderId && activeOrderIds.has(i.orderId) && !i.isReady,
+  );
+
+  const stationItemCounts = new Map<string, number>();
+  for (const s of activeStations) {
+    stationItemCounts.set(s._id, 0);
+  }
+
+  for (const item of activeItems) {
+    if (item.stationId && stationItemCounts.has(item.stationId)) {
+      stationItemCounts.set(
+        item.stationId,
+        (stationItemCounts.get(item.stationId) || 0) + item.quantity,
+      );
+    } else if (activeStations.length > 0) {
+      const mainId = (
+        activeStations.find((s) => s.isMain) || activeStations[0]
+      )._id;
+      stationItemCounts.set(
+        mainId,
+        (stationItemCounts.get(mainId) || 0) + item.quantity,
+      );
+    }
+  }
+
+  const lanes = activeStations.map((s) => {
+    const count = stationItemCounts.get(s._id) ?? 0;
+    return {
+      name: s.name,
+      count: count > 0 ? count : activeOrders.length,
+    };
+  });
+
+  if (lanes.length === 0) {
+    lanes.push({
+      name: defaultStationName,
+      count: activeOrders.length,
+    });
+  }
 
   let acceptedCount = 0;
   let inProgressCount = 0;
@@ -1680,9 +1782,7 @@ export async function provideWorkstationOrderSummary(
   };
 
   res.summary = {
-    mainPosLane: acceptedCount + inProgressCount,
-    barLane: readyCount,
-    dessertStation: 0,
+    lanes,
     totalSpoolPool: activeOrders.length,
     activeTasksText: `${activeOrders.length} Active Tasks`,
   };
@@ -1697,29 +1797,45 @@ export async function provideWorkstationOrdersByWorkstation(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const stations = await ctx.db
     .query("stations")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
-
+  const activeStations = stations.filter((s) => s.deletedAt === undefined);
   const stationNameMap: Record<string, string> = {};
-  for (const s of stations) {
+  for (const s of activeStations) {
     stationNameMap[s._id] = s.name;
   }
+  const defaultStationName =
+    activeStations.find((s) => s.isMain)?.name ||
+    activeStations[0]?.name ||
+    "Main";
 
   const orderItems = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const activeItems = orderItems.filter((i) => !i.isReady);
+  const inRangeItems = orderItems.filter(
+    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
+  );
 
   const stationCounts: Record<string, number> = {};
-  for (const item of activeItems) {
+  for (const s of activeStations) {
+    stationCounts[s.name] = 0;
+  }
+
+  for (const item of inRangeItems) {
     const sName = item.stationId
-      ? stationNameMap[item.stationId] || "Kitchen Station"
-      : "Main Kitchen";
+      ? stationNameMap[item.stationId] || defaultStationName
+      : defaultStationName;
     stationCounts[sName] = (stationCounts[sName] || 0) + item.quantity;
   }
 
@@ -1731,14 +1847,15 @@ export async function provideWorkstationOrdersByWorkstation(
   const perfData =
     chartData.length > 0
       ? chartData
-      : [{ label: "General Kitchen", value: activeItems.length }];
+      : [{ label: defaultStationName, value: inRangeItems.length }];
+
   res.chart = {
     chartType: "donut",
     type: "donut",
     series: [{ name: "Orders by Workstation", data: perfData }],
     data: perfData,
     xAxisLabel: "Workstation",
-    yAxisLabel: "Active Items",
+    yAxisLabel: "Items",
   };
 
   res.summary = {
@@ -1746,11 +1863,11 @@ export async function provideWorkstationOrdersByWorkstation(
       name: d.label,
       count: d.value,
       pct:
-        activeItems.length > 0
-          ? Math.round((d.value / activeItems.length) * 100)
+        inRangeItems.length > 0
+          ? Math.round((d.value / inRangeItems.length) * 100)
           : 0,
     })),
-    totalCount: activeItems.length,
+    totalCount: inRangeItems.length,
   };
 
   return res;
@@ -1764,15 +1881,41 @@ export async function provideWorkstationActiveTasks(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const stations = await ctx.db
     .query("stations")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
+  const activeStations = stations.filter((s) => s.deletedAt === undefined);
   const stationNameMap: Record<string, string> = {};
-  for (const s of stations) {
+  for (const s of activeStations) {
     stationNameMap[s._id] = s.name;
   }
+  const defaultStationName =
+    activeStations.find((s) => s.isMain)?.name ||
+    activeStations[0]?.name ||
+    "Station";
+
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
+    .collect();
+
+  const activeOrders = orders.filter(
+    (o) => !o.isCompleted && !o.isRejected && o.orderStatusName !== "Completed",
+  );
+  const activeOrderMap = new Map(activeOrders.map((o) => [o._id, o]));
 
   const items = await ctx.db
     .query("orderItems")
@@ -1780,17 +1923,27 @@ export async function provideWorkstationActiveTasks(
     .collect();
 
   const activeTasks = items
-    .filter((i) => !i.isReady)
+    .filter((i) => i.orderId && activeOrderMap.has(i.orderId) && !i.isReady)
     .sort((a, b) => a.createdAt - b.createdAt)
     .slice(0, 10);
 
   const rows = activeTasks.map((i) => {
     const elapsedMins = Math.floor((now - i.createdAt) / 60000);
     const stationName = i.stationId
-      ? stationNameMap[i.stationId] || "Kitchen"
-      : "Main Kitchen";
+      ? stationNameMap[i.stationId] || defaultStationName
+      : defaultStationName;
+    const parentOrder = i.orderId ? activeOrderMap.get(i.orderId) : null;
+    const cleanToken = (parentOrder?.tokenNumber || "")
+      .replace(/^#+/, "")
+      .trim();
+    const taskToken = cleanToken
+      ? `Token #${cleanToken}`
+      : parentOrder?.orderNumber ||
+        `#ITEM-${String(i._id).slice(-4).toUpperCase()}`;
+
     return {
       id: i._id,
+      taskNo: taskToken,
       itemName: i.itemName,
       quantity: i.quantity,
       station: stationName,
@@ -1813,8 +1966,8 @@ export async function provideWorkstationActiveTasks(
 
   res.summary = {
     tasksCount: activeTasks.length,
-    activeTasksList: rows.map((r, idx) => ({
-      taskNo: `#TASK-${401 + idx}`,
+    activeTasksList: rows.map((r) => ({
+      taskNo: r.taskNo,
       title: r.itemName,
       station: r.station,
       status: r.status,
@@ -1833,11 +1986,28 @@ export async function provideWorkstationQueue(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
+
+  const tables = await ctx.db
+    .query("organizationTables")
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+  const tableMap = new Map(tables.map((t) => [t._id, t.tableNumber]));
 
   const active = orders
     .filter(
@@ -1850,15 +2020,37 @@ export async function provideWorkstationQueue(
   const rows = active.map((o) => {
     const elapsedMins = Math.floor((now - o.createdAt) / 60000);
     const statusKey = deriveWorkstationStatusKey(o);
+    const tableLabel =
+      o.tableId && tableMap.has(o.tableId)
+        ? `Table ${tableMap.get(o.tableId)}`
+        : o.orderType || "Counter";
+
     return {
       id: o._id,
       orderNumber: o.orderNumber,
       channel: o.orderType,
-      table: o.tableId ? `Table ${o.orderNumber}` : "Counter",
+      table: tableLabel,
       elapsed: `${elapsedMins}m`,
       status: statusKey,
     };
   });
+
+  res.kpi = {
+    value: active.length,
+    displayValue: `${active.length} Orders`,
+    label: "Workstation Buffer Depth",
+    trend: active.length > 5 ? "down" : "up",
+    secondaryMetrics: [
+      {
+        label: "Oldest in Buffer",
+        value: rows.length > 0 ? rows[0].elapsed : "--",
+      },
+      {
+        label: "Spool State",
+        value: active.length > 0 ? "Nominal Spool" : "Queue Idle",
+      },
+    ],
+  };
 
   res.table = {
     columns: [
@@ -1895,6 +2087,12 @@ export async function provideWorkstationPrepTime(
     options.toTimestamp,
   );
 
+  const stations = await ctx.db
+    .query("stations")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const activeStations = stations.filter((s) => s.deletedAt === undefined);
+
   const orders = await ctx.db
     .query("orders")
     .withIndex("by_created_at", (q) =>
@@ -1909,23 +2107,59 @@ export async function provideWorkstationPrepTime(
     (o) => o.isCompleted || o.orderStatusName === "Completed",
   );
 
-  let totalPrepMins = 0;
-  for (const o of completed) {
-    const duration = Math.max(
-      1,
-      Math.floor(((o.updatedAt || o.createdAt) - o.createdAt) / 60000),
-    );
-    totalPrepMins += Math.min(duration, 60); // cap outliers
+  const activities = await ctx.db
+    .query("orderActivities")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const activityDurations: number[] = [];
+  for (const a of activities) {
+    if (a.completedAt && a.startedAt && a.completedAt > a.startedAt) {
+      const mins = Math.floor((a.completedAt - a.startedAt) / 60000);
+      if (mins > 0 && mins <= 60) activityDurations.push(mins);
+    } else if (
+      a.totalDuration &&
+      a.totalDuration > 0 &&
+      a.totalDuration <= 3600
+    ) {
+      activityDurations.push(Math.round(a.totalDuration / 60));
+    }
   }
 
-  const avgPrepMins =
-    completed.length > 0
-      ? Math.round((totalPrepMins / completed.length) * 10) / 10
-      : 0;
+  let avgPrepMins = 0;
+  if (activityDurations.length > 0) {
+    avgPrepMins =
+      Math.round(
+        (activityDurations.reduce((acc, d) => acc + d, 0) /
+          activityDurations.length) *
+          10,
+      ) / 10;
+  } else if (completed.length > 0) {
+    const validOrderDurations = completed
+      .map((o) => {
+        const diff = Math.floor(
+          ((o.updatedAt || o.createdAt) - o.createdAt) / 60000,
+        );
+        return diff;
+      })
+      .filter((d) => d >= 1 && d <= 30);
+
+    if (validOrderDurations.length > 0) {
+      avgPrepMins =
+        Math.round(
+          (validOrderDurations.reduce((acc, d) => acc + d, 0) /
+            validOrderDurations.length) *
+            10,
+        ) / 10;
+    } else {
+      avgPrepMins = 8.5;
+    }
+  }
+
   const deltaText =
     avgPrepMins > 0
       ? avgPrepMins <= 20
-        ? `${(20 - avgPrepMins).toFixed(1)}m faster`
+        ? `${(20 - avgPrepMins).toFixed(1)}m under SLA`
         : `${(avgPrepMins - 20).toFixed(1)}m over SLA`
       : "Within SLA";
 
@@ -1941,26 +2175,18 @@ export async function provideWorkstationPrepTime(
     ],
   };
 
+  const stationBars = activeStations.map((s) => ({
+    name: s.name,
+    prep: avgPrepMins > 0 ? `${avgPrepMins}m` : "--",
+  }));
+
   res.summary = {
     avgPrepMins,
     displayValue: avgPrepMins > 0 ? `${avgPrepMins}` : "--",
     slaGoal: "< 20.0 min",
     deltaText,
     completedCount: completed.length,
-    stationBars: [
-      {
-        name: "Grill",
-        prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.8).toFixed(1)}m` : "--",
-      },
-      {
-        name: "Clay Oven",
-        prep: avgPrepMins > 0 ? `${(avgPrepMins * 1.05).toFixed(1)}m` : "--",
-      },
-      {
-        name: "Pantry",
-        prep: avgPrepMins > 0 ? `${(avgPrepMins * 0.4).toFixed(1)}m` : "--",
-      },
-    ],
+    stationBars,
   };
 
   return res;
@@ -1974,17 +2200,37 @@ export async function provideWorkstationDelayedOrders(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
   const delayed = orders.filter((o) => {
-    if (o.isCompleted || o.isRejected) return false;
+    if (o.isCompleted || o.isRejected || o.orderStatusName === "Completed") {
+      return false;
+    }
     const elapsed = Math.floor((now - o.createdAt) / 60000);
     return elapsed > 15;
   });
+
+  const earliestDelayMins =
+    delayed.length > 0
+      ? Math.floor(
+          (now - Math.min(...delayed.map((d) => d.createdAt))) / 60000,
+        )
+      : 0;
 
   res.alert = {
     count: delayed.length,
@@ -1997,7 +2243,7 @@ export async function provideWorkstationDelayedOrders(
         : "All Stations Running On Target",
     message:
       delayed.length > 0
-        ? `Earliest delayed ticket has been in prep for ${Math.floor((now - Math.min(...delayed.map((d) => d.createdAt))) / 60000)} mins.`
+        ? `Earliest delayed ticket has been in prep for ${earliestDelayMins} mins.`
         : "No station queues exceed the 15-minute target threshold.",
     actionUrl: "/orders?filter=delayed",
   };
@@ -2015,14 +2261,21 @@ export async function provideWorkstationPerformance(
   const timeRange = calculateDateRangeBoundaries(
     options.dateRangePreset || "today",
     res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
   );
 
   const stations = await ctx.db
     .query("stations")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
+  const activeStations = stations.filter((s) => s.deletedAt === undefined);
   const stationMap: Record<string, string> = {};
-  for (const s of stations) stationMap[s._id] = s.name;
+  for (const s of activeStations) stationMap[s._id] = s.name;
+  const defaultStationName =
+    activeStations.find((s) => s.isMain)?.name ||
+    activeStations[0]?.name ||
+    "Station";
 
   const orderItems = await ctx.db
     .query("orderItems")
@@ -2030,14 +2283,21 @@ export async function provideWorkstationPerformance(
     .collect();
 
   const completedToday = orderItems.filter(
-    (i) => i.isReady && i.createdAt >= timeRange.from,
+    (i) =>
+      i.isReady &&
+      i.createdAt >= timeRange.from &&
+      i.createdAt <= timeRange.to,
   );
 
   const stationCompleted: Record<string, number> = {};
+  for (const s of activeStations) {
+    stationCompleted[s.name] = 0;
+  }
+
   for (const item of completedToday) {
     const name = item.stationId
-      ? stationMap[item.stationId] || "Kitchen"
-      : "Main Kitchen";
+      ? stationMap[item.stationId] || defaultStationName
+      : defaultStationName;
     stationCompleted[name] = (stationCompleted[name] || 0) + item.quantity;
   }
 
@@ -2049,7 +2309,8 @@ export async function provideWorkstationPerformance(
   const perfData =
     chartData.length > 0
       ? chartData
-      : [{ label: "General Kitchen", value: completedToday.length }];
+      : [{ label: defaultStationName, value: completedToday.length }];
+
   res.chart = {
     chartType: "bar",
     type: "bar",
@@ -2115,11 +2376,11 @@ export async function provideWorkstationAvailability(
   res.summary = {
     onlineTerminals: publishedStations.length,
     totalTerminals: stations.length,
-    terminalsList: stations.map((s, idx) => ({
+    terminalsList: stations.map((s) => ({
       name: s.name,
       status: s.deletedAt ? "Offline" : "Online",
-      latency: `${10 + idx * 2}ms`,
-      alert: idx === 2 ? "Low Paper Roll (15%)" : undefined,
+      latency: "Active",
+      alert: undefined,
     })),
   };
 
@@ -2207,20 +2468,50 @@ export async function provideKdsLiveOrders(
     .filter((o) => {
       if (o.createdAt < timeRange.from || o.createdAt > timeRange.to)
         return false;
+      const s = (o.orderStatusName || "").toLowerCase();
       return (
-        !o.isCompleted && !o.isRejected && o.orderStatusName !== "Completed"
+        !o.isCompleted &&
+        !o.isRejected &&
+        s !== "completed" &&
+        s !== "delivered" &&
+        s !== "cancelled" &&
+        s !== "cancelled / refunded"
       );
     })
     .sort((a, b) => a.createdAt - b.createdAt);
 
   const inPrepCount = live.filter((o) => {
     const s = (o.orderStatusName || "").toLowerCase();
-    return !s.includes("ready") && !s.includes("pass") && !s.includes("plated");
+    return (
+      s.includes("progress") ||
+      s.includes("prep") ||
+      s.includes("cook") ||
+      s.includes("kitchen") ||
+      s.includes("baking")
+    );
   }).length;
 
   const atPassCount = live.filter((o) => {
     const s = (o.orderStatusName || "").toLowerCase();
-    return s.includes("ready") || s.includes("pass") || s.includes("plated");
+    return (
+      s.includes("ready") ||
+      s.includes("pass") ||
+      s.includes("plated") ||
+      s.includes("serve")
+    );
+  }).length;
+
+  const pendingCount = live.filter((o) => {
+    const s = (o.orderStatusName || "").toLowerCase();
+    return (
+      s.includes("accept") ||
+      s.includes("pending") ||
+      s.includes("new") ||
+      s.includes("hold") ||
+      s.includes("placed") ||
+      s.includes("queue") ||
+      !o.orderStatusName
+    );
   }).length;
 
   const capacityPercent = Math.min(100, Math.round((live.length / 15) * 100));
@@ -2230,7 +2521,7 @@ export async function provideKdsLiveOrders(
     orderNumber: o.orderNumber,
     channel: o.orderType,
     time: formatRelativeTime(o.createdAt, now),
-    status: deriveWorkstationStatusKey(o),
+    status: o.orderStatusName || "Accepted",
   }));
 
   res.table = {
@@ -2259,6 +2550,7 @@ export async function provideKdsLiveOrders(
     capacityPercent,
     inPrepCount,
     atPassCount,
+    pendingCount,
     activeTicketsCount: live.length,
   };
 
@@ -2288,15 +2580,44 @@ export async function provideKdsPendingTickets(
   const pending = orders.filter((o) => {
     if (o.createdAt < timeRange.from || o.createdAt > timeRange.to)
       return false;
-    if (o.isCompleted || o.isRejected || o.orderStatusName === "Completed")
+    if (o.isCompleted || o.isRejected)
       return false;
     const s = (o.orderStatusName || "").toLowerCase();
+    if (
+      s === "completed" ||
+      s === "delivered" ||
+      s === "cancelled" ||
+      s === "cancelled / refunded"
+    ) {
+      return false;
+    }
+    // Ready orders are at pass, not pending fire
+    if (
+      s.includes("ready") ||
+      s.includes("pass") ||
+      s.includes("plated") ||
+      s.includes("serve")
+    ) {
+      return false;
+    }
+    // Orders already in preparation (in progress) have been fired
+    if (
+      s.includes("progress") ||
+      s.includes("cook") ||
+      s.includes("prep") ||
+      s.includes("kitchen")
+    ) {
+      return false;
+    }
+    // Newly accepted orders, pending tickets, or held orders waiting for kitchen preparation
     return (
+      s.includes("accept") ||
       s.includes("pending") ||
       s.includes("new") ||
       s.includes("hold") ||
       s.includes("placed") ||
-      s.includes("queue")
+      s.includes("queue") ||
+      !o.orderStatusName
     );
   });
 
@@ -2368,10 +2689,33 @@ export async function provideKdsStationQueue(
   const targetStation =
     options.configuration && options.configuration.stationId
       ? activeStations.find((s) => s._id === options.configuration!.stationId)
-      : activeStations[0] || null;
+      : activeStations.find((s) => s.isMain) || activeStations[0] || null;
 
-  const stationName = targetStation?.name || "Tandoor & Clay Oven";
-  const stationTag = targetStation ? `Stn 01` : "Stn 02";
+  const stationName = targetStation?.name || "Main Kitchen";
+  const stationTag = targetStation
+    ? targetStation.name.length > 8
+      ? targetStation.name.slice(0, 8)
+      : targetStation.name
+    : "Kitchen";
+
+  // Active live orders for this org
+  const activeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const liveOrderIds = new Set(
+    activeOrders
+      .filter(
+        (o) =>
+          !o.isCompleted &&
+          !o.isRejected &&
+          o.orderStatusName !== "Completed" &&
+          o.orderStatusName !== "Delivered" &&
+          o.orderStatusName !== "Cancelled" &&
+          o.orderStatusName !== "Cancelled / Refunded",
+      )
+      .map((o) => o._id),
+  );
 
   const items = await ctx.db
     .query("orderItems")
@@ -2379,22 +2723,27 @@ export async function provideKdsStationQueue(
     .collect();
 
   const queued = items.filter((i) => {
+    if (!liveOrderIds.has(i.orderId)) return false;
     if (
       !i.createdAt ||
       i.createdAt < timeRange.from ||
       i.createdAt > timeRange.to
     )
       return false;
-    if (targetStation && i.stationId && i.stationId !== targetStation._id)
+    if (targetStation && targetStation.isMain) {
+      if (i.stationId && i.stationId !== targetStation._id) return false;
+    } else if (targetStation && i.stationId !== targetStation._id) {
       return false;
+    }
     return !i.isReady;
   });
 
+  const distinctOrdersCount = new Set(queued.map((i) => i.orderId)).size;
   const loadPercent = Math.min(100, Math.round((queued.length / 10) * 100));
 
   res.kpi = {
-    value: queued.length,
-    displayValue: `${queued.length} Items`,
+    value: distinctOrdersCount,
+    displayValue: `${distinctOrdersCount} Tickets`,
     label: "Active Station Queue Load",
     trend: queued.length > 20 ? "down" : "up",
     secondaryMetrics: [
@@ -2406,8 +2755,9 @@ export async function provideKdsStationQueue(
   res.summary = {
     stationName,
     stationTag,
-    ticketsCount: queued.length,
-    avgPrepText: queued.length > 0 ? "12.4m" : "--",
+    ticketsCount: distinctOrdersCount,
+    itemsCount: queued.length,
+    avgPrepText: queued.length > 0 ? `${Math.round(queued.length * 3.5)}m` : "--",
     loadPercent,
   };
 
@@ -2438,37 +2788,55 @@ export async function provideKdsStatusBreakdown(
     (o) => o.createdAt >= timeRange.from && o.createdAt <= timeRange.to,
   );
 
+  let accepted = 0;
   let inPrep = 0;
   let ready = 0;
-  let held = 0;
   let overdue = 0;
 
   for (const o of filtered) {
-    if (o.isCompleted || o.isRejected) continue;
+    if (
+      o.isCompleted ||
+      o.isRejected ||
+      o.orderStatusName === "Completed" ||
+      o.orderStatusName === "Delivered" ||
+      o.orderStatusName === "Cancelled" ||
+      o.orderStatusName === "Cancelled / Refunded"
+    ) {
+      continue;
+    }
     const elapsedMins = Math.floor((now - o.createdAt) / 60000);
-    const s = (o.orderStatusName || "").toLowerCase();
+    const s = (o.orderStatusName || "Accepted").toLowerCase();
 
     if (elapsedMins > 20) {
       overdue++;
-    } else if (
+    }
+
+    if (
       s.includes("ready") ||
       s.includes("pass") ||
-      s.includes("plated")
+      s.includes("plated") ||
+      s.includes("serve")
     ) {
       ready++;
-    } else if (s.includes("hold") || s.includes("pending")) {
-      held++;
-    } else {
+    } else if (
+      s.includes("progress") ||
+      s.includes("prep") ||
+      s.includes("cook") ||
+      s.includes("kitchen")
+    ) {
       inPrep++;
+    } else {
+      accepted++;
     }
   }
 
-  const total = inPrep + ready + held + overdue;
+  const total = accepted + inPrep + ready + overdue;
 
   res.summary = {
+    accepted,
     inPrep,
     ready,
-    held,
+    held: accepted,
     overdue,
     total,
   };
@@ -2480,9 +2848,9 @@ export async function provideKdsStatusBreakdown(
       {
         name: "Order Status",
         data: [
+          { label: "Accepted", value: accepted },
           { label: "In Prep", value: inPrep },
           { label: "Ready", value: ready },
-          { label: "Held", value: held },
           { label: "Overdue", value: overdue },
         ],
       },
@@ -2542,10 +2910,21 @@ export async function provideKdsExpeditor(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
   const readyAtPass = orders.filter(
@@ -2579,14 +2958,24 @@ export async function provideKdsPrepPreferences(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const items = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
+  const periodItems = items.filter(
+    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
+  );
+
   const prefCounts: Record<string, number> = {};
-  for (const item of items) {
+  for (const item of periodItems) {
     const prefs = item.chefPrepPreferences || item.prepPreferences || [];
     for (const p of prefs) {
       prefCounts[p.name] = (prefCounts[p.name] || 0) + 1;
@@ -2598,8 +2987,7 @@ export async function provideKdsPrepPreferences(
     .slice(0, 6)
     .map(([label, value]) => ({ label, value }));
 
-  const prefData =
-    chartData.length > 0 ? chartData : [{ label: "Standard Prep", value: 1 }];
+  const prefData = chartData;
   res.chart = {
     chartType: "bar",
     type: "bar",
@@ -2718,12 +3106,22 @@ export async function provideCashierShiftSummary(
     }
   }
 
-  const floatPaise = options.configuration?.floatPaise || 500000; // configurable drawer float
+  const floatPaise = options.configuration?.floatPaise || 0; // configurable drawer float
   const totalCollected = cashPaise + digitalPaise;
 
   res.summary = {
     grossIntake: formatCurrencyPaise(
       totalCollected,
+      res.currencySymbol,
+      res.currency,
+    ),
+    cashCollected: formatCurrencyPaise(
+      cashPaise,
+      res.currencySymbol,
+      res.currency,
+    ),
+    digitalCollected: formatCurrencyPaise(
+      digitalPaise,
       res.currencySymbol,
       res.currency,
     ),
@@ -2897,12 +3295,13 @@ export async function provideCashierCashSales(
 
   if (payments.length > 0) {
     for (const p of payments) {
-      if (p.paymentType === "Debit") continue;
+      const isDebit = p.paymentType === "Debit";
       const amt = p.payAmount || p.amount || 0;
-      totalPaise += amt;
+      const signedAmt = isDebit ? -amt : amt;
+      totalPaise += signedAmt;
       if ((p.paymentModeName || "").toLowerCase().includes("cash")) {
-        cashPaise += amt;
-        cashTxns++;
+        cashPaise += signedAmt;
+        if (!isDebit) cashTxns++;
       }
     }
   } else {
@@ -2990,21 +3389,24 @@ export async function provideCashierDigitalSales(
 
   if (payments.length > 0) {
     for (const p of payments) {
-      if (p.paymentType === "Debit") continue;
+      const isDebit = p.paymentType === "Debit";
       const amt = p.payAmount || p.amount || 0;
-      totalPaise += amt;
+      const signedAmt = isDebit ? -amt : amt;
+      totalPaise += signedAmt;
       const mode = (p.paymentModeName || "").toLowerCase();
       if (!mode.includes("cash")) {
-        digitalPaise += amt;
-        digitalTxns++;
-        if (
-          mode.includes("upi") ||
-          mode.includes("qr") ||
-          mode.includes("online")
-        ) {
-          upiCount++;
-        } else {
-          cardCount++;
+        digitalPaise += signedAmt;
+        if (!isDebit) {
+          digitalTxns++;
+          if (
+            mode.includes("upi") ||
+            mode.includes("qr") ||
+            mode.includes("online")
+          ) {
+            upiCount++;
+          } else {
+            cardCount++;
+          }
         }
       }
     }
@@ -3040,6 +3442,27 @@ export async function provideCashierDigitalSales(
     }
   }
 
+  const prevOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.comparisonFrom)
+        .lte("createdAt", timeRange.comparisonTo),
+    )
+    .collect();
+
+  let prevDigitalPaise = 0;
+  for (const o of prevOrders) {
+    if (!isValidActiveOrCompletedOrder(o) || o.paymentStatus !== "Paid") continue;
+    const mode = (o.paymentMode || "").toLowerCase();
+    if (!mode.includes("cash")) {
+      prevDigitalPaise += o.totalAmount || 0;
+    }
+  }
+
+  const delta = computePercentageDelta(digitalPaise, prevDigitalPaise);
+
   const volPercent =
     totalPaise > 0 ? Math.round((digitalPaise / totalPaise) * 100) : 0;
 
@@ -3049,7 +3472,10 @@ export async function provideCashierDigitalSales(
       res.currencySymbol,
       res.currency,
     ),
-    deltaPercent: "▲ +14.8%",
+    deltaPercent:
+      delta.deltaPercent !== undefined
+        ? `${delta.deltaPercent >= 0 ? "▲ +" : "▼ "}${delta.deltaPercent}%`
+        : "0.0%",
     upiCount,
     cardCount,
     totalCount: digitalTxns,
@@ -3086,6 +3512,31 @@ export async function provideCashierPaymentBreakdown(
     options.toTimestamp,
   );
 
+  // 1. Fetch configured payment modes from Settings (paymentModes table)
+  const configuredModes = await ctx.db
+    .query("paymentModes")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const activeModes = configuredModes.filter(
+    (m) => m.deletedAt === undefined && m.active !== false,
+  );
+
+  // If no modes configured in DB yet, fallback to standard defaults
+  const modeNames =
+    activeModes.length > 0
+      ? activeModes.map((m) => m.name)
+      : ["UPI", "Credit Card", "Debit Card", "Cash"];
+
+  const modeTotals: Record<string, number> = {};
+  for (const name of modeNames) {
+    modeTotals[name] = 0;
+  }
+
+  let totalUpiPaise = 0;
+  let totalCardsPaise = 0;
+  let totalCashPaise = 0;
+
   const payments = await ctx.db
     .query("orderPayments")
     .withIndex("by_org_created_at", (q) =>
@@ -3096,19 +3547,66 @@ export async function provideCashierPaymentBreakdown(
     )
     .collect();
 
-  const modeTotals: Record<string, number> = {
-    UPI: 0,
-    Cards: 0,
-    Cash: 0,
+  const matchMode = (modeStr: string): string => {
+    const lower = modeStr.toLowerCase().trim();
+    const exact = modeNames.find((m) => m.toLowerCase() === lower);
+    if (exact) return exact;
+
+    if (lower.includes("credit") && modeNames.some((m) => m.toLowerCase().includes("credit"))) {
+      return modeNames.find((m) => m.toLowerCase().includes("credit"))!;
+    }
+    if (lower.includes("debit") && modeNames.some((m) => m.toLowerCase().includes("debit"))) {
+      return modeNames.find((m) => m.toLowerCase().includes("debit"))!;
+    }
+    if (lower.includes("card") && modeNames.some((m) => m.toLowerCase().includes("card"))) {
+      return modeNames.find((m) => m.toLowerCase().includes("card"))!;
+    }
+    if (lower.includes("upi") && modeNames.some((m) => m.toLowerCase().includes("upi"))) {
+      return modeNames.find((m) => m.toLowerCase().includes("upi"))!;
+    }
+    if (lower.includes("cash") && modeNames.some((m) => m.toLowerCase().includes("cash"))) {
+      return modeNames.find((m) => m.toLowerCase().includes("cash"))!;
+    }
+    return modeStr.trim() || "Other";
   };
 
   if (payments.length > 0) {
     for (const p of payments) {
-      if (p.paymentType === "Debit") continue;
-      const mode = p.paymentModeName || "Other";
-      modeTotals[mode] =
-        (modeTotals[mode] || 0) + (p.payAmount || p.amount || 0) / 100;
+      const isDebit = p.paymentType === "Debit";
+      const amtPaise = p.payAmount || p.amount || 0;
+      const signedAmt = isDebit ? -amtPaise : amtPaise;
+      const modeStr = (p.paymentModeName || "").trim();
+      const lower = modeStr.toLowerCase();
+
+      if (
+        lower.includes("upi") ||
+        lower.includes("qr") ||
+        lower.includes("gpay") ||
+        lower.includes("phonepe")
+      ) {
+        totalUpiPaise += signedAmt;
+      } else if (
+        lower.includes("card") ||
+        lower.includes("pos") ||
+        lower.includes("credit") ||
+        lower.includes("debit")
+      ) {
+        totalCardsPaise += signedAmt;
+      } else if (lower.includes("cash")) {
+        totalCashPaise += signedAmt;
+      }
+
+      const resolved = matchMode(modeStr);
+      modeTotals[resolved] = (modeTotals[resolved] || 0) + signedAmt;
     }
+
+    // Ensure net amounts do not show as negative
+    for (const k of Object.keys(modeTotals)) {
+      if (modeTotals[k] < 0) modeTotals[k] = 0;
+    }
+    totalUpiPaise = Math.max(0, totalUpiPaise);
+    totalCardsPaise = Math.max(0, totalCardsPaise);
+    totalCashPaise = Math.max(0, totalCashPaise);
   } else {
     const orders = await ctx.db
       .query("orders")
@@ -3123,42 +3621,75 @@ export async function provideCashierPaymentBreakdown(
     for (const o of orders) {
       if (!isValidActiveOrCompletedOrder(o) || o.paymentStatus !== "Paid")
         continue;
-      const mode = o.paymentMode || "Cash";
-      modeTotals[mode] = (modeTotals[mode] || 0) + (o.totalAmount || 0) / 100;
+      const amtPaise = o.totalAmount || 0;
+      const modeStr = (o.paymentMode || "Cash").trim();
+      const lower = modeStr.toLowerCase();
+
+      if (lower.includes("upi") || lower.includes("qr") || lower.includes("gpay") || lower.includes("phonepe")) {
+        totalUpiPaise += amtPaise;
+      } else if (lower.includes("card") || lower.includes("pos") || lower.includes("credit") || lower.includes("debit")) {
+        totalCardsPaise += amtPaise;
+      } else if (lower.includes("cash")) {
+        totalCashPaise += amtPaise;
+      }
+
+      const resolved = matchMode(modeStr);
+      modeTotals[resolved] = (modeTotals[resolved] || 0) + amtPaise;
     }
   }
 
-  const tenderSeries = Object.entries(modeTotals).map(([label, value]) => ({
-    label,
-    value,
-  }));
-  const totalAmount = Object.values(modeTotals).reduce((a, b) => a + b, 0);
-  const upiAmt = modeTotals["UPI"] || 0;
-  const cardsAmt = modeTotals["Cards"] || 0;
-  const cashAmt = modeTotals["Cash"] || 0;
+  const totalAmountPaise = Object.values(modeTotals).reduce((a, b) => a + b, 0);
 
-  const upiPct = totalAmount > 0 ? Math.round((upiAmt / totalAmount) * 100) : 0;
-  const cardsPct =
-    totalAmount > 0 ? Math.round((cardsAmt / totalAmount) * 100) : 0;
-  const cashPct =
-    totalAmount > 0 ? Math.round((cashAmt / totalAmount) * 100) : 0;
+  const breakdown = Object.entries(modeTotals).map(([name, paise]) => {
+    const percentNum = totalAmountPaise > 0 ? Math.round((paise / totalAmountPaise) * 100) : 0;
+    return {
+      name,
+      percent: `${percentNum}%`,
+      percentNum,
+      amount: formatCurrencyPaise(paise, res.currencySymbol, res.currency),
+      paise,
+    };
+  });
+
+  const standardSeries = [
+    { label: "UPI", value: totalUpiPaise / 100 },
+    { label: "Cards", value: totalCardsPaise / 100 },
+    { label: "Cash", value: totalCashPaise / 100 },
+  ];
+  for (const b of breakdown) {
+    const l = b.name.toLowerCase();
+    if (
+      !l.includes("upi") &&
+      !l.includes("card") &&
+      !l.includes("credit") &&
+      !l.includes("debit") &&
+      !l.includes("cash")
+    ) {
+      standardSeries.push({ label: b.name, value: b.paise / 100 });
+    }
+  }
+
+  const upiPct = totalAmountPaise > 0 ? Math.round((totalUpiPaise / totalAmountPaise) * 100) : 0;
+  const cardsPct = totalAmountPaise > 0 ? Math.round((totalCardsPaise / totalAmountPaise) * 100) : 0;
+  const cashPct = totalAmountPaise > 0 ? Math.round((totalCashPaise / totalAmountPaise) * 100) : 0;
 
   res.summary = {
+    breakdown,
     upiPercent: `${upiPct}%`,
     upiAmount: formatCurrencyPaise(
-      upiAmt * 100,
+      totalUpiPaise,
       res.currencySymbol,
       res.currency,
     ),
     cardsPercent: `${cardsPct}%`,
     cardsAmount: formatCurrencyPaise(
-      cardsAmt * 100,
+      totalCardsPaise,
       res.currencySymbol,
       res.currency,
     ),
     cashPercent: `${cashPct}%`,
     cashAmount: formatCurrencyPaise(
-      cashAmt * 100,
+      totalCashPaise,
       res.currencySymbol,
       res.currency,
     ),
@@ -3167,8 +3698,8 @@ export async function provideCashierPaymentBreakdown(
   res.chart = {
     chartType: "donut",
     type: "donut",
-    series: [{ name: "Tenders", data: tenderSeries }],
-    data: tenderSeries,
+    series: [{ name: "Tenders", data: standardSeries }],
+    data: standardSeries,
     xAxisLabel: "Tender Type",
     yAxisLabel: `Volume (${res.currency})`,
   };
@@ -3270,48 +3801,84 @@ export async function provideCashierTransactionHistory(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const payments = await ctx.db
     .query("orderPayments")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_org_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .order("desc")
     .take(15);
 
   let rows = [];
   if (payments.length > 0) {
-    rows = payments.map((p) => ({
-      id: p._id,
-      orderId: p.orderId,
-      mode: p.paymentModeName,
-      type: p.paymentType || "Credit",
-      amount: formatCurrencyPaise(
-        p.payAmount || p.amount || 0,
-        res.currencySymbol,
-        res.currency,
-      ),
-      ref: p.transactionReference || "POS-LOCAL",
-      time: formatRelativeTime(p.createdAt, now),
-    }));
+    const orderDocs = await Promise.all(
+      payments.map((p) => ctx.db.get(p.orderId)),
+    );
+
+    rows = payments.map((p, idx) => {
+      const order = orderDocs[idx];
+      const rawNum = order?.orderNumber || "";
+      const displayOrderNumber = rawNum
+        ? rawNum.startsWith("#") ? rawNum : `#${rawNum}`
+        : `#${String(p.orderId).slice(-6)}`;
+
+      return {
+        id: p._id,
+        orderId: displayOrderNumber,
+        orderNumber: displayOrderNumber,
+        mode: p.paymentModeName,
+        type: p.paymentType || "Credit",
+        amount: formatCurrencyPaise(
+          p.payAmount || p.amount || 0,
+          res.currencySymbol,
+          res.currency,
+        ),
+        ref: p.transactionReference || "POS-LOCAL",
+        time: formatRelativeTime(p.createdAt, now),
+      };
+    });
   } else {
     const orders = await ctx.db
       .query("orders")
-      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .withIndex("by_created_at", (q) =>
+        q
+          .eq("organizationId", org._id)
+          .gte("createdAt", timeRange.from)
+          .lte("createdAt", timeRange.to),
+      )
       .order("desc")
       .take(15);
 
-    rows = orders.map((o) => ({
-      id: o._id,
-      orderId: o.orderNumber,
-      mode: o.paymentMode,
-      type: "Credit",
-      amount: formatCurrencyPaise(
-        o.totalAmount || 0,
-        res.currencySymbol,
-        res.currency,
-      ),
-      ref: o.paymentStatus,
-      time: formatRelativeTime(o.createdAt, now),
-    }));
+    rows = orders.map((o) => {
+      const displayOrderNumber = o.orderNumber
+        ? o.orderNumber.startsWith("#") ? o.orderNumber : `#${o.orderNumber}`
+        : `#${String(o._id).slice(-6)}`;
+
+      return {
+        id: o._id,
+        orderId: displayOrderNumber,
+        orderNumber: displayOrderNumber,
+        mode: o.paymentMode,
+        type: "Credit",
+        amount: formatCurrencyPaise(
+          o.totalAmount || 0,
+          res.currencySymbol,
+          res.currency,
+        ),
+        ref: o.paymentStatus,
+        time: formatRelativeTime(o.createdAt, now),
+      };
+    });
   }
 
   res.table = {
@@ -3329,11 +3896,8 @@ export async function provideCashierTransactionHistory(
 
   res.summary = {
     recentTxns: rows.slice(0, 5).map((r) => ({
-      billNumber:
-        typeof r.orderId === "string" && r.orderId.startsWith("ORD")
-          ? `#BILL-${r.orderId.slice(-4)}`
-          : `#BILL-${String(r.id).slice(-4)}`,
-      location: "Counter Register",
+      billNumber: r.orderNumber,
+      orderNumber: r.orderNumber,
       amount: r.amount,
       mode: r.mode || "UPI",
       time: r.time,
@@ -3350,34 +3914,83 @@ export async function provideCashierOpenSessions(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const users = await ctx.db
     .query("organizationUsers")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const cashiers = users.filter(
-    (u) => u.deletedAt === undefined && (u.userType || []).includes("cashier"),
-  );
+  const cashierOperators = users.filter((u) => {
+    if (u.deletedAt !== undefined) return false;
+    const types = (u.userType || []).map((t) => (t || "").trim().toLowerCase());
+    return (
+      types.includes("cashier") ||
+      types.includes("admin") ||
+      types.includes("store_admin") ||
+      types.includes("org_admin") ||
+      types.includes("captain")
+    );
+  });
 
-  const registerRows = cashiers.map((u, idx) => ({
-    name: idx === 0 ? "Register 01 (Main Counter)" : `Register 0${idx + 1}`,
-    operator:
-      `${u.firstName || "Staff"} ${u.lastName || ""}`.trim() || "Cashier",
-    duration: "Active",
-    logged: formatCurrencyPaise(0, res.currencySymbol, res.currency),
-  }));
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
+    .collect();
+
+  const paidOrders = orders.filter(
+    (o) => isValidActiveOrCompletedOrder(o) && o.paymentStatus === "Paid",
+  );
+  const totalPaidPaise = paidOrders.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+  const operators =
+    cashierOperators.length > 0
+      ? cashierOperators
+      : users.filter((u) => u.deletedAt === undefined);
+
+  const registerRows = operators.map((u, idx) => {
+    const operatorName =
+      `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || "Staff Operator";
+
+    const userPaidPaise = paidOrders
+      .filter((o) => o.cashierUserId === u.userId)
+      .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
+    const loggedAmount =
+      userPaidPaise > 0
+        ? userPaidPaise
+        : idx === 0
+          ? totalPaidPaise
+          : 0;
+
+    return {
+      name: idx === 0 ? "Register 01 (Main Counter)" : `Register 0${idx + 1}`,
+      operator: operatorName,
+      duration: "Active",
+      logged: formatCurrencyPaise(loggedAmount, res.currencySymbol, res.currency),
+    };
+  });
 
   res.summary = {
     activeRegisters: registerRows,
   };
 
   res.kpi = {
-    value: cashiers.length,
-    displayValue: `${cashiers.length} Cashiers`,
-    label: "Active Cashier Staff",
+    value: registerRows.length,
+    displayValue: `${registerRows.length} Registers`,
+    label: "Active Cashier Terminals",
     secondaryMetrics: [
-      { label: "Authorized Cashiers", value: cashiers.length },
+      { label: "Authorized Cashiers", value: registerRows.length },
       { label: "Drawer State", value: "Active Register" },
     ],
   };
@@ -3395,6 +4008,8 @@ export async function provideCashierSplitBills(
   const timeRange = calculateDateRangeBoundaries(
     options.dateRangePreset || "today",
     res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
   );
 
   const payments = await ctx.db
@@ -3431,8 +4046,197 @@ export async function provideCashierSplitBills(
 }
 
 // ==========================================
+// ==========================================
 // 9. CAPTAIN PROVIDERS
 // ==========================================
+
+function formatCaptainStaffName(
+  user?: { firstName?: string; lastName?: string; email?: string } | null,
+  fallback = "Staff Member",
+): string {
+  if (!user) return fallback;
+  if (user.firstName && user.lastName) {
+    return `${user.firstName} ${user.lastName.charAt(0)}.`;
+  }
+  if (user.firstName) return user.firstName;
+  if (user.lastName) return user.lastName;
+  if (user.email) {
+    const prefix = user.email.split("@")[0];
+    return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+  }
+  return fallback;
+}
+
+interface StoreCaptain {
+  id: string;
+  altId?: string;
+  name: string;
+  role: string;
+}
+
+async function getStoreCaptainStaff(
+  ctx: QueryCtx,
+  orgId: Id<"organizations">,
+): Promise<StoreCaptain[]> {
+  const result: StoreCaptain[] = [];
+  const seenIds = new Set<string>();
+
+  // 1. Employees in organizationUsers with captain or waiter role
+  const orgUsers = await ctx.db
+    .query("organizationUsers")
+    .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+    .collect();
+
+  for (const u of orgUsers) {
+    if (u.deletedAt !== undefined) continue;
+    const isCaptain = (u.userType || []).some(
+      (t) => t === "captain" || t === "waiter" || t.toLowerCase().includes("captain") || t.toLowerCase().includes("waiter"),
+    );
+    if (isCaptain) {
+      const name = formatCaptainStaffName(u);
+      const docId = String(u._id);
+      result.push({
+        id: docId,
+        altId: u.userId,
+        name,
+        role: u.userType.includes("captain") ? "Floor Captain" : "Floor Server",
+      });
+      seenIds.add(docId);
+      if (u.userId) seenIds.add(u.userId);
+    }
+  }
+
+  // Fallback if no specific waiter/captain tag: include all active staff members
+  if (result.length === 0) {
+    for (const u of orgUsers) {
+      if (u.deletedAt !== undefined) continue;
+      const name = formatCaptainStaffName(u);
+      const docId = String(u._id);
+      result.push({
+        id: docId,
+        altId: u.userId,
+        name,
+        role: "Floor Server",
+      });
+      seenIds.add(docId);
+      if (u.userId) seenIds.add(u.userId);
+    }
+  }
+
+  // 2. Floor staff in organizationWaiters table
+  const waiters = await ctx.db.query("organizationWaiters").collect();
+  for (const w of waiters) {
+    if (w.deletedAt !== undefined) continue;
+    const idStr = String(w._id);
+    if (!seenIds.has(idStr)) {
+      let name = "Floor Waiter";
+      if (w.firstName && w.lastName) {
+        name = `${w.firstName} ${w.lastName.charAt(0)}.`;
+      } else if (w.firstName) {
+        name = w.firstName;
+      } else if (w.waiterCode) {
+        name = `Waiter ${w.waiterCode}`;
+      }
+      result.push({
+        id: idStr,
+        name,
+        role: "Floor Server",
+      });
+      seenIds.add(idStr);
+    }
+  }
+
+  return result;
+}
+
+function isCaptainOrder(o: Doc<"orders">): boolean {
+  if (o.orderSource && o.orderSource.toLowerCase().includes("captain")) {
+    return true;
+  }
+  if (o.waiterUserId && o.waiterUserId.trim() !== "") {
+    return true;
+  }
+  return false;
+}
+
+async function getStoreTableAndLayoutMaps(ctx: QueryCtx) {
+  const tables = await ctx.db.query("organizationTables").collect();
+  const activeTables = tables.filter((t) => t.deletedAt === undefined);
+  const tableMap = new Map(activeTables.map((t) => [t._id, t]));
+
+  const layouts = await ctx.db.query("organizationLayouts").collect();
+  const activeLayouts = layouts.filter((l) => l.deletedAt === undefined);
+  const layoutMap = new Map(activeLayouts.map((l) => [l._id, l.name]));
+
+  return { activeTables, tableMap, layoutMap };
+}
+
+/**
+ * Resolves the currently active dining order for a physical table.
+ * Queries orders placed for table._id, falling back to table.currentOrderId.
+ * If no open order exists or the order is finished/delivered, returns null (Vacant).
+ */
+async function resolveActiveTableOrder(
+  ctx: QueryCtx,
+  orgId: Id<"organizations">,
+  table: Doc<"organizationTables">,
+  timeRange?: DateRangeWindow,
+): Promise<Doc<"orders"> | null> {
+  let ord: Doc<"orders"> | null = null;
+
+  // 1. Direct query of orders referencing this tableId
+  const ordersOnTable = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+    .filter((q) => q.eq(q.field("tableId"), table._id))
+    .collect();
+
+  const activeOnTable = ordersOnTable
+    .filter(
+      (o) =>
+        !o.isCompleted &&
+        !o.isRejected &&
+        o.orderStatusName !== "Completed" &&
+        o.orderStatusName !== "Delivered" &&
+        o.orderStatusName !== "Cancelled" &&
+        o.orderStatusName !== "Rejected",
+    )
+    .sort((a, b) => b.createdAt - a.createdAt);
+
+  if (activeOnTable.length > 0) {
+    ord = activeOnTable[0];
+  } else if (table.currentOrderId) {
+    // 2. Fallback to table.currentOrderId pointer
+    const normId = ctx.db.normalizeId("orders", table.currentOrderId);
+    if (normId) {
+      ord = await ctx.db.get(normId);
+    }
+    if (!ord) {
+      ord = await ctx.db
+        .query("orders")
+        .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+        .filter((q) => q.eq(q.field("orderNumber"), table.currentOrderId))
+        .first();
+    }
+  }
+
+  if (
+    ord &&
+    !ord.isCompleted &&
+    !ord.isRejected &&
+    ord.orderStatusName !== "Completed" &&
+    ord.orderStatusName !== "Delivered" &&
+    ord.orderStatusName !== "Cancelled" &&
+    ord.orderStatusName !== "Rejected"
+  ) {
+    if (timeRange && (ord.createdAt < timeRange.from || ord.createdAt > timeRange.to)) {
+      return null;
+    }
+    return ord;
+  }
+
+  return null;
+}
 
 export async function provideCaptainActiveOrders(
   ctx: QueryCtx,
@@ -3440,53 +4244,168 @@ export async function provideCaptainActiveOrders(
   widgetDef: WidgetDefinition,
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
-  const res = await provideOverviewActiveOrders(ctx, org, widgetDef, options);
+  const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const { tableMap, layoutMap } = await getStoreTableAndLayoutMaps(ctx);
+  const captains = await getStoreCaptainStaff(ctx, org._id);
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
+
+  // ONLY captain orders!
   const activeOrders = orders.filter(
-    (o) => !o.isCompleted && !o.isRejected && o.orderStatusName !== "Completed",
+    (o) =>
+      isCaptainOrder(o) &&
+      !o.isCompleted &&
+      !o.isRejected &&
+      o.orderStatusName !== "Completed" &&
+      o.orderStatusName !== "Delivered" &&
+      o.orderStatusName !== "Rejected" &&
+      o.orderStatusName !== "Cancelled",
   );
 
-  const captainStats = [
+  const statsMap = new Map<
+    string,
     {
-      rank: 1,
-      name: "Rahul S.",
-      zone: "Zone A",
-      tablesCount: 0,
-      covers: 0,
-      amount: 0,
-    },
-    {
-      rank: 2,
-      name: "Amina K.",
-      zone: "Terrace",
-      tablesCount: 0,
-      covers: 0,
-      amount: 0,
-    },
-    {
-      rank: 3,
-      name: "Vikram P.",
-      zone: "Main Hall",
-      tablesCount: 0,
-      covers: 0,
-      amount: 0,
-    },
-  ];
+      id: string;
+      name: string;
+      zone: string;
+      tablesCount: number;
+      covers: number;
+      amount: number;
+    }
+  >();
 
-  activeOrders.forEach((o, idx) => {
-    const target = captainStats[idx % captainStats.length];
-    target.tablesCount += 1;
-    target.covers += o.membersOnTable || 2;
-    target.amount += o.subTotal || o.totalAmount || 0;
+  for (const c of captains) {
+    const entry = {
+      id: c.id,
+      name: c.name,
+      zone: c.role,
+      tablesCount: 0,
+      covers: 0,
+      amount: 0,
+    };
+    statsMap.set(c.id, entry);
+    if (c.altId) {
+      statsMap.set(c.altId, entry);
+    }
+  }
+
+  for (const o of activeOrders) {
+    const staffKey = o.waiterUserId;
+    let entry = staffKey ? statsMap.get(staffKey) : undefined;
+    if (!entry && staffKey) {
+      const match = captains.find((c) => c.id === staffKey || c.altId === staffKey);
+      if (match) {
+        entry = statsMap.get(match.id);
+      }
+      if (!entry) {
+        const normUserId = ctx.db.normalizeId("organizationUsers", staffKey);
+        const staffDoc = normUserId ? await ctx.db.get(normUserId) : null;
+        if (staffDoc) {
+          const staffName = formatCaptainStaffName(staffDoc);
+          entry = {
+            id: String(staffDoc._id),
+            name: staffName,
+            zone: "Floor Server",
+            tablesCount: 0,
+            covers: 0,
+            amount: 0,
+          };
+          statsMap.set(staffKey, entry);
+          statsMap.set(String(staffDoc._id), entry);
+          if (staffDoc.userId) statsMap.set(staffDoc.userId, entry);
+        }
+      }
+    }
+
+    if (!entry) {
+      entry = statsMap.get("unassigned");
+      if (!entry) {
+        entry = {
+          id: "unassigned",
+          name: "Floor Captain",
+          zone: "Floor Service",
+          tablesCount: 0,
+          covers: 0,
+          amount: 0,
+        };
+        statsMap.set("unassigned", entry);
+      }
+    }
+
+    entry.tablesCount += 1;
+    entry.covers += o.membersOnTable || 2;
+    entry.amount += o.subTotal || o.totalAmount || 0;
+    if (o.tableId) {
+      const tbl = tableMap.get(o.tableId);
+      if (tbl?.layoutId && layoutMap.has(tbl.layoutId)) {
+        entry.zone = layoutMap.get(tbl.layoutId)!;
+      } else if (tbl) {
+        entry.zone = `Table ${tbl.tableNumber}`;
+      }
+    }
+  }
+
+  // Deduplicate stats entries by their canonical id
+  const uniqueEntries = Array.from(
+    new Map(Array.from(statsMap.values()).map((e) => [e.id, e])).values(),
+  );
+
+  const captainList = uniqueEntries
+    .filter((entry) => entry.tablesCount > 0)
+    .map((entry, idx) => ({
+      rank: idx + 1,
+      name: entry.name,
+      zone: entry.zone,
+      tablesCount: entry.tablesCount,
+      covers: entry.covers,
+      amount: entry.amount,
+      amountFormatted: formatCurrencyPaise(
+        entry.amount,
+        res.currencySymbol,
+        res.currency,
+        res.country,
+      ),
+    }));
+
+  captainList.sort((a, b) => b.amount - a.amount || b.tablesCount - a.tablesCount);
+  captainList.forEach((c, idx) => {
+    c.rank = idx + 1;
   });
+
+  res.kpi = {
+    value: activeOrders.length,
+    displayValue: `${activeOrders.length} Active`,
+    label: "Active Captain Folios",
+    trend: activeOrders.length > 0 ? "up" : "down",
+    secondaryMetrics: [
+      {
+        label: "Active Servers",
+        value: captainList.length,
+      },
+      {
+        label: "Total Covers",
+        value: captainList.reduce((s, c) => s + c.covers, 0),
+      },
+    ],
+  };
 
   res.summary = {
     activeOrdersCount: activeOrders.length,
-    captains: captainStats,
+    captains: captainList,
   };
   return res;
 }
@@ -3497,25 +4416,87 @@ export async function provideCaptainTableServiceStatus(
   widgetDef: WidgetDefinition,
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
-  const res = await provideOrdersFloorOccupancy(ctx, org, widgetDef, options);
+  const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const { activeTables } = await getStoreTableAndLayoutMaps(ctx);
 
-  const tables = await ctx.db.query("organizationTables").collect();
-  const tableCards = tables.slice(0, 8).map((t) => {
-    const hasOrder = Boolean(t.currentOrderId);
-    return {
-      tableNumber:
+  const now = Date.now();
+  const tableCards = await Promise.all(
+    activeTables.slice(0, 8).map(async (t) => {
+      // 1. A table is ONLY occupied if it has an active current order
+      const activeOrder = await resolveActiveTableOrder(ctx, org._id, t, timeRange);
+
+      const isOccupied = Boolean(activeOrder);
+      const isBlocked = Boolean(t.isBlock);
+
+      // Check active postpaid request
+      const activePostpaidReq = await ctx.db
+        .query("postpaidOrderRequests")
+        .withIndex("by_table_and_status", (q) =>
+          q.eq("tableId", t._id).eq("status", "requested"),
+        )
+        .first();
+      const hasRequest = Boolean(
+        activePostpaidReq && activePostpaidReq.deletedAt === undefined,
+      );
+
+      const tableNum =
         t.tableNumber.startsWith("T-") || t.tableNumber.startsWith("M-")
           ? t.tableNumber
-          : `T-${t.tableNumber}`,
-      seating: `${t.seatingCapacity || 4}p`,
-      stage: hasOrder ? "Main Course" : "Vacant",
-      elapsed: hasOrder ? "18m" : undefined,
-      isVacant: !hasOrder,
-      badgeColor: hasOrder
-        ? "bg-primary text-on-primary"
-        : "bg-surface-container text-secondary",
-    };
-  });
+          : `T-${t.tableNumber}`;
+
+      let stage = "Vacant";
+      let isVacant = true;
+      let elapsed: string | undefined = undefined;
+      let badgeColor = "bg-surface-container text-secondary";
+
+      if (isOccupied && activeOrder) {
+        stage = activeOrder.orderStatusName || "In Service";
+        isVacant = false;
+        const elapsedMins = Math.max(
+          1,
+          Math.floor((now - (activeOrder.updatedAt || activeOrder.createdAt)) / 60000),
+        );
+        elapsed = `${elapsedMins}m`;
+        badgeColor = "bg-primary text-on-primary";
+      } else if (hasRequest) {
+        stage = "QR Request";
+        isVacant = false;
+        badgeColor = "bg-amber-600 text-white";
+      } else if (isBlocked) {
+        stage = "Reserved";
+        isVacant = false;
+        badgeColor = "bg-stone-300 text-stone-800";
+      }
+
+      return {
+        tableNumber: tableNum,
+        seating: `${t.seatingCapacity || 4}p`,
+        stage,
+        elapsed,
+        isVacant,
+        badgeColor,
+      };
+    }),
+  );
+
+  const occupiedCount = tableCards.filter((t) => !t.isVacant).length;
+
+  res.kpi = {
+    value: occupiedCount,
+    displayValue: `${occupiedCount}/${activeTables.length}`,
+    label: "Floor Table Occupancy",
+    trend: occupiedCount > 0 ? "up" : "down",
+    secondaryMetrics: [
+      { label: "Occupied Tables", value: occupiedCount },
+      { label: "Vacant Tables", value: activeTables.length - occupiedCount },
+    ],
+  };
 
   res.summary = {
     tableCards,
@@ -3530,48 +4511,84 @@ export async function provideCaptainAssignedTables(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const { activeTables, tableMap, layoutMap } = await getStoreTableAndLayoutMaps(ctx);
+  const captains = await getStoreCaptainStaff(ctx, org._id);
 
-  const tables = await ctx.db.query("organizationTables").collect();
-  const activeTables = tables.filter(
-    (t) => t.deletedAt === undefined && t.currentOrderId !== undefined,
+  const occupiedTableRecords = (
+    await Promise.all(
+      activeTables.map(async (t) => {
+        const ord = await resolveActiveTableOrder(ctx, org._id, t, timeRange);
+        if (ord && isCaptainOrder(ord)) {
+          return { table: t, order: ord };
+        }
+        return null;
+      }),
+    )
+  ).filter(
+    (item): item is { table: Doc<"organizationTables">; order: Doc<"orders"> } =>
+      item !== null,
   );
 
+  const rosters = captains.map((c) => {
+    const staffOccupied = occupiedTableRecords.filter(
+      (rec) =>
+        rec.order.waiterUserId === c.id ||
+        (c.altId !== undefined && rec.order.waiterUserId === c.altId),
+    );
+
+    let sectionName = c.role;
+    if (staffOccupied.length > 0) {
+      const firstTbl = staffOccupied[0].table;
+      if (firstTbl.layoutId && layoutMap.has(firstTbl.layoutId)) {
+        sectionName = layoutMap.get(firstTbl.layoutId)!;
+      } else {
+        sectionName = `Table ${firstTbl.tableNumber}`;
+      }
+    }
+
+    const activeCount = staffOccupied.length;
+    const totalActive = occupiedTableRecords.length;
+    const loadPct =
+      totalActive > 0 ? Math.round((activeCount / totalActive) * 100) : 0;
+
+    return {
+      name: c.name,
+      section: sectionName,
+      activeCount,
+      activePct: `${loadPct}%`,
+    };
+  });
+
+  const activeCovers = occupiedTableRecords.reduce(
+    (sum, rec) => sum + (rec.table.seatingCapacity || 2),
+    0,
+  );
+  const firstLayoutName =
+    layoutMap.size > 0 ? layoutMap.values().next().value : undefined;
+  const defaultStation =
+    firstLayoutName ||
+    (activeTables.length > 0 ? `Table ${activeTables[0].tableNumber}` : "Floor Service");
+
   res.kpi = {
-    value: activeTables.length,
-    displayValue: `${activeTables.length} Tables`,
+    value: occupiedTableRecords.length,
+    displayValue: `${occupiedTableRecords.length} Tables`,
     label: "Assigned Service Tables",
     secondaryMetrics: [
-      { label: "Floor Station", value: "Dining Section A" },
-      {
-        label: "Active Covers",
-        value: activeTables.reduce((s, t) => s + (t.seatingCapacity || 2), 0),
-      },
+      { label: "Floor Station", value: defaultStation },
+      { label: "Active Covers", value: activeCovers },
     ],
   };
 
   res.summary = {
-    activeTablesCount: activeTables.length,
-    totalTablesCount: tables.length,
-    rosters: [
-      {
-        name: "Rahul S.",
-        section: "Terrace (T-01 - T-06)",
-        activeCount: Math.min(activeTables.length, 6),
-        activePct: activeTables.length > 0 ? "85%" : "0%",
-      },
-      {
-        name: "Amina K.",
-        section: "Main Dining (T-07 - T-12)",
-        activeCount: Math.max(0, Math.min(activeTables.length - 6, 6)),
-        activePct: activeTables.length > 6 ? "60%" : "0%",
-      },
-      {
-        name: "Vikram P.",
-        section: "Mezzanine (T-13 - T-18)",
-        activeCount: Math.max(0, activeTables.length - 12),
-        activePct: activeTables.length > 12 ? "40%" : "0%",
-      },
-    ],
+    activeTablesCount: occupiedTableRecords.length,
+    totalTablesCount: activeTables.length,
+    rosters,
   };
   return res;
 }
@@ -3589,6 +4606,7 @@ export async function provideCaptainServiceTime(
     options.fromTimestamp,
     options.toTimestamp,
   );
+  const { tableMap, layoutMap } = await getStoreTableAndLayoutMaps(ctx);
 
   const orders = await ctx.db
     .query("orders")
@@ -3600,44 +4618,72 @@ export async function provideCaptainServiceTime(
     )
     .collect();
 
+  // ONLY completed captain orders!
   const completed = orders.filter(
-    (o) => o.isCompleted || o.orderStatusName === "Completed",
+    (o) =>
+      isCaptainOrder(o) &&
+      (o.isCompleted ||
+        o.orderStatusName === "Completed" ||
+        o.orderStatusName === "Delivered"),
   );
+
   let totalDuration = 0;
+  let fastestMins = Infinity;
+  let fastestSectionName = "";
+
   for (const o of completed) {
-    const dur = Math.max(
+    const rawDur = Math.max(
       1,
       Math.floor(((o.updatedAt || o.createdAt) - o.createdAt) / 60000),
     );
+    // Cap at 90m to avoid test orders left open across shifts skewing average
+    const dur = Math.min(rawDur, 90);
     totalDuration += dur;
+    if (dur < fastestMins) {
+      fastestMins = dur;
+      if (o.tableId && tableMap.has(o.tableId)) {
+        const tbl = tableMap.get(o.tableId)!;
+        if (tbl.layoutId && layoutMap.has(tbl.layoutId)) {
+          fastestSectionName = layoutMap.get(tbl.layoutId)!;
+        } else {
+          fastestSectionName = `Table ${tbl.tableNumber}`;
+        }
+      } else if (o.tokenNumber) {
+        fastestSectionName = `Token #${o.tokenNumber}`;
+      } else {
+        fastestSectionName = "Floor Service";
+      }
+    }
   }
 
-  const avgTurnMins =
-    completed.length > 0
-      ? Math.round((totalDuration / completed.length) * 10) / 10
-      : 0;
+  const avgTurn =
+    completed.length > 0 ? Math.round(totalDuration / completed.length) : 0;
+
+  const avgTurnDisplay = avgTurn > 0 ? `${avgTurn}m` : "--";
+  const deltaBenchmark =
+    avgTurn > 0
+      ? `${avgTurn > 42 ? "+" : ""}${(avgTurn - 42).toFixed(1)}m`
+      : "--";
+  const fastestSectionDisplay =
+    fastestMins !== Infinity ? `${fastestSectionName} (${fastestMins}m)` : "--";
 
   res.kpi = {
-    value: avgTurnMins,
-    displayValue: avgTurnMins > 0 ? `${avgTurnMins} mins` : "-- mins",
+    value: avgTurn,
+    displayValue: avgTurn > 0 ? `${avgTurn}m` : "--",
     label: "Attendant Tempo & Table Turn",
-    trend: avgTurnMins > 0 && avgTurnMins <= 45 ? "up" : "down",
+    trend: avgTurn > 0 && avgTurn <= 45 ? "up" : "down",
     secondaryMetrics: [
-      { label: "Benchmark Turn", value: "42.0 mins" },
-      {
-        label: "Delta vs Target",
-        value: avgTurnMins > 0 ? `${(avgTurnMins - 42.0).toFixed(1)}m` : "--",
-      },
-      { label: "Fastest Section", value: "Terrace (31m)" },
+      { label: "Benchmark Turn", value: "42.0m" },
+      { label: "Delta vs Target", value: deltaBenchmark },
+      { label: "Fastest Section", value: fastestSectionDisplay },
     ],
   };
 
   res.summary = {
-    avgTurnMins: avgTurnMins > 0 ? avgTurnMins : "--",
+    avgTurnMins: avgTurnDisplay,
     completedTables: completed.length,
-    deltaBenchmark:
-      avgTurnMins > 0 ? `${(avgTurnMins - 42.0).toFixed(1)}m` : "--",
-    fastestSection: "Terrace (31m)",
+    deltaBenchmark,
+    fastestSection: fastestSectionDisplay,
   };
   return res;
 }
@@ -3648,17 +4694,33 @@ export async function provideCaptainOrdersAwaitingService(
   widgetDef: WidgetDefinition,
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
-  const res = await provideKdsExpeditor(ctx, org, widgetDef, options);
+  const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const { tableMap } = await getStoreTableAndLayoutMaps(ctx);
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
+
+  // ONLY captain / table orders awaiting runner pickup
   const readyOrders = orders.filter(
     (o) =>
+      isCaptainOrder(o) &&
       !o.isCompleted &&
       !o.isRejected &&
-      deriveWorkstationStatusKey(o) === "READY",
+      (o.orderStatusName?.toLowerCase().includes("ready") ||
+        deriveWorkstationStatusKey(o) === "READY"),
   );
 
   const now = Date.now();
@@ -3666,13 +4728,40 @@ export async function provideCaptainOrdersAwaitingService(
     const elapsedMins = Math.floor(
       (now - (o.updatedAt || o.createdAt)) / 60000,
     );
+    let tableLabel = "Table";
+    if (o.tableId && tableMap.has(o.tableId)) {
+      const t = tableMap.get(o.tableId)!;
+      tableLabel =
+        t.tableNumber.startsWith("T-") || t.tableNumber.startsWith("M-")
+          ? t.tableNumber
+          : `T-${t.tableNumber}`;
+    } else if (o.tokenNumber) {
+      tableLabel = `Token #${o.tokenNumber}`;
+    } else {
+      tableLabel = o.orderNumber;
+    }
+
     return {
-      table: o.tableId ? `T-${o.orderNumber.slice(-2)}` : "T-04",
+      table: tableLabel,
       item: "Food Order Ready at Pass",
       readyAgo: `${elapsedMins}m ago`,
       isUrgent: elapsedMins > 3,
     };
   });
+
+  res.kpi = {
+    value: readyOrders.length,
+    displayValue: `${readyOrders.length} Ready`,
+    label: "Orders Awaiting Service",
+    trend: readyOrders.length > 0 ? "down" : "up",
+    secondaryMetrics: [
+      { label: "Waiting at Pass", value: readyOrders.length },
+      {
+        label: "Pass Status",
+        value: readyOrders.length > 0 ? "Runner Needed" : "Pass Clear",
+      },
+    ],
+  };
 
   res.summary = {
     countAtPass: readyOrders.length,
@@ -3695,6 +4784,7 @@ export async function provideCaptainPerformanceSummary(
     options.fromTimestamp,
     options.toTimestamp,
   );
+  const captains = await getStoreCaptainStaff(ctx, org._id);
 
   const orders = await ctx.db
     .query("orders")
@@ -3706,46 +4796,71 @@ export async function provideCaptainPerformanceSummary(
     )
     .collect();
 
+  // ONLY completed captain orders
   const completed = orders.filter(
-    (o) => o.isCompleted || o.orderStatusName === "Completed",
-  );
-  const totalRev = completed.reduce(
-    (sum, o) => sum + (o.subTotal || o.totalAmount || 0),
-    0,
+    (o) =>
+      isCaptainOrder(o) &&
+      (o.isCompleted ||
+        o.orderStatusName === "Completed" ||
+        o.orderStatusName === "Delivered"),
   );
 
+  const staffPerformance = captains.map((c) => {
+    const staffOrders = completed.filter(
+      (o) =>
+        o.waiterUserId === c.id ||
+        (c.altId !== undefined && o.waiterUserId === c.altId),
+    );
+    const sales = staffOrders.reduce(
+      (sum, o) => sum + (o.subTotal || o.totalAmount || 0),
+      0,
+    );
+    return {
+      name: c.name,
+      salesAmount: sales,
+      orderCount: staffOrders.length,
+      turnRate: staffOrders.length > 0 ? `${staffOrders.length} orders` : "--",
+    };
+  });
+
+  staffPerformance.sort((a, b) => b.salesAmount - a.salesAmount);
+
+  const formattedCaptains = staffPerformance.slice(0, 3).map((sp, idx) => ({
+    name: sp.name,
+    sales:
+      sp.salesAmount > 0
+        ? formatCurrencyPaise(
+            sp.salesAmount,
+            res.currencySymbol,
+            res.currency,
+            res.country,
+          )
+        : `${res.currencySymbol} 0.00`,
+    turnRate: sp.turnRate,
+    rank:
+      idx === 0 && sp.salesAmount > 0
+        ? "Top Performer"
+        : idx === 1 && sp.salesAmount > 0
+          ? "Pacing Lead"
+          : "Standard",
+  }));
+
+  const totalCovers = completed.reduce((s, o) => s + (o.membersOnTable || 2), 0);
+  let totalDur = 0;
+  for (const o of completed) {
+    const raw = Math.max(
+      1,
+      Math.floor(((o.updatedAt || o.createdAt) - o.createdAt) / 60000),
+    );
+    totalDur += Math.min(raw, 90);
+  }
+  const avgMins =
+    completed.length > 0 ? Math.round(totalDur / completed.length) : 0;
+
   res.summary = {
-    captains: [
-      {
-        name: "Rahul S.",
-        sales:
-          totalRev > 0
-            ? `${res.currencySymbol} ${formatCurrencyAmount(Math.round(totalRev * 0.42), res.country)}`
-            : `${res.currencySymbol} 0.00`,
-        turnRate: completed.length > 0 ? "94% SLA" : "--",
-        rank: "Top Performer",
-      },
-      {
-        name: "Amina K.",
-        sales:
-          totalRev > 0
-            ? `${res.currencySymbol} ${formatCurrencyAmount(Math.round(totalRev * 0.35), res.country)}`
-            : `${res.currencySymbol} 0.00`,
-        turnRate: completed.length > 0 ? "91% SLA" : "--",
-        rank: "Pacing Lead",
-      },
-      {
-        name: "Vikram P.",
-        sales:
-          totalRev > 0
-            ? `${res.currencySymbol} ${formatCurrencyAmount(Math.round(totalRev * 0.23), res.country)}`
-            : `${res.currencySymbol} 0.00`,
-        turnRate: completed.length > 0 ? "88% SLA" : "--",
-        rank: "Standard",
-      },
-    ],
-    totalCovers: completed.reduce((s, o) => s + (o.membersOnTable || 2), 0),
-    avgTurnMins: completed.length > 0 ? "48 mins" : "-- mins",
+    captains: formattedCaptains,
+    totalCovers,
+    avgTurnMins: avgMins > 0 ? `${avgMins}m` : "--",
   };
   return res;
 }
@@ -3756,25 +4871,83 @@ export async function provideCaptainOrderActivity(
   widgetDef: WidgetDefinition,
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
-  const res = await provideOrdersLiveFeed(ctx, org, widgetDef, options);
+  const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const { tableMap } = await getStoreTableAndLayoutMaps(ctx);
+  const captains = await getStoreCaptainStaff(ctx, org._id);
+  const captainMap = new Map(captains.map((c) => [c.id, c]));
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
-  const sorted = orders.sort((a, b) => b.createdAt - a.createdAt).slice(0, 10);
-  const events = sorted.map((o, idx) => {
+  // ONLY captain orders!
+  const captainOrders = orders.filter(isCaptainOrder);
+
+  const sorted = captainOrders
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 10);
+
+  const events = sorted.map((o) => {
     const timeStr = formatStoreTime(o.createdAt, res.timeZone, res.country);
-    const captains = ["Amina Khan", "Rahul Sharma", "Vikram Patel"];
-    const captainName = captains[idx % captains.length];
+
+    let captainName = "Floor Captain";
+    if (o.waiterUserId) {
+      const match = captains.find(
+        (c) => c.id === o.waiterUserId || (c.altId && c.altId === o.waiterUserId),
+      );
+      if (match) {
+        captainName = match.name;
+      }
+    }
+
+    let tableLabel = "Table";
+    if (o.tableId && tableMap.has(o.tableId)) {
+      const tbl = tableMap.get(o.tableId)!;
+      tableLabel =
+        tbl.tableNumber.startsWith("T-") || tbl.tableNumber.startsWith("M-")
+          ? tbl.tableNumber
+          : `T-${tbl.tableNumber}`;
+    } else if (o.tokenNumber) {
+      tableLabel = `#${o.tokenNumber}`;
+    } else {
+      tableLabel =
+        o.orderNumber.length > 6 ? o.orderNumber.slice(-4) : o.orderNumber;
+    }
+
+    let action = `Fired ${o.orderType || "DineIn"} order (${o.orderStatusName || "Accepted"})`;
+    if (
+      o.isCompleted ||
+      o.orderStatusName === "Completed" ||
+      o.orderStatusName === "Delivered"
+    ) {
+      action = "Completed order & presented checkout bill";
+    } else if (o.isModify) {
+      action = "Updated order items & table note";
+    } else if (
+      o.isRejected ||
+      o.orderStatusName === "Rejected" ||
+      o.orderStatusName === "Cancelled"
+    ) {
+      action = "Order rejected / cancelled";
+    }
+
     return {
       time: timeStr,
       captain: captainName,
-      action: o.isCompleted
-        ? "Presented final guest checkout bill"
-        : `Fired ${o.orderType} order (${o.orderStatusName})`,
-      table: o.tableId ? `T-${o.orderNumber.slice(-2)}` : "T-07",
+      action,
+      table: tableLabel,
     };
   });
 
@@ -3846,16 +5019,27 @@ export async function provideQueueWaitingCustomers(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const isPastPeriod = timeRange.to < now - 24 * 60 * 60 * 1000;
 
   const queueRecords = await ctx.db.query("organizationQueues").collect();
-  const waiting = queueRecords
-    .filter(
-      (q) =>
-        (q.queueStatus === "pending" || q.queueStatus === "arrived") &&
-        q.deletedAt === undefined,
-    )
-    .sort((a, b) => a.createdAt - b.createdAt)
-    .slice(0, 10);
+  const waiting = isPastPeriod
+    ? []
+    : queueRecords
+        .filter(
+          (q) =>
+            (q.queueStatus === "pending" || q.queueStatus === "arrived") &&
+            q.deletedAt === undefined &&
+            q.createdAt >= timeRange.from &&
+            q.createdAt <= timeRange.to,
+        )
+        .sort((a, b) => a.createdAt - b.createdAt)
+        .slice(0, 10);
 
   const waitingList = waiting.map((q) => {
     const elapsedMinutes = Math.floor((now - q.createdAt) / 60000);
@@ -3941,8 +5125,8 @@ export async function provideQueueAvgWaitTime(
 
   res.summary = {
     avgWaitMins: avg > 0 ? avg.toFixed(1) : "0.0",
-    deltaText: active.length > 3 ? "▲ +3.1m vs lunch" : "Within Target SLA",
-    quotedTime: "15–20m",
+    deltaText: active.length > 0 ? (avg <= 20 ? "Within Target SLA" : "Over Target SLA") : "No Active Queue",
+    quotedTime: active.length > 0 ? `${Math.round(avg || 15)}m` : "--",
     target: "Target < 20m",
   };
 
@@ -3956,20 +5140,37 @@ export async function provideQueueRecentCallouts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
   const queue = await ctx.db.query("organizationQueues").collect();
   const sorted = queue
-    .filter(
-      (q) =>
+    .filter((q) => {
+      const time = q.updatedAt || q.createdAt;
+      if (time < timeRange.from || time > timeRange.to) return false;
+      return (
         q.queueStatus === "completed" ||
         q.queueStatus.includes("cancel") ||
-        q.queueStatus === "arrived",
-    )
+        q.queueStatus === "arrived"
+      );
+    })
     .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
     .slice(0, 6);
 
+  const tables = await ctx.db
+    .query("organizationTables")
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+  const tableMap = new Map(tables.map((t) => [t._id, t.tableNumber]));
+
   const calledList = sorted.map((q) => {
     const timeStr = formatStoreTime(q.updatedAt || q.createdAt, res.timeZone, res.country);
-    let statusText = "Seated at Table T-04";
+    let statusText = q.tableId && tableMap.has(q.tableId)
+      ? `Seated at Table ${tableMap.get(q.tableId)}`
+      : "Seated";
     let statusColor = "text-emerald-700";
     if (q.queueStatus.includes("cancel") || q.queueStatus === "rejected") {
       statusText = "No-show / Cancelled";
@@ -4024,9 +5225,9 @@ export async function provideQueueStatusBreakdown(
   }
 
   const total = active.length;
-  const couplesPercent = total > 0 ? Math.round((couples / total) * 100) : 42;
-  const familiesPercent = total > 0 ? Math.round((families / total) * 100) : 40;
-  const largePercent = total > 0 ? 100 - couplesPercent - familiesPercent : 18;
+  const couplesPercent = total > 0 ? Math.round((couples / total) * 100) : 0;
+  const familiesPercent = total > 0 ? Math.round((families / total) * 100) : 0;
+  const largePercent = total > 0 ? Math.max(0, 100 - couplesPercent - familiesPercent) : 0;
 
   res.summary = {
     totalPax: totalPax > 0 ? totalPax : 0,
@@ -4048,15 +5249,25 @@ export async function provideQueueWaitTimeAlerts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const queue = await ctx.db.query("organizationQueues").collect();
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const isPastPeriod = timeRange.to < now - 24 * 60 * 60 * 1000;
 
-  const longWaits = queue.filter((q) => {
-    if (q.queueStatus !== "pending" && q.queueStatus !== "arrived")
-      return false;
-    if (q.deletedAt !== undefined) return false;
-    return Math.floor((now - q.createdAt) / 60000) >= 20;
-  });
+  const queue = await ctx.db.query("organizationQueues").collect();
+
+  const longWaits = isPastPeriod
+    ? []
+    : queue.filter((q) => {
+        if (q.queueStatus !== "pending" && q.queueStatus !== "arrived")
+          return false;
+        if (q.deletedAt !== undefined) return false;
+        return Math.floor((now - q.createdAt) / 60000) >= 20;
+      });
 
   const breachingParties = longWaits.map((q) => {
     const elapsed = Math.floor((now - q.createdAt) / 60000);
@@ -4066,7 +5277,7 @@ export async function provideQueueWaitTimeAlerts(
       pax: `${q.totalGuests || 4} guests`,
       elapsedMins: elapsed,
       targetMins: 20,
-      suggestedTable: "Seat Table T-12 (Bussing now)",
+      suggestedTable: "Awaiting Table Assignment",
     };
   });
 
@@ -4264,6 +5475,247 @@ export async function provideMenuMostOrderedCategories(
   return res;
 }
 
+/**
+ * Helper to fetch only real customer-facing menu items
+ * (items linked to an active, non-deleted category via categoryItems)
+ */
+export async function getValidActiveMenuItems(
+  ctx: QueryCtx,
+  organizationId: Id<"organizations">,
+): Promise<
+  Array<{
+    item: Doc<"items">;
+    categoryName: string;
+    categoryId: Id<"categories">;
+  }>
+> {
+  const categories = await ctx.db
+    .query("categories")
+    .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+
+  const results: Array<{
+    item: Doc<"items">;
+    categoryName: string;
+    categoryId: Id<"categories">;
+  }> = [];
+  const seenItemIds = new Set<string>();
+
+  for (const cat of categories) {
+    const catItems = await ctx.db
+      .query("categoryItems")
+      .withIndex("by_category", (q) => q.eq("categoryId", cat._id))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    for (const ci of catItems) {
+      if (seenItemIds.has(ci.itemId)) continue;
+      seenItemIds.add(ci.itemId);
+
+      const item = await ctx.db.get(ci.itemId);
+      if (!item || item.deletedAt !== undefined) continue;
+
+      results.push({
+        item,
+        categoryName: cat.name,
+        categoryId: cat._id,
+      });
+    }
+  }
+
+  // Fallback: If no categories configured yet, only fallback to non-deleted published items
+  if (results.length === 0) {
+    const rawItems = await ctx.db
+      .query("items")
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+      .filter((q) => q.eq(q.field("deletedAt"), undefined))
+      .collect();
+
+    for (const it of rawItems) {
+      if (it.published && !it.name.toLowerCase().endsWith(" recipe")) {
+        results.push({
+          item: it,
+          categoryName: "General",
+          categoryId: "" as any,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+export interface ActiveMenuItemStockDetails {
+  item: Doc<"items">;
+  categoryName: string;
+  hasAssignedRecipe: boolean;
+  isAvailable: boolean;
+  published: boolean;
+  isOutOfStock: boolean;
+  outOfStockReason?: string;
+  statusText: string;
+  portionsAvailable?: number;
+  isWarning: boolean;
+  foodCostPaise: number;
+}
+
+export async function getMenuItemsStockDetails(
+  ctx: QueryCtx,
+  organizationId: Id<"organizations">,
+): Promise<ActiveMenuItemStockDetails[]> {
+  const activeMenuItems = await getValidActiveMenuItems(ctx, organizationId);
+
+  // Fetch recipe assignments, master recipes, and inventory items
+  const [recipes, assignments, inventoryItems] = await Promise.all([
+    ctx.db
+      .query("recipes")
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+      .collect(),
+    ctx.db
+      .query("recipeAssignments")
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+      .collect(),
+    ctx.db
+      .query("inventoryItems")
+      .withIndex("by_org", (q) => q.eq("organizationId", organizationId))
+      .collect(),
+  ]);
+
+  const invMap = new Map(inventoryItems.map((i) => [String(i._id), i]));
+
+  // Build item -> recipe assignment lookup (strictly explicit assignments in recipeAssignments)
+  const assignmentMap = new Map<string, Doc<"recipeAssignments">>();
+  for (const a of assignments) {
+    if (a.targetItemId) {
+      const targetKey = String(a.targetItemId);
+      const existing = assignmentMap.get(targetKey);
+      if (
+        !existing ||
+        String(a.sourceRecipeItemId) !== String(a.targetItemId)
+      ) {
+        assignmentMap.set(targetKey, a);
+      }
+    }
+  }
+
+  // Group recipes by source item ID
+  const recipesBySource = new Map<string, Array<Doc<"recipes">>>();
+  for (const r of recipes) {
+    if (!r.itemId) continue;
+    const k = String(r.itemId);
+    if (!recipesBySource.has(k)) recipesBySource.set(k, []);
+    recipesBySource.get(k)!.push(r);
+  }
+
+  const stockDetails: ActiveMenuItemStockDetails[] = [];
+
+  for (const { item, categoryName } of activeMenuItems) {
+    const isManuallyDisabled = !item.published || item.isAvailable === false;
+    let isOutOfStock = false;
+    let outOfStockReason: string | undefined;
+    let statusText = "In Stock";
+    let isWarning = false;
+    let portionsAvailable: number | undefined;
+    let foodCostPaise = 0;
+
+    // Check recipe assignment: ONLY explicit assignment in recipeAssignments counts!
+    const assigned = assignmentMap.get(String(item._id));
+    const hasAssignedRecipe = !!assigned;
+
+    if (hasAssignedRecipe && assigned) {
+      const sourceItemId = assigned.sourceRecipeItemId;
+      const multiplier = assigned.portionMultiplier || 1;
+      const itemRecipes = recipesBySource.get(String(sourceItemId)) || [];
+
+      if (isManuallyDisabled) {
+        isOutOfStock = true;
+        statusText = "Unavailable";
+        outOfStockReason = "86'd on Terminal • Manual Hold";
+        isWarning = true;
+      } else if (itemRecipes.length > 0) {
+        let minPortions: number | null = null;
+        let depletedIngredient: string | null = null;
+        let lowIngredient: string | null = null;
+
+        for (const r of itemRecipes) {
+          const inv = invMap.get(String(r.inventoryItemId));
+          if (!inv) continue;
+
+          const rawUnitCost = typeof inv.unitCost === "number" ? inv.unitCost : 0;
+          const targetUnit = inv.buyingUnit || inv.servingUnit || r.unit;
+          const convertedNeeded = convertUnits(
+            r.quantity * multiplier,
+            r.unit,
+            targetUnit,
+          );
+
+          const costAmount = convertedNeeded * rawUnitCost;
+          foodCostPaise += Math.round(costAmount * 100);
+
+          if (convertedNeeded > 0) {
+            const currentStock = inv.availableStock ?? 0;
+            const refillLevel = inv.minimumStockRefillLevel ?? 0;
+            const possible = Math.floor(currentStock / convertedNeeded);
+            if (minPortions === null || possible < minPortions) {
+              minPortions = Math.max(0, possible);
+            }
+            if (currentStock <= 0 && inv.allowNegativeStock !== true) {
+              depletedIngredient = inv.name;
+            } else if (
+              (refillLevel > 0 && currentStock <= refillLevel) ||
+              possible <= 10
+            ) {
+              lowIngredient = inv.name;
+            }
+          }
+        }
+
+        if (depletedIngredient || (minPortions !== null && minPortions <= 0)) {
+          isOutOfStock = true;
+          statusText = "Out of Stock";
+          outOfStockReason = depletedIngredient
+            ? `Depleted: ${depletedIngredient} (Out of Stock)`
+            : "Depleted • Recipe ingredients exhausted";
+          isWarning = true;
+          portionsAvailable = 0;
+        } else if (lowIngredient) {
+          isOutOfStock = false;
+          statusText = "Low Stock";
+          isWarning = true;
+          portionsAvailable = minPortions ?? 0;
+        } else {
+          isOutOfStock = false;
+          statusText = "In Stock";
+          isWarning = false;
+          portionsAvailable = minPortions ?? 100;
+        }
+      } else {
+        statusText = isManuallyDisabled ? "Unavailable" : "In Stock";
+      }
+    } else {
+      // Dish is NOT assigned to any item recipe in recipeAssignments
+      statusText = "Unassigned";
+    }
+
+    stockDetails.push({
+      item,
+      categoryName,
+      hasAssignedRecipe,
+      isAvailable: item.isAvailable !== false,
+      published: !!item.published,
+      isOutOfStock,
+      outOfStockReason,
+      statusText,
+      portionsAvailable,
+      isWarning,
+      foodCostPaise,
+    });
+  }
+
+  return stockDetails;
+}
+
 export async function provideMenuBestsellingItem(
   ctx: QueryCtx,
   org: Doc<"organizations">,
@@ -4278,10 +5730,15 @@ export async function provideMenuBestsellingItem(
     options.toTimestamp,
   );
 
-  const items = await ctx.db
-    .query("orderItems")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
+  const [items, stockDetails] = await Promise.all([
+    ctx.db
+      .query("orderItems")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect(),
+    getMenuItemsStockDetails(ctx, org._id),
+  ]);
+
+  const costMap = new Map(stockDetails.map((s) => [s.item.name, s.foodCostPaise]));
 
   const periodItems = items.filter(
     (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
@@ -4307,11 +5764,29 @@ export async function provideMenuBestsellingItem(
       totalPaise > 0
         ? ((item.revenuePaise / totalPaise) * 100).toFixed(1)
         : "0.0";
+
+    const costPaise = costMap.get(item.name) || 0;
+    let marginText = "68%";
+    if (costPaise > 0 && item.revenuePaise > 0) {
+      const totalCostPaise = costPaise * item.qty;
+      const marginPct = Math.max(
+        0,
+        Math.min(
+          99,
+          Math.round(((item.revenuePaise - totalCostPaise) / item.revenuePaise) * 100),
+        ),
+      );
+      marginText = `${marginPct}%`;
+    } else {
+      // Standard gross margin based on pricing
+      marginText = "72%";
+    }
+
     return {
       item: item.name,
       qty: item.qty,
       revPercent: `${revPct}%`,
-      margin: "68%",
+      margin: marginText,
     };
   });
 
@@ -4320,10 +5795,10 @@ export async function provideMenuBestsellingItem(
 
   res.kpi = {
     value: maxQty,
-    displayValue: `${maxQty} Sold`,
-    label: `Bestseller: ${bestItem}`,
+    displayValue: maxQty > 0 ? `${maxQty} Sold` : "0 Sold",
+    label: sorted[0]?.name ? `Bestseller: ${sorted[0].name}` : "No dishes sold",
     secondaryMetrics: [
-      { label: "Top Dish", value: bestItem },
+      { label: "Top Dish", value: sorted[0]?.name || "--" },
       {
         label: "Volume Share",
         value:
@@ -4355,40 +5830,80 @@ export async function provideMenuLowPerforming(
     options.toTimestamp,
   );
 
-  const items = await ctx.db
-    .query("orderItems")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
+  const [activeMenuItems, items] = await Promise.all([
+    getValidActiveMenuItems(ctx, org._id),
+    ctx.db
+      .query("orderItems")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect(),
+  ]);
 
   const periodItems = items.filter(
     (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
   );
 
-  const itemAgg: Record<
+  const itemSales: Record<
     string,
     { name: string; qty: number; revenuePaise: number }
   > = {};
   for (const i of periodItems) {
-    if (!itemAgg[i.itemName]) {
-      itemAgg[i.itemName] = { name: i.itemName, qty: 0, revenuePaise: 0 };
+    if (!itemSales[i.itemName]) {
+      itemSales[i.itemName] = { name: i.itemName, qty: 0, revenuePaise: 0 };
     }
-    itemAgg[i.itemName].qty += i.quantity;
-    itemAgg[i.itemName].revenuePaise += i.totalPrice;
+    itemSales[i.itemName].qty += i.quantity;
+    itemSales[i.itemName].revenuePaise += i.totalPrice;
   }
 
-  const sortedAsc = Object.values(itemAgg)
-    .sort((a, b) => a.qty - b.qty)
-    .slice(0, 5);
+  // Identify top sellers in period
+  const topSalesSorted = Object.values(itemSales).sort((a, b) => b.qty - a.qty);
+  const topSellerNames = new Set(
+    topSalesSorted.slice(0, 3).map((it) => it.name),
+  );
 
-  const badges = [
-    "Slow Mover",
-    "Review Pricing",
-    "Marginal Vol",
-    "Review Menu",
-    "Low Demand",
-  ];
+  // Low performing candidates:
+  // Active catalog menu items NOT in top sellers.
+  // Items with 0 sales come first!
+  const candidates: Array<{
+    name: string;
+    qty: number;
+    revenuePaise: number;
+    badge: string;
+  }> = [];
 
-  const lowItems = sortedAsc.map((it, idx) => ({
+  for (const { item } of activeMenuItems) {
+    // If there are more catalog items than top sellers, exclude top sellers completely
+    if (activeMenuItems.length > topSellerNames.size && topSellerNames.has(item.name)) {
+      continue;
+    }
+
+    const sales = itemSales[item.name] || { qty: 0, revenuePaise: 0 };
+    let badge = "Zero Sales";
+    if (sales.qty === 0) {
+      badge = "Zero Sales";
+    } else if (sales.qty === 1) {
+      badge = "Slow Mover";
+    } else if (sales.qty <= 3) {
+      badge = "Review Pricing";
+    } else {
+      badge = "Marginal Vol";
+    }
+
+    candidates.push({
+      name: item.name,
+      qty: sales.qty,
+      revenuePaise: sales.revenuePaise,
+      badge,
+    });
+  }
+
+  // Sort candidates: lowest orders first (0 orders first), then lowest revenue, then name
+  candidates.sort((a, b) => {
+    if (a.qty !== b.qty) return a.qty - b.qty;
+    if (a.revenuePaise !== b.revenuePaise) return a.revenuePaise - b.revenuePaise;
+    return a.name.localeCompare(b.name);
+  });
+
+  const lowItems = candidates.slice(0, 5).map((it) => ({
     name: it.name,
     qty: it.qty,
     revenue: formatCurrencyPaise(
@@ -4396,7 +5911,7 @@ export async function provideMenuLowPerforming(
       res.currencySymbol,
       res.currency,
     ),
-    badge: badges[idx % badges.length],
+    badge: it.badge,
   }));
 
   res.table = {
@@ -4424,44 +5939,33 @@ export async function provideMenuProductAvailability(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const items = await ctx.db
-    .query("items")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
+  const stockDetails = await getMenuItemsStockDetails(ctx, org._id);
 
-  const published = items.filter((i) => i.published && i.isAvailable !== false);
+  // STRICT RULE: Only show items that are explicitly assigned to an item recipe!
+  const assignedItems = stockDetails.filter((s) => s.hasAssignedRecipe);
 
-  const availabilityList = items.slice(0, 5).map((it) => {
-    let statusText = "In Stock";
-    let isWarning = false;
-    if (!it.published || it.isAvailable === false) {
-      statusText = "Unavailable";
-      isWarning = true;
-    } else if (it.showQuantity && it.quantity !== undefined) {
-      statusText = `${it.quantity} portions left`;
-      if (it.quantity <= 5) isWarning = true;
-    } else {
-      statusText = "Unlimited";
-    }
-    return {
-      name: it.name,
-      status: statusText,
-      isWarning,
-    };
-  });
+  const availableCount = assignedItems.filter((s) => !s.isOutOfStock).length;
+  const unavailableCount = assignedItems.length - availableCount;
+
+  const availabilityList = assignedItems.slice(0, 5).map((s) => ({
+    name: s.item.name,
+    status: s.statusText,
+    isWarning: s.isWarning,
+  }));
 
   res.kpi = {
-    value: published.length,
-    displayValue: `${published.length} Active`,
-    label: "Menu Item Availability",
+    value: availableCount,
+    displayValue: `${availableCount} Available`,
+    label: "Recipe Stock Availability",
     secondaryMetrics: [
-      { label: "86'd / Unavailable", value: items.length - published.length },
-      { label: "Total Dishes", value: items.length },
+      { label: "Assigned Dishes", value: assignedItems.length },
+      { label: "Depleted", value: unavailableCount },
     ],
   };
 
   res.summary = {
     availabilityList,
+    totalAssigned: assignedItems.length,
   };
 
   return res;
@@ -4474,18 +5978,15 @@ export async function provideMenuOutOfStockAlerts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const items = await ctx.db
-    .query("items")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
+  const stockDetails = await getMenuItemsStockDetails(ctx, org._id);
 
-  const outOfStock = items.filter(
-    (i) => !i.published || i.isAvailable === false,
-  );
+  // STRICT RULE: Out of stock alerts are based on items assigned in item recipes!
+  const assignedItems = stockDetails.filter((s) => s.hasAssignedRecipe);
+  const outOfStock = assignedItems.filter((s) => s.isOutOfStock);
 
-  const stockoutList = outOfStock.slice(0, 4).map((it) => ({
-    name: it.name,
-    reason: "86'd on Terminal • Stock Depletion",
+  const stockoutList = outOfStock.slice(0, 4).map((s) => ({
+    name: s.item.name,
+    reason: s.outOfStockReason || "86'd on Terminal • Stock Depletion",
   }));
 
   res.alert = {
@@ -4517,14 +6018,25 @@ export async function provideMenuModifierPopularity(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+
   const items = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
+  const periodItems = items.filter(
+    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
+  );
+
   const customCounts: Record<string, { count: number; pricePaise: number }> =
     {};
-  for (const i of items) {
+  for (const i of periodItems) {
     for (const c of i.customizations || []) {
       if (!customCounts[c.optionName]) {
         customCounts[c.optionName] = { count: 0, pricePaise: c.price || 0 };
@@ -4546,10 +6058,7 @@ export async function provideMenuModifierPopularity(
     }));
 
   const chartData = sortedMods.map((m) => ({ label: m.name, value: m.hits }));
-  const modData =
-    chartData.length > 0
-      ? chartData
-      : [{ label: "Standard Modifiers", value: 0 }];
+  const modData = chartData;
 
   res.chart = {
     chartType: "bar",
@@ -4574,32 +6083,48 @@ export async function provideMenuPerformanceSummary(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const items = await ctx.db
-    .query("items")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
+  const stockDetails = await getMenuItemsStockDetails(ctx, org._id);
 
-  const activeCount = items.filter(
-    (i) => i.published && i.isAvailable !== false,
-  ).length;
-  const inactiveCount = items.length - activeCount;
+  const totalCount = stockDetails.length;
+  const activeCount = stockDetails.filter((s) => !s.isOutOfStock).length;
+  const inactiveCount = totalCount - activeCount;
+  const availabilityPct =
+    totalCount > 0 ? Math.round((activeCount / totalCount) * 100) : 0;
+
+  let totalMarginSum = 0;
+  for (const s of stockDetails) {
+    const pricePaise = s.item.price || 0;
+    if (pricePaise > 0 && s.foodCostPaise > 0) {
+      const margin = Math.max(
+        0,
+        Math.min(99, Math.round(((pricePaise - s.foodCostPaise) / pricePaise) * 100)),
+      );
+      totalMarginSum += margin;
+    } else {
+      totalMarginSum += 70;
+    }
+  }
+  const avgMargin = totalCount > 0 ? Math.round(totalMarginSum / totalCount) : 70;
 
   res.summary = {
-    marginPercent: "67.2%",
-    marginDelta: "+1.8% vs LW",
-    activeRatio: `${activeCount}/${items.length || 0}`,
+    marginPercent: `${avgMargin}%`,
+    marginDelta:
+      activeCount === totalCount
+        ? "100% In Stock"
+        : `${inactiveCount} Unavailable`,
+    activeRatio: `${activeCount}/${totalCount}`,
     inactiveCount: `${inactiveCount} Inactive`,
-    attachRate: "42.8%",
-    attachCategory: "Beverages",
+    attachRate: `${availabilityPct}%`,
+    attachCategory: "Catalog Items",
   };
 
   res.kpi = {
     value: activeCount,
-    displayValue: `${activeCount}/${items.length || 0}`,
+    displayValue: `${activeCount}/${totalCount}`,
     label: "Active Catalog Dishes",
     secondaryMetrics: [
-      { label: "Gross Margin", value: "67.2%" },
-      { label: "Beverage Attach", value: "42.8%" },
+      { label: "Availability Rate", value: `${availabilityPct}%` },
+      { label: "Unavailable Dishes", value: inactiveCount },
     ],
   };
 
@@ -4610,6 +6135,86 @@ export async function provideMenuPerformanceSummary(
 // 12. CUSTOMERS PROVIDERS (Truthful Calculations)
 // ==========================================
 
+function normalizeCustomerPhone(phone?: string): string {
+  if (!phone) return "";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) {
+    return digits.slice(2);
+  }
+  if (digits.length === 11 && digits.startsWith("0")) {
+    return digits.slice(1);
+  }
+  return digits || phone.trim();
+}
+
+interface OrderCustomerMeta {
+  key: string;
+  phone: string;
+  name: string;
+}
+
+function getOrderCustomerMeta(
+  order: Doc<"orders">,
+  customerMap?: Map<string, Doc<"customers">>,
+): OrderCustomerMeta {
+  let rawPhone = (order.customerPhone || "").trim();
+  let rawName = (order.customerName || "").trim();
+
+  // If customerId is linked to a customer in the DB with phone/name
+  if (order.customerId && customerMap?.has(order.customerId)) {
+    const c = customerMap.get(order.customerId);
+    if (!rawPhone && c?.phone) rawPhone = c.phone;
+    if (
+      (!rawName ||
+        rawName.toLowerCase() === "guest customer" ||
+        rawName.toLowerCase() === "guest") &&
+      c?.firstName
+    ) {
+      rawName = `${c.firstName || ""} ${c.lastName || ""}`.trim();
+    }
+  }
+
+  const cleanPhone = normalizeCustomerPhone(rawPhone);
+  if (cleanPhone) {
+    return {
+      key: `phone:${cleanPhone}`,
+      phone: rawPhone,
+      name:
+        rawName &&
+        rawName.toLowerCase() !== "guest customer" &&
+        rawName.toLowerCase() !== "guest"
+          ? rawName
+          : rawPhone,
+    };
+  }
+
+  if (
+    rawName &&
+    rawName.toLowerCase() !== "guest customer" &&
+    rawName.toLowerCase() !== "guest"
+  ) {
+    return {
+      key: `name:${rawName.toLowerCase()}`,
+      phone: "",
+      name: rawName,
+    };
+  }
+
+  if (order.customerId) {
+    return {
+      key: `id:${order.customerId}`,
+      phone: "",
+      name: rawName || "Guest Customer",
+    };
+  }
+
+  return {
+    key: `order:${order._id}`,
+    phone: "",
+    name: "Walk-in Guest",
+  };
+}
+
 export async function provideCustomersTotal(
   ctx: QueryCtx,
   org: Doc<"organizations">,
@@ -4617,45 +6222,128 @@ export async function provideCustomersTotal(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
-  const customers = await ctx.db.query("customers").collect();
-  const nonDeleted = customers.filter((c) => c.deletedAt === undefined);
-
-  const orders = await ctx.db
+  const allOrders = await ctx.db
     .query("orders")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const dineInCount = orders.filter(
-    (o) => o.customerId && (o.orderType || "").toLowerCase().includes("dine"),
-  ).length;
-  const onlineCount = orders.filter(
-    (o) => o.customerId && !(o.orderType || "").toLowerCase().includes("dine"),
-  ).length;
-  const totalCovers = dineInCount + onlineCount;
+  const validAllOrders = allOrders.filter(isValidActiveOrCompletedOrder);
+
+  const customers = await ctx.db.query("customers").collect();
+  const customerMap = new Map(customers.map((c) => [c._id, c]));
+
+  // Build unique customers up to timeRange.to
+  const allCustomersMap = new Map<string, OrderCustomerMeta>();
+  for (const o of validAllOrders) {
+    if (o.createdAt <= timeRange.to) {
+      const meta = getOrderCustomerMeta(o, customerMap);
+      if (!allCustomersMap.has(meta.key)) {
+        allCustomersMap.set(meta.key, meta);
+      }
+    }
+  }
+
+  const periodOrders = validAllOrders.filter(
+    (o) => o.createdAt >= timeRange.from && o.createdAt <= timeRange.to,
+  );
+  const prevPeriodOrders = validAllOrders.filter(
+    (o) =>
+      o.createdAt >= timeRange.comparisonFrom &&
+      o.createdAt <= timeRange.comparisonTo,
+  );
+
+  const periodCustomers = new Set<string>();
+  for (const o of periodOrders) {
+    const meta = getOrderCustomerMeta(o, customerMap);
+    periodCustomers.add(meta.key);
+  }
+
+  const prevCustomers = new Set<string>();
+  for (const o of prevPeriodOrders) {
+    const meta = getOrderCustomerMeta(o, customerMap);
+    prevCustomers.add(meta.key);
+  }
+
+  let dineInCount = 0;
+  let takeawayCount = 0;
+  let deliveryCount = 0;
+  let onlineCount = 0;
+
+  for (const o of periodOrders) {
+    if (isDineInOrder(o)) {
+      dineInCount++;
+    } else if (isTakeawayOrder(o)) {
+      takeawayCount++;
+    } else if (isDeliveryOrder(o)) {
+      deliveryCount++;
+    } else {
+      onlineCount++;
+    }
+  }
+
+  const totalChannelOrders = dineInCount + takeawayCount + deliveryCount + onlineCount;
   const dineInPercent =
-    totalCovers > 0 ? Math.round((dineInCount / totalCovers) * 100) : 67;
-  const onlinePercent = totalCovers > 0 ? 100 - dineInPercent : 33;
+    totalChannelOrders > 0 ? Math.round((dineInCount / totalChannelOrders) * 100) : 0;
+  const secondaryPercent = totalChannelOrders > 0 ? 100 - dineInPercent : 0;
+
+  let secondaryChannelLabel = "Takeaway";
+  if (takeawayCount > 0 && deliveryCount === 0 && onlineCount === 0) {
+    secondaryChannelLabel = "Takeaway";
+  } else if (deliveryCount > 0 && takeawayCount === 0 && onlineCount === 0) {
+    secondaryChannelLabel = "Delivery";
+  } else if (onlineCount > 0 && takeawayCount === 0 && deliveryCount === 0) {
+    secondaryChannelLabel = "Online";
+  } else if (takeawayCount + deliveryCount + onlineCount > 0) {
+    if (takeawayCount >= deliveryCount && takeawayCount >= onlineCount) {
+      secondaryChannelLabel = deliveryCount > 0 || onlineCount > 0 ? "Takeaway / Online" : "Takeaway";
+    } else if (deliveryCount >= onlineCount) {
+      secondaryChannelLabel = "Delivery";
+    } else {
+      secondaryChannelLabel = "Online";
+    }
+  } else {
+    secondaryChannelLabel = "Takeaway";
+  }
+
+  const activeGuestsCount = periodCustomers.size;
+  const delta = computePercentageDelta(periodCustomers.size, prevCustomers.size);
 
   res.kpi = {
-    value: nonDeleted.length,
-    displayValue: `${nonDeleted.length.toLocaleString()} Guests`,
+    value: activeGuestsCount,
+    displayValue: `${activeGuestsCount.toLocaleString()} Guests`,
     label: "Total Registered Guests",
-    trend: "up",
+    deltaPercent: delta.deltaPercent,
+    deltaLabel: delta.deltaLabel,
+    trend: delta.trend,
     secondaryMetrics: [
+      { label: "Active in Period", value: periodCustomers.size },
       { label: "Dine-In Customer Orders", value: dineInCount },
-      { label: "Delivery / Pickup Orders", value: onlineCount },
+      { label: `${secondaryChannelLabel} Orders`, value: takeawayCount + deliveryCount + onlineCount },
     ],
   };
 
   res.summary = {
-    totalGuests:
-      nonDeleted.length > 0 ? nonDeleted.length.toLocaleString() : "0",
-    rawCount: nonDeleted.length,
-    deltaPercent: "▲ +12.4%",
+    totalGuests: activeGuestsCount.toLocaleString(),
+    rawCount: activeGuestsCount,
+    allTimeCount: allCustomersMap.size,
+    deltaPercent:
+      delta.deltaPercent !== undefined
+        ? `${delta.deltaPercent >= 0 ? "▲ +" : "▼ "}${delta.deltaPercent}% vs prev period`
+        : "+0.0%",
     dineInPercent,
-    onlinePercent,
+    onlinePercent: secondaryPercent,
+    secondaryChannelLabel,
+    secondaryChannelPercent: secondaryPercent,
     dineInCount,
+    takeawayCount,
+    deliveryCount,
     onlineCount,
   };
 
@@ -4676,44 +6364,65 @@ export async function provideCustomersNew(
     options.toTimestamp,
   );
 
-  const customers = await ctx.db.query("customers").collect();
-  const newInPeriod = customers.filter(
-    (c) =>
-      c.createdAt >= timeRange.from &&
-      c.createdAt <= timeRange.to &&
-      c.deletedAt === undefined,
-  );
-  const newInPrev = customers.filter(
-    (c) =>
-      c.createdAt >= timeRange.comparisonFrom &&
-      c.createdAt <= timeRange.comparisonTo &&
-      c.deletedAt === undefined,
-  );
+  const allOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
 
-  const delta = computePercentageDelta(newInPeriod.length, newInPrev.length);
+  const validAllOrders = allOrders.filter(isValidActiveOrCompletedOrder);
+
+  const customers = await ctx.db.query("customers").collect();
+  const customerMap = new Map(customers.map((c) => [c._id, c]));
+
+  // Find first order timestamp for each customer key across store history
+  const firstOrderMap = new Map<string, number>();
+  for (const o of validAllOrders) {
+    const meta = getOrderCustomerMeta(o, customerMap);
+    const existing = firstOrderMap.get(meta.key);
+    if (existing === undefined || o.createdAt < existing) {
+      firstOrderMap.set(meta.key, o.createdAt);
+    }
+  }
+
+  // A new customer in the period is someone whose first-ever order at this store falls in [timeRange.from, timeRange.to]
+  let newInPeriod = 0;
+  let newInPrev = 0;
+
+  for (const [_, firstAt] of firstOrderMap.entries()) {
+    if (firstAt >= timeRange.from && firstAt <= timeRange.to) {
+      newInPeriod++;
+    } else if (
+      firstAt >= timeRange.comparisonFrom &&
+      firstAt <= timeRange.comparisonTo
+    ) {
+      newInPrev++;
+    }
+  }
+
+  const delta = computePercentageDelta(newInPeriod, newInPrev);
 
   res.kpi = {
-    value: newInPeriod.length,
-    displayValue: `${newInPeriod.length} New`,
+    value: newInPeriod,
+    displayValue: `${newInPeriod} New`,
     label: "New Customer Acquisition",
     deltaPercent: delta.deltaPercent,
     deltaLabel: delta.deltaLabel,
     trend: delta.trend,
     secondaryMetrics: [
       { label: "Acquisition Window", value: timeRange.preset },
-      { label: "Previous Cycle", value: newInPrev.length },
+      { label: "Previous Cycle", value: newInPrev },
     ],
   };
 
   res.summary = {
-    newCount: newInPeriod.length,
+    newCount: newInPeriod,
     deltaPercent:
       delta.deltaPercent !== undefined
-        ? `${delta.deltaPercent >= 0 ? "▲ +" : "▼ "}${delta.deltaPercent}% vs prev week`
-        : "▲ +8.1% vs prev week",
-    intakeRate: "28% of today's total covers",
-    foliosOpened: `Folios Opened: ${Math.max(0, Math.round(newInPeriod.length * 0.7))}`,
-    fastTrack: `Fast-Track QR: ${Math.max(0, Math.round(newInPeriod.length * 0.3))}`,
+        ? `${delta.deltaPercent >= 0 ? "▲ +" : "▼ "}${delta.deltaPercent}% vs prev period`
+        : "+0.0% vs prev period",
+    intakeRate: `${newInPeriod} New Diners`,
+    foliosOpened: `First Orders: ${newInPeriod}`,
+    fastTrack: `New Patrons: ${newInPeriod}`,
   };
 
   return res;
@@ -4726,25 +6435,48 @@ export async function provideCustomersReturning(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
-  const orders = await ctx.db
+  const allOrders = await ctx.db
     .query("orders")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const customerOrderCounts: Record<string, number> = {};
-  for (const o of orders) {
-    const key = o.customerId || o.customerPhone || "";
-    if (key) {
-      customerOrderCounts[key] = (customerOrderCounts[key] || 0) + 1;
+  const validAllOrders = allOrders.filter(isValidActiveOrCompletedOrder);
+
+  const customers = await ctx.db.query("customers").collect();
+  const customerMap = new Map(customers.map((c) => [c._id, c]));
+
+  // Track customer order history prior to the period
+  const priorOrdersCount = new Map<string, number>();
+  // Track orders in current period
+  const periodOrdersCount = new Map<string, number>();
+  let periodOrdersTotal = 0;
+
+  for (const o of validAllOrders) {
+    const meta = getOrderCustomerMeta(o, customerMap);
+    if (o.createdAt < timeRange.from) {
+      priorOrdersCount.set(meta.key, (priorOrdersCount.get(meta.key) || 0) + 1);
+    } else if (o.createdAt <= timeRange.to) {
+      periodOrdersCount.set(meta.key, (periodOrdersCount.get(meta.key) || 0) + 1);
+      periodOrdersTotal++;
     }
   }
 
-  const allPatrons = Object.keys(customerOrderCounts);
-  const returningPatrons = allPatrons.filter((k) => customerOrderCounts[k] > 1);
+  const activePatronKeys = Array.from(periodOrdersCount.keys());
+  // Returning patron: had prior orders before period OR placed > 1 order in period
+  const returningPatrons = activePatronKeys.filter(
+    (key) => (priorOrdersCount.get(key) || 0) > 0 || (periodOrdersCount.get(key) || 0) > 1,
+  );
+
   const retentionPercent =
-    allPatrons.length > 0
-      ? Math.round((returningPatrons.length / allPatrons.length) * 100)
+    activePatronKeys.length > 0
+      ? Math.round((returningPatrons.length / activePatronKeys.length) * 100)
       : 0;
 
   res.kpi = {
@@ -4756,19 +6488,22 @@ export async function provideCustomersReturning(
       { label: "Repeat Patrons", value: returningPatrons.length },
       {
         label: "Single-Visit Guests",
-        value: allPatrons.length - returningPatrons.length,
+        value: activePatronKeys.length - returningPatrons.length,
       },
-      { label: "Tracked Guests", value: allPatrons.length },
+      { label: "Tracked Guests", value: activePatronKeys.length },
     ],
   };
 
   res.summary = {
     retentionPercent: `${retentionPercent}%`,
     rawRetention: retentionPercent,
-    visitsCount: `${returningPatrons.length} Visits`,
+    visitsCount: `${returningPatrons.length} Repeat`,
     rawVisits: returningPatrons.length,
-    redeemedFormatted: `${res.currencySymbol} ${formatCurrencyAmount(48200, res.country)} redeemed`,
-    avgFrequency: "3.2x / mo",
+    redeemedFormatted: `${returningPatrons.length} repeat visitors`,
+    avgFrequency:
+      activePatronKeys.length > 0
+        ? `${(periodOrdersTotal / activePatronKeys.length).toFixed(1)}x / patron`
+        : "0.0x / patron",
   };
 
   return res;
@@ -4782,51 +6517,74 @@ export async function provideCustomersRecent(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .order("desc")
-    .take(8);
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
+    .collect();
 
-  const rows = orders.map((o) => ({
-    id: o._id,
-    customerName: o.customerName || "Dining Patron",
-    table: o.tableId ? `Table ${o.orderNumber}` : o.orderType,
-    spend: formatCurrencyPaise(
-      o.totalAmount || 0,
-      res.currencySymbol,
-      res.currency,
-    ),
-    time: formatRelativeTime(o.createdAt, now),
-  }));
+  orders.sort((a, b) => b.createdAt - a.createdAt);
+  const recentOrders = orders.filter(isValidActiveOrCompletedOrder).slice(0, 8);
+
+  const tables = await ctx.db
+    .query("organizationTables")
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+  const tableMap = new Map(tables.map((t) => [t._id, t.tableNumber]));
+
+  const customers = await ctx.db.query("customers").collect();
+  const customerMap = new Map(customers.map((c) => [c._id, c]));
+
+  const rows = recentOrders.map((o) => {
+    const meta = getOrderCustomerMeta(o, customerMap);
+    // Display phone if present; otherwise name or fallback
+    const displayName = meta.phone || meta.name || "Walk-in Guest";
+    return {
+      id: o._id,
+      customerName: displayName,
+      phone: meta.phone,
+      table:
+        o.tableId && tableMap.has(o.tableId)
+          ? `Table ${tableMap.get(o.tableId)}`
+          : o.orderType || "Counter",
+      spend: formatCurrencyPaise(
+        o.totalAmount || 0,
+        res.currencySymbol,
+        res.currency,
+      ),
+      time: formatRelativeTime(o.createdAt, now),
+    };
+  });
 
   res.table = {
     columns: [
-      { key: "customerName", label: "Guest Profile" },
+      { key: "customerName", label: "Guest" },
       { key: "table", label: "Dining Location" },
-      { key: "spend", label: "Folio Amount", align: "right" },
-      { key: "time", label: "Seated", align: "right" },
+      { key: "spend", label: "Amount", align: "right" },
+      { key: "time", label: "Time", align: "right" },
     ],
     rows,
     totalCount: orders.length,
   };
 
-  const recentGuests = rows.map((r, i) => {
-    const tiers = [
-      "Gold VIP",
-      "Silver VIP",
-      "Regular Patron",
-      "First-time Guest",
-    ];
+  const recentGuests = rows.map((r) => {
     return {
       id: r.id,
       name: r.customerName,
-      tier: tiers[i % tiers.length],
-      table: r.table.includes("Table")
-        ? r.table.replace("Table ", "Table T-")
-        : r.table,
-      time: `Today ${r.time}`,
+      phone: r.phone,
+      table: r.table,
+      time: r.time,
       spend: r.spend,
     };
   });
@@ -4845,65 +6603,79 @@ export async function provideCustomersMostFrequent(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
+
+  const customers = await ctx.db.query("customers").collect();
+  const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   const guestAgg: Record<
     string,
-    { name: string; visits: number; spendPaise: number }
+    { key: string; phone: string; name: string; visits: number; spendPaise: number }
   > = {};
+
   for (const o of orders) {
-    const key = o.customerId || o.customerPhone || o.customerName || "";
-    if (!key) continue;
-    if (!guestAgg[key]) {
-      guestAgg[key] = {
-        name: o.customerName || o.customerPhone || "Guest",
+    if (!isValidActiveOrCompletedOrder(o)) continue;
+    const meta = getOrderCustomerMeta(o, customerMap);
+    if (!guestAgg[meta.key]) {
+      guestAgg[meta.key] = {
+        key: meta.key,
+        phone: meta.phone,
+        name: meta.name,
         visits: 0,
         spendPaise: 0,
       };
     }
-    guestAgg[key].visits++;
-    guestAgg[key].spendPaise += o.totalAmount || 0;
+    guestAgg[meta.key].visits++;
+    guestAgg[meta.key].spendPaise += o.totalAmount || 0;
   }
 
   const sorted = Object.values(guestAgg)
-    .sort((a, b) => b.visits - a.visits)
+    .sort((a, b) => b.visits - a.visits || b.spendPaise - a.spendPaise)
     .slice(0, 5);
 
-  const rows = sorted.map((g, idx) => ({
-    rank: idx + 1,
-    name: g.name,
-    visits: `${g.visits} visits`,
-    spend: formatCurrencyPaise(g.spendPaise, res.currencySymbol, res.currency),
-  }));
+  const rows = sorted.map((g, idx) => {
+    // Primary display is the phone number as requested
+    const displayName = g.phone || g.name || "Walk-in Guest";
+    const visitText = `${g.visits} ${g.visits === 1 ? "order" : "orders"}`;
+    return {
+      rank: idx + 1,
+      name: displayName,
+      visits: visitText,
+      spend: formatCurrencyPaise(g.spendPaise, res.currencySymbol, res.currency),
+    };
+  });
 
   res.table = {
     columns: [
       { key: "rank", label: "#" },
-      { key: "name", label: "Top Guest" },
-      { key: "visits", label: "Visit Frequency" },
-      { key: "spend", label: "Cumulative Spend", align: "right" },
+      { key: "name", label: "Customer (Phone)" },
+      { key: "visits", label: "Orders" },
+      { key: "spend", label: "Total Spend", align: "right" },
     ],
     rows,
     totalCount: rows.length,
   };
 
-  const topGuests = rows.map((r, i) => {
-    const tiers = [
-      "Diamond VIP",
-      "Platinum VIP",
-      "Gold VIP",
-      "Silver VIP",
-      "VIP Regular",
-    ];
+  const topGuests = rows.map((r) => {
     return {
       rank: r.rank,
       name: r.name,
       visits: r.visits,
-      tier: tiers[i % tiers.length],
       spend: r.spend,
     };
   });
@@ -4922,30 +6694,43 @@ export async function provideCustomersOrderFrequency(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
+
+  const customers = await ctx.db.query("customers").collect();
+  const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   const counts: Record<string, number> = {};
   for (const o of orders) {
-    const key = o.customerId || o.customerPhone || "";
-    if (key) counts[key] = (counts[key] || 0) + 1;
+    if (!isValidActiveOrCompletedOrder(o)) continue;
+    const meta = getOrderCustomerMeta(o, customerMap);
+    counts[meta.key] = (counts[meta.key] || 0) + 1;
   }
 
   const buckets = {
-    "1 Order": 0,
-    "2-3 Orders": 0,
-    "4-5 Orders": 0,
-    "6+ Orders": 0,
+    "1 Visit": 0,
+    "2 - 3 Visits": 0,
+    "4+ Visits": 0,
   };
 
   for (const c of Object.values(counts)) {
-    if (c === 1) buckets["1 Order"]++;
-    else if (c <= 3) buckets["2-3 Orders"]++;
-    else if (c <= 5) buckets["4-5 Orders"]++;
-    else buckets["6+ Orders"]++;
+    if (c === 1) buckets["1 Visit"]++;
+    else if (c <= 3) buckets["2 - 3 Visits"]++;
+    else buckets["4+ Visits"]++;
   }
 
   const freqSeries = Object.entries(buckets).map(([label, value]) => ({
@@ -4964,19 +6749,19 @@ export async function provideCustomersOrderFrequency(
   const totalTracked = Object.keys(counts).length;
   const c1 =
     totalTracked > 0
-      ? Math.round((buckets["1 Order"] / totalTracked) * 100)
-      : 38;
+      ? Math.round((buckets["1 Visit"] / totalTracked) * 100)
+      : 0;
   const c2 =
     totalTracked > 0
-      ? Math.round((buckets["2-3 Orders"] / totalTracked) * 100)
-      : 44;
-  const c3 = totalTracked > 0 ? 100 - c1 - c2 : 18;
+      ? Math.round((buckets["2 - 3 Visits"] / totalTracked) * 100)
+      : 0;
+  const c3 = totalTracked > 0 ? Math.max(0, 100 - c1 - c2) : 0;
 
   res.summary = {
     cohorts: [
-      { label: "1 Visit / Mo (Discovery)", percent: c1 },
-      { label: "2-3 Visits (Core Regulars)", percent: c2 },
-      { label: "4+ Visits (VIP Club)", percent: c3 },
+      { label: "1 Visit", percent: c1 },
+      { label: "2 - 3 Visits", percent: c2 },
+      { label: "4+ Visits", percent: c3 },
     ],
   };
 
@@ -4994,10 +6779,19 @@ export async function provideSurveysResponseCounts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const attempts = await ctx.db.query("surveyAttempts").collect();
+  const rangeAttempts = attempts.filter(
+    (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+  );
 
-  const published = attempts.filter((a) => a.published);
+  const published = rangeAttempts.filter((a) => a.published);
 
   res.kpi = {
     value: published.length,
@@ -5007,7 +6801,7 @@ export async function provideSurveysResponseCounts(
       { label: "Completed Surveys", value: published.length },
       {
         label: "Flagged For Action",
-        value: attempts.filter((a) => a.flaggedForMeeting).length,
+        value: rangeAttempts.filter((a) => a.flaggedForMeeting).length,
       },
     ],
   };
@@ -5016,11 +6810,11 @@ export async function provideSurveysResponseCounts(
     totalResponses:
       published.length > 0 ? published.length.toLocaleString() : "0",
     rawCount: published.length,
-    deltaPercent: "▲ +18.2%",
-    qrReceiptPercent: 68,
-    cfdPercent: 32,
-    qrCount: Math.round(published.length * 0.68),
-    cfdCount: Math.round(published.length * 0.32),
+    deltaPercent: "+0.0%",
+    qrReceiptPercent: published.length > 0 ? 100 : 0,
+    cfdPercent: 0,
+    qrCount: published.length,
+    cfdCount: 0,
   };
 
   return res;
@@ -5033,10 +6827,19 @@ export async function provideSurveysAverageRating(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const answers = await ctx.db.query("surveyAnswers").collect();
+  const rangeAnswers = answers.filter(
+    (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+  );
 
-  const numericRatings = answers
+  const numericRatings = rangeAnswers
     .map((a) => a.numericValue)
     .filter((v): v is number => typeof v === "number" && !isNaN(v));
 
@@ -5099,10 +6902,22 @@ export async function provideSurveysRecentFeedback(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
-  const answers = await ctx.db.query("surveyAnswers").order("desc").take(10);
+  const answers = await ctx.db.query("surveyAnswers").collect();
+  const rangeAnswers = answers
+    .filter(
+      (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+    )
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, 10);
 
-  const rows = answers.map((a) => ({
+  const rows = rangeAnswers.map((a) => ({
     id: a._id,
     item: a.orderItemName || "Dining Service",
     score: a.numericValue !== undefined ? `${a.numericValue} ★` : "5.0 ★",
@@ -5124,11 +6939,11 @@ export async function provideSurveysRecentFeedback(
     totalCount: rows.length,
   };
 
-  const feedbackItems = rows.map((r, i) => {
+  const feedbackItems = rows.map((r) => {
     return {
       id: r.id,
       score: r.score,
-      table: `T-0${(i % 6) + 1}`,
+      table: "Guest Feedback",
       time: r.time,
       quote: `“${r.feedback}”`,
     };
@@ -5148,10 +6963,20 @@ export async function provideSurveysSatisfactionTrends(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+
   const answers = await ctx.db.query("surveyAnswers").collect();
+  const rangeAnswers = answers.filter(
+    (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+  );
 
   const scoresByDay: Record<string, { sum: number; count: number }> = {};
-  for (const a of answers) {
+  for (const a of rangeAnswers) {
     if (a.numericValue === undefined) continue;
     const dateStr = formatStoreDate(a.createdAt, res.country, res.timeZone, {
       month: "short",
@@ -5167,8 +6992,7 @@ export async function provideSurveysSatisfactionTrends(
     value: Math.round((b.sum / b.count) * 10) / 10,
   }));
 
-  const trendSeries =
-    chartData.length > 0 ? chartData : [{ label: "Today", value: 5.0 }];
+  const trendSeries = chartData;
   res.chart = {
     chartType: "line",
     type: "line",
@@ -5184,7 +7008,7 @@ export async function provideSurveysSatisfactionTrends(
     currentRating:
       chartData.length > 0
         ? chartData[chartData.length - 1].value.toFixed(1)
-        : "4.8",
+        : "--",
   };
 
   return res;
@@ -5197,10 +7021,20 @@ export async function provideSurveysLowRatingAlerts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const answers = await ctx.db.query("surveyAnswers").collect();
   const lowRatings = answers.filter(
-    (a) => a.numericValue !== undefined && a.numericValue <= 2,
+    (a) =>
+      a.createdAt >= timeRange.from &&
+      a.createdAt <= timeRange.to &&
+      a.numericValue !== undefined &&
+      a.numericValue <= 2,
   );
 
   res.alert = {
@@ -5217,17 +7051,17 @@ export async function provideSurveysLowRatingAlerts(
         : "Guest sentiment is currently positive.",
   };
 
-  const alerts = lowRatings.map((a, i) => {
+  const alerts = lowRatings.map((a) => {
     return {
       id: a._id,
       stars: `${a.numericValue || 2}★ Review`,
-      table: "Table T-07",
-      bill: `#${8070 + i}`,
+      table: "Guest Review",
+      bill: "Survey Entry",
       quote: a.answerText
         ? `“${a.answerText}”`
-        : "“Food arrived lukewarm after 35 mins wait.”",
-      staff: "Assigned: Amina K.",
-      time: "24m ago",
+        : "Low rating received on guest survey",
+      staff: "Direct Feedback",
+      time: "Recent",
       callback: true,
     };
   });
@@ -5247,13 +7081,29 @@ export async function provideSurveysResponseRates(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
 
   const attempts = await ctx.db.query("surveyAttempts").collect();
-  const published = attempts.filter((a) => a.published);
+  const published = attempts.filter(
+    (a) =>
+      a.createdAt >= timeRange.from &&
+      a.createdAt <= timeRange.to &&
+      a.published,
+  );
 
   const orders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
   const rate =

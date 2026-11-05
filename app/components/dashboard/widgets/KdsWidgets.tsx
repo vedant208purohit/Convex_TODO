@@ -346,18 +346,23 @@ export function KdsStatusBreakdownWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const bAccepted =
+    typeof summary.accepted === "number"
+      ? summary.accepted
+      : typeof summary.held === "number"
+        ? summary.held
+        : 0;
   const bInPrep = typeof summary.inPrep === "number" ? summary.inPrep : 0;
   const bReady = typeof summary.ready === "number" ? summary.ready : 0;
-  const bHeld = typeof summary.held === "number" ? summary.held : 0;
   const bOverdue = typeof summary.overdue === "number" ? summary.overdue : 0;
   const bTotal =
     typeof summary.total === "number"
       ? summary.total
-      : bInPrep + bReady + bHeld + bOverdue;
+      : bAccepted + bInPrep + bReady + bOverdue;
 
+  const donutAccepted = bTotal > 0 ? (bAccepted / bTotal) * 88 : 0;
   const donutInPrep = bTotal > 0 ? (bInPrep / bTotal) * 88 : 0;
   const donutReady = bTotal > 0 ? (bReady / bTotal) * 88 : 0;
-  const donutHeld = bTotal > 0 ? (bHeld / bTotal) * 88 : 0;
   const donutOverdue = bTotal > 0 ? (bOverdue / bTotal) * 88 : 0;
 
   return (
@@ -396,13 +401,23 @@ export function KdsStatusBreakdownWidget({
             {bTotal > 0 ? (
               <>
                 <circle
+                  className="stroke-stone-900"
+                  cx="18"
+                  cy="18"
+                  fill="none"
+                  r="14"
+                  strokeDasharray={`${donutAccepted} 88`}
+                  strokeDashoffset="0"
+                  strokeWidth="3.5"
+                />
+                <circle
                   className="stroke-primary"
                   cx="18"
                   cy="18"
                   fill="none"
                   r="14"
                   strokeDasharray={`${donutInPrep} 88`}
-                  strokeDashoffset="0"
+                  strokeDashoffset={`-${donutAccepted}`}
                   strokeWidth="3.5"
                 />
                 <circle
@@ -412,17 +427,7 @@ export function KdsStatusBreakdownWidget({
                   fill="none"
                   r="14"
                   strokeDasharray={`${donutReady} 88`}
-                  strokeDashoffset={`-${donutInPrep}`}
-                  strokeWidth="3.5"
-                />
-                <circle
-                  className="stroke-outline"
-                  cx="18"
-                  cy="18"
-                  fill="none"
-                  r="14"
-                  strokeDasharray={`${donutHeld} 88`}
-                  strokeDashoffset={`-${donutInPrep + donutReady}`}
+                  strokeDashoffset={`-${donutAccepted + donutInPrep}`}
                   strokeWidth="3.5"
                 />
                 <circle
@@ -432,7 +437,7 @@ export function KdsStatusBreakdownWidget({
                   fill="none"
                   r="14"
                   strokeDasharray={`${donutOverdue} 88`}
-                  strokeDashoffset={`-${donutInPrep + donutReady + donutHeld}`}
+                  strokeDashoffset={`-${donutAccepted + donutInPrep + donutReady}`}
                   strokeWidth="3.5"
                 />
               </>
@@ -453,6 +458,14 @@ export function KdsStatusBreakdownWidget({
         <div className="flex flex-col gap-1 w-full text-left font-body-sm text-body-sm">
           <div className="flex items-center justify-between">
             <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-stone-900" />
+              Accepted
+            </span>
+            <span className="font-semibold text-on-surface">{bAccepted}</span>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-primary" />
               In Prep
             </span>
@@ -465,14 +478,6 @@ export function KdsStatusBreakdownWidget({
               Ready
             </span>
             <span className="font-semibold text-on-surface">{bReady}</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-outline" />
-              Held
-            </span>
-            <span className="font-semibold text-on-surface">{bHeld}</span>
           </div>
 
           <div className="flex items-center justify-between text-error font-medium">

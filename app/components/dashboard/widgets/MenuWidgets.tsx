@@ -361,12 +361,20 @@ export function MenuProductAvailabilityWidget({
               <div className="flex items-center gap-1.5 shrink-0">
                 <span
                   className={`w-2 h-2 rounded-full ${
-                    item.isWarning ? "bg-on-tertiary-container animate-pulse" : "bg-primary"
+                    item.status === "Out of Stock" || item.status === "Unavailable"
+                      ? "bg-red-500"
+                      : item.status === "Low Stock" || item.isWarning
+                      ? "bg-amber-500 animate-pulse"
+                      : "bg-emerald-600"
                   }`}
                 />
                 <span
                   className={`font-label-sm text-label-sm font-semibold ${
-                    item.isWarning ? "text-on-tertiary-container" : "text-on-surface"
+                    item.status === "Out of Stock" || item.status === "Unavailable"
+                      ? "text-red-700"
+                      : item.status === "Low Stock" || item.isWarning
+                      ? "text-amber-700"
+                      : "text-emerald-700"
                   }`}
                 >
                   {item.status}
@@ -376,13 +384,13 @@ export function MenuProductAvailabilityWidget({
           ))
         ) : (
           <div className="py-2 text-center font-body-sm text-body-sm text-on-surface-variant">
-            No dishes configured in catalog
+            No dishes assigned to recipes
           </div>
         )}
       </div>
 
       <div className="flex items-center justify-between text-outline text-[11px] pt-space-xs border-t border-outline-variant/10">
-        <span>Portion Countdown</span>
+        <span>Recipe Stock</span>
         <span>Active Sync</span>
       </div>
     </div>
@@ -427,7 +435,13 @@ export function MenuOutOfStockAlertsWidget({
         </span>
       </div>
 
-      <div className="bg-error-container/40 rounded-DEFAULT p-space-sm flex flex-col gap-space-xs my-auto min-h-[120px] justify-center">
+      <div
+        className={`rounded-DEFAULT p-space-sm flex flex-col gap-space-xs my-auto min-h-[120px] justify-center ${
+          stockoutList.length > 0
+            ? "bg-error-container/40"
+            : "bg-surface-container"
+        }`}
+      >
         {stockoutList.length > 0 ? (
           stockoutList.map((item: any, idx: number) => (
             <div key={idx} className="flex items-start gap-space-xs font-body-sm text-body-sm text-on-error-container pb-1">

@@ -234,7 +234,7 @@ export default function MenuCatalogPage() {
       title: "Product Availability",
       track: "INVENTORY LINK",
       badge: "LIVE",
-      desc: "Real-time stock status of kitchen menu items with portion count countdowns.",
+      desc: "Real-time stock status of kitchen menu items based on recipe ingredient inventory.",
       width: 4,
     },
     {
@@ -668,7 +668,7 @@ export default function MenuCatalogPage() {
                     Product Availability
                   </h2>
                   <p className="font-body-sm text-body-sm text-on-surface-variant mt-1">
-                    Real-time stock status of kitchen menu items with portion count countdowns.
+                    Real-time stock status of kitchen menu items based on recipe ingredient inventory.
                   </p>
 
                   {/* Rich Preview Section */}
@@ -680,12 +680,20 @@ export default function MenuCatalogPage() {
                           <div className="flex items-center gap-1.5 shrink-0">
                             <span
                               className={`w-2 h-2 rounded-full ${
-                                item.isWarning ? "bg-on-tertiary-container animate-pulse" : "bg-primary"
+                                item.status === "Out of Stock" || item.status === "Unavailable"
+                                  ? "bg-red-500"
+                                  : item.status === "Low Stock" || item.isWarning
+                                  ? "bg-amber-500 animate-pulse"
+                                  : "bg-emerald-600"
                               }`}
                             />
                             <span
                               className={`font-label-sm text-label-sm font-semibold ${
-                                item.isWarning ? "text-on-tertiary-container" : "text-on-surface"
+                                item.status === "Out of Stock" || item.status === "Unavailable"
+                                  ? "text-red-700"
+                                  : item.status === "Low Stock" || item.isWarning
+                                  ? "text-amber-700"
+                                  : "text-emerald-700"
                               }`}
                             >
                               {item.status}
@@ -743,7 +751,13 @@ export default function MenuCatalogPage() {
                   </p>
 
                   {/* Rich Rose Alert Card Preview */}
-                  <div className="mt-space-md p-space-md rounded-DEFAULT bg-error-container/40 flex flex-col gap-space-xs min-h-[120px] justify-center">
+                  <div
+                    className={`mt-space-md p-space-md rounded-DEFAULT flex flex-col gap-space-xs min-h-[120px] justify-center ${
+                      stockoutAlertsData?.summary?.stockoutList && stockoutAlertsData.summary.stockoutList.length > 0
+                        ? "bg-error-container/40"
+                        : "bg-surface-container"
+                    }`}
+                  >
                     {stockoutAlertsData?.summary?.stockoutList && stockoutAlertsData.summary.stockoutList.length > 0 ? (
                       stockoutAlertsData.summary.stockoutList.map((item: any, idx: number) => (
                         <div key={idx} className="flex items-start gap-space-xs font-body-sm text-body-sm text-on-error-container pb-1">
@@ -762,7 +776,13 @@ export default function MenuCatalogPage() {
                         <span>All menu items currently active &amp; in stock</span>
                       </div>
                     )}
-                    <div className="mt-1 pt-1.5 flex items-center justify-between font-label-sm text-label-sm text-on-error-container border-t border-error-container/60">
+                    <div
+                      className={`mt-1 pt-1.5 flex items-center justify-between font-label-sm text-label-sm border-t ${
+                        stockoutAlertsData?.summary?.stockoutList && stockoutAlertsData.summary.stockoutList.length > 0
+                          ? "text-on-error-container border-error-container/60"
+                          : "text-outline border-outline-variant/10"
+                      }`}
+                    >
                       <span className="font-medium tracking-wide">Auto-disabled on POS &amp; Web Store</span>
                       <span className="material-symbols-outlined text-[14px]">lock</span>
                     </div>

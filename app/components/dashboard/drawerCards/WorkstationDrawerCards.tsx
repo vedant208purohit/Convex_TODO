@@ -96,9 +96,10 @@ export function DrawerWorkstationOrderSummaryCard({
 }: DrawerCardProps) {
   const summary = data?.summary || {};
   const total = data?.kpi?.value ?? 0;
-  const mainLane = summary.mainPosLane ?? (Number(total) > 0 ? Math.round(Number(total) * 0.7) : 0);
-  const barLane = summary.barLane ?? 0;
-  const dessert = summary.dessertStation ?? 0;
+  const lanes: Array<{ name: string; count: number }> =
+    summary.lanes && summary.lanes.length > 0
+      ? summary.lanes
+      : [{ name: "Main", count: Number(total) }];
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -121,19 +122,21 @@ export function DrawerWorkstationOrderSummaryCard({
             <span className="font-semibold text-stone-800">Active Lane Volume</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
           </div>
-          <div className="grid grid-cols-3 gap-1.5 text-center py-1">
-            <div className="bg-white p-1 rounded border border-[#f0eae3]">
-              <span className="text-[10px] text-stone-400 block">Main POS</span>
-              <span className="text-xs font-bold text-stone-800">{mainLane}</span>
-            </div>
-            <div className="bg-white p-1 rounded border border-[#f0eae3]">
-              <span className="text-[10px] text-stone-400 block">Bar Lane</span>
-              <span className="text-xs font-bold text-stone-800">{barLane}</span>
-            </div>
-            <div className="bg-white p-1 rounded border border-[#f0eae3]">
-              <span className="text-[10px] text-stone-400 block">Dessert</span>
-              <span className="text-xs font-bold text-stone-800">{dessert}</span>
-            </div>
+          <div
+            className={`grid gap-1.5 text-center py-1 ${
+              lanes.length === 1
+                ? "grid-cols-1"
+                : lanes.length === 2
+                ? "grid-cols-2"
+                : "grid-cols-3"
+            }`}
+          >
+            {lanes.map((lane: any, idx: number) => (
+              <div key={idx} className="bg-white p-1 rounded border border-[#f0eae3]">
+                <span className="text-[10px] text-stone-400 block truncate">{lane.name}</span>
+                <span className="text-xs font-bold text-stone-800">{lane.count}</span>
+              </div>
+            ))}
           </div>
           <div className="flex items-center justify-between px-2 py-1 bg-stone-100 rounded text-xs">
             <span className="text-stone-600">Total Spool Pool</span>
@@ -190,7 +193,7 @@ export function DrawerWorkstationOrdersByWorkstationCard({
 
         <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1.5 border border-[#f3ede6]">
           <div className="flex justify-between text-[10px] text-stone-400 font-bold uppercase">
-            <span>Counter Register</span>
+            <span>Workstation</span>
             <span>Tkts</span>
           </div>
           <div className="flex flex-col gap-1">
@@ -304,8 +307,8 @@ export function DrawerWorkstationQueueCard({
   onAdd,
   data,
 }: DrawerCardProps) {
-  const depth = data?.kpi?.value ?? 0;
   const summary = data?.summary || {};
+  const depth = data?.kpi?.value ?? (summary.bufferDepth ?? 0);
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -327,7 +330,7 @@ export function DrawerWorkstationQueueCard({
           <div className="flex items-center justify-between">
             <span className="text-2xl font-serif text-stone-900">{depth}</span>
             <span className="text-[10px] bg-stone-200 text-stone-700 px-2 py-0.5 rounded-full font-semibold">
-              {summary.spoolStatus || "Nominal Spool"}
+              {summary.spoolStatus || (depth > 0 ? "Nominal Spool" : "Queue Idle")}
             </span>
           </div>
           <div className="flex justify-between text-xs text-stone-600 pt-1 border-t border-[#f0eae3]">

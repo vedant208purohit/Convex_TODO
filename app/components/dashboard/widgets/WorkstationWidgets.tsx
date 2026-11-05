@@ -34,9 +34,10 @@ export function WorkstationOrderSummaryWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const total = widgetData?.kpi?.value ?? 0;
-  const mainLane = summary.mainPosLane ?? (Number(total) > 0 ? Math.round(Number(total) * 0.7) : 0);
-  const barLane = summary.barLane ?? 0;
-  const dessert = summary.dessertStation ?? 0;
+  const lanes: Array<{ name: string; count: number }> =
+    summary.lanes && summary.lanes.length > 0
+      ? summary.lanes
+      : [{ name: "Main", count: Number(total) || 0 }];
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -62,19 +63,21 @@ export function WorkstationOrderSummaryWidget({
           </span>
           <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
         </div>
-        <div className="grid grid-cols-3 gap-space-xs text-center py-1">
-          <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
-            <span className="font-label-sm text-[10px] text-outline">Main POS</span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{mainLane}</span>
-          </div>
-          <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
-            <span className="font-label-sm text-[10px] text-outline">Bar Lane</span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{barLane}</span>
-          </div>
-          <div className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
-            <span className="font-label-sm text-[10px] text-outline">Dessert</span>
-            <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{dessert}</span>
-          </div>
+        <div
+          className={`grid gap-space-xs text-center py-1 ${
+            lanes.length === 1
+              ? "grid-cols-1"
+              : lanes.length === 2
+              ? "grid-cols-2"
+              : "grid-cols-3"
+          }`}
+        >
+          {lanes.map((lane: any, idx: number) => (
+            <div key={idx} className="bg-surface-container-lowest p-space-xs rounded-DEFAULT flex flex-col">
+              <span className="font-label-sm text-[10px] text-outline truncate">{lane.name}</span>
+              <span className="font-headline-sm text-headline-sm text-on-surface font-semibold">{lane.count}</span>
+            </div>
+          ))}
         </div>
         <div className="flex items-center justify-between bg-surface-container-high px-space-sm py-1 rounded-full text-xs">
           <span className="text-on-surface font-medium">Total Spool Pool</span>
@@ -131,7 +134,7 @@ export function WorkstationOrdersByWorkstationWidget({
 
       <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-space-xs my-auto">
         <div className="flex justify-between items-center text-outline font-label-sm text-[10px] uppercase">
-          <span>Counter Register</span>
+          <span>Workstation</span>
           <span>Tkts</span>
         </div>
         <div className="flex flex-col gap-1.5">
@@ -152,7 +155,7 @@ export function WorkstationOrdersByWorkstationWidget({
             ))
           ) : (
             <div className="py-3 text-center text-secondary text-xs">
-              0 orders processed at counter terminals
+              0 orders processed across workstations
             </div>
           )}
         </div>
@@ -263,8 +266,8 @@ export function WorkstationQueueWidget({
     toTimestamp,
   });
 
-  const depth = widgetData?.kpi?.value ?? 0;
   const summary = (widgetData as any)?.summary || {};
+  const depth = widgetData?.kpi?.value ?? (summary.bufferDepth ?? 0);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -289,7 +292,7 @@ export function WorkstationQueueWidget({
             {depth}
           </span>
           <span className="bg-surface-container-highest text-[11px] px-2 py-0.5 rounded-full text-secondary font-semibold">
-            {summary.spoolStatus || "Nominal Spool"}
+            {summary.spoolStatus || (depth > 0 ? "Nominal Spool" : "Queue Idle")}
           </span>
         </div>
         <div className="space-y-1 text-xs pt-1 border-t border-surface-container-high/60">
@@ -333,6 +336,10 @@ export function WorkstationPrepTimeWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
+  const stationBars: Array<{ name: string; prep: string }> =
+    summary.stationBars && summary.stationBars.length > 0
+      ? summary.stationBars
+      : [{ name: "Main", prep: summary.displayValue ? `${summary.displayValue}m` : "--" }];
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -360,19 +367,21 @@ export function WorkstationPrepTimeWidget({
             Target: {summary.slaGoal || "< 20.0m"}
           </span>
         </div>
-        <div className="flex items-end justify-between h-10 pt-1 px-4 border-b border-surface-container-high">
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="w-4 bg-primary rounded-t-sm h-6" />
-            <span className="text-[9px] text-outline">Grill</span>
-          </div>
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="w-4 bg-secondary rounded-t-sm h-8" />
-            <span className="text-[9px] text-outline">Oven</span>
-          </div>
-          <div className="flex flex-col items-center gap-0.5">
-            <div className="w-4 bg-surface-container-highest rounded-t-sm h-4" />
-            <span className="text-[9px] text-outline">Bar</span>
-          </div>
+        <div className="flex items-end justify-around h-10 pt-1 px-4 border-b border-surface-container-high">
+          {stationBars.map((sb, idx) => (
+            <div key={idx} className="flex flex-col items-center gap-0.5">
+              <div
+                className={`w-4 rounded-t-sm h-6 ${
+                  idx === 0
+                    ? "bg-primary"
+                    : idx === 1
+                    ? "bg-secondary"
+                    : "bg-surface-container-highest"
+                }`}
+              />
+              <span className="text-[9px] text-outline truncate max-w-[60px]">{sb.name}</span>
+            </div>
+          ))}
         </div>
         <div className="flex justify-between items-center text-xs text-outline">
           <span>Efficiency Pace:</span>

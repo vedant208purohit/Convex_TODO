@@ -34,9 +34,9 @@ export function SurveyResponseCountWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const totalResponses = summary.totalResponses ?? "0";
-  const deltaPercent = summary.deltaPercent ?? "▲ +18.2%";
-  const qrReceiptPercent = summary.qrReceiptPercent ?? 68;
-  const cfdPercent = summary.cfdPercent ?? 32;
+  const deltaPercent = summary.deltaPercent ?? "+0.0%";
+  const qrReceiptPercent = summary.qrReceiptPercent ?? 0;
+  const cfdPercent = summary.cfdPercent ?? 0;
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -69,8 +69,14 @@ export function SurveyResponseCountWidget({
         </div>
 
         <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden flex mt-1">
-          <div className="bg-primary h-full" style={{ width: `${qrReceiptPercent}%` }}></div>
-          <div className="bg-secondary h-full opacity-60" style={{ width: `${cfdPercent}%` }}></div>
+          {qrReceiptPercent + cfdPercent > 0 ? (
+            <>
+              <div className="bg-primary h-full transition-all" style={{ width: `${qrReceiptPercent}%` }}></div>
+              <div className="bg-secondary h-full opacity-60 transition-all" style={{ width: `${cfdPercent}%` }}></div>
+            </>
+          ) : (
+            <div className="bg-surface-container-high h-full w-full opacity-30"></div>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-secondary pt-0.5">
@@ -106,9 +112,9 @@ export function SurveyAverageRatingWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const avgScore = summary.avgScore ?? "0.00";
-  const positivePercent = summary.positivePercent ?? 92;
-  const neutralPercent = summary.neutralPercent ?? 6;
-  const negativePercent = summary.negativePercent ?? 2;
+  const positivePercent = summary.positivePercent ?? 0;
+  const neutralPercent = summary.neutralPercent ?? 0;
+  const negativePercent = summary.negativePercent ?? 0;
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -142,9 +148,15 @@ export function SurveyAverageRatingWidget({
         </div>
 
         <div className="w-full bg-surface-container-highest h-2 rounded-full overflow-hidden flex mt-1">
-          <div className="bg-emerald-600 h-full" style={{ width: `${positivePercent}%` }}></div>
-          <div className="bg-amber-500 h-full" style={{ width: `${neutralPercent}%` }}></div>
-          <div className="bg-rose-500 h-full" style={{ width: `${negativePercent}%` }}></div>
+          {positivePercent + neutralPercent + negativePercent > 0 ? (
+            <>
+              <div className="bg-emerald-600 h-full" style={{ width: `${positivePercent}%` }}></div>
+              <div className="bg-amber-500 h-full" style={{ width: `${neutralPercent}%` }}></div>
+              <div className="bg-rose-500 h-full" style={{ width: `${negativePercent}%` }}></div>
+            </>
+          ) : (
+            <div className="bg-surface-container-high h-full w-full opacity-30"></div>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-secondary pt-0.5">
@@ -254,7 +266,7 @@ export function SurveySatisfactionTrendWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currentRating = summary.currentRating ?? "4.8";
+  const currentRating = summary.currentRating ?? "--";
   const slaTarget = summary.slaTarget ?? "SLA: 4.5+";
 
   return (
@@ -389,7 +401,7 @@ export function SurveyLowRatingAlertsWidget({
               <span className="px-1.5 py-0.2 bg-rose-200/70 text-rose-900 rounded font-semibold">
                 Callback Requested
               </span>
-              <span className="text-secondary">{topAlert?.staff || "Assigned: Amina K."}</span>
+              <span className="text-secondary">{topAlert?.staff || "Guest Feedback"}</span>
             </div>
           </div>
         )}

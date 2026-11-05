@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api } from "./_generated/api";
@@ -1040,6 +1040,50 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       // 1 repeat out of 2 customers = 50%
       expect(ret.kpi?.value).toBe(50);
       expect(ret.kpi?.secondaryMetrics?.find((m) => m.label === "Repeat Patrons")?.value).toBe(1);
+
+      // Verify customers_total
+      const tot = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_total",
+        organizationId: orgId,
+      });
+      expect(tot.kpi?.value).toBe(2);
+
+      // Verify customers_new
+      const newCust = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_new",
+        organizationId: orgId,
+      });
+      expect(newCust.kpi?.value).toBe(2);
+
+      // Verify customers_recent has NO "Dining Guest" tier
+      const rec = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_recent",
+        organizationId: orgId,
+      });
+      for (const g of rec.summary?.recentGuests || []) {
+        expect(g.tier).toBeUndefined();
+      }
+
+      // Verify customers_most_frequent groups properly and has NO VIP tier labels
+      const freq = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_most_frequent",
+        organizationId: orgId,
+      });
+      expect(freq.summary?.topGuests?.[0]?.visits).toBe("2 orders");
+      for (const g of freq.summary?.topGuests || []) {
+        expect(g.tier).toBeUndefined();
+      }
+
+      // Verify customers_order_frequency has clean cohort labels
+      const ordFreq = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_order_frequency",
+        organizationId: orgId,
+      });
+      expect(ordFreq.summary?.cohorts?.map((c: any) => c.label)).toEqual([
+        "1 Visit",
+        "2 - 3 Visits",
+        "4+ Visits",
+      ]);
     });
 
     test("Surveys provide truthful empty state when no responses exist and accurate score when logged", async () => {
@@ -1393,6 +1437,260 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       });
       expect(tenderChart.chart).toBeDefined();
       expect(tenderChart.chart!.series).toBeDefined();
+    });
+
+    test("Menu widgets: low-performing excludes top-sellers, out-of-stock ignores internal recipes, and margins are percentage", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      const menuId = await t.mutation(api.menu.createMenu, {
+        organizationId: orgId,
+        name: "Main Menu",
+        isDefault: true,
+      });
+
+      // Create a category
+      const catId = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId,
+        name: "Starters",
+      });
+
+      const now = Date.now();
+      let pizzaId: any, samosaId: any, biryaniId: any;
+
+      const baseItem = {
+        organizationId: orgId,
+        updatedAt: now,
+        isGst: true,
+        isVeg: true,
+        isSpicy: false,
+        showItemType: false,
+        showQuantity: false,
+        showAllergenContents: false,
+        showCalorie: false,
+        markAsBestseller: false,
+      };
+
+      await t.run(async (ctx) => {
+        pizzaId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Pizza",
+          price: 10000,
+          published: true,
+          isAvailable: true,
+          createdAt: now,
+        });
+
+        samosaId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Samosa",
+          price: 8000,
+          published: true,
+          isAvailable: true,
+          createdAt: now,
+        });
+
+        biryaniId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Biryani",
+          price: 12000,
+          published: true,
+          isAvailable: true,
+          createdAt: now,
+        });
+
+        // Link to category via categoryItems
+        await ctx.db.insert("categoryItems", {
+          organizationId: orgId,
+          categoryId: catId,
+          itemId: pizzaId,
+          position: 0,
+          published: true,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("categoryItems", {
+          organizationId: orgId,
+          categoryId: catId,
+          itemId: samosaId,
+          position: 1,
+          published: true,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("categoryItems", {
+          organizationId: orgId,
+          categoryId: catId,
+          itemId: biryaniId,
+          position: 2,
+          published: true,
+          createdAt: now,
+        });
+
+        // Create an internal recipe record in items table (not in categoryItems, unpublished)
+        await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Vadapav Recipe",
+          price: 0,
+          published: false,
+          isAvailable: false,
+          createdAt: now,
+        });
+
+        // Insert order with 2 Pizzas, 1 Samosa (Biryani has 0 orders)
+        const orderId = await ctx.db.insert("orders", {
+          organizationId: orgId,
+          orderNumber: "ORD-MENU-1",
+          tokenNumber: "01",
+          orderType: "DineIn",
+          orderSource: "POS-Terminal",
+          orderStatusName: "Completed",
+          subTotal: 28000,
+          taxTotal: 0,
+          totalAmount: 28000,
+          paymentMode: "Cash",
+          paymentStatus: "Paid",
+          isCompleted: true,
+          isRejected: false,
+          isModify: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await ctx.db.insert("orderItems", {
+          organizationId: orgId,
+          orderId,
+          itemId: pizzaId,
+          itemName: "Pizza",
+          itemPrice: 10000,
+          quantity: 2,
+          totalPrice: 20000,
+          isReady: true,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("orderItems", {
+          organizationId: orgId,
+          orderId,
+          itemId: samosaId,
+          itemName: "Samosa",
+          itemPrice: 8000,
+          quantity: 1,
+          totalPrice: 8000,
+          isReady: true,
+          createdAt: now,
+        });
+      });
+
+      // 1. Check Top Selling
+      const topSelling = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_top_selling",
+        dateRangePreset: "today",
+      });
+      expect(topSelling.summary!.topItems[0].name).toBe("Pizza");
+      expect(topSelling.summary!.topItems[1].name).toBe("Samosa");
+
+      // 2. Check Low Performing:
+      // Must exclude Pizza and Samosa (top sellers).
+      // Biryani (0 orders) must be surfaced!
+      const lowPerforming = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_low_performing",
+        dateRangePreset: "today",
+      });
+      const lowNames = lowPerforming.table!.rows.map((r: any) => r.name);
+      expect(lowNames).toContain("Biryani");
+      expect(lowNames).not.toContain("Pizza");
+      expect(lowNames).not.toContain("Samosa");
+      const biryaniRow = lowPerforming.table!.rows.find((r: any) => r.name === "Biryani");
+      expect(biryaniRow?.qty).toBe(0);
+      expect(biryaniRow?.badge).toBe("Zero Sales");
+
+      // 3. Check Out-of-Stock:
+      // Internal "Vadapav Recipe" dish must NOT be reported as 86'd out of stock!
+      const stockout = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_out_of_stock_alerts",
+      });
+      expect(stockout.alert!.count).toBe(0);
+      expect(stockout.alert!.title).toBe("All Menu Items In Stock");
+      expect(stockout.summary!.stockoutList.length).toBe(0);
+
+      // 4. Check Product Availability:
+      // Unassigned items (Biryani, Samosa) must NOT appear in availabilityList!
+      const availabilityBefore = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_product_availability",
+      });
+      expect(availabilityBefore.summary!.availabilityList.length).toBe(0);
+
+      // Now create inventory item and assign recipe to Pizza
+      await t.run(async (ctx) => {
+        const invId = await ctx.db.insert("inventoryItems", {
+          organizationId: orgId,
+          name: "Pizza Dough",
+          buyingUnit: "piece",
+          servingUnit: "piece",
+          availableStock: 50,
+          minimumStockRefillLevel: 5,
+          unitCost: 10,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        const masterRecipeDishId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Master Pizza Recipe Dish",
+          price: 0,
+          published: false,
+          isAvailable: false,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("recipes", {
+          organizationId: orgId,
+          itemId: masterRecipeDishId,
+          inventoryItemId: invId,
+          quantity: 1,
+          unit: "piece",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await ctx.db.insert("recipeAssignments", {
+          organizationId: orgId,
+          sourceRecipeItemId: masterRecipeDishId,
+          targetItemId: pizzaId,
+          portionMultiplier: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      const availabilityAfter = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_product_availability",
+      });
+      const availNames = availabilityAfter.summary!.availabilityList.map((a: any) => a.name);
+      expect(availNames).toContain("Pizza");
+      expect(availNames).not.toContain("Samosa");
+      expect(availNames).not.toContain("Biryani");
+      expect(availabilityAfter.summary!.availabilityList[0].status.toLowerCase()).toContain("in stock");
+      // Must NOT contain portion count numbers (e.g. "87 in stock")
+      expect(/\d+/.test(availabilityAfter.summary!.availabilityList[0].status)).toBe(false);
+
+      // 5. Check Bestselling Items margin:
+      // Margin column must be a percentage (e.g. 72%), not "2 sold"!
+      const bestselling = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_bestselling_items",
+        dateRangePreset: "today",
+      });
+      for (const row of bestselling.summary!.bestsellingRows) {
+        expect(row.margin).toMatch(/\d+%/);
+        expect(row.margin).not.toContain("sold");
+      }
     });
   });
 

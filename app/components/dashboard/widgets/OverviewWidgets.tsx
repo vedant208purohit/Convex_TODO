@@ -33,14 +33,15 @@ export function OverviewAovWidget({
     toTimestamp,
   });
 
-  const currencySymbol = widgetData?.currencySymbol || "$";
-  const displayVal = widgetData?.kpi?.displayValue || formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = widgetData?.currencySymbol || "₹";
+  const country = widgetData?.country;
+  const displayVal = widgetData?.kpi?.displayValue || formatPriceWithSymbol(0, currencySymbol, country);
   const delta =
     widgetData?.kpi?.deltaLabel ||
     (widgetData?.kpi?.deltaPercent !== undefined
       ? `${widgetData.kpi.deltaPercent >= 0 ? "+" : ""}${widgetData.kpi.deltaPercent}% vs 7d avg`
       : "+0.0% vs 7d avg");
-  const topTicket = (widgetData as any)?.summary?.topTicket || formatPriceWithSymbol(0, currencySymbol);
+  const topTicket = (widgetData as any)?.summary?.topTicket || formatPriceWithSymbol(0, currencySymbol, country);
 
   return (
     <div className="flex flex-col justify-between h-full font-sans">
@@ -232,8 +233,9 @@ export function OverviewBusinessSummaryWidget({
     toTimestamp,
   });
 
-  const currencySymbol = widgetData?.currencySymbol || "$";
-  const revPash = (widgetData as any)?.summary?.revPash || formatPriceWithSymbol(412, currencySymbol);
+  const currencySymbol = widgetData?.currencySymbol || "₹";
+  const country = widgetData?.country;
+  const revPash = (widgetData as any)?.summary?.revPash || formatPriceWithSymbol(412, currencySymbol, country);
   const foodCost = (widgetData as any)?.summary?.foodCost || "28.4%";
   const laborRatio = (widgetData as any)?.summary?.laborRatio || "14.2%";
 

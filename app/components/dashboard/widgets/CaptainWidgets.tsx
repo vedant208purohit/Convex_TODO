@@ -34,51 +34,50 @@ export function CaptainActiveOrdersWidget({
   });
 
   const captains = (widgetData as any)?.summary?.captains || [];
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const country = (widgetData as any)?.country;
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
-              TABLE
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">FLOOR ASSIGNMENT</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Active Orders by Captain</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            FLOOR ASSIGNMENT
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Active Orders by Captain</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-1.5 my-auto">
+      <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1.5 border border-[#f3ede6] my-auto">
         {captains.length > 0 ? (
           captains.map((c: any, idx: number) => (
             <div
               key={idx}
-              className="flex items-center justify-between p-1.5 rounded-DEFAULT bg-surface-container-lowest text-xs"
+              className="flex items-center justify-between p-1 bg-white rounded border border-[#f0eae3] text-xs"
             >
-              <div className="flex items-center gap-2">
-                <span className="w-4 h-4 rounded-full bg-surface-container-high flex items-center justify-center text-[10px] font-semibold text-on-surface">
+              <div className="flex items-center gap-1.5">
+                <span className="w-4 h-4 rounded-full bg-stone-100 flex items-center justify-center text-[10px] font-bold text-stone-700">
                   {c.rank}
                 </span>
                 <div>
-                  <div className="font-medium text-on-surface">
-                    {c.name} <span className="text-[10px] text-outline font-normal">({c.zone})</span>
+                  <div className="font-semibold text-stone-800">
+                    {c.name} <span className="text-[10px] text-stone-400 font-normal">({c.zone})</span>
                   </div>
-                  <div className="text-[10px] text-secondary">
+                  <div className="text-[10px] text-stone-500">
                     {c.tablesCount} Tables • {c.covers} Covers
                   </div>
                 </div>
               </div>
-              <span className="font-semibold text-on-surface">
-                {formatPriceWithSymbol(c.amount, (widgetData as any)?.currencySymbol || "$")}
+              <span className="font-bold text-stone-900">
+                {c.amountFormatted || formatPriceWithSymbol(c.amount, currencySymbol, country, true)}
               </span>
             </div>
           ))
         ) : (
-          <div className="py-3 text-center text-secondary text-xs">
+          <div className="py-2 text-center text-stone-400 text-xs">
             0 active seated tables assigned to captains
           </div>
         )}
@@ -115,41 +114,38 @@ export function CaptainTableServiceStatusWidget({
   const tableCards = (widgetData as any)?.summary?.tableCards || [];
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="px-space-xs py-0.5 rounded-full bg-error-container text-on-error-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
-              LIVE
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">SERVICE PACING</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Table Service Status</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            SERVICE PACING
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Table Service Status</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-wrap gap-1.5 my-auto">
+      <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-wrap gap-1.5 border border-[#f3ede6] my-auto">
         {tableCards.length > 0 ? (
           tableCards.slice(0, 4).map((tc: any, idx: number) => (
             <div
               key={idx}
-              className="flex-1 min-w-[90px] p-1.5 bg-surface-container-lowest rounded-DEFAULT text-xs flex flex-col gap-0.5"
+              className="flex-1 min-w-[80px] p-1.5 bg-white rounded border border-[#f0eae3] text-xs"
             >
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-on-surface">{tc.tableNumber}</span>
-                <span className="text-[10px] text-outline">{tc.seating}</span>
+              <div className="flex justify-between items-center">
+                <span className="font-bold text-stone-800">{tc.tableNumber}</span>
+                <span className="text-[10px] text-stone-400">{tc.seating}</span>
               </div>
-              <div className="flex items-center justify-between text-[11px]">
-                <span className="text-secondary truncate">{tc.stage}</span>
-                {tc.elapsed && <span className="text-primary font-medium">{tc.elapsed}</span>}
+              <div className="flex justify-between items-center text-[10px] text-stone-500 mt-0.5">
+                <span className="truncate">{tc.stage}</span>
+                {tc.elapsed && <span className="text-emerald-600 font-medium ml-1 shrink-0">{tc.elapsed}</span>}
               </div>
             </div>
           ))
         ) : (
-          <div className="w-full py-3 text-center text-secondary text-xs">
+          <div className="w-full py-2 text-center text-stone-400 text-xs">
             No active dining tables
           </div>
         )}
@@ -186,41 +182,38 @@ export function CaptainAssignedTablesWidget({
   const rosters = (widgetData as any)?.summary?.rosters || [];
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
-              TABLE
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">ROSTER ALLOCATION</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Assigned Tables</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            ROSTER ALLOCATION
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Assigned Tables</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-1.5 my-auto">
+      <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] my-auto">
         {rosters.length > 0 ? (
           rosters.map((r: any, idx: number) => (
             <div
               key={idx}
-              className="p-1.5 rounded-DEFAULT bg-surface-container-lowest flex items-center justify-between text-xs"
+              className="flex justify-between items-center p-1 bg-white rounded border border-[#f0eae3] text-xs"
             >
               <div>
-                <span className="font-semibold text-on-surface">{r.name}</span>
-                <div className="text-[10px] text-secondary">{r.section}</div>
+                <span className="font-semibold text-stone-800">{r.name}</span>
+                <div className="text-[10px] text-stone-400">{r.section}</div>
               </div>
               <div className="text-right">
-                <div className="font-semibold text-primary">{r.activeCount} Active</div>
-                <div className="text-[10px] text-outline">{r.activePct} load</div>
+                <span className="font-bold text-stone-900">{r.activeCount} Active</span>
+                <span className="text-[10px] text-stone-400 block">{r.activePct} load</span>
               </div>
             </div>
           ))
         ) : (
-          <div className="py-3 text-center text-secondary text-xs">
+          <div className="py-2 text-center text-stone-400 text-xs">
             0 tables allocated in shift
           </div>
         )}
@@ -257,36 +250,27 @@ export function CaptainServiceTimeWidget({
   const summary = (widgetData as any)?.summary || {};
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
-              KPI
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">ATTENDANT TEMPO</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Service Time</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            ATTENDANT TEMPO
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Service Time</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-1.5 my-auto">
+      <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] my-auto">
         <div className="flex items-baseline justify-between">
-          <span className="font-display-sm text-display-sm text-on-surface font-normal">
-            {summary.avgTurnMins ?? "--"}
-          </span>
-          <span className="text-[11px] text-secondary">Benchmark: 42.0m</span>
+          <span className="text-2xl font-serif text-stone-900">{summary.avgTurnMins ?? "--"}</span>
+          <span className="text-[10px] text-stone-400">Benchmark: 42.0m</span>
         </div>
-        <div className="flex justify-between items-center text-xs text-outline pt-1 border-t border-surface-container-high/60">
-          <span>Turn Variance:</span>
-          <span className="font-semibold text-on-surface">{summary.deltaBenchmark ?? "--"}</span>
-        </div>
-        <div className="flex justify-between items-center text-xs text-outline">
-          <span>Fastest Floor:</span>
-          <span className="font-semibold text-on-surface">{summary.fastestSection ?? "Terrace"}</span>
+        <div className="flex justify-between text-xs text-stone-600 pt-1 border-t border-[#f0eae3]">
+          <span>Fastest:</span>
+          <span className="font-semibold text-stone-900">{summary.fastestSection || "--"}</span>
         </div>
       </div>
 
@@ -322,49 +306,49 @@ export function CaptainOrdersAwaitingServiceWidget({
   const isAwaiting = (summary.countAtPass ?? 0) > 0;
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className={`px-space-xs py-0.5 rounded-full ${isAwaiting ? "bg-error-container text-on-error-container" : "bg-secondary-container text-on-secondary-container"} font-label-sm text-[10px] tracking-widest uppercase font-semibold`}>
-              ALERT
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">CALL BELL QUEUE</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Orders Awaiting Service</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            CALL BELL QUEUE
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Orders Awaiting Service</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-1.5 my-auto">
-        <div className={`${isAwaiting ? "bg-error-container/40 border border-error-container" : "bg-surface-container-lowest"} p-space-xs px-space-sm rounded-DEFAULT flex items-center gap-2`}>
-          <span className={`material-symbols-outlined ${isAwaiting ? "text-error" : "text-primary"} text-[18px]`}>
+      <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] my-auto">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-stone-800">
+          <span
+            className={`material-symbols-outlined ${
+              isAwaiting ? "text-amber-500" : "text-emerald-500"
+            } text-[16px]`}
+          >
             {isAwaiting ? "notifications_active" : "check_circle"}
           </span>
-          <span className={`text-xs font-semibold ${isAwaiting ? "text-on-error-container" : "text-on-surface"}`}>
-            {summary.countAtPass ?? 0} Orders at Pass
-          </span>
+          <span>{summary.countAtPass ?? 0} Orders at Pass</span>
         </div>
-        <div className="text-xs text-secondary pt-0.5">
-          {summary.ordersAtPass && summary.ordersAtPass.length > 0 ? (
-            summary.ordersAtPass.slice(0, 2).map((it: any, idx: number) => (
-              <div key={idx} className="flex justify-between py-0.5">
-                <span className="font-medium text-on-surface">{it.table} Ready</span>
-                <span className="text-error font-medium">{it.readyAgo}</span>
+        <span className="text-[11px] text-stone-500">
+          {isAwaiting ? "Runner needed for hot food pickup" : "No orders waiting at pass"}
+        </span>
+        {summary.ordersAtPass && summary.ordersAtPass.length > 0 && (
+          <div className="pt-1 border-t border-[#f0eae3] flex flex-col gap-0.5">
+            {summary.ordersAtPass.slice(0, 2).map((it: any, idx: number) => (
+              <div key={idx} className="flex justify-between text-[11px]">
+                <span className="font-medium text-stone-800">{it.table} Ready</span>
+                <span className="text-amber-600 font-medium">{it.readyAgo}</span>
               </div>
-            ))
-          ) : (
-            "No food waiting at kitchen pass."
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex items-center justify-between pt-space-xs border-t border-surface-container/60 text-[11px] text-secondary">
         <span>Pass Expeditor Queue</span>
         <span className="flex items-center gap-1">
-          <span className={`w-1.5 h-1.5 rounded-full ${isAwaiting ? "bg-error" : "bg-primary"}`} />
+          <span className={`w-1.5 h-1.5 rounded-full ${isAwaiting ? "bg-amber-500" : "bg-emerald-500"}`} />
           {isAwaiting ? "Runner Needed" : "Pass Clear"}
         </span>
       </div>
@@ -392,41 +376,38 @@ export function CaptainPerformanceSummaryWidget({
   const captains = (widgetData as any)?.summary?.captains || [];
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
-              CHART
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">CAPTAIN METRICS</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Captain Performance</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            CAPTAIN METRICS
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Captain Performance</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-sm flex flex-col gap-1.5 my-auto">
+      <div className="bg-[#fcf8f5] rounded-lg p-2.5 flex flex-col gap-1 border border-[#f3ede6] my-auto">
         {captains.length > 0 ? (
-          captains.slice(0, 3).map((c: any, idx: number) => (
+          captains.slice(0, 2).map((c: any, idx: number) => (
             <div
               key={idx}
-              className="p-1.5 rounded-DEFAULT bg-surface-container-lowest flex items-center justify-between text-xs"
+              className="flex justify-between items-center p-1 bg-white rounded border border-[#f0eae3] text-xs"
             >
               <div>
-                <span className="font-semibold text-on-surface">{c.name}</span>
-                <div className="text-[10px] text-secondary">{c.rank}</div>
+                <div className="font-semibold text-stone-800">{c.name}</div>
+                <div className="text-[10px] text-stone-400">{c.rank}</div>
               </div>
               <div className="text-right">
-                <div className="font-semibold text-on-surface">{c.sales}</div>
-                <div className="text-[10px] text-primary">{c.turnRate}</div>
+                <span className="font-bold text-stone-900">{c.sales}</span>
+                <span className="text-[10px] text-emerald-600 block">{c.turnRate}</span>
               </div>
             </div>
           ))
         ) : (
-          <div className="py-3 text-center text-secondary text-xs">
+          <div className="py-2 text-center text-stone-400 text-xs">
             0 covers served in this period
           </div>
         )}
@@ -443,7 +424,7 @@ export function CaptainPerformanceSummaryWidget({
   );
 }
 
-// 7. Captain Order Activity Widget (can span full width or multi-col)
+// 7. Captain Order Activity Widget
 export function CaptainOrderActivityWidget({
   organizationId,
   widgetId,
@@ -463,47 +444,41 @@ export function CaptainOrderActivityWidget({
   const auditEvents = (widgetData as any)?.summary?.auditEvents || [];
 
   return (
-    <div className="flex flex-col justify-between h-full">
+    <div className="flex flex-col justify-between h-full font-sans">
       <div className="flex items-start justify-between mb-space-xs">
         <div className="flex flex-col">
-          <div className="flex items-center gap-1.5">
-            <span className="px-space-xs py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-label-sm text-[10px] tracking-widest uppercase font-semibold">
-              TABLE
-            </span>
-            <span className="font-label-sm text-[11px] text-secondary">AUDIT TRAIL</span>
-          </div>
-          <h3 className="font-headline-sm text-headline-sm text-on-surface mt-0.5">Captain Order Activity</h3>
+          <span className="text-[10px] font-sans font-bold text-stone-400 tracking-widest uppercase">
+            AUDIT TRAIL
+          </span>
+          <h3 className="font-serif text-lg text-stone-900 font-normal mt-0.5">Captain Order Activity</h3>
         </div>
         <span className="font-label-sm text-label-sm px-2 py-0.5 bg-surface-container rounded-full text-on-surface font-semibold shrink-0">
           {dateLabel || "Today"}
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT overflow-hidden my-auto">
-        <div className="grid grid-cols-12 px-space-sm py-1.5 bg-surface-container-high font-label-sm text-[10px] text-secondary font-semibold uppercase">
+      <div className="bg-[#fcf8f5] rounded-lg overflow-hidden border border-[#f3ede6] my-auto">
+        <div className="grid grid-cols-12 px-3 py-1 bg-stone-100 text-[10px] font-bold uppercase text-stone-500">
           <span className="col-span-2">Time</span>
           <span className="col-span-3">Captain</span>
-          <span className="col-span-5">Action Event</span>
+          <span className="col-span-5">Action</span>
           <span className="col-span-2 text-right">Table</span>
         </div>
-        <div className="divide-y divide-surface-container/50">
+        <div className="divide-y divide-[#f0eae3]">
           {auditEvents.length > 0 ? (
             auditEvents.slice(0, 3).map((ev: any, idx: number) => (
               <div
                 key={idx}
-                className="grid grid-cols-12 px-space-sm py-2 items-center text-xs bg-surface-container-lowest"
+                className="grid grid-cols-12 px-3 py-1.5 items-center text-xs bg-white"
               >
-                <span className="col-span-2 text-outline font-medium text-[11px]">{ev.time}</span>
-                <span className="col-span-3 font-medium text-on-surface truncate">{ev.captain}</span>
-                <span className="col-span-5 text-on-surface flex items-center gap-1 truncate">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
-                  <span className="truncate">{ev.action}</span>
-                </span>
-                <span className="col-span-2 text-right font-semibold text-on-surface">{ev.table}</span>
+                <span className="col-span-2 text-stone-400 text-[11px]">{ev.time}</span>
+                <span className="col-span-3 font-semibold text-stone-800 truncate">{ev.captain}</span>
+                <span className="col-span-5 text-stone-700 truncate">{ev.action}</span>
+                <span className="col-span-2 text-right font-bold text-stone-900">{ev.table}</span>
               </div>
             ))
           ) : (
-            <div className="py-3 text-center text-secondary text-xs bg-surface-container-lowest">
+            <div className="py-2 text-center text-stone-400 text-xs bg-white">
               No tableside activity in selected timeframe
             </div>
           )}
@@ -520,4 +495,3 @@ export function CaptainOrderActivityWidget({
     </div>
   );
 }
-

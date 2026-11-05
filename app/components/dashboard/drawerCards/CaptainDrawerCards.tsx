@@ -117,11 +117,11 @@ export function DrawerCaptainActiveOrdersCard({
                     <div className="text-[10px] text-stone-500">{c.tablesCount} Tables • {c.covers} Covers</div>
                   </div>
                 </div>
-                <span className="font-bold text-stone-900">{formatPriceWithSymbol(c.amount, data?.currencySymbol || "$")}</span>
+                <span className="font-bold text-stone-900">{c.amountFormatted || formatPriceWithSymbol(c.amount, data?.currencySymbol || "₹", data?.country, true)}</span>
               </div>
             ))
           ) : (
-            <div className="py-2 text-center text-stone-400 text-xs">0 active seated tables assigned</div>
+            <div className="py-2 text-center text-stone-400 text-xs">0 active seated tables assigned to captains</div>
           )}
         </div>
       </div>
@@ -308,7 +308,7 @@ export function DrawerCaptainServiceTimeCard({
           </div>
           <div className="flex justify-between text-xs text-stone-600 pt-1 border-t border-[#f0eae3]">
             <span>Fastest:</span>
-            <span className="font-semibold text-stone-900">{summary.fastestSection || "Terrace"}</span>
+            <span className="font-semibold text-stone-900">{summary.fastestSection || "--"}</span>
           </div>
         </div>
       </div>

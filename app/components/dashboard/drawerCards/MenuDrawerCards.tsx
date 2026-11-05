@@ -59,7 +59,7 @@ export const MENU_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     type: "LIVE",
     typeBadgeBg: "bg-black text-white",
     description:
-      "Real-time stock status of kitchen menu items with portion count countdowns.",
+      "Real-time stock status of kitchen menu items based on recipe ingredient inventory.",
     defaultWidth: 4,
   },
   {
@@ -501,16 +501,33 @@ export function DrawerMenuProductAvailabilityCard({
                 <span className="font-medium text-stone-800 truncate">
                   {item.name}
                 </span>
-                <span
-                  className={`text-[10px] font-bold ${item.isWarning ? "text-amber-700" : "text-stone-700"}`}
-                >
-                  {item.status}
-                </span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      item.status === "Out of Stock" || item.status === "Unavailable"
+                        ? "bg-red-500"
+                        : item.status === "Low Stock" || item.isWarning
+                        ? "bg-amber-500"
+                        : "bg-emerald-600"
+                    }`}
+                  />
+                  <span
+                    className={`text-[10px] font-bold ${
+                      item.status === "Out of Stock" || item.status === "Unavailable"
+                        ? "text-red-700"
+                        : item.status === "Low Stock" || item.isWarning
+                        ? "text-amber-700"
+                        : "text-emerald-700"
+                    }`}
+                  >
+                    {item.status}
+                  </span>
+                </div>
               </div>
             ))
           ) : (
             <div className="text-center py-2 text-xs text-stone-400">
-              No items configured in catalog
+              No dishes assigned to recipes
             </div>
           )}
         </div>
@@ -576,7 +593,13 @@ export function DrawerMenuOutOfStockAlertsCard({
           {widget.description}
         </p>
 
-        <div className="bg-red-50/60 rounded-lg p-2.5 flex flex-col gap-1 border border-red-100 min-h-[95px] justify-center">
+        <div
+          className={`rounded-lg p-2.5 flex flex-col gap-1 min-h-[95px] justify-center border ${
+            stockoutList.length > 0
+              ? "bg-red-50/60 border-red-100"
+              : "bg-[#fcf8f5] border-[#f3ede6]"
+          }`}
+        >
           {stockoutList.length > 0 ? (
             stockoutList.slice(0, 2).map((item: any, idx: number) => (
               <div

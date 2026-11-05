@@ -34,8 +34,8 @@ export function CashierShiftSummaryWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, (widgetData as any)?.country);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -64,22 +64,22 @@ export function CashierShiftSummaryWidget({
           </span>
         </div>
         <div className="flex justify-between items-baseline">
-          <span className="font-label-sm text-label-sm text-secondary uppercase">Float Cash</span>
-          <span className="font-label-md text-label-md text-on-surface">
-            {summary.floatCash || zeroFormatted}
+          <span className="font-label-sm text-label-sm text-secondary uppercase">Cash Collected</span>
+          <span className="font-label-md text-label-md font-semibold text-on-surface">
+            {summary.cashCollected || zeroFormatted}
           </span>
         </div>
         <div className="pt-space-xs flex justify-between items-baseline border-t border-outline-variant/20">
-          <span className="font-label-sm text-label-sm text-secondary uppercase">Drawer Variance</span>
+          <span className="font-label-sm text-label-sm text-secondary uppercase">Digital & UPI</span>
           <span className="font-label-sm text-label-sm font-semibold text-on-surface bg-surface-container-highest px-space-xs py-0.5 rounded-full">
-            {summary.drawerVariance || `+${zeroFormatted} Balanced`}
+            {summary.digitalCollected || zeroFormatted}
           </span>
         </div>
       </div>
 
       <div className="flex items-center justify-between text-outline text-[11px] pt-space-xs border-t border-outline-variant/10">
-        <span>Drawer Balance</span>
-        <span>Audited</span>
+        <span>Shift Revenue</span>
+        <span>Live Sync</span>
       </div>
     </div>
   );
@@ -103,8 +103,8 @@ export function CashierTotalTransactionsWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, (widgetData as any)?.country);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -166,8 +166,8 @@ export function CashierCashSalesWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, (widgetData as any)?.country);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -236,8 +236,8 @@ export function CashierDigitalSalesWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, (widgetData as any)?.country);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -298,8 +298,8 @@ export function CashierPaymentBreakdownWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, (widgetData as any)?.country);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -324,40 +324,89 @@ export function CashierPaymentBreakdownWidget({
         <div className="w-16 h-16 relative flex items-center justify-center flex-shrink-0">
           <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
             <circle className="text-surface-container-highest" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeWidth="4" />
-            <circle className="text-primary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
-            <circle className="text-secondary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
-            <circle className="text-outline" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
+            {summary.breakdown && summary.breakdown.length > 0 ? (
+              (() => {
+                let accumulated = 0;
+                const strokeColors = ["text-primary", "text-secondary", "text-outline", "text-amber-600", "text-emerald-600"];
+                return summary.breakdown.map((item: any, idx: number) => {
+                  const pct = Math.max(0, Math.min(100, item.percentNum || parseInt(item.percent, 10) || 0));
+                  const offset = accumulated;
+                  accumulated += pct;
+                  if (pct === 0) return null;
+                  return (
+                    <circle
+                      key={idx}
+                      className={strokeColors[idx % strokeColors.length]}
+                      cx="18"
+                      cy="18"
+                      fill="none"
+                      r="14"
+                      stroke="currentColor"
+                      strokeDasharray={`${pct} 100`}
+                      strokeDashoffset={offset === 0 ? "0" : `-${offset}`}
+                      strokeWidth="4"
+                    />
+                  );
+                });
+              })()
+            ) : (
+              <>
+                <circle className="text-primary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
+                <circle className="text-secondary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
+                <circle className="text-outline" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
+              </>
+            )}
           </svg>
           <span className="absolute font-label-sm text-label-sm font-semibold text-on-surface">POS</span>
         </div>
         <div className="flex flex-col gap-0.5 flex-1 min-w-0 text-on-surface-variant">
-          <div className="flex justify-between items-center font-body-sm text-body-sm">
-            <span className="flex items-center gap-1 truncate">
-              <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
-              UPI ({summary.upiPercent || "0%"})
-            </span>
-            <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-              {summary.upiAmount || zeroFormatted}
-            </span>
-          </div>
-          <div className="flex justify-between items-center font-body-sm text-body-sm">
-            <span className="flex items-center gap-1 truncate">
-              <span className="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
-              Cards ({summary.cardsPercent || "0%"})
-            </span>
-            <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-              {summary.cardsAmount || zeroFormatted}
-            </span>
-          </div>
-          <div className="flex justify-between items-center font-body-sm text-body-sm">
-            <span className="flex items-center gap-1 truncate">
-              <span className="w-2 h-2 rounded-full bg-outline flex-shrink-0"></span>
-              Cash ({summary.cashPercent || "0%"})
-            </span>
-            <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-              {summary.cashAmount || zeroFormatted}
-            </span>
-          </div>
+          {summary.breakdown && summary.breakdown.length > 0 ? (
+            summary.breakdown.map((item: any, idx: number) => {
+              const colors = ["bg-primary", "bg-secondary", "bg-outline", "bg-amber-600", "bg-emerald-600"];
+              const color = colors[idx % colors.length];
+              return (
+                <div key={idx} className="flex justify-between items-center font-body-sm text-body-sm">
+                  <span className="flex items-center gap-1 truncate">
+                    <span className={`w-2 h-2 rounded-full ${color} flex-shrink-0`}></span>
+                    {item.name} ({item.percent})
+                  </span>
+                  <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                    {item.amount}
+                  </span>
+                </div>
+              );
+            })
+          ) : (
+            <>
+              <div className="flex justify-between items-center font-body-sm text-body-sm">
+                <span className="flex items-center gap-1 truncate">
+                  <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
+                  UPI ({summary.upiPercent || "0%"})
+                </span>
+                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                  {summary.upiAmount || zeroFormatted}
+                </span>
+              </div>
+              <div className="flex justify-between items-center font-body-sm text-body-sm">
+                <span className="flex items-center gap-1 truncate">
+                  <span className="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
+                  Cards ({summary.cardsPercent || "0%"})
+                </span>
+                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                  {summary.cardsAmount || zeroFormatted}
+                </span>
+              </div>
+              <div className="flex justify-between items-center font-body-sm text-body-sm">
+                <span className="flex items-center gap-1 truncate">
+                  <span className="w-2 h-2 rounded-full bg-outline flex-shrink-0"></span>
+                  Cash ({summary.cashPercent || "0%"})
+                </span>
+                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
+                  {summary.cashAmount || zeroFormatted}
+                </span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -387,8 +436,8 @@ export function CashierRefundSummaryWidget({
   });
 
   const summary = (widgetData as any)?.summary || {};
-  const currencySymbol = (widgetData as any)?.currencySymbol || "$";
-  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = (widgetData as any)?.currencySymbol || "₹";
+  const zeroFormatted = formatPriceWithSymbol(0, currencySymbol, (widgetData as any)?.country);
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -480,9 +529,8 @@ export function CashierTransactionHistoryWidget({
           recentTxns.slice(0, 4).map((txn: any, idx: number) => (
             <div key={idx} className="flex items-center justify-between py-1 font-body-sm text-body-sm border-b border-outline-variant/10 last:border-b-0">
               <span className="font-label-md text-label-md text-on-surface font-semibold">
-                {txn.billNumber}
+                {txn.orderNumber || txn.billNumber}
               </span>
-              <span className="text-on-surface-variant">{txn.location}</span>
               <span className="font-label-md text-label-md text-on-surface font-semibold">
                 {txn.amount}
               </span>

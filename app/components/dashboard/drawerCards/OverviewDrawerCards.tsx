@@ -89,8 +89,8 @@ export const OVERVIEW_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
 
 // Card 1: Net Sales
 export function DrawerOverviewNetSalesCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
-  const currencySymbol = data?.currencySymbol || "$";
-  const displayVal = data?.kpi?.displayValue || formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const displayVal = data?.kpi?.displayValue || formatPriceWithSymbol(0, currencySymbol, data?.country);
   const delta = data?.kpi?.deltaFormatted || "+0.0% vs yesterday";
   const isPos = !delta.includes("-");
   const settledCount = data?.summary?.settledCount ?? 0;
@@ -217,10 +217,10 @@ export function DrawerOverviewTotalOrdersCard({ widget, isPlaced, placement, onA
 
 // Card 3: Average Order Value
 export function DrawerOverviewAovCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
-  const currencySymbol = data?.currencySymbol || "$";
-  const displayVal = data?.kpi?.displayValue || formatPriceWithSymbol(0, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const displayVal = data?.kpi?.displayValue || formatPriceWithSymbol(0, currencySymbol, data?.country);
   const delta = data?.kpi?.deltaFormatted || "+0.0% vs 7d avg";
-  const topTicket = data?.summary?.topTicket || formatPriceWithSymbol(0, currencySymbol);
+  const topTicket = data?.summary?.topTicket || formatPriceWithSymbol(0, currencySymbol, data?.country);
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -408,8 +408,8 @@ export function DrawerOverviewPendingOrdersCard({ widget, isPlaced, placement, o
 
 // Card 6: Sales Trend
 export function DrawerOverviewSalesTrendsCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
-  const currencySymbol = data?.currencySymbol || "$";
-  const peakText = data?.summary?.peakText || `Peak: 8:30 PM (${formatPriceWithSymbol(24800, currencySymbol)})`;
+  const currencySymbol = data?.currencySymbol || "₹";
+  const peakText = data?.summary?.peakText || `Peak: 8:30 PM (${formatPriceWithSymbol(24800, currencySymbol, data?.country)})`;
   const bars: Array<{ label: string; value: number }> = data?.chart?.data || [
     { label: "11a", value: 28 },
     { label: "1p", value: 56 },
@@ -578,8 +578,8 @@ export function DrawerOverviewOrderStatusSummaryCard({ widget, isPlaced, placeme
 
 // Card 8: Business Performance Summary
 export function DrawerOverviewBusinessSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
-  const currencySymbol = data?.currencySymbol || "$";
-  const revPash = data?.summary?.revPash || formatPriceWithSymbol(412, currencySymbol);
+  const currencySymbol = data?.currencySymbol || "₹";
+  const revPash = data?.summary?.revPash || formatPriceWithSymbol(412, currencySymbol, data?.country);
   const foodCost = data?.summary?.foodCost || "28.4%";
   const laborRatio = data?.summary?.laborRatio || "14.2%";
 

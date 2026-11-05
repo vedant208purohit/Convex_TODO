@@ -37,7 +37,7 @@ export const CUSTOMER_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
     title: "Returning Customers",
     type: "KPI",
     typeBadgeBg: "bg-[#ece6e0] text-stone-700",
-    description: "Repeat patrons with 2 or more historical dining visits and active loyalty points balance.",
+    description: "Repeat patrons with 2 or more historical dining visits.",
     defaultWidth: 4,
   },
   {
@@ -51,20 +51,20 @@ export const CUSTOMER_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
   },
   {
     id: "customers_most_frequent",
-    categoryTrack: "VIP Dining Club",
+    categoryTrack: "Top Patrons",
     title: "Most Frequent Customers",
     type: "TABLE",
     typeBadgeBg: "bg-[#ece6e0] text-stone-700",
-    description: "Ranked guest leaderboard by visit frequency, lifetime spend, and table reservation priority.",
+    description: "Ranked customer leaderboard by order frequency and cumulative spend.",
     defaultWidth: 4,
   },
   {
     id: "customers_order_frequency",
-    categoryTrack: "Cohort Velocity",
+    categoryTrack: "Visit Frequency",
     title: "Customer Order Frequency",
     type: "CHART",
     typeBadgeBg: "bg-[#ece6e0] text-stone-700",
-    description: "Distribution of customer visits per month across one-time, occasional, and core regular diners.",
+    description: "Distribution of customer visit counts across one-time, occasional, and frequent diners.",
     defaultWidth: 4,
   },
 ];
@@ -72,10 +72,13 @@ export const CUSTOMER_CATALOG_WIDGETS: OrdersCatalogWidget[] = [
 // 1. Total Customers
 export function DrawerCustomerTotalCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
-  const totalGuests = summary.totalGuests ?? "0";
-  const deltaPercent = summary.deltaPercent ?? "▲ +12.4%";
-  const dineInPercent = summary.dineInPercent ?? 67;
-  const onlinePercent = summary.onlinePercent ?? 33;
+  const totalGuests = summary.totalGuests ?? (data?.kpi?.value != null ? String(data.kpi.value) : "0");
+  const deltaPercent = summary.deltaPercent ?? "+0.0%";
+  const dineInPercent = summary.dineInPercent ?? 0;
+  const secondaryLabel =
+    summary.secondaryChannelLabel ||
+    (summary.takeawayCount > 0 ? "Takeaway" : summary.deliveryCount > 0 ? "Delivery" : summary.onlineCount > 0 ? "Online" : "Takeaway");
+  const secondaryPercent = summary.secondaryChannelPercent ?? summary.onlinePercent ?? 0;
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -104,12 +107,18 @@ export function DrawerCustomerTotalCard({ widget, isPlaced, placement, onAdd, da
             </span>
           </div>
           <div className="w-full bg-stone-200 h-1.5 rounded-full overflow-hidden flex">
-            <div className="bg-black h-full" style={{ width: `${dineInPercent}%` }}></div>
-            <div className="bg-stone-400 h-full" style={{ width: `${onlinePercent}%` }}></div>
+            {dineInPercent + secondaryPercent > 0 ? (
+              <>
+                <div className="bg-black h-full" style={{ width: `${dineInPercent}%` }}></div>
+                <div className="bg-stone-400 h-full" style={{ width: `${secondaryPercent}%` }}></div>
+              </>
+            ) : (
+              <div className="bg-stone-300 h-full w-full opacity-40"></div>
+            )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5">
             <span>Dine-In: {dineInPercent}%</span>
-            <span>Online: {onlinePercent}%</span>
+            <span>{secondaryLabel}: {secondaryPercent}%</span>
           </div>
         </div>
       </div>
@@ -204,9 +213,8 @@ export function DrawerCustomerReturningCard({ widget, isPlaced, placement, onAdd
   const summary = data?.summary || {};
   const retentionPercent = summary.retentionPercent ?? "0%";
   const visitsCount = summary.visitsCount ?? "0 Visits";
-  const currencySymbol = data?.currencySymbol || "$";
-  const redeemedFormatted = summary.redeemedFormatted ?? `${formatPriceWithSymbol(48200, currencySymbol)} redeemed`;
-  const avgFrequency = summary.avgFrequency ?? "3.2x / mo";
+  const redeemedFormatted = summary.redeemedFormatted ?? "0 repeat visitors";
+  const avgFrequency = summary.avgFrequency ?? "0.0x / patron";
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -235,7 +243,7 @@ export function DrawerCustomerReturningCard({ widget, isPlaced, placement, onAdd
             </span>
           </div>
           <div className="flex items-center justify-between px-2 py-1 rounded bg-stone-100 text-[10.5px]">
-            <span className="text-stone-500">Loyalty Redemptions:</span>
+            <span className="text-stone-500">Repeat Visitors:</span>
             <span className="font-semibold text-stone-900">{redeemedFormatted}</span>
           </div>
           <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5">
@@ -293,10 +301,7 @@ export function DrawerCustomerRecentCard({ widget, isPlaced, placement, onAdd, d
             recentGuests.slice(0, 3).map((g: any, idx: number) => (
               <div key={idx} className="p-1 rounded bg-white border border-[#f0eae3] flex items-center justify-between">
                 <div className="flex flex-col min-w-0 pr-1">
-                  <div className="flex items-center gap-1">
-                    <span className="font-bold text-stone-900 text-[11px] truncate">{g.name}</span>
-                    <span className="px-1 py-0.2 rounded bg-amber-100 text-amber-900 text-[8.5px] font-semibold">{g.tier}</span>
-                  </div>
+                  <span className="font-bold text-stone-900 text-[11px] truncate">{g.name}</span>
                   <span className="text-[9.5px] text-stone-400">{g.table} • {g.time}</span>
                 </div>
                 <span className="font-bold text-stone-900 text-[11px] shrink-0">{g.spend}</span>
@@ -359,7 +364,7 @@ export function DrawerCustomerMostFrequentCard({ widget, isPlaced, placement, on
                   </span>
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold text-stone-900 text-[11px] truncate">{g.name}</span>
-                    <span className="text-[9.5px] text-stone-400">{g.visits} • {g.tier}</span>
+                    <span className="text-[9.5px] text-stone-400">{g.visits}</span>
                   </div>
                 </div>
                 <span className="font-bold text-stone-900 text-[11px] shrink-0">{g.spend}</span>
@@ -393,9 +398,9 @@ export function DrawerCustomerMostFrequentCard({ widget, isPlaced, placement, on
 export function DrawerCustomerOrderFrequencyCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const cohorts = summary.cohorts || [
-    { label: "1 Visit / Mo (Discovery)", percent: 38 },
-    { label: "2-3 Visits (Core Regulars)", percent: 44 },
-    { label: "4+ Visits (VIP Club)", percent: 18 },
+    { label: "1 Visit", percent: 0 },
+    { label: "2 - 3 Visits", percent: 0 },
+    { label: "4+ Visits", percent: 0 },
   ];
 
   return (

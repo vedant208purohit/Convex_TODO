@@ -208,7 +208,7 @@ export function OrdersLiveFeedWidget({
                 >
                   <div className="flex items-center gap-1.5 min-w-0 flex-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-stone-900 shrink-0" />
-                    <span className="text-[11px] font-bold text-stone-900 whitespace-nowrap shrink-0">
+                    <span className="text-[11px] font-bold text-stone-900 truncate max-w-[110px] sm:max-w-[130px] shrink-0">
                       {item.title}
                     </span>
                     <span className="text-[11px] text-stone-500 truncate min-w-0">
@@ -467,25 +467,27 @@ export function OrdersHighValueWidget({
             {rows.map((row: any, idx: number) => (
               <div
                 key={idx}
-                className="bg-white rounded-md px-2.5 py-1.5 flex items-center justify-between border border-stone-100 shadow-xs gap-1.5 min-w-0"
+                className="bg-white rounded-md p-2 flex flex-col gap-1 border border-stone-100 shadow-xs min-w-0"
               >
-                <div className="flex flex-col min-w-0 flex-1">
-                  <span className="text-[11px] font-bold text-stone-900 whitespace-nowrap">
+                {/* Line 1: Order # on left, Amount on right - Never Collide */}
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-[11px] font-bold text-stone-900 truncate">
                     {row.orderNumber ||
                       row.orderNum ||
                       row.ticket ||
                       `#ORD-${String(row.id || "").slice(-4)}`}
                   </span>
-                  <span className="text-[10.5px] text-stone-500 truncate">
-                    {row.label || row.customer || "Dine-In"}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[11px] font-bold text-stone-900 font-mono whitespace-nowrap">
+                  <span className="text-[11px] font-bold text-stone-900 font-mono shrink-0 whitespace-nowrap">
                     {row.amount || "₹0.00"}
                   </span>
+                </div>
+                {/* Line 2: Patron / Channel on left, Status badge on right */}
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <span className="text-[10px] text-stone-500 truncate">
+                    {row.label || row.customer || "Dine-In"}
+                  </span>
                   <span
-                    className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap ${row.statusBg || "bg-[#eee8e2] text-stone-800"}`}
+                    className={`text-[9.5px] font-semibold px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap ${row.statusBg || "bg-[#eee8e2] text-stone-800"}`}
                   >
                     {row.status || "Paid"}
                   </span>
@@ -645,25 +647,26 @@ export function OrdersVolumeOverTimeWidget({
   );
 
   let selectedItems = chartData;
-  if (chartData.length > 7) {
+  if (chartData.length > 0) {
     const activeIndices = chartData
       .map((d: any, idx: number) => (Number(d.value) > 0 ? idx : -1))
       .filter((idx: number) => idx !== -1);
+
     if (activeIndices.length > 0) {
-      const minIdx = Math.max(0, Math.min(...activeIndices) - 1);
-      const maxIdx = Math.min(chartData.length, minIdx + 7);
-      const adjustedMin = Math.max(0, maxIdx - 7);
-      selectedItems = chartData.slice(adjustedMin, adjustedMin + 7);
+      const firstActive = Math.min(...activeIndices);
+      const lastActive = Math.max(...activeIndices);
+      let startIdx = Math.max(0, firstActive - 1);
+      let endIdx = Math.min(chartData.length, lastActive + 2);
+      if (endIdx - startIdx < 7) {
+        const needed = 7 - (endIdx - startIdx);
+        startIdx = Math.max(0, startIdx - Math.ceil(needed / 2));
+        endIdx = Math.min(chartData.length, startIdx + 7);
+        startIdx = Math.max(0, endIdx - 7);
+      }
+      selectedItems = chartData.slice(startIdx, endIdx);
     } else {
-      selectedItems = [
-        chartData[1] || chartData[0],
-        chartData[3] || chartData[1],
-        chartData[5] || chartData[2],
-        chartData[7] || chartData[3],
-        chartData[9] || chartData[4],
-        chartData[11] || chartData[5],
-        chartData[13] || chartData[6],
-      ].filter(Boolean);
+      // Default to daytime service window (9a to 5p)
+      selectedItems = chartData.slice(0, 9);
     }
   }
 
