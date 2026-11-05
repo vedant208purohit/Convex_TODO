@@ -409,16 +409,16 @@ export function DrawerOverviewPendingOrdersCard({ widget, isPlaced, placement, o
 // Card 6: Sales Trend
 export function DrawerOverviewSalesTrendsCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const currencySymbol = data?.currencySymbol || "₹";
-  const peakText = data?.summary?.peakText || `Peak: 8:30 PM (${formatPriceWithSymbol(24800, currencySymbol, data?.country)})`;
-  const bars: Array<{ label: string; value: number }> = data?.chart?.data || [
-    { label: "11a", value: 28 },
-    { label: "1p", value: 56 },
-    { label: "3p", value: 20 },
-    { label: "7p", value: 48 },
-    { label: "8p", value: 70 },
-    { label: "9p", value: 52 },
+  const peakText = data?.summary?.peakText || "No sales recorded yet";
+  const bars: Array<{ label: string; value: number }> = data?.chart?.data || data?.summary?.bars || [
+    { label: "11a", value: 0 },
+    { label: "1p", value: 0 },
+    { label: "3p", value: 0 },
+    { label: "5p", value: 0 },
+    { label: "7p", value: 0 },
+    { label: "9p", value: 0 },
   ];
-  const maxVal = Math.max(...bars.map((b) => b.value), 1);
+  const maxVal = Math.max(...bars.map((b) => b.value), 0);
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -449,15 +449,19 @@ export function DrawerOverviewSalesTrendsCard({ widget, isPlaced, placement, onA
 
           <div className="flex items-end justify-between gap-1.5 h-16 pt-2">
             {bars.map((bar, idx) => {
-              const heightPct = Math.round((bar.value / maxVal) * 100);
-              const isPeak = idx === 4 || heightPct === 100;
+              const heightPct = maxVal > 0 ? Math.round((bar.value / maxVal) * 100) : 0;
+              const isPeak = maxVal > 0 && bar.value === maxVal;
               return (
                 <div key={idx} className="flex-1 flex flex-col items-center gap-1 h-full justify-end">
                   <div
                     className={`w-full rounded-t transition-all ${
-                      isPeak ? "bg-stone-900" : "bg-stone-300 hover:bg-stone-400"
+                      isPeak
+                        ? "bg-stone-900"
+                        : heightPct > 0
+                        ? "bg-stone-300 hover:bg-stone-400"
+                        : "bg-stone-200"
                     }`}
-                    style={{ height: `${Math.max(12, heightPct)}%` }}
+                    style={{ height: `${Math.max(6, heightPct)}%` }}
                   />
                   <span className="text-[9px] text-stone-500">{bar.label}</span>
                 </div>
@@ -489,12 +493,11 @@ export function DrawerOverviewSalesTrendsCard({ widget, isPlaced, placement, onA
 
 // Card 7: Order Status Summary
 export function DrawerOverviewOrderStatusSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
-  const chartItems: Array<{ label: string; value: number }> = data?.chart?.data || [];
-  const total = data?.chart?.totalValue ?? data?.kpi?.value ?? 172;
-  const completed = chartItems.find((d) => d.label.toLowerCase().includes("complete"))?.value ?? 96;
-  const billed = chartItems.find((d) => d.label.toLowerCase().includes("bill") || d.label.toLowerCase().includes("paid"))?.value ?? 32;
-  const inPrep = chartItems.find((d) => d.label.toLowerCase().includes("prep") || d.label.toLowerCase().includes("cook"))?.value ?? 18;
-  const newOther = Math.max(0, total - completed - billed - inPrep);
+  const total = data?.summary?.total ?? data?.kpi?.value ?? 0;
+  const completed = data?.summary?.completed ?? 0;
+  const billed = data?.summary?.billed ?? 0;
+  const inPrep = data?.summary?.inPrep ?? 0;
+  const newOther = data?.summary?.newOther ?? Math.max(0, total - completed - billed - inPrep);
 
   const compPct = total > 0 ? (completed / total) * 88 : 0;
   const billedPct = total > 0 ? (billed / total) * 88 : 0;
@@ -525,9 +528,13 @@ export function DrawerOverviewOrderStatusSummaryCard({ widget, isPlaced, placeme
           <div className="relative w-16 h-16 shrink-0 flex items-center justify-center">
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
               <circle className="stroke-stone-200" cx="18" cy="18" fill="none" r="14" strokeWidth="4" />
-              <circle className="stroke-stone-900" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${compPct} 88`} strokeDashoffset="0" strokeWidth="4" />
-              <circle className="stroke-stone-500" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${billedPct} 88`} strokeDashoffset={`-${compPct}`} strokeWidth="4" />
-              <circle className="stroke-stone-400" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${prepPct} 88`} strokeDashoffset={`-${compPct + billedPct}`} strokeWidth="4" />
+              {total > 0 && (
+                <>
+                  <circle className="stroke-stone-900" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${compPct} 88`} strokeDashoffset="0" strokeWidth="4" />
+                  <circle className="stroke-stone-500" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${billedPct} 88`} strokeDashoffset={`-${compPct}`} strokeWidth="4" />
+                  <circle className="stroke-stone-400" cx="18" cy="18" fill="none" r="14" strokeDasharray={`${prepPct} 88`} strokeDashoffset={`-${compPct + billedPct}`} strokeWidth="4" />
+                </>
+              )}
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
               <span className="font-serif text-sm text-stone-900 font-bold leading-none">{total}</span>
@@ -579,9 +586,12 @@ export function DrawerOverviewOrderStatusSummaryCard({ widget, isPlaced, placeme
 // Card 8: Business Performance Summary
 export function DrawerOverviewBusinessSummaryCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const currencySymbol = data?.currencySymbol || "₹";
-  const revPash = data?.summary?.revPash || formatPriceWithSymbol(412, currencySymbol, data?.country);
-  const foodCost = data?.summary?.foodCost || "28.4%";
-  const laborRatio = data?.summary?.laborRatio || "14.2%";
+  const revPash = data?.summary?.revPash || formatPriceWithSymbol(0, currencySymbol, data?.country);
+  const revPashSubtext = data?.summary?.revPashSubtext || "Realized / Seat-Hour";
+  const foodCost = data?.summary?.foodCost || "100%";
+  const foodCostSubtext = data?.summary?.foodCostSubtext || "Net Realization";
+  const laborRatio = data?.summary?.laborRatio || "0.0%";
+  const laborRatioSubtext = data?.summary?.laborRatioSubtext || "Discount Ratio";
 
   return (
     <article className="bg-white rounded-xl p-4 sm:p-4.5 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1] relative group overflow-hidden">
@@ -608,17 +618,17 @@ export function DrawerOverviewBusinessSummaryCard({ widget, isPlaced, placement,
           <div className="flex flex-col p-2 bg-white rounded border border-stone-100">
             <span className="text-[9.5px] text-stone-400 uppercase font-semibold">RevPASH</span>
             <span className="font-serif text-lg text-stone-900 font-normal">{revPash}</span>
-            <span className="text-[9px] text-stone-500 mt-0.5">+4.8% vs bench</span>
+            <span className="text-[9px] text-stone-500 mt-0.5">{revPashSubtext}</span>
           </div>
           <div className="flex flex-col p-2 bg-white rounded border border-stone-100">
-            <span className="text-[9.5px] text-stone-400 uppercase font-semibold">Food Cost</span>
+            <span className="text-[9.5px] text-stone-400 uppercase font-semibold">Net Margin</span>
             <span className="font-serif text-lg text-stone-900 font-normal">{foodCost}</span>
-            <span className="text-[9px] text-stone-500 mt-0.5">Target &lt; 30%</span>
+            <span className="text-[9px] text-stone-500 mt-0.5">{foodCostSubtext}</span>
           </div>
           <div className="flex flex-col p-2 bg-white rounded border border-stone-100">
-            <span className="text-[9.5px] text-stone-400 uppercase font-semibold">Labor Ratio</span>
+            <span className="text-[9.5px] text-stone-400 uppercase font-semibold">Discounts</span>
             <span className="font-serif text-lg text-stone-900 font-normal">{laborRatio}</span>
-            <span className="text-[9px] text-stone-500 mt-0.5">Optimal ceiling</span>
+            <span className="text-[9px] text-stone-500 mt-0.5">{laborRatioSubtext}</span>
           </div>
         </div>
       </div>

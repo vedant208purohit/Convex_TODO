@@ -13,9 +13,13 @@ import {
   OrdersVolumeOverTimeWidget,
 } from "./widgets/OrdersWidgets";
 import {
+  OverviewNetSalesWidget,
+  OverviewTotalOrdersWidget,
   OverviewAovWidget,
   OverviewActiveOrdersWidget,
   OverviewPendingOrdersWidget,
+  OverviewSalesTrendsWidget,
+  OverviewOrderStatusSummaryWidget,
   OverviewBusinessSummaryWidget,
 } from "./widgets/OverviewWidgets";
 import {
@@ -121,20 +125,21 @@ export function DashboardWidgetRenderer({
   };
 
   switch (widgetId) {
-    // Overview & Special
-    case "overview_sales_trends":
+    // Overview (8 Dedicated Widgets)
     case "overview_net_revenue":
-      return <RevenueVelocityWidget {...commonProps} />;
+      return <OverviewNetSalesWidget {...commonProps} />;
     case "overview_total_orders":
-      return <OrdersTotalVolumeWidget {...commonProps} />;
+      return <OverviewTotalOrdersWidget {...commonProps} />;
     case "overview_average_order_value":
       return <OverviewAovWidget {...commonProps} />;
     case "overview_active_orders":
       return <OverviewActiveOrdersWidget {...commonProps} />;
     case "overview_pending_orders":
       return <OverviewPendingOrdersWidget {...commonProps} />;
+    case "overview_sales_trends":
+      return <OverviewSalesTrendsWidget {...commonProps} />;
     case "overview_order_status_distribution":
-      return <OrdersByStatusWidget {...commonProps} />;
+      return <OverviewOrderStatusSummaryWidget {...commonProps} />;
     case "overview_business_summary":
       return <OverviewBusinessSummaryWidget {...commonProps} />;
     case "orders_dinein_occupancy":

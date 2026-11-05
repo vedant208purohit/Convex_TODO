@@ -129,6 +129,7 @@ export interface KpiPayload {
   label?: string;
   deltaPercent?: number; // e.g. +14.2%
   deltaLabel?: string; // vs yesterday, vs last shift
+  deltaFormatted?: string;
   trend?: "up" | "down" | "neutral";
   comparisonPeriod?: string;
   secondaryMetrics?: Array<{ label: string; value: string | number }>;
@@ -150,6 +151,7 @@ export interface ChartPayload {
     data: number[] | ChartSeriesItem[];
   }>;
   data?: Array<{ label: string; value: number; secondaryValue?: number }>;
+  hourlyData?: Array<{ label: string; value: number; secondaryValue?: number }>;
   totalValue?: number | string;
   summaryLabel?: string;
   xAxisLabel?: string;

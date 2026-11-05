@@ -342,7 +342,7 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
           <div className="w-12 h-12 relative flex items-center justify-center shrink-0">
             <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
               <circle className="text-stone-200" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeWidth="4" />
-              {summary.breakdown && summary.breakdown.length > 0 ? (
+              {summary.breakdown && summary.breakdown.length > 0 && (
                 (() => {
                   let accumulated = 0;
                   const strokeColors = ["text-stone-900", "text-stone-600", "text-stone-400", "text-amber-700", "text-emerald-700"];
@@ -367,12 +367,6 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
                     );
                   });
                 })()
-              ) : (
-                <>
-                  <circle className="text-stone-900" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
-                  <circle className="text-stone-500" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
-                  <circle className="text-stone-300" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
-                </>
               )}
             </svg>
             <span className="absolute text-[8px] font-bold text-stone-800">POS</span>
@@ -386,20 +380,9 @@ export function DrawerCashierPaymentBreakdownCard({ widget, isPlaced, placement,
                 </div>
               ))
             ) : (
-              <>
-                <div className="flex justify-between items-center">
-                  <span className="truncate">UPI ({summary.upiPercent || "0%"})</span>
-                  <span className="font-bold text-stone-900">{summary.upiAmount || zeroFormatted}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="truncate">Cards ({summary.cardsPercent || "0%"})</span>
-                  <span className="font-bold text-stone-900">{summary.cardsAmount || zeroFormatted}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="truncate">Cash ({summary.cashPercent || "0%"})</span>
-                  <span className="font-bold text-stone-900">{summary.cashAmount || zeroFormatted}</span>
-                </div>
-              </>
+              <div className="text-center py-2 text-[10px] text-stone-400">
+                No tender records in this period
+              </div>
             )}
           </div>
         </div>

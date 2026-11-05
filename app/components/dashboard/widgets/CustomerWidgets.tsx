@@ -116,10 +116,10 @@ export function CustomerNewWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const newCount = summary.newCount ?? 0;
-  const deltaPercent = summary.deltaPercent ?? "▲ +8.1% vs prev week";
-  const intakeRate = summary.intakeRate ?? "28% of today's total covers";
-  const foliosOpened = summary.foliosOpened ?? "Folios Opened: 24";
-  const fastTrack = summary.fastTrack ?? "Fast-Track QR: 12";
+  const deltaPercent = summary.deltaPercent ?? "+0.0% vs prev period";
+  const intakeRate = summary.intakeRate ?? `${newCount} New Diners`;
+  const foliosOpened = summary.foliosOpened ?? `First Orders: ${newCount}`;
+  const fastTrack = summary.fastTrack ?? `New Patrons: ${newCount}`;
 
   return (
     <div className="flex flex-col justify-between h-full">

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -132,7 +132,7 @@ const MODULE_CATEGORIES: ModuleCategory[] = [
     icon: "table_restaurant",
     count: 7,
     description:
-      "Floor section occupancy, waiter assignment pacing, turnaround times, and VIP covers.",
+      "Floor section occupancy, waiter assignment pacing, turnaround times, and table covers.",
   },
   {
     id: "Queue",
@@ -339,9 +339,17 @@ export function AddWidgetDrawer({
   fromTimestamp,
   toTimestamp,
 }: Props) {
-  // Default directly to Orders so user sees the 6 curated orders widgets right away
-  const [selectedCategory, setSelectedCategory] = useState<string>("Orders");
+  // Default directly to Overview so user sees the 8 curated overview widgets right away
+  const [selectedCategory, setSelectedCategory] = useState<string>("Overview");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Whenever the drawer opens, reset category selection to Overview and clear search
+  useEffect(() => {
+    if (isOpen) {
+      setSelectedCategory("Overview");
+      setSearchQuery("");
+    }
+  }, [isOpen]);
 
   // Query general catalog for other categories
   const catalogQuery = useQuery(

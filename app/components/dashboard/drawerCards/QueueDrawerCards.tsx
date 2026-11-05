@@ -216,9 +216,16 @@ export function DrawerQueueWaitingCustomersCard({ widget, isPlaced, placement, o
 export function DrawerQueueAvgWaitTimeCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const avgWait = summary.avgWaitMins || "0.0";
-  const deltaText = summary.deltaText || "Within Target SLA";
-  const quotedTime = summary.quotedTime || "15–20m";
+  const deltaText = summary.deltaText || "No Active Queue";
+  const quotedTime = summary.quotedTime || "--";
   const target = summary.target || "Target < 20m";
+
+  const deltaBadgeClass =
+    deltaText === "No Active Queue"
+      ? "text-stone-600 bg-stone-100"
+      : deltaText.includes("Within")
+        ? "text-emerald-700 bg-emerald-100/70"
+        : "text-rose-700 bg-rose-100/70";
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -242,14 +249,20 @@ export function DrawerQueueAvgWaitTimeCard({ widget, isPlaced, placement, onAdd,
               <span className="font-serif text-2xl font-bold text-stone-900">{avgWait}</span>
               <span className="text-stone-500 text-xs">mins</span>
             </div>
-            <span className="text-[10px] font-semibold text-rose-700 bg-rose-100/70 px-2 py-0.5 rounded-full">
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${deltaBadgeClass}`}>
               {deltaText}
             </span>
           </div>
           <div className="w-full h-5">
-            <svg className="w-full h-full overflow-visible stroke-stone-800" fill="none" viewBox="0 0 100 20">
-              <path d="M0 15 Q 25 18, 50 8 T 100 10" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-            </svg>
+            {Number(avgWait) > 0 ? (
+              <svg className="w-full h-full overflow-visible stroke-stone-800" fill="none" viewBox="0 0 100 20">
+                <path d="M0 15 Q 25 18, 50 8 T 100 10" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+              </svg>
+            ) : (
+              <svg className="w-full h-full overflow-visible stroke-stone-300" fill="none" viewBox="0 0 100 20">
+                <path d="M0 15 L 100 15" strokeLinecap="round" strokeDasharray="3 3" strokeWidth="1.5" />
+              </svg>
+            )}
           </div>
           <div className="flex items-center justify-between text-[10px] text-stone-500 pt-0.5 border-t border-[#f0eae3]">
             <span>Quoted: {quotedTime}</span>
@@ -455,7 +468,7 @@ export function DrawerQueueWaitTimeAlertsCard({ widget, isPlaced, placement, onA
                 </div>
               </div>
               <div className="text-[9.5px] text-stone-500 pt-0.5 border-t border-rose-200/40">
-                Suggested: {topBreach?.suggestedTable || "Seat Table T-12"}
+                Suggested: {topBreach?.suggestedTable || "Awaiting Table Assignment"}
               </div>
             </div>
           )}

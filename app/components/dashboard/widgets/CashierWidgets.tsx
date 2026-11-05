@@ -324,7 +324,7 @@ export function CashierPaymentBreakdownWidget({
         <div className="w-16 h-16 relative flex items-center justify-center flex-shrink-0">
           <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 36 36">
             <circle className="text-surface-container-highest" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeWidth="4" />
-            {summary.breakdown && summary.breakdown.length > 0 ? (
+            {summary.breakdown && summary.breakdown.length > 0 && (
               (() => {
                 let accumulated = 0;
                 const strokeColors = ["text-primary", "text-secondary", "text-outline", "text-amber-600", "text-emerald-600"];
@@ -349,12 +349,6 @@ export function CashierPaymentBreakdownWidget({
                   );
                 });
               })()
-            ) : (
-              <>
-                <circle className="text-primary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="54 100" strokeDashoffset="0" strokeWidth="4" />
-                <circle className="text-secondary" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="31 100" strokeDashoffset="-54" strokeWidth="4" />
-                <circle className="text-outline" cx="18" cy="18" fill="none" r="14" stroke="currentColor" strokeDasharray="15 100" strokeDashoffset="-85" strokeWidth="4" />
-              </>
             )}
           </svg>
           <span className="absolute font-label-sm text-label-sm font-semibold text-on-surface">POS</span>
@@ -377,35 +371,9 @@ export function CashierPaymentBreakdownWidget({
               );
             })
           ) : (
-            <>
-              <div className="flex justify-between items-center font-body-sm text-body-sm">
-                <span className="flex items-center gap-1 truncate">
-                  <span className="w-2 h-2 rounded-full bg-primary flex-shrink-0"></span>
-                  UPI ({summary.upiPercent || "0%"})
-                </span>
-                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-                  {summary.upiAmount || zeroFormatted}
-                </span>
-              </div>
-              <div className="flex justify-between items-center font-body-sm text-body-sm">
-                <span className="flex items-center gap-1 truncate">
-                  <span className="w-2 h-2 rounded-full bg-secondary flex-shrink-0"></span>
-                  Cards ({summary.cardsPercent || "0%"})
-                </span>
-                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-                  {summary.cardsAmount || zeroFormatted}
-                </span>
-              </div>
-              <div className="flex justify-between items-center font-body-sm text-body-sm">
-                <span className="flex items-center gap-1 truncate">
-                  <span className="w-2 h-2 rounded-full bg-outline flex-shrink-0"></span>
-                  Cash ({summary.cashPercent || "0%"})
-                </span>
-                <span className="font-label-sm text-label-sm font-semibold text-on-surface">
-                  {summary.cashAmount || zeroFormatted}
-                </span>
-              </div>
-            </>
+            <div className="flex flex-col items-center justify-center py-2 text-center text-xs text-stone-400">
+              <span>No transactions recorded</span>
+            </div>
           )}
         </div>
       </div>

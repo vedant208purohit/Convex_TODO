@@ -125,9 +125,9 @@ function reorderWithPlacement(
 }
 
 const WIDGET_DISPLAY_NAMES: Record<string, string> = {
-  overview_sales_trends: "Revenue & Velocity Stream",
+  overview_sales_trends: "Sales Trend",
   overview_net_revenue: "Net Sales",
-  overview_total_orders: "Total Orders Volume",
+  overview_total_orders: "Total Orders",
   overview_average_order_value: "Average Order Value",
   overview_active_orders: "Active Orders",
   overview_pending_orders: "Pending Orders",

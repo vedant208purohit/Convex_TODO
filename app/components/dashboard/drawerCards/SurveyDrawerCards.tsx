@@ -276,6 +276,20 @@ export function DrawerSurveySatisfactionTrendCard({ widget, isPlaced, placement,
   const summary = data?.summary || {};
   const currentRating = summary.currentRating ?? "--";
   const slaTarget = summary.slaTarget ?? "SLA: 4.5+";
+  const chartPoints = summary.chartPoints || [];
+  const hasData = chartPoints.length > 0;
+
+  const svgWidth = 200;
+  const svgHeight = 40;
+  const pts = chartPoints.map((p: any, idx: number) => {
+    const x = chartPoints.length === 1 ? svgWidth / 2 : (idx / (chartPoints.length - 1)) * (svgWidth - 20) + 10;
+    const score = Math.max(1, Math.min(5, Number(p.value) || 3));
+    const y = svgHeight - 6 - ((score - 1) / 4) * (svgHeight - 12);
+    return { x, y, score, label: p.label };
+  });
+  const pathD = pts.length === 1
+    ? `M 0,${pts[0].y} L ${svgWidth},${pts[0].y}`
+    : `M ` + pts.map((p: any) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L ");
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -298,18 +312,36 @@ export function DrawerSurveySatisfactionTrendCard({ widget, isPlaced, placement,
             <span>7-Day Rolling Index</span>
             <span className="text-emerald-700 font-bold">{slaTarget}</span>
           </div>
-          <div className="w-full h-7 relative flex items-end my-1">
-            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 200 50">
-              <line className="text-stone-300" stroke="currentColor" strokeDasharray="2 2" strokeWidth="1" x1="0" x2="200" y1="18" y2="18" />
-              <path d="M0,35 C40,32 80,24 120,25 C160,26 180,12 200,8" fill="none" stroke="currentColor" className="text-stone-900" strokeWidth="2" />
-            </svg>
-          </div>
-          <div className="flex items-center justify-between text-[9px] text-stone-400 border-t border-[#f0eae3] pt-0.5">
-            <span>Mon</span>
-            <span>Wed</span>
-            <span>Fri</span>
-            <span className="font-bold text-stone-900">Sun ({currentRating}★)</span>
-          </div>
+
+          {hasData ? (
+            <>
+              <div className="w-full h-7 relative flex items-end my-1">
+                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
+                  <line className="text-stone-300" stroke="currentColor" strokeDasharray="2 2" strokeWidth="1" x1="0" x2={svgWidth} y1={svgHeight / 2} y2={svgHeight / 2} />
+                  <path d={pathD} fill="none" stroke="currentColor" className="text-stone-900" strokeWidth="2" />
+                  {pts.map((p: any, i: number) => (
+                    <circle key={i} cx={p.x} cy={p.y} r="2.5" className="fill-stone-900" />
+                  ))}
+                </svg>
+              </div>
+              <div className="flex items-center justify-between text-[9px] text-stone-400 border-t border-[#f0eae3] pt-0.5">
+                <span>{pts[0]?.label || "Start"}</span>
+                <span className="font-bold text-stone-900">
+                  {pts[pts.length - 1]?.label} ({currentRating}★)
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="h-7 flex items-center justify-center text-[10.5px] text-stone-400 italic">
+                No rating trend data in this period
+              </div>
+              <div className="flex items-center justify-between text-[9px] text-stone-400 border-t border-[#f0eae3] pt-0.5">
+                <span>Goal: 4.5+</span>
+                <span>Awaiting Submissions</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -369,14 +401,16 @@ export function DrawerSurveyLowRatingAlertsCard({ widget, isPlaced, placement, o
               <div className="flex items-center justify-between">
                 <span className="text-[10.5px] text-rose-800 flex items-center gap-1 font-bold">
                   <span className="material-symbols-outlined text-[13px]">warning</span>
-                  {topAlert?.stars || "2★ Review"}
+                  {topAlert?.stars || "Review"}
                 </span>
-                <span className="text-[9.5px] text-stone-500">{topAlert?.bill || "Bill #8074"}</span>
+                <span className="text-[9.5px] text-stone-500">{topAlert?.bill || topAlert?.table || "Review"}</span>
               </div>
-              <p className="text-[10px] text-stone-800 italic line-clamp-1">{topAlert?.quote || "“Food arrived lukewarm”"}</p>
+              <p className="text-[10px] text-stone-800 italic line-clamp-1">{topAlert?.quote || "Low rating received"}</p>
               <div className="flex items-center justify-between pt-0.5 border-t border-rose-200/40 text-[9px]">
-                <span className="px-1 py-0.2 bg-rose-200 text-rose-900 rounded font-semibold">Callback Requested</span>
-                <span className="text-stone-500">{topAlert?.staff || "Guest Feedback"}</span>
+                <span className="px-1 py-0.2 bg-rose-200 text-rose-900 rounded font-semibold">
+                  {topAlert?.callback ? "Callback Requested" : "Review Logged"}
+                </span>
+                <span className="text-stone-500">{topAlert?.table || topAlert?.time || "Guest Feedback"}</span>
               </div>
             </div>
           )}
@@ -407,7 +441,11 @@ export function DrawerSurveyLowRatingAlertsCard({ widget, isPlaced, placement, o
 export function DrawerSurveyResponseRateCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const conversionPercent = summary.conversionPercent ?? "0%";
+  const rawRate = summary.rawRate ?? 0;
   const benchmark = summary.benchmark ?? "Industry benchmark: 15–20%";
+  const isOptimal = summary.isOptimal ?? false;
+  const status = summary.status ?? (rawRate > 0 ? "Below Target Benchmark" : "Awaiting Submissions");
+  const trendLabel = summary.trendLabel ?? (isOptimal ? "Optimal" : rawRate > 0 ? "Building Pace" : "Awaiting Data");
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">
@@ -431,15 +469,29 @@ export function DrawerSurveyResponseRateCard({ widget, isPlaced, placement, onAd
               <span className="font-serif text-2xl font-bold text-stone-900">{conversionPercent}</span>
               <span className="text-stone-500 text-xs">Rate</span>
             </div>
-            <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
-              Active Trend
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+              isOptimal
+                ? "text-emerald-700 bg-emerald-100/70"
+                : rawRate > 0
+                ? "text-amber-800 bg-amber-100/70"
+                : "text-stone-500 bg-stone-100"
+            }`}>
+              {trendLabel}
             </span>
           </div>
           <div className="flex items-center justify-between px-2 py-1 rounded bg-stone-100 text-[10.5px]">
             <span className="text-stone-600 truncate">{benchmark}</span>
-            <span className="font-bold text-emerald-700 shrink-0">Optimal</span>
+            <span className={`font-bold shrink-0 ${
+              isOptimal
+                ? "text-emerald-700"
+                : rawRate > 0
+                ? "text-amber-700"
+                : "text-stone-400"
+            }`}>
+              {isOptimal ? "Optimal" : rawRate > 0 ? "Pacing" : "No Data"}
+            </span>
           </div>
-          <div className="text-[10px] text-stone-400 pt-0.5">High Guest Engagement</div>
+          <div className="text-[10px] text-stone-500 pt-0.5">{status}</div>
         </div>
       </div>
 

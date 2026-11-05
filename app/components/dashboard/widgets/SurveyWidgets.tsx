@@ -268,6 +268,21 @@ export function SurveySatisfactionTrendWidget({
   const summary = (widgetData as any)?.summary || {};
   const currentRating = summary.currentRating ?? "--";
   const slaTarget = summary.slaTarget ?? "SLA: 4.5+";
+  const chartPoints = summary.chartPoints || [];
+  const hasData = chartPoints.length > 0;
+
+  // Generate dynamic chart path coordinates
+  const svgWidth = 200;
+  const svgHeight = 50;
+  const pts = chartPoints.map((p: any, idx: number) => {
+    const x = chartPoints.length === 1 ? svgWidth / 2 : (idx / (chartPoints.length - 1)) * (svgWidth - 24) + 12;
+    const score = Math.max(1, Math.min(5, Number(p.value) || 3));
+    const y = svgHeight - 8 - ((score - 1) / 4) * (svgHeight - 16);
+    return { x, y, score, label: p.label };
+  });
+  const pathD = pts.length === 1
+    ? `M 0,${pts[0].y} L ${svgWidth},${pts[0].y}`
+    : `M ` + pts.map((p: any) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L ");
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -294,38 +309,51 @@ export function SurveySatisfactionTrendWidget({
           <span className="text-emerald-700 font-semibold">{slaTarget}</span>
         </div>
 
-        <div className="w-full h-12 relative flex items-end my-1">
-          <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 200 65">
-            <line
-              className="text-outline-variant/60"
-              stroke="currentColor"
-              strokeDasharray="3 3"
-              strokeWidth="1"
-              x1="0"
-              x2="200"
-              y1="22"
-              y2="22"
-            />
-            <path
-              d="M0,45 C30,42 60,30 90,32 C120,34 150,15 200,10"
-              fill="none"
-              stroke="currentColor"
-              className="text-primary"
-              strokeWidth="2.5"
-            />
-            <circle cx="200" cy="10" r="3.5" className="fill-primary" />
-          </svg>
-        </div>
+        {hasData ? (
+          <>
+            <div className="w-full h-12 relative flex items-end my-1">
+              <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox={`0 0 ${svgWidth} ${svgHeight}`}>
+                <line
+                  className="text-outline-variant/40"
+                  stroke="currentColor"
+                  strokeDasharray="3 3"
+                  strokeWidth="1"
+                  x1="0"
+                  x2={svgWidth}
+                  y1={svgHeight / 2}
+                  y2={svgHeight / 2}
+                />
+                <path
+                  d={pathD}
+                  fill="none"
+                  stroke="currentColor"
+                  className="text-primary"
+                  strokeWidth="2.5"
+                />
+                {pts.map((p: any, i: number) => (
+                  <circle key={i} cx={p.x} cy={p.y} r="3" className="fill-primary" />
+                ))}
+              </svg>
+            </div>
 
-        <div className="flex items-center justify-between text-[10px] text-secondary border-t border-outline-variant/15 pt-1">
-          <span>Mon</span>
-          <span>Tue</span>
-          <span>Wed</span>
-          <span>Thu</span>
-          <span>Fri</span>
-          <span>Sat</span>
-          <span className="font-bold text-on-surface">Sun ({currentRating}★)</span>
-        </div>
+            <div className="flex items-center justify-between text-[10px] text-secondary border-t border-outline-variant/15 pt-1">
+              <span>{pts[0]?.label || "Start"}</span>
+              <span className="font-bold text-on-surface">
+                {pts[pts.length - 1]?.label} ({currentRating}★)
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="h-12 flex items-center justify-center my-1 text-xs text-secondary italic">
+              No rating trend data in this period
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-secondary border-t border-outline-variant/15 pt-1">
+              <span>Goal: 4.5+</span>
+              <span className="font-medium text-secondary">Awaiting Submissions</span>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex items-center justify-between text-outline text-[11px] pt-space-xs border-t border-outline-variant/10">
@@ -390,18 +418,18 @@ export function SurveyLowRatingAlertsWidget({
             <div className="flex items-center justify-between">
               <span className="text-xs text-rose-800 flex items-center gap-1 font-semibold">
                 <span className="material-symbols-outlined text-[15px]">warning</span>
-                {topAlert?.stars || "2★ Review: Table T-07"}
+                {topAlert?.stars || "Review"}
               </span>
-              <span className="text-[10px] text-secondary">{topAlert?.bill || "Bill #8074"}</span>
+              <span className="text-[10px] text-secondary">{topAlert?.bill || topAlert?.table || "Review"}</span>
             </div>
             <p className="text-xs text-on-surface font-medium italic line-clamp-1 font-serif">
-              {topAlert?.quote || "“Food arrived lukewarm after 35 mins wait.”"}
+              {topAlert?.quote || "Low rating received"}
             </p>
             <div className="flex items-center justify-between pt-1 border-t border-rose-200/40 text-[10px]">
               <span className="px-1.5 py-0.2 bg-rose-200/70 text-rose-900 rounded font-semibold">
-                Callback Requested
+                {topAlert?.callback ? "Callback Requested" : "Review Logged"}
               </span>
-              <span className="text-secondary">{topAlert?.staff || "Guest Feedback"}</span>
+              <span className="text-secondary">{topAlert?.table || topAlert?.time || "Guest Feedback"}</span>
             </div>
           </div>
         )}
@@ -434,8 +462,11 @@ export function SurveyResponseRateWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const conversionPercent = summary.conversionPercent ?? "0%";
+  const rawRate = summary.rawRate ?? 0;
   const benchmark = summary.benchmark ?? "Industry benchmark: 15–20%";
-  const status = summary.status ?? "Active Trend • Above Benchmark";
+  const isOptimal = summary.isOptimal ?? false;
+  const status = summary.status ?? (rawRate > 0 ? "Below Target Benchmark" : "Awaiting Submissions");
+  const trendLabel = summary.trendLabel ?? (isOptimal ? "Optimal" : rawRate > 0 ? "Building Pace" : "Awaiting Data");
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -462,14 +493,28 @@ export function SurveyResponseRateWidget({
             <span className="font-serif text-3xl font-bold text-on-surface">{conversionPercent}</span>
             <span className="text-xs text-secondary font-medium">Conversion</span>
           </div>
-          <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/60 px-2 py-0.5 rounded-full">
-            Active Trend
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+            isOptimal
+              ? "text-emerald-700 bg-emerald-100/60"
+              : rawRate > 0
+              ? "text-amber-800 bg-amber-100/60"
+              : "text-secondary bg-surface-container-highest"
+          }`}>
+            {trendLabel}
           </span>
         </div>
 
         <div className="flex items-center justify-between px-2.5 py-1.5 rounded-DEFAULT bg-surface-container-highest text-[11px]">
           <span className="text-secondary">{benchmark}</span>
-          <span className="font-semibold text-emerald-700">Optimal</span>
+          <span className={`font-semibold ${
+            isOptimal
+              ? "text-emerald-700"
+              : rawRate > 0
+              ? "text-amber-700"
+              : "text-secondary"
+          }`}>
+            {isOptimal ? "Optimal" : rawRate > 0 ? "Pacing" : "No Data"}
+          </span>
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-secondary pt-0.5">

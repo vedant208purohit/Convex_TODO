@@ -147,10 +147,10 @@ export function DrawerCustomerTotalCard({ widget, isPlaced, placement, onAdd, da
 export function DrawerCustomerNewCard({ widget, isPlaced, placement, onAdd, data }: DrawerCardProps) {
   const summary = data?.summary || {};
   const newCount = summary.newCount ?? 0;
-  const deltaPercent = summary.deltaPercent ?? "▲ +8.1% vs prev week";
-  const intakeRate = summary.intakeRate ?? "28% of today's total covers";
-  const foliosOpened = summary.foliosOpened ?? "Folios Opened: 24";
-  const fastTrack = summary.fastTrack ?? "Fast-Track QR: 12";
+  const deltaPercent = summary.deltaPercent ?? "+0.0% vs prev period";
+  const intakeRate = summary.intakeRate ?? `${newCount} New Diners`;
+  const foliosOpened = summary.foliosOpened ?? `First Orders: ${newCount}`;
+  const fastTrack = summary.fastTrack ?? `New Patrons: ${newCount}`;
 
   return (
     <article className="bg-white rounded-xl p-4 flex flex-col justify-between shadow-xs hover:shadow-md transition-shadow duration-300 border border-[#eee7e1]">

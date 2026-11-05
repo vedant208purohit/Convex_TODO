@@ -133,7 +133,11 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       });
       expect(searchResults.length).toBeGreaterThan(0);
       expect(
-        searchResults.some((w) => w.name.toLowerCase().includes("revenue"))
+        searchResults.some(
+          (w) =>
+            w.name.toLowerCase().includes("revenue") ||
+            w.description.toLowerCase().includes("revenue"),
+        ),
       ).toBe(true);
     }, 20000);
 
@@ -1691,6 +1695,198 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
         expect(row.margin).toMatch(/\d+%/);
         expect(row.margin).not.toContain("sold");
       }
+    });
+
+    test("Queue widgets: dynamic calculations, layout indoor/outdoor resolution, short ticket formatting, and turnaround SLA", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithUsers();
+      const now = Date.now();
+
+      // 1. Initial Empty Queue verification
+      const emptyLength = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_length",
+        dateRangePreset: "today",
+      });
+      expect(emptyLength.summary!.partiesCount).toBe("00");
+      expect(emptyLength.summary!.rawCount).toBe(0);
+      expect(emptyLength.summary!.guestsCount).toBe(0);
+      expect(emptyLength.summary!.indoorCount).toBe("00");
+      expect(emptyLength.summary!.outdoorCount).toBe("00");
+      expect(emptyLength.summary!.statusTag).toBe("Nominal Flow");
+
+      const emptyWaitTime = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_avg_wait_time",
+        dateRangePreset: "today",
+      });
+      expect(emptyWaitTime.summary!.avgWaitMins).toBe("0.0");
+      expect(emptyWaitTime.summary!.deltaText).toBe("No Active Queue");
+      expect(emptyWaitTime.summary!.quotedTime).toBe("--");
+
+      const emptyBreakdown = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_status_breakdown",
+        dateRangePreset: "today",
+      });
+      expect(emptyBreakdown.summary!.totalPax).toBe(0);
+      expect(emptyBreakdown.summary!.couplesPercent).toBe(0);
+      expect(emptyBreakdown.summary!.familiesPercent).toBe(0);
+      expect(emptyBreakdown.summary!.largePercent).toBe(0);
+
+      // 2. Setup Layouts & Tables
+      let outdoorLayoutId: any;
+      let indoorLayoutId: any;
+      let table1Id: any;
+      let table2Id: any;
+
+      await t.run(async (ctx) => {
+        outdoorLayoutId = await ctx.db.insert("organizationLayouts", {
+          name: "Outdoor Patio",
+          createdAt: now,
+          updatedAt: now,
+        });
+        indoorLayoutId = await ctx.db.insert("organizationLayouts", {
+          name: "Main Dining Hall",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        table1Id = await ctx.db.insert("organizationTables", {
+          tableNumber: "T1",
+          seatingCapacity: 4,
+          layoutId: indoorLayoutId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        table2Id = await ctx.db.insert("organizationTables", {
+          tableNumber: "T2",
+          seatingCapacity: 6,
+          layoutId: outdoorLayoutId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      // 3. Seed Queue Entries:
+      // Party 1: Active Indoor, 4 pax, arrived 25 mins ago (SLA breach >= 20m)
+      // Party 2: Active Outdoor Patio, 2 pax, arrived 10 mins ago (Couples)
+      // Party 3: Completed Seated, 6 pax, waited 15 mins then completed at Table T1
+      await t.run(async (ctx) => {
+        await ctx.db.insert("organizationQueues", {
+          queueType: "waitlist",
+          queueStatus: "arrived",
+          queueNumber: "05-11-2026.QN001",
+          totalGuests: 4,
+          notes: "Rahul Sharma (+91 9876543210) - High chair requested",
+          layoutId: indoorLayoutId,
+          createdAt: now - 25 * 60 * 1000,
+          updatedAt: now - 25 * 60 * 1000,
+        });
+
+        await ctx.db.insert("organizationQueues", {
+          queueType: "waitlist",
+          queueStatus: "arrived",
+          queueNumber: "05-11-2026.QN002",
+          totalGuests: 2,
+          notes: "Priya Patel (+91 9123456789) - Birthday anniversary",
+          layoutId: outdoorLayoutId,
+          createdAt: now - 10 * 60 * 1000,
+          updatedAt: now - 10 * 60 * 1000,
+        });
+
+        await ctx.db.insert("organizationQueues", {
+          queueType: "waitlist",
+          queueStatus: "completed",
+          queueNumber: "05-11-2026.QN003",
+          totalGuests: 6,
+          notes: "Amit Verma (+91 9988776655)",
+          layoutId: indoorLayoutId,
+          tableId: table1Id,
+          createdAt: now - 30 * 60 * 1000,
+          completionTime: now - 15 * 60 * 1000,
+          updatedAt: now - 15 * 60 * 1000,
+        });
+      });
+
+      // 4. Test Queue Length
+      const qLength = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_length",
+        dateRangePreset: "today",
+      });
+      expect(qLength.summary!.partiesCount).toBe("02");
+      expect(qLength.summary!.rawCount).toBe(2);
+      expect(qLength.summary!.guestsCount).toBe(6); // 4 + 2
+      expect(qLength.summary!.indoorCount).toBe("01"); // Rahul in indoor layout
+      expect(qLength.summary!.outdoorCount).toBe("01"); // Priya in outdoor layout
+
+      // 5. Test Waiting Customers List
+      const qWaiting = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_waiting_customers",
+        dateRangePreset: "today",
+      });
+      expect(qWaiting.summary!.waitingPartiesCount).toBe(2);
+      expect(qWaiting.summary!.waitingList.length).toBe(2);
+      // Clean short ticket formatting
+      expect(qWaiting.summary!.waitingList[0].ticket).toBe("QN001");
+      expect(qWaiting.summary!.waitingList[0].name).toBe("Rahul Sharma");
+      expect(qWaiting.summary!.waitingList[0].pax).toBe("4p");
+      expect(qWaiting.summary!.waitingList[1].ticket).toBe("QN002");
+      expect(qWaiting.summary!.waitingList[1].name).toBe("Priya Patel");
+      expect(qWaiting.summary!.waitingList[1].pax).toBe("2p");
+
+      // 6. Test Average Wait Time
+      // Completed turnaround: 15 mins (30m - 15m)
+      // Active turnarounds: 25 mins and 10 mins
+      // Average: (15 + 25 + 10) / 3 = 16.7 mins <= 20 mins SLA
+      const qWaitTime = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_avg_wait_time",
+        dateRangePreset: "today",
+      });
+      expect(Number(qWaitTime.summary!.avgWaitMins)).toBeGreaterThan(15);
+      expect(qWaitTime.summary!.deltaText).toBe("Within Target SLA");
+      expect(qWaitTime.summary!.quotedTime).toMatch(/\d+m/);
+
+      // 7. Test Recently Called Customers
+      const qCalled = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_recent_callouts",
+        dateRangePreset: "today",
+      });
+      expect(qCalled.summary!.calledList.length).toBeGreaterThanOrEqual(1);
+      const seatedEntry = qCalled.summary!.calledList.find((c: any) => c.ticket === "QN003");
+      expect(seatedEntry).toBeDefined();
+      expect(seatedEntry.name).toBe("Amit Verma");
+      expect(seatedEntry.status).toBe("Seated at Table T1");
+
+      // 8. Test Queue Status Breakdown (Party Mix)
+      // Active parties: QN001 (4p = Families), QN002 (2p = Couples) -> 50% / 50%
+      const qBreakdown = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_status_breakdown",
+        dateRangePreset: "today",
+      });
+      expect(qBreakdown.summary!.totalPax).toBe(6);
+      expect(qBreakdown.summary!.couplesPercent).toBe(50);
+      expect(qBreakdown.summary!.familiesPercent).toBe(50);
+      expect(qBreakdown.summary!.largePercent).toBe(0);
+
+      // 9. Test Queue Wait Time Alerts
+      // QN001 has elapsed 25 mins >= 20 mins SLA threshold
+      const qAlerts = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_wait_time_alerts",
+        dateRangePreset: "today",
+      });
+      expect(qAlerts.alert!.count).toBe(1);
+      expect(qAlerts.alert!.severity).toBe("critical");
+      expect(qAlerts.summary!.breachingParties[0].ticket).toBe("QN001");
+      expect(qAlerts.summary!.breachingParties[0].name).toBe("Rahul Sharma");
+      expect(qAlerts.summary!.breachingParties[0].elapsedMins).toBeGreaterThanOrEqual(24);
+      // Must dynamically suggest an available table (T1 is vacant after party completed), NOT "Seat Table T-12"
+      expect(qAlerts.summary!.breachingParties[0].suggestedTable).toBe("Seat Table T1");
     });
   });
 

@@ -206,9 +206,16 @@ export function QueueAvgWaitTimeWidget({
 
   const summary = (widgetData as any)?.summary || {};
   const avgWait = summary.avgWaitMins || "0.0";
-  const deltaText = summary.deltaText || "Within Target SLA";
-  const quotedTime = summary.quotedTime || "15–20m";
+  const deltaText = summary.deltaText || "No Active Queue";
+  const quotedTime = summary.quotedTime || "--";
   const target = summary.target || "Target < 20m";
+
+  const deltaBadgeClass =
+    deltaText === "No Active Queue"
+      ? "text-secondary bg-surface-container-highest"
+      : deltaText.includes("Within")
+        ? "text-emerald-700 bg-emerald-100/60"
+        : "text-rose-700 bg-rose-100/60";
 
   return (
     <div className="flex flex-col justify-between h-full">
@@ -235,20 +242,31 @@ export function QueueAvgWaitTimeWidget({
             <span className="font-serif text-3xl font-bold text-on-surface">{avgWait}</span>
             <span className="text-xs text-secondary font-medium ml-1.5">mins</span>
           </div>
-          <span className="text-[11px] font-semibold text-rose-700 bg-rose-100/60 px-2 py-0.5 rounded-full">
+          <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${deltaBadgeClass}`}>
             {deltaText}
           </span>
         </div>
 
         <div className="pt-1">
-          <svg className="w-full h-7 overflow-visible stroke-primary" fill="none" viewBox="0 0 100 25">
-            <path
-              d="M0 18 Q 20 22, 40 12 T 70 8 T 100 14"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth="2"
-            />
-          </svg>
+          {Number(avgWait) > 0 ? (
+            <svg className="w-full h-7 overflow-visible stroke-primary" fill="none" viewBox="0 0 100 25">
+              <path
+                d="M0 18 Q 20 22, 40 12 T 70 8 T 100 14"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+              />
+            </svg>
+          ) : (
+            <svg className="w-full h-7 overflow-visible stroke-outline-variant/40" fill="none" viewBox="0 0 100 25">
+              <path
+                d="M0 18 L 100 18"
+                strokeLinecap="round"
+                strokeDasharray="4 4"
+                strokeWidth="1.5"
+              />
+            </svg>
+          )}
         </div>
 
         <div className="flex items-center justify-between text-[11px] text-secondary pt-0.5 border-t border-outline-variant/15">
@@ -525,7 +543,7 @@ export function QueueWaitTimeAlertsWidget({
               </div>
             </div>
             <div className="mt-1 pt-1 border-t border-rose-200/40 text-[10px] text-secondary font-medium">
-              Suggested: {topBreach?.suggestedTable || "Seat Table T-12"}
+              Suggested: {topBreach?.suggestedTable || "Awaiting Table Assignment"}
             </div>
           </div>
         )}

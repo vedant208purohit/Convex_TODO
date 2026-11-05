@@ -362,6 +362,9 @@ export async function provideOverviewNetRevenue(
   }
 
   const delta = computePercentageDelta(currentNetPaise, prevNetPaise);
+  const openCount = currentOrders.filter(
+    (o) => isValidActiveOrCompletedOrder(o) && o.paymentStatus !== "Paid",
+  ).length;
 
   res.kpi = {
     value: currentNetPaise,
@@ -371,9 +374,10 @@ export async function provideOverviewNetRevenue(
       res.currency,
     ),
     unit: res.currency,
-    label: "Net Revenue",
+    label: "Net Sales",
     deltaPercent: delta.deltaPercent,
     deltaLabel: delta.deltaLabel,
+    deltaFormatted: delta.deltaLabel,
     trend: delta.trend,
     comparisonPeriod:
       timeRange.preset === "today" ? "yesterday" : "prior period",
@@ -402,8 +406,23 @@ export async function provideOverviewNetRevenue(
           res.currency,
         ),
       },
-      { label: "Paid Orders", value: currentPaidCount },
+      { label: "Settled", value: currentPaidCount },
+      { label: "Open", value: openCount },
     ],
+  };
+
+  res.summary = {
+    netRevenueFormatted: res.kpi?.displayValue || "",
+    grossSalesFormatted: formatCurrencyPaise(
+      currentGrossPaise,
+      res.currencySymbol,
+      res.currency,
+    ),
+    settledCount: currentPaidCount,
+    openCount,
+    paidCount: currentPaidCount,
+    deltaPercent: delta.deltaPercent,
+    deltaFormatted: delta.deltaLabel,
   };
 
   return res;
@@ -492,6 +511,7 @@ export async function provideOverviewTotalOrders(
     label: "Total Orders",
     deltaPercent: delta.deltaPercent,
     deltaLabel: delta.deltaLabel,
+    deltaFormatted: delta.deltaLabel,
     trend: delta.trend,
     comparisonPeriod: "prior period",
     secondaryMetrics: [
@@ -507,6 +527,11 @@ export async function provideOverviewTotalOrders(
     delivery: deliveryCount,
     digital: takeawayCount + deliveryCount,
     total: validCurrent.length,
+    dineInCount,
+    onlineCount: takeawayCount + deliveryCount,
+    takeawayCount,
+    deliveryCount,
+    deltaFormatted: delta.deltaLabel,
   };
 
   return res;
@@ -571,6 +596,16 @@ export async function provideOverviewAov(
 
   const delta = computePercentageDelta(currentAov, prevAov);
 
+  const topTicketPaise = paidCurrent.reduce(
+    (max, o) => Math.max(max, (o.subTotal || 0) - (o.discountAmount || 0)),
+    0,
+  );
+  const topTicketFormatted = formatCurrencyPaise(
+    topTicketPaise,
+    res.currencySymbol,
+    res.currency,
+  );
+
   res.kpi = {
     value: currentAov,
     displayValue: formatCurrencyPaise(
@@ -581,6 +616,7 @@ export async function provideOverviewAov(
     label: "Average Order Value",
     deltaPercent: delta.deltaPercent,
     deltaLabel: delta.deltaLabel,
+    deltaFormatted: delta.deltaLabel,
     trend: delta.trend,
     secondaryMetrics: [
       { label: "Settled Orders", value: paidCurrent.length },
@@ -589,6 +625,15 @@ export async function provideOverviewAov(
         value: formatCurrencyPaise(prevAov, res.currencySymbol, res.currency),
       },
     ],
+  };
+
+  res.summary = {
+    aov: currentAov,
+    aovFormatted: res.kpi?.displayValue || "",
+    topTicket: topTicketFormatted,
+    topTicketPaise,
+    settledCount: paidCurrent.length,
+    deltaFormatted: delta.deltaLabel,
   };
 
   return res;
@@ -625,25 +670,38 @@ export async function provideOverviewActiveOrders(
   });
 
   const dining = activeOrders.filter((o) =>
-    (o.orderType || "").toLowerCase().includes("dine"),
+    (o.orderType || "").toLowerCase().includes("dine") || o.tableId !== undefined,
   ).length;
   const takeaway = activeOrders.filter((o) =>
-    (o.orderType || "").toLowerCase().includes("take"),
+    (o.orderType || "").toLowerCase().includes("take") || (o.orderType || "").toLowerCase().includes("pickup"),
   ).length;
   const delivery = activeOrders.filter((o) =>
     (o.orderType || "").toLowerCase().includes("deliv"),
   ).length;
 
+  const prep = activeOrders.filter((o) => {
+    const s = (o.orderStatusName || "").toLowerCase();
+    return s.includes("prep") || s.includes("cook") || s.includes("progress") || s.includes("kitchen") || s.includes("accepted");
+  }).length || (activeOrders.length - dining > 0 ? activeOrders.length - dining : 0);
+
   res.kpi = {
     value: activeOrders.length,
     displayValue: `${activeOrders.length} Live`,
-    label: "Active Floor Orders",
+    label: "Active Orders",
     trend: "neutral",
     secondaryMetrics: [
       { label: "Dine-In Tables", value: dining },
       { label: "Takeaway Counter", value: takeaway },
       { label: "Delivery Fleet", value: delivery },
     ],
+  };
+
+  res.summary = {
+    activeCount: activeOrders.length,
+    diningCount: dining,
+    prepCount: prep,
+    takeawayCount: takeaway,
+    deliveryCount: delivery,
   };
 
   return res;
@@ -681,10 +739,20 @@ export async function provideOverviewPendingOrders(
     0,
   );
 
+  const now = Date.now();
+  let oldestWaitMs = 0;
+  if (pending.length > 0) {
+    const oldestCreated = Math.min(...pending.map((o) => o.createdAt));
+    oldestWaitMs = Math.max(0, now - oldestCreated);
+  }
+  const mins = Math.floor(oldestWaitMs / 60000);
+  const secs = Math.floor((oldestWaitMs % 60000) / 1000);
+  const oldestWait = pending.length > 0 ? `${mins}m ${secs.toString().padStart(2, "0")}s` : "0m 00s";
+
   res.kpi = {
     value: pending.length,
     displayValue: `${pending.length} Unpaid`,
-    label: "Pending Settlement Orders",
+    label: "Pending Orders",
     secondaryMetrics: [
       {
         label: "Pending Value",
@@ -696,6 +764,18 @@ export async function provideOverviewPendingOrders(
       },
       { label: "Open Tabs", value: pending.length },
     ],
+  };
+
+  res.summary = {
+    pendingCount: pending.length,
+    pendingAmountPaise: pendingAmount,
+    pendingAmountFormatted: formatCurrencyPaise(
+      pendingAmount,
+      res.currencySymbol,
+      res.currency,
+    ),
+    oldestWait,
+    oldestWaitMs,
   };
 
   return res;
@@ -755,6 +835,53 @@ export async function provideOverviewSalesTrends(
     }
   }
 
+  let peakHour = -1;
+  let peakPaise = 0;
+  for (let h = 0; h < 24; h++) {
+    const label = `${h.toString().padStart(2, "0")}:00`;
+    const b = hourlyBuckets[label];
+    if (b && b.revenuePaise > peakPaise) {
+      peakPaise = b.revenuePaise;
+      peakHour = h;
+    }
+  }
+
+  const peakFormatted = formatCurrencyPaise(
+    peakPaise,
+    res.currencySymbol,
+    res.currency,
+  );
+  const peakTimeStr =
+    peakHour >= 0
+      ? `${peakHour > 12 ? peakHour - 12 : peakHour === 0 ? 12 : peakHour}:00 ${peakHour >= 12 ? "PM" : "AM"}`
+      : "";
+  const peakText =
+    peakPaise > 0
+      ? `Peak: ${peakTimeStr} (${peakFormatted})`
+      : "No sales recorded yet";
+
+  // Representative service windows across the operating day for bar display
+  const serviceWindows = [
+    { label: "11a", start: 10, end: 12 },
+    { label: "1p", start: 12, end: 14 },
+    { label: "3p", start: 14, end: 16 },
+    { label: "5p", start: 16, end: 18 },
+    { label: "7p", start: 18, end: 20 },
+    { label: "9p", start: 20, end: 22 },
+  ];
+
+  const barData = serviceWindows.map((w) => {
+    let windowRevenue = 0;
+    for (let h = w.start; h < w.end; h++) {
+      const hLabel = `${h.toString().padStart(2, "0")}:00`;
+      windowRevenue += (hourlyBuckets[hLabel]?.revenuePaise || 0) / 100;
+    }
+    return {
+      label: w.label,
+      value: Math.round(windowRevenue * 100) / 100,
+    };
+  });
+
   const chartData = Object.entries(hourlyBuckets).map(([label, bucket]) => ({
     label,
     value: bucket.revenuePaise / 100,
@@ -765,9 +892,28 @@ export async function provideOverviewSalesTrends(
     chartType: "area",
     type: "area",
     series: [{ name: "Hourly Revenue", data: chartData }],
-    data: chartData,
+    data: barData,
+    hourlyData: chartData,
     xAxisLabel: "Hour of Day",
     yAxisLabel: `Revenue (${res.currency})`,
+    totalValue: Object.values(hourlyBuckets).reduce(
+      (s, b) => s + b.revenuePaise,
+      0,
+    ),
+  };
+
+  res.summary = {
+    peakText,
+    peakHour,
+    peakTimeStr,
+    peakFormatted,
+    peakRevenuePaise: peakPaise,
+    bars: barData,
+    totalSales: formatCurrencyPaise(
+      Object.values(hourlyBuckets).reduce((s, b) => s + b.revenuePaise, 0),
+      res.currencySymbol,
+      res.currency,
+    ),
   };
 
   return res;
@@ -824,7 +970,27 @@ export async function provideOverviewOrderStatusDistribution(
     };
   }
 
+  let completedCount = 0;
+  let billedCount = 0;
+  let inPrepCount = 0;
+  let newOtherCount = 0;
+
   for (const o of orders) {
+    if (o.isCompleted || (o.orderStatusName || "").toLowerCase().includes("deliver")) {
+      completedCount++;
+    } else if (o.paymentStatus === "Paid") {
+      billedCount++;
+    } else if (
+      (o.orderStatusName || "").toLowerCase().includes("prep") ||
+      (o.orderStatusName || "").toLowerCase().includes("cook") ||
+      (o.orderStatusName || "").toLowerCase().includes("progress") ||
+      (o.orderStatusName || "").toLowerCase().includes("ready")
+    ) {
+      inPrepCount++;
+    } else {
+      newOtherCount++;
+    }
+
     if (o.isRejected) {
       if (!statusCounts["Reject"]) {
         statusCounts["Reject"] = { count: 0, color: "#ef4444" };
@@ -875,9 +1041,20 @@ export async function provideOverviewOrderStatusDistribution(
     secondaryMetrics: statusSeries,
   };
 
-  res.summary = Object.fromEntries(
-    Object.entries(statusCounts).map(([k, v]) => [k, v.count]),
-  );
+  res.summary = {
+    total: orders.length,
+    completed: completedCount,
+    billed: billedCount,
+    inPrep: inPrepCount,
+    newOther: newOtherCount,
+    completedCount,
+    billedCount,
+    inPrepCount,
+    newOtherCount,
+    statusCounts: Object.fromEntries(
+      Object.entries(statusCounts).map(([k, v]) => [k, v.count]),
+    ),
+  };
 
   return res;
 }
@@ -925,40 +1102,79 @@ export async function provideOverviewBusinessSummary(
 
   const aov = paidCount > 0 ? Math.round(netPaise / paidCount) : 0;
 
+  // Real store seating capacity
+  const tables = await ctx.db
+    .query("organizationTables")
+    .filter((q) => q.eq(q.field("deletedAt"), undefined))
+    .collect();
+  const totalSeats = tables.reduce(
+    (sum, t) => sum + (t.seatingCapacity || 4),
+    0,
+  );
+
+  const durationHours = Math.max(
+    1,
+    Math.min(
+      24,
+      Math.round(
+        (Math.min(timeRange.to, Date.now()) - timeRange.from) / 3600000,
+      ) || 12,
+    ),
+  );
+  const availableSeatHours =
+    (totalSeats > 0 ? totalSeats : 20) * durationHours;
+  const revPashPaise =
+    netPaise > 0 ? Math.round(netPaise / availableSeatHours) : 0;
+  const revPash = formatCurrencyPaise(
+    revPashPaise,
+    res.currencySymbol,
+    res.currency,
+  );
+  const revPashSubtext =
+    totalSeats > 0
+      ? `${totalSeats} Seats • ${durationHours}h`
+      : "Direct Counter Service";
+
+  // Realized Net Margin %
+  const marginPct =
+    grossPaise > 0 ? Math.round((netPaise / grossPaise) * 100) : 100;
+  const foodCost = `${marginPct}%`;
+  const foodCostSubtext =
+    grossPaise > 0
+      ? `${formatCurrencyPaise(netPaise, res.currencySymbol, res.currency)} Net`
+      : "100% Realized Net";
+
+  // Discount Ratio %
+  const discountPct =
+    grossPaise > 0 ? ((discountsPaise / grossPaise) * 100).toFixed(1) : "0.0";
+  const laborRatio = `${discountPct}%`;
+  const laborRatioSubtext =
+    discountsPaise > 0
+      ? `${formatCurrencyPaise(discountsPaise, res.currencySymbol, res.currency)} Discs`
+      : "Zero Leakage";
+
   res.summary = {
-    title: "Executive Store Summary",
-    statusBadge: "Operational",
-    items: [
-      {
-        label: "Gross Intake",
-        value: formatCurrencyPaise(
-          grossPaise,
-          res.currencySymbol,
-          res.currency,
-        ),
-      },
-      {
-        label: "Net Revenue",
-        value: formatCurrencyPaise(netPaise, res.currencySymbol, res.currency),
-      },
-      {
-        label: "Discounts Applied",
-        value: formatCurrencyPaise(
-          discountsPaise,
-          res.currencySymbol,
-          res.currency,
-        ),
-      },
-      {
-        label: "Taxes Collected",
-        value: formatCurrencyPaise(taxPaise, res.currencySymbol, res.currency),
-      },
-      { label: "Paid Transactions", value: paidCount },
-      {
-        label: "Average Order Value",
-        value: formatCurrencyPaise(aov, res.currencySymbol, res.currency),
-      },
-    ],
+    title: "Business Performance Summary",
+    revPash,
+    revPashSubtext,
+    foodCost,
+    foodCostSubtext,
+    laborRatio,
+    laborRatioSubtext,
+    grossSales: formatCurrencyPaise(
+      grossPaise,
+      res.currencySymbol,
+      res.currency,
+    ),
+    netSales: formatCurrencyPaise(netPaise, res.currencySymbol, res.currency),
+    discounts: formatCurrencyPaise(
+      discountsPaise,
+      res.currencySymbol,
+      res.currency,
+    ),
+    taxes: formatCurrencyPaise(taxPaise, res.currencySymbol, res.currency),
+    paidTransactions: paidCount,
+    aov: formatCurrencyPaise(aov, res.currencySymbol, res.currency),
   };
 
   return res;
@@ -1012,7 +1228,12 @@ export async function provideOrdersLiveFeed(
       ticket: displayNum,
       tokenNumber: tokenDisplay,
       type: typeLabel,
-      customer: o.customerName || (typeLabel === "Dine-In" ? "Dine-In Guest" : "Guest Customer"),
+      customer:
+        o.customerName && o.customerName.trim().length > 0
+          ? o.customerName.trim()
+          : o.customerPhone && o.customerPhone.trim().length > 0
+            ? o.customerPhone.trim()
+            : "Guest Customer",
       amount: formatCurrencyPaise(
         o.totalAmount || 0,
         res.currencySymbol,
@@ -1120,7 +1341,12 @@ export async function provideOrdersHighValue(
       orderNumber: displayNum,
       orderNum: displayNum,
       ticket: displayNum,
-      customer: o.customerName || (typeLabel === "Dine-In" ? "Dine-In Guest" : "Guest Customer"),
+      customer:
+        o.customerName && o.customerName.trim().length > 0
+          ? o.customerName.trim()
+          : o.customerPhone && o.customerPhone.trim().length > 0
+            ? o.customerPhone.trim()
+            : "Guest Customer",
       label: `${typeLabel} ${displayNum}${o.customerName ? ` • ${o.customerName}` : ""}`,
       channel: typeLabel,
       amount: formatCurrencyPaise(
@@ -2965,14 +3191,32 @@ export async function provideKdsPrepPreferences(
     options.toTimestamp,
   );
 
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const validOrders = orders.filter(
+    (o) =>
+      o.createdAt >= timeRange.from &&
+      o.createdAt <= timeRange.to &&
+      isValidActiveOrCompletedOrder(o) &&
+      !o.isRejected,
+  );
+  const validOrderIds = new Set(validOrders.map((o) => o._id));
+
   const items = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const periodItems = items.filter(
-    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
-  );
+  const periodItems = items.filter((i) => {
+    if (i.orderId && validOrderIds.has(i.orderId)) return true;
+    if (validOrderIds.size === 0 && i.createdAt >= timeRange.from && i.createdAt <= timeRange.to) {
+      return true;
+    }
+    return false;
+  });
 
   const prefCounts: Record<string, number> = {};
   for (const item of periodItems) {
@@ -4961,6 +5205,126 @@ export async function provideCaptainOrderActivity(
 // 10. QUEUE PROVIDERS
 // ==========================================
 
+/**
+ * Helper to parse timestamp from a queue record matching app/queue/page.tsx
+ */
+function parseQueueRecordTimestamp(q: Doc<"organizationQueues">): number {
+  if (q.reservationDate) {
+    if (q.reservationDate.includes("-")) {
+      const parts = q.reservationDate.split("-");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          // YYYY-MM-DD
+          return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+        } else {
+          // DD-MM-YYYY
+          return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+        }
+      }
+    } else if (q.reservationDate.includes("/")) {
+      const parts = q.reservationDate.split("/");
+      if (parts.length === 3) {
+        if (parts[0].length === 4) {
+          // YYYY/MM/DD
+          return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])).getTime();
+        } else {
+          // DD/MM/YYYY
+          return new Date(Number(parts[2]), Number(parts[1]) - 1, Number(parts[0])).getTime();
+        }
+      }
+    }
+  }
+  if (q.reservationTime) return q.reservationTime;
+  return q.createdAt;
+}
+
+/**
+ * Formats full ticket like "05-11-2026.QN001" to clean short ticket "QN001"
+ */
+function formatShortQueueTicket(qNum?: string, fallbackId?: string): string {
+  if (!qNum) return fallbackId ? `#Q-${fallbackId.slice(-2).toUpperCase()}` : "QN001";
+  if (qNum.includes(".")) {
+    const parts = qNum.split(".");
+    return parts[parts.length - 1];
+  }
+  return qNum;
+}
+
+/**
+ * Parses clean guest name from notes formatted as "Name (Phone) - Note"
+ */
+function parseQueueGuestName(notes?: string): string {
+  if (!notes) return "Walk-in Guest";
+  const firstPart = notes.split("-")[0].trim();
+  const match = firstPart.match(/^([^(]+)(?:\(([^)]+)\))?/);
+  if (match && match[1].trim()) {
+    return match[1].trim();
+  }
+  return notes.split("\n")[0].slice(0, 16);
+}
+
+/**
+ * Checks if a queue item is actively waiting right now
+ */
+function isQueueActiveWaiting(q: Doc<"organizationQueues">): boolean {
+  if (q.deletedAt !== undefined) return false;
+  if (
+    q.queueStatus === "completed" ||
+    q.queueStatus.includes("cancel") ||
+    q.queueStatus === "rejected" ||
+    q.queueStatus === "close"
+  ) {
+    return false;
+  }
+  return (
+    q.queueStatus === "arrived" ||
+    q.queueStatus === "pending" ||
+    q.queueStatus === "running_late" ||
+    q.queueStatus === "booked"
+  );
+}
+
+/**
+ * Checks if a queue item is in the requested time window
+ */
+function isQueueInTimeWindow(
+  q: Doc<"organizationQueues">,
+  timeRange: { from: number; to: number },
+  isCurrentDay: boolean
+): boolean {
+  if (q.deletedAt !== undefined) return false;
+  if (isCurrentDay && isQueueActiveWaiting(q)) return true;
+  const ts = parseQueueRecordTimestamp(q);
+  if (ts >= timeRange.from && ts <= timeRange.to) return true;
+  if (q.createdAt >= timeRange.from && q.createdAt <= timeRange.to) return true;
+  if (q.updatedAt >= timeRange.from && q.updatedAt <= timeRange.to) return true;
+  return false;
+}
+
+/**
+ * Checks if a queue item is outdoor based on layout or notes
+ */
+function isQueueOutdoor(
+  q: Doc<"organizationQueues">,
+  layoutMap: Map<Id<"organizationLayouts">, string>
+): boolean {
+  if (q.layoutId && layoutMap.has(q.layoutId)) {
+    const layoutName = (layoutMap.get(q.layoutId) || "").toLowerCase();
+    if (
+      layoutName.includes("outdoor") ||
+      layoutName.includes("patio") ||
+      layoutName.includes("terrace") ||
+      layoutName.includes("garden") ||
+      layoutName.includes("lawn") ||
+      layoutName.includes("balcony")
+    ) {
+      return true;
+    }
+  }
+  const notesLower = (q.notes || "").toLowerCase();
+  return notesLower.includes("patio") || notesLower.includes("outdoor");
+}
+
 export async function provideQueueLength(
   ctx: QueryCtx,
   org: Doc<"organizations">,
@@ -4968,44 +5332,54 @@ export async function provideQueueLength(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
+  const { layoutMap } = await getStoreTableAndLayoutMaps(ctx);
   const queueRecords = await ctx.db.query("organizationQueues").collect();
+
   const waiting = queueRecords.filter(
-    (q) =>
-      (q.queueStatus === "pending" || q.queueStatus === "arrived") &&
-      q.deletedAt === undefined,
+    (q) => isQueueActiveWaiting(q) && isQueueInTimeWindow(q, timeRange, isCurrentDay)
   );
+
   const totalGuests = waiting.reduce((sum, q) => sum + (q.totalGuests || 1), 0);
-  const indoor = waiting.filter(
-    (q) =>
-      !(q.notes || "").toLowerCase().includes("patio") &&
-      !(q.notes || "").toLowerCase().includes("outdoor"),
+  const outdoor = waiting.filter((q) => isQueueOutdoor(q, layoutMap));
+  const indoor = waiting.filter((q) => !isQueueOutdoor(q, layoutMap));
+
+  const partiesCount = waiting.length < 10 ? `0${waiting.length}` : `${waiting.length}`;
+  const indoorCount = indoor.length < 10 ? `0${indoor.length}` : `${indoor.length}`;
+  const outdoorCount = outdoor.length < 10 ? `0${outdoor.length}` : `${outdoor.length}`;
+  const statusTag = waiting.length > 5 ? "High Lobby Congestion" : "Nominal Flow";
+
+  const totalWaitMins = waiting.reduce(
+    (sum, q) => sum + Math.max(0, Math.floor((now - (q.reservationTime || q.createdAt)) / 60000)),
+    0
   );
-  const outdoor = waiting.filter(
-    (q) =>
-      (q.notes || "").toLowerCase().includes("patio") ||
-      (q.notes || "").toLowerCase().includes("outdoor"),
-  );
+  const avgWait = waiting.length > 0 ? Math.round(totalWaitMins / waiting.length) : 0;
 
   res.kpi = {
     value: waiting.length,
-    displayValue: `${waiting.length < 10 ? "0" + waiting.length : waiting.length} Parties`,
+    displayValue: `${partiesCount} Parties`,
     label: "Waiting Parties at Host Stand",
     secondaryMetrics: [
       { label: "Total Waiting Guests", value: `${totalGuests} Guests` },
-      { label: "Est. Wait Duration", value: `${waiting.length * 5} mins` },
+      { label: "Est. Wait Duration", value: waiting.length > 0 ? `${avgWait || waiting.length * 5} mins` : "0 mins" },
     ],
   };
 
   res.summary = {
-    partiesCount:
-      waiting.length < 10 ? `0${waiting.length}` : `${waiting.length}`,
+    partiesCount,
     rawCount: waiting.length,
     guestsCount: totalGuests,
-    indoorCount: indoor.length < 10 ? `0${indoor.length}` : `${indoor.length}`,
-    outdoorCount:
-      outdoor.length < 10 ? `0${outdoor.length}` : `${outdoor.length}`,
-    statusTag: waiting.length > 5 ? "High Lobby Congestion" : "Nominal Flow",
+    indoorCount,
+    outdoorCount,
+    statusTag,
   };
 
   return res;
@@ -5025,49 +5399,48 @@ export async function provideQueueWaitingCustomers(
     options.fromTimestamp,
     options.toTimestamp,
   );
-  const isPastPeriod = timeRange.to < now - 24 * 60 * 60 * 1000;
+  const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
   const queueRecords = await ctx.db.query("organizationQueues").collect();
-  const waiting = isPastPeriod
-    ? []
-    : queueRecords
-        .filter(
-          (q) =>
-            (q.queueStatus === "pending" || q.queueStatus === "arrived") &&
-            q.deletedAt === undefined &&
-            q.createdAt >= timeRange.from &&
-            q.createdAt <= timeRange.to,
-        )
-        .sort((a, b) => a.createdAt - b.createdAt)
-        .slice(0, 10);
+  const waiting = queueRecords
+    .filter((q) => isQueueActiveWaiting(q) && isQueueInTimeWindow(q, timeRange, isCurrentDay))
+    .sort((a, b) => (a.reservationTime || a.createdAt) - (b.reservationTime || b.createdAt))
+    .slice(0, 10);
 
   const waitingList = waiting.map((q) => {
-    const elapsedMinutes = Math.floor((now - q.createdAt) / 60000);
+    const elapsedMinutes = Math.max(0, Math.floor((now - (q.reservationTime || q.createdAt)) / 60000));
+    let status = "Waiting";
+    if (q.queueStatus === "running_late") {
+      status = "Late";
+    } else if (q.queueStatus === "arrived") {
+      status = "In Lobby";
+    } else if (q.queueStatus === "booked") {
+      status = "Booked";
+    } else if (elapsedMinutes > 15) {
+      status = "Paged";
+    }
+
     return {
       id: q._id,
-      ticket: q.queueNumber || `#Q-${q._id.slice(-2).toUpperCase()}`,
-      name: q.notes ? q.notes.split("\n")[0].slice(0, 16) : "Patron Party",
+      ticket: formatShortQueueTicket(q.queueNumber, q._id),
+      name: parseQueueGuestName(q.notes),
       pax: `${q.totalGuests || 2}p`,
       waitMins: `${elapsedMinutes}m`,
-      status:
-        q.queueStatus === "arrived"
-          ? "In Lobby"
-          : elapsedMinutes > 15
-            ? "Paged"
-            : "Waiting",
+      status,
     };
   });
 
+  const totalPax = waiting.reduce((sum, q) => sum + (q.totalGuests || 1), 0);
   const avgWait =
     waiting.length > 0
       ? Math.round(
           waiting.reduce(
-            (sum, q) => sum + Math.floor((now - q.createdAt) / 60000),
-            0,
-          ) / waiting.length,
+            (sum, q) =>
+              sum + Math.max(0, Math.floor((now - (q.reservationTime || q.createdAt)) / 60000)),
+            0
+          ) / waiting.length
         )
       : 0;
-  const totalPax = waiting.reduce((sum, q) => sum + (q.totalGuests || 1), 0);
 
   res.summary = {
     avgWaitTimeMinutes: avgWait,
@@ -5097,37 +5470,69 @@ export async function provideQueueAvgWaitTime(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const queue = await ctx.db.query("organizationQueues").collect();
-  const active = queue.filter(
-    (q) =>
-      (q.queueStatus === "pending" || q.queueStatus === "arrived") &&
-      q.deletedAt === undefined,
-  );
   const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
+  );
+  const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
-  let totalMins = 0;
-  for (const q of active) {
-    totalMins += Math.floor((now - q.createdAt) / 60000);
+  const queue = await ctx.db.query("organizationQueues").collect();
+
+  const periodQueues = queue.filter((q) => isQueueInTimeWindow(q, timeRange, isCurrentDay));
+
+  const completed = periodQueues.filter((q) => q.queueStatus === "completed" && q.deletedAt === undefined);
+  const active = isCurrentDay
+    ? periodQueues.filter((q) => isQueueActiveWaiting(q))
+    : [];
+
+  let totalWaitMinutes = 0;
+  let count = 0;
+
+  for (const q of completed) {
+    const start = q.reservationTime || q.createdAt;
+    const end = q.completionTime || q.updatedAt;
+    if (end >= start) {
+      const waitMins = Math.max(0, Math.floor((end - start) / 60000));
+      totalWaitMinutes += waitMins;
+      count++;
+    }
   }
-  const avg =
-    active.length > 0 ? Math.round((totalMins / active.length) * 10) / 10 : 0;
+
+  for (const q of active) {
+    const start = q.reservationTime || q.createdAt;
+    const waitMins = Math.max(0, Math.floor((now - start) / 60000));
+    totalWaitMinutes += waitMins;
+    count++;
+  }
+
+  const avg = count > 0 ? Math.round((totalWaitMinutes / count) * 10) / 10 : 0;
+  const avgDisplay = avg > 0 ? avg.toFixed(1) : "0.0";
+  const deltaText = count > 0 ? (avg <= 20 ? "Within Target SLA" : "Over Target SLA") : "No Active Queue";
+  const quotedTime = count > 0 ? `${Math.round(avg || 15)}m` : "--";
 
   res.kpi = {
     value: avg,
-    displayValue: `${avg} mins`,
+    displayValue: `${avgDisplay} mins`,
     label: "Average Guest Wait Time",
     trend: avg > 20 ? "down" : "up",
     secondaryMetrics: [
       { label: "Active Waiters", value: active.length },
+      { label: "Completed Turnarounds", value: completed.length },
       { label: "Target Wait SLA", value: "20 mins" },
     ],
   };
 
   res.summary = {
-    avgWaitMins: avg > 0 ? avg.toFixed(1) : "0.0",
-    deltaText: active.length > 0 ? (avg <= 20 ? "Within Target SLA" : "Over Target SLA") : "No Active Queue",
-    quotedTime: active.length > 0 ? `${Math.round(avg || 15)}m` : "--",
+    avgWaitMins: avgDisplay,
+    deltaText,
+    quotedTime,
     target: "Target < 20m",
+    rawCount: count,
+    activeCount: active.length,
+    completedCount: completed.length,
   };
 
   return res;
@@ -5140,49 +5545,57 @@ export async function provideQueueRecentCallouts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const now = Date.now();
   const timeRange = calculateDateRangeBoundaries(
     options.dateRangePreset || "today",
     res.timeZone,
     options.fromTimestamp,
     options.toTimestamp,
   );
+  const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
+
+  const { tableMap } = await getStoreTableAndLayoutMaps(ctx);
   const queue = await ctx.db.query("organizationQueues").collect();
-  const sorted = queue
+
+  const calledOrSeated = queue
     .filter((q) => {
-      const time = q.updatedAt || q.createdAt;
-      if (time < timeRange.from || time > timeRange.to) return false;
+      if (q.deletedAt !== undefined) return false;
+      if (!isQueueInTimeWindow(q, timeRange, isCurrentDay)) return false;
       return (
         q.queueStatus === "completed" ||
         q.queueStatus.includes("cancel") ||
-        q.queueStatus === "arrived"
+        q.queueStatus === "arrived" ||
+        q.queueStatus === "running_late" ||
+        q.queueStatus === "rejected"
       );
     })
     .sort((a, b) => (b.updatedAt || b.createdAt) - (a.updatedAt || a.createdAt))
     .slice(0, 6);
 
-  const tables = await ctx.db
-    .query("organizationTables")
-    .filter((q) => q.eq(q.field("deletedAt"), undefined))
-    .collect();
-  const tableMap = new Map(tables.map((t) => [t._id, t.tableNumber]));
-
-  const calledList = sorted.map((q) => {
+  const calledList = calledOrSeated.map((q) => {
     const timeStr = formatStoreTime(q.updatedAt || q.createdAt, res.timeZone, res.country);
-    let statusText = q.tableId && tableMap.has(q.tableId)
-      ? `Seated at Table ${tableMap.get(q.tableId)}`
-      : "Seated";
+    let statusText = "Seated";
     let statusColor = "text-emerald-700";
+
+    if (q.tableId && tableMap.has(q.tableId)) {
+      statusText = `Seated at Table ${tableMap.get(q.tableId)!.tableNumber}`;
+    }
+
     if (q.queueStatus.includes("cancel") || q.queueStatus === "rejected") {
       statusText = "No-show / Cancelled";
-      statusColor = "text-error";
+      statusColor = "text-rose-600";
+    } else if (q.queueStatus === "running_late") {
+      statusText = "Running Late";
+      statusColor = "text-amber-700";
     } else if (q.queueStatus === "arrived") {
       statusText = "SMS Sent • Paged";
       statusColor = "text-amber-700";
     }
+
     return {
       id: q._id,
-      ticket: q.queueNumber || `#Q-${q._id.slice(-2).toUpperCase()}`,
-      name: q.notes ? q.notes.split("\n")[0].slice(0, 14) : "Patron",
+      ticket: formatShortQueueTicket(q.queueNumber, q._id),
+      name: parseQueueGuestName(q.notes),
       pax: `${q.totalGuests || 2}p`,
       status: statusText,
       statusColor,
@@ -5204,19 +5617,31 @@ export async function provideQueueStatusBreakdown(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
-  const queue = await ctx.db.query("organizationQueues").collect();
-  const active = queue.filter(
-    (q) =>
-      (q.queueStatus === "pending" || q.queueStatus === "arrived") &&
-      q.deletedAt === undefined,
+  const now = Date.now();
+  const timeRange = calculateDateRangeBoundaries(
+    options.dateRangePreset || "today",
+    res.timeZone,
+    options.fromTimestamp,
+    options.toTimestamp,
   );
+  const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
+
+  const queue = await ctx.db.query("organizationQueues").collect();
+
+  const activeWaiting = queue.filter(
+    (q) => isQueueActiveWaiting(q) && isQueueInTimeWindow(q, timeRange, isCurrentDay)
+  );
+
+  const targetParties = activeWaiting.length > 0
+    ? activeWaiting
+    : queue.filter((q) => q.queueStatus === "completed" && isQueueInTimeWindow(q, timeRange, isCurrentDay));
 
   let couples = 0;
   let families = 0;
   let large = 0;
   let totalPax = 0;
 
-  for (const q of active) {
+  for (const q of targetParties) {
     const pax = q.totalGuests || 2;
     totalPax += pax;
     if (pax <= 2) couples++;
@@ -5224,19 +5649,21 @@ export async function provideQueueStatusBreakdown(
     else large++;
   }
 
-  const total = active.length;
+  const total = targetParties.length;
   const couplesPercent = total > 0 ? Math.round((couples / total) * 100) : 0;
   const familiesPercent = total > 0 ? Math.round((families / total) * 100) : 0;
   const largePercent = total > 0 ? Math.max(0, 100 - couplesPercent - familiesPercent) : 0;
 
   res.summary = {
-    totalPax: totalPax > 0 ? totalPax : 0,
-    couplesPercent: total > 0 ? couplesPercent : 0,
-    familiesPercent: total > 0 ? familiesPercent : 0,
-    largePercent: total > 0 ? largePercent : 0,
+    totalPax,
+    couplesPercent,
+    familiesPercent,
+    largePercent,
     couplesCount: couples,
     familiesCount: families,
     largeCount: large,
+    partiesAnalyzed: total,
+    isCurrentActive: activeWaiting.length > 0,
   };
 
   return res;
@@ -5256,28 +5683,44 @@ export async function provideQueueWaitTimeAlerts(
     options.fromTimestamp,
     options.toTimestamp,
   );
-  const isPastPeriod = timeRange.to < now - 24 * 60 * 60 * 1000;
+  const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
+  const { activeTables, tableMap } = await getStoreTableAndLayoutMaps(ctx);
   const queue = await ctx.db.query("organizationQueues").collect();
 
-  const longWaits = isPastPeriod
+  const occupiedTableIds = new Set(
+    queue.filter((q) => q.tableId && isQueueActiveWaiting(q)).map((q) => q.tableId!)
+  );
+  const availableTable = activeTables.find(
+    (t) => !t.isBlock && !t.currentOrderId && !occupiedTableIds.has(t._id)
+  );
+  const suggestedTableText = availableTable
+    ? `Seat Table ${availableTable.tableNumber}`
+    : "Awaiting Table Assignment";
+
+  const longWaits = !isCurrentDay
     ? []
     : queue.filter((q) => {
-        if (q.queueStatus !== "pending" && q.queueStatus !== "arrived")
-          return false;
+        if (!isQueueActiveWaiting(q)) return false;
         if (q.deletedAt !== undefined) return false;
-        return Math.floor((now - q.createdAt) / 60000) >= 20;
+        const elapsed = Math.floor((now - (q.reservationTime || q.createdAt)) / 60000);
+        return elapsed >= 20;
       });
 
   const breachingParties = longWaits.map((q) => {
-    const elapsed = Math.floor((now - q.createdAt) / 60000);
+    const elapsed = Math.floor((now - (q.reservationTime || q.createdAt)) / 60000);
+    let partySuggestedTable = suggestedTableText;
+    if (q.tableId && tableMap.has(q.tableId)) {
+      partySuggestedTable = `Assigned Table ${tableMap.get(q.tableId)!.tableNumber}`;
+    }
+
     return {
-      ticket: q.queueNumber || `#Q-${q._id.slice(-2).toUpperCase()}`,
-      name: q.notes ? q.notes.split("\n")[0].slice(0, 16) : "Patron Party",
+      ticket: formatShortQueueTicket(q.queueNumber, q._id),
+      name: parseQueueGuestName(q.notes),
       pax: `${q.totalGuests || 4} guests`,
       elapsedMins: elapsed,
       targetMins: 20,
-      suggestedTable: "Awaiting Table Assignment",
+      suggestedTable: partySuggestedTable,
     };
   });
 
@@ -5321,14 +5764,32 @@ export async function provideMenuTopSelling(
     options.toTimestamp,
   );
 
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const validOrders = orders.filter(
+    (o) =>
+      o.createdAt >= timeRange.from &&
+      o.createdAt <= timeRange.to &&
+      isValidActiveOrCompletedOrder(o) &&
+      !o.isRejected,
+  );
+  const validOrderIds = new Set(validOrders.map((o) => o._id));
+
   const items = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const periodItems = items.filter(
-    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
-  );
+  const periodItems = items.filter((i) => {
+    if (i.orderId && validOrderIds.has(i.orderId)) return true;
+    if (validOrderIds.size === 0 && i.createdAt >= timeRange.from && i.createdAt <= timeRange.to) {
+      return true;
+    }
+    return false;
+  });
 
   const itemAgg: Record<
     string,
@@ -5389,14 +5850,32 @@ export async function provideMenuMostOrderedCategories(
     options.toTimestamp,
   );
 
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const validOrders = orders.filter(
+    (o) =>
+      o.createdAt >= timeRange.from &&
+      o.createdAt <= timeRange.to &&
+      isValidActiveOrCompletedOrder(o) &&
+      !o.isRejected,
+  );
+  const validOrderIds = new Set(validOrders.map((o) => o._id));
+
   const items = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const periodItems = items.filter(
-    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
-  );
+  const periodItems = items.filter((i) => {
+    if (i.orderId && validOrderIds.has(i.orderId)) return true;
+    if (validOrderIds.size === 0 && i.createdAt >= timeRange.from && i.createdAt <= timeRange.to) {
+      return true;
+    }
+    return false;
+  });
 
   const categories = await ctx.db
     .query("categories")
@@ -6025,14 +6504,32 @@ export async function provideMenuModifierPopularity(
     options.toTimestamp,
   );
 
+  const orders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+
+  const validOrders = orders.filter(
+    (o) =>
+      o.createdAt >= timeRange.from &&
+      o.createdAt <= timeRange.to &&
+      isValidActiveOrCompletedOrder(o) &&
+      !o.isRejected,
+  );
+  const validOrderIds = new Set(validOrders.map((o) => o._id));
+
   const items = await ctx.db
     .query("orderItems")
     .withIndex("by_org", (q) => q.eq("organizationId", org._id))
     .collect();
 
-  const periodItems = items.filter(
-    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
-  );
+  const periodItems = items.filter((i) => {
+    if (i.orderId && validOrderIds.has(i.orderId)) return true;
+    if (validOrderIds.size === 0 && i.createdAt >= timeRange.from && i.createdAt <= timeRange.to) {
+      return true;
+    }
+    return false;
+  });
 
   const customCounts: Record<string, { count: number; pricePaise: number }> =
     {};
@@ -6786,17 +7283,60 @@ export async function provideSurveysResponseCounts(
     options.toTimestamp,
   );
 
-  const attempts = await ctx.db.query("surveyAttempts").collect();
-  const rangeAttempts = attempts.filter(
+  const storeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const storeOrderIds = new Set(storeOrders.map((o) => o._id));
+
+  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const storeAttempts = allAttempts.filter(
+    (a) => !a.orderId || storeOrderIds.has(a.orderId),
+  );
+
+  const rangeAttempts = storeAttempts.filter(
     (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+  );
+  const prevAttempts = storeAttempts.filter(
+    (a) =>
+      a.createdAt >= timeRange.comparisonFrom &&
+      a.createdAt <= timeRange.comparisonTo &&
+      a.published,
   );
 
   const published = rangeAttempts.filter((a) => a.published);
+
+  // Dynamic source breakdown based on actual submission channel
+  let qrCount = 0;
+  let cfdCount = 0;
+  let webCount = 0;
+  for (const a of published) {
+    const src = (a.source || "").toLowerCase();
+    if (src.includes("qr") || src.includes("receipt") || src.includes("table")) {
+      qrCount++;
+    } else if (src.includes("cfd") || src.includes("counter") || src.includes("display")) {
+      cfdCount++;
+    } else {
+      webCount++;
+    }
+  }
+
+  const totalSourceCount = published.length;
+  const qrReceiptPercent =
+    totalSourceCount > 0 ? Math.round((qrCount / totalSourceCount) * 100) : 0;
+  const cfdPercent =
+    totalSourceCount > 0 ? Math.round((cfdCount / totalSourceCount) * 100) : 0;
+  const webPercent = totalSourceCount > 0 ? 100 - qrReceiptPercent - cfdPercent : 0;
+
+  const delta = computePercentageDelta(published.length, prevAttempts.length);
 
   res.kpi = {
     value: published.length,
     displayValue: `${published.length.toLocaleString()} Responses`,
     label: "Survey Feedback Submissions",
+    deltaPercent: delta.deltaPercent,
+    deltaLabel: delta.deltaLabel,
+    trend: delta.trend,
     secondaryMetrics: [
       { label: "Completed Surveys", value: published.length },
       {
@@ -6810,11 +7350,16 @@ export async function provideSurveysResponseCounts(
     totalResponses:
       published.length > 0 ? published.length.toLocaleString() : "0",
     rawCount: published.length,
-    deltaPercent: "+0.0%",
-    qrReceiptPercent: published.length > 0 ? 100 : 0,
-    cfdPercent: 0,
-    qrCount: published.length,
-    cfdCount: 0,
+    deltaPercent:
+      delta.deltaPercent !== undefined
+        ? `${delta.deltaPercent >= 0 ? "▲ +" : "▼ "}${delta.deltaPercent}% vs prev period`
+        : "+0.0%",
+    qrReceiptPercent,
+    cfdPercent,
+    webPercent,
+    qrCount,
+    cfdCount,
+    webCount,
   };
 
   return res;
@@ -6834,9 +7379,25 @@ export async function provideSurveysAverageRating(
     options.toTimestamp,
   );
 
-  const answers = await ctx.db.query("surveyAnswers").collect();
-  const rangeAnswers = answers.filter(
-    (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+  const storeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const storeOrderIds = new Set(storeOrders.map((o) => o._id));
+
+  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const storeAttemptIds = new Set(
+    allAttempts
+      .filter((a) => !a.orderId || storeOrderIds.has(a.orderId))
+      .map((a) => a._id),
+  );
+
+  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const rangeAnswers = allAnswers.filter(
+    (a) =>
+      storeAttemptIds.has(a.attemptId) &&
+      a.createdAt >= timeRange.from &&
+      a.createdAt <= timeRange.to,
   );
 
   const numericRatings = rangeAnswers
@@ -6851,7 +7412,7 @@ export async function provideSurveysAverageRating(
       trend: "neutral",
       secondaryMetrics: [
         { label: "Reviews Logged", value: 0 },
-        { label: "Positive Sentiment", value: "N/A" },
+        { label: "Positive Sentiment", value: "0%" },
       ],
     };
     res.summary = {
@@ -6867,6 +7428,8 @@ export async function provideSurveysAverageRating(
   const avg =
     numericRatings.reduce((sum, v) => sum + v, 0) / numericRatings.length;
   const positiveCount = numericRatings.filter((r) => r >= 4).length;
+  const neutralCount = numericRatings.filter((r) => r === 3).length;
+  const negCount = numericRatings.filter((r) => r <= 2).length;
   const positiveSentiment = `${Math.round((positiveCount / numericRatings.length) * 100)}%`;
 
   res.kpi = {
@@ -6879,9 +7442,6 @@ export async function provideSurveysAverageRating(
       { label: "Positive Sentiment", value: positiveSentiment },
     ],
   };
-
-  const neutralCount = numericRatings.filter((r) => r === 3).length;
-  const negCount = numericRatings.filter((r) => r <= 2).length;
 
   res.summary = {
     avgScore: (Math.round(avg * 100) / 100).toFixed(2),
@@ -6909,24 +7469,51 @@ export async function provideSurveysRecentFeedback(
     options.toTimestamp,
   );
 
-  const answers = await ctx.db.query("surveyAnswers").collect();
-  const rangeAnswers = answers
+  const storeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const storeOrderIds = new Set(storeOrders.map((o) => o._id));
+  const orderMap = new Map(storeOrders.map((o) => [o._id, o]));
+
+  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const storeAttempts = allAttempts.filter(
+    (a) => !a.orderId || storeOrderIds.has(a.orderId),
+  );
+  const attemptMap = new Map(storeAttempts.map((a) => [a._id, a]));
+  const storeAttemptIds = new Set(storeAttempts.map((a) => a._id));
+
+  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const rangeAnswers = allAnswers
     .filter(
-      (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+      (a) =>
+        storeAttemptIds.has(a.attemptId) &&
+        a.createdAt >= timeRange.from &&
+        a.createdAt <= timeRange.to,
     )
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 10);
 
-  const rows = rangeAnswers.map((a) => ({
-    id: a._id,
-    item: a.orderItemName || "Dining Service",
-    score: a.numericValue !== undefined ? `${a.numericValue} ★` : "5.0 ★",
-    feedback:
-      a.answerText ||
-      (a.selectedOptions || []).join(", ") ||
-      "Feedback submitted",
-    time: formatRelativeTime(a.createdAt, now),
-  }));
+  const tables = await ctx.db.query("organizationTables").collect();
+  const tableMap = new Map(tables.map((t) => [t._id, t]));
+
+  const rows = rangeAnswers.map((a) => {
+    const attempt = attemptMap.get(a.attemptId);
+    const order = attempt?.orderId ? orderMap.get(attempt.orderId) : null;
+    const tableLabel = order?.tableId ? `Table ${tableMap.get(order.tableId)?.tableNumber || ""}` : (order?.orderType || "Order");
+    const label = a.orderItemName || tableLabel || "Dining Service";
+    return {
+      id: a._id,
+      item: label,
+      score: a.numericValue !== undefined ? `${a.numericValue} ★` : "5.0 ★",
+      feedback:
+        a.answerText ||
+        (a.selectedOptions || []).join(", ") ||
+        "Feedback submitted",
+      time: formatRelativeTime(a.createdAt, now),
+      orderNumber: order?.orderNumber ? `#${order.orderNumber}` : undefined,
+    };
+  });
 
   res.table = {
     columns: [
@@ -6943,7 +7530,7 @@ export async function provideSurveysRecentFeedback(
     return {
       id: r.id,
       score: r.score,
-      table: "Guest Feedback",
+      table: r.item,
       time: r.time,
       quote: `“${r.feedback}”`,
     };
@@ -6970,9 +7557,25 @@ export async function provideSurveysSatisfactionTrends(
     options.toTimestamp,
   );
 
-  const answers = await ctx.db.query("surveyAnswers").collect();
-  const rangeAnswers = answers.filter(
-    (a) => a.createdAt >= timeRange.from && a.createdAt <= timeRange.to,
+  const storeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const storeOrderIds = new Set(storeOrders.map((o) => o._id));
+
+  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const storeAttemptIds = new Set(
+    allAttempts
+      .filter((a) => !a.orderId || storeOrderIds.has(a.orderId))
+      .map((a) => a._id),
+  );
+
+  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const rangeAnswers = allAnswers.filter(
+    (a) =>
+      storeAttemptIds.has(a.attemptId) &&
+      a.createdAt >= timeRange.from &&
+      a.createdAt <= timeRange.to,
   );
 
   const scoresByDay: Record<string, { sum: number; count: number }> = {};
@@ -6992,12 +7595,11 @@ export async function provideSurveysSatisfactionTrends(
     value: Math.round((b.sum / b.count) * 10) / 10,
   }));
 
-  const trendSeries = chartData;
   res.chart = {
     chartType: "line",
     type: "line",
-    series: [{ name: "Satisfaction Trend", data: trendSeries }],
-    data: trendSeries,
+    series: [{ name: "Satisfaction Trend", data: chartData }],
+    data: chartData,
     xAxisLabel: "Date",
     yAxisLabel: "Score (1-5)",
   };
@@ -7009,6 +7611,7 @@ export async function provideSurveysSatisfactionTrends(
       chartData.length > 0
         ? chartData[chartData.length - 1].value.toFixed(1)
         : "--",
+    chartPoints: chartData,
   };
 
   return res;
@@ -7021,6 +7624,7 @@ export async function provideSurveysLowRatingAlerts(
   options: DataProviderOptions,
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
+  const now = Date.now();
   const timeRange = calculateDateRangeBoundaries(
     options.dateRangePreset || "today",
     res.timeZone,
@@ -7028,9 +7632,24 @@ export async function provideSurveysLowRatingAlerts(
     options.toTimestamp,
   );
 
-  const answers = await ctx.db.query("surveyAnswers").collect();
-  const lowRatings = answers.filter(
+  const storeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const storeOrderIds = new Set(storeOrders.map((o) => o._id));
+  const orderMap = new Map(storeOrders.map((o) => [o._id, o]));
+
+  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const storeAttempts = allAttempts.filter(
+    (a) => !a.orderId || storeOrderIds.has(a.orderId),
+  );
+  const attemptMap = new Map(storeAttempts.map((a) => [a._id, a]));
+  const storeAttemptIds = new Set(storeAttempts.map((a) => a._id));
+
+  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const lowRatings = allAnswers.filter(
     (a) =>
+      storeAttemptIds.has(a.attemptId) &&
       a.createdAt >= timeRange.from &&
       a.createdAt <= timeRange.to &&
       a.numericValue !== undefined &&
@@ -7051,18 +7670,25 @@ export async function provideSurveysLowRatingAlerts(
         : "Guest sentiment is currently positive.",
   };
 
+  const tables = await ctx.db.query("organizationTables").collect();
+  const tableMap = new Map(tables.map((t) => [t._id, t]));
+
   const alerts = lowRatings.map((a) => {
+    const attempt = attemptMap.get(a.attemptId);
+    const order = attempt?.orderId ? orderMap.get(attempt.orderId) : null;
     return {
       id: a._id,
       stars: `${a.numericValue || 2}★ Review`,
-      table: "Guest Review",
-      bill: "Survey Entry",
+      table: order?.tableId
+        ? `Table ${tableMap.get(order.tableId)?.tableNumber || ""}`
+        : (order?.orderType || "Guest Review"),
+      bill: order?.orderNumber ? `Order #${order.orderNumber}` : "Survey Entry",
       quote: a.answerText
         ? `“${a.answerText}”`
         : "Low rating received on guest survey",
       staff: "Direct Feedback",
-      time: "Recent",
-      callback: true,
+      time: formatRelativeTime(a.createdAt, now),
+      callback: Boolean(attempt?.flaggedForMeeting),
     };
   });
 
@@ -7088,37 +7714,51 @@ export async function provideSurveysResponseRates(
     options.toTimestamp,
   );
 
-  const attempts = await ctx.db.query("surveyAttempts").collect();
-  const published = attempts.filter(
+  const storeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .collect();
+  const storeOrderIds = new Set(storeOrders.map((o) => o._id));
+
+  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const storeAttempts = allAttempts.filter(
+    (a) => !a.orderId || storeOrderIds.has(a.orderId),
+  );
+
+  const published = storeAttempts.filter(
     (a) =>
       a.createdAt >= timeRange.from &&
       a.createdAt <= timeRange.to &&
       a.published,
   );
 
-  const orders = await ctx.db
-    .query("orders")
-    .withIndex("by_created_at", (q) =>
-      q
-        .eq("organizationId", org._id)
-        .gte("createdAt", timeRange.from)
-        .lte("createdAt", timeRange.to),
-    )
-    .collect();
+  const periodOrders = storeOrders.filter(
+    (o) => o.createdAt >= timeRange.from && o.createdAt <= timeRange.to,
+  );
 
   const rate =
-    orders.length > 0
-      ? Math.round((published.length / orders.length) * 1000) / 10
+    periodOrders.length > 0
+      ? Math.round((published.length / periodOrders.length) * 1000) / 10
       : 0;
+
+  const isOptimal = rate >= 15;
+  const status =
+    rate >= 15
+      ? "Optimal • Above Benchmark"
+      : rate > 0
+      ? "Below Target Benchmark"
+      : "Awaiting Submissions";
+
+  const trendLabel = rate >= 15 ? "Optimal" : rate > 0 ? "Building Pace" : "Awaiting Data";
 
   res.kpi = {
     value: rate,
     displayValue: `${rate}% Rate`,
     label: "Survey Completion Rate",
-    trend: rate > 15 ? "up" : "neutral",
+    trend: rate >= 15 ? "up" : "neutral",
     secondaryMetrics: [
       { label: "Surveys Answered", value: published.length },
-      { label: "Total Dining Covers", value: orders.length },
+      { label: "Total Dining Covers", value: periodOrders.length },
     ],
   };
 
@@ -7126,8 +7766,9 @@ export async function provideSurveysResponseRates(
     conversionPercent: rate > 0 ? `${rate}%` : "0%",
     rawRate: rate,
     benchmark: "Industry benchmark: 15–20%",
-    status:
-      rate >= 15 ? "Active Trend • Above Benchmark" : "Awaiting Submissions",
+    status,
+    trendLabel,
+    isOptimal,
   };
 
   return res;

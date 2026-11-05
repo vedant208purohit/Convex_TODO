@@ -357,18 +357,24 @@ export default function SurveysCatalogPage() {
                         <span className="text-xs text-stone-500 font-medium">Responses</span>
                       </div>
                       <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
-                        {respSummary.deltaPercent || "▲ +18.2%"}
+                        {respSummary.deltaPercent || "+0.0%"}
                       </span>
                     </div>
 
                     <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden flex">
-                      <div className="bg-black h-full" style={{ width: `${respSummary.qrReceiptPercent ?? 68}%` }}></div>
-                      <div className="bg-stone-400 h-full" style={{ width: `${respSummary.cfdPercent ?? 32}%` }}></div>
+                      {(respSummary.qrReceiptPercent ?? 0) + (respSummary.cfdPercent ?? 0) > 0 ? (
+                        <>
+                          <div className="bg-black h-full" style={{ width: `${respSummary.qrReceiptPercent ?? 0}%` }}></div>
+                          <div className="bg-stone-400 h-full" style={{ width: `${respSummary.cfdPercent ?? 0}%` }}></div>
+                        </>
+                      ) : (
+                        <div className="bg-stone-300 h-full w-full opacity-40"></div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-stone-500 pt-0.5">
-                      <span>QR Receipt: {respSummary.qrReceiptPercent ?? 68}%</span>
-                      <span>CFD Counter: {respSummary.cfdPercent ?? 32}%</span>
+                      <span>QR Receipt: {respSummary.qrReceiptPercent ?? 0}%</span>
+                      <span>CFD Counter: {respSummary.cfdPercent ?? 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -434,15 +440,21 @@ export default function SurveysCatalogPage() {
                     </div>
 
                     <div className="w-full bg-stone-200 h-2 rounded-full overflow-hidden flex">
-                      <div className="bg-emerald-600 h-full" style={{ width: `${rateSummary.positivePercent ?? 92}%` }}></div>
-                      <div className="bg-amber-500 h-full" style={{ width: `${rateSummary.neutralPercent ?? 6}%` }}></div>
-                      <div className="bg-rose-500 h-full" style={{ width: `${rateSummary.negativePercent ?? 2}%` }}></div>
+                      {(rateSummary.positivePercent ?? 0) + (rateSummary.neutralPercent ?? 0) + (rateSummary.negativePercent ?? 0) > 0 ? (
+                        <>
+                          <div className="bg-emerald-600 h-full" style={{ width: `${rateSummary.positivePercent ?? 0}%` }}></div>
+                          <div className="bg-amber-500 h-full" style={{ width: `${rateSummary.neutralPercent ?? 0}%` }}></div>
+                          <div className="bg-rose-500 h-full" style={{ width: `${rateSummary.negativePercent ?? 0}%` }}></div>
+                        </>
+                      ) : (
+                        <div className="bg-stone-300 h-full w-full opacity-40"></div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-stone-500 pt-0.5">
-                      <span className="text-emerald-700 font-medium">Pos: {rateSummary.positivePercent ?? 92}%</span>
-                      <span className="text-amber-700 font-medium">Neu: {rateSummary.neutralPercent ?? 6}%</span>
-                      <span className="text-rose-700 font-medium">Neg: {rateSummary.negativePercent ?? 2}%</span>
+                      <span className="text-emerald-700 font-medium">Pos: {rateSummary.positivePercent ?? 0}%</span>
+                      <span className="text-amber-700 font-medium">Neu: {rateSummary.neutralPercent ?? 0}%</span>
+                      <span className="text-rose-700 font-medium">Neg: {rateSummary.negativePercent ?? 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -564,19 +576,50 @@ export default function SurveysCatalogPage() {
                       <span className="text-emerald-700 font-bold">{trendSummary.slaTarget || "SLA: 4.5+"}</span>
                     </div>
 
-                    <div className="w-full h-8 relative flex items-end my-1">
-                      <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 200 50">
-                        <line className="text-stone-300" stroke="currentColor" strokeDasharray="2 2" strokeWidth="1" x1="0" x2="200" y1="18" y2="18" />
-                        <path d="M0,35 C40,32 80,24 120,25 C160,26 180,12 200,8" fill="none" stroke="currentColor" className="text-stone-900" strokeWidth="2" />
-                      </svg>
-                    </div>
-
-                    <div className="flex items-center justify-between text-[10px] text-stone-400 border-t border-[#f0eae3] pt-1">
-                      <span>Mon</span>
-                      <span>Wed</span>
-                      <span>Fri</span>
-                      <span className="font-bold text-stone-900">Sun ({trendSummary.currentRating || "4.8"}★)</span>
-                    </div>
+                    {(trendSummary.chartPoints || []).length > 0 ? (
+                      <>
+                        <div className="w-full h-8 relative flex items-end my-1">
+                          <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 0 200 40">
+                            <line className="text-stone-300" stroke="currentColor" strokeDasharray="2 2" strokeWidth="1" x1="0" x2="200" y1="20" y2="20" />
+                            {(() => {
+                              const pts = (trendSummary.chartPoints || []).map((p: any, idx: number, arr: any[]) => {
+                                const x = arr.length === 1 ? 100 : (idx / (arr.length - 1)) * 180 + 10;
+                                const score = Math.max(1, Math.min(5, Number(p.value) || 3));
+                                const y = 34 - ((score - 1) / 4) * 28;
+                                return { x, y };
+                              });
+                              const pathD = pts.length === 1
+                                ? `M 0,${pts[0].y} L 200,${pts[0].y}`
+                                : `M ` + pts.map((p: any) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" L ");
+                              return (
+                                <>
+                                  <path d={pathD} fill="none" stroke="currentColor" className="text-stone-900" strokeWidth="2" />
+                                  {pts.map((p: any, i: number) => (
+                                    <circle key={i} cx={p.x} cy={p.y} r="2.5" className="fill-stone-900" />
+                                  ))}
+                                </>
+                              );
+                            })()}
+                          </svg>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-400 border-t border-[#f0eae3] pt-1">
+                          <span>{trendSummary.chartPoints[0]?.label || "Start"}</span>
+                          <span className="font-bold text-stone-900">
+                            {trendSummary.chartPoints[trendSummary.chartPoints.length - 1]?.label} ({trendSummary.currentRating || "--"}★)
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="h-8 flex items-center justify-center text-xs text-stone-400 italic">
+                          No rating trend data in this period
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-400 border-t border-[#f0eae3] pt-1">
+                          <span>Goal: 4.5+</span>
+                          <span>Awaiting Submissions</span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -640,14 +683,16 @@ export default function SurveysCatalogPage() {
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-rose-800 flex items-center gap-1 font-bold">
                             <span className="material-symbols-outlined text-[14px]">warning</span>
-                            {alertSummary.alerts[0]?.stars || "2★ Review"}
+                            {alertSummary.alerts[0]?.stars || "Review"}
                           </span>
-                          <span className="text-[10px] text-stone-500">{alertSummary.alerts[0]?.bill || "Bill #8074"}</span>
+                          <span className="text-[10px] text-stone-500">{alertSummary.alerts[0]?.bill || alertSummary.alerts[0]?.table || "Review"}</span>
                         </div>
-                        <p className="text-xs text-stone-800 italic line-clamp-1">{alertSummary.alerts[0]?.quote || "“Food arrived lukewarm”"}</p>
+                        <p className="text-xs text-stone-800 italic line-clamp-1">{alertSummary.alerts[0]?.quote || "Low rating received"}</p>
                         <div className="flex items-center justify-between pt-1 border-t border-rose-200/40 text-[10px]">
-                          <span className="px-1.5 py-0.2 bg-rose-200 text-rose-900 rounded font-semibold">Callback Requested</span>
-                          <span className="text-stone-500">{alertSummary.alerts[0]?.staff || "Guest Feedback"}</span>
+                          <span className="px-1.5 py-0.2 bg-rose-200 text-rose-900 rounded font-semibold">
+                            {alertSummary.alerts[0]?.callback ? "Callback Requested" : "Review Logged"}
+                          </span>
+                          <span className="text-stone-500">{alertSummary.alerts[0]?.table || alertSummary.alerts[0]?.time || "Guest Feedback"}</span>
                         </div>
                       </div>
                     )}
@@ -708,18 +753,32 @@ export default function SurveysCatalogPage() {
                         </span>
                         <span className="text-xs text-stone-500 font-medium">Rate</span>
                       </div>
-                      <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-full">
-                        Active Trend
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                        convSummary.isOptimal
+                          ? "text-emerald-700 bg-emerald-100/70"
+                          : (convSummary.rawRate ?? 0) > 0
+                          ? "text-amber-800 bg-amber-100/70"
+                          : "text-stone-500 bg-stone-100"
+                      }`}>
+                        {convSummary.trendLabel || ((convSummary.rawRate ?? 0) > 0 ? "Building Pace" : "Awaiting Data")}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between px-2.5 py-1.5 rounded bg-stone-100 text-[11px]">
                       <span className="text-stone-600 truncate">{convSummary.benchmark || "Benchmark: 15–20%"}</span>
-                      <span className="font-bold text-emerald-700 shrink-0">Optimal</span>
+                      <span className={`font-bold shrink-0 ${
+                        convSummary.isOptimal
+                          ? "text-emerald-700"
+                          : (convSummary.rawRate ?? 0) > 0
+                          ? "text-amber-700"
+                          : "text-stone-400"
+                      }`}>
+                        {convSummary.isOptimal ? "Optimal" : (convSummary.rawRate ?? 0) > 0 ? "Pacing" : "No Data"}
+                      </span>
                     </div>
 
                     <div className="text-[11px] text-stone-500 pt-0.5">
-                      <span>{convSummary.status || "Active Trend • Above Benchmark"}</span>
+                      <span>{convSummary.status || "Awaiting Submissions"}</span>
                     </div>
                   </div>
                 </div>

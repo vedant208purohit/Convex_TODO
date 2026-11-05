@@ -85,8 +85,8 @@ export function DashboardAddSlot({
               onClick={() => onQuickAdd("customers_total", 4)}
               className="flex items-center gap-1.5 px-space-md py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface text-label-md font-label-md transition-colors shadow-sm cursor-pointer active:scale-95"
             >
-              <span className="material-symbols-outlined text-[16px]">card_membership</span>
-              <span>+ VIP Loyalty Feeds</span>
+              <span className="material-symbols-outlined text-[16px]">groups</span>
+              <span>+ Total Customers</span>
             </button>
             <button
               type="button"
@@ -102,15 +102,15 @@ export function DashboardAddSlot({
               className="flex items-center gap-1.5 px-space-md py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface text-label-md font-label-md transition-colors shadow-sm cursor-pointer active:scale-95"
             >
               <span className="material-symbols-outlined text-[16px]">payments</span>
-              <span>+ Tender Breakdown (Cash/UPI/Cards)</span>
+              <span>+ Payment Breakdown (Cash/UPI/Cards)</span>
             </button>
             <button
               type="button"
               onClick={() => onQuickAdd("orders_live_feed", 6)}
               className="flex items-center gap-1.5 px-space-md py-1.5 rounded-full bg-surface-container-lowest hover:bg-surface-container text-on-surface text-label-md font-label-md transition-colors shadow-sm cursor-pointer active:scale-95"
             >
-              <span className="material-symbols-outlined text-[16px]">delivery_dining</span>
-              <span>+ Aggregator Dispatch (Swiggy/Zomato)</span>
+              <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+              <span>+ Live Orders Feed</span>
             </button>
           </div>
         </>
