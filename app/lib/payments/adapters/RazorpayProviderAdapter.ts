@@ -91,8 +91,8 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
   }
 
   private getBasicAuth(credentials: PaymentCredentials): string {
-    const keyId = (credentials.keyId || "").trim();
-    const keySecret = (credentials.keySecret || "").trim();
+    const keyId = (credentials.keyId || "").trim().replace(/^['"]|['"]$/g, "");
+    const keySecret = (credentials.keySecret || "").trim().replace(/^['"]|['"]$/g, "");
     return Buffer.from(`${keyId}:${keySecret}`).toString("base64");
   }
 
@@ -164,6 +164,15 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
       }
 
       if (response.status === 401) {
+        let errorDesc = "Invalid Razorpay Key ID or Key Secret.";
+        try {
+          const errData = await response.json();
+          if (errData?.error?.description) {
+            errorDesc = errData.error.description;
+          }
+        } catch {
+          // ignore
+        }
         return {
           success: false,
           verified: false,
@@ -173,7 +182,7 @@ export class RazorpayProviderAdapter implements PaymentProviderAdapter {
           merchantExists: "unknown",
           accountStatus: "unknown",
           code: "INVALID_CREDENTIALS",
-          message: "Invalid Razorpay Key ID or Key Secret.",
+          message: errorDesc,
         };
       }
 

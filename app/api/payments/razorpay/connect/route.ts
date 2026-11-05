@@ -38,9 +38,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { key_id, key_secret } = body || {};
+    const key_id = String(body?.key_id || body?.keyId || "").trim().replace(/^['"]|['"]$/g, "");
+    const key_secret = String(body?.key_secret || body?.keySecret || "").trim().replace(/^['"]|['"]$/g, "");
 
-    if (!key_id || typeof key_id !== "string" || !key_id.trim()) {
+    if (!key_id) {
       return NextResponse.json(
         {
           success: false,
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!key_secret || typeof key_secret !== "string" || !key_secret.trim()) {
+    if (!key_secret) {
       return NextResponse.json(
         {
           success: false,
