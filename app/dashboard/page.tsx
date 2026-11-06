@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
@@ -206,8 +207,16 @@ function getWidgetTitle(widgetId: string): string {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+
+  // Onboarding guard: If organization exists and onboarding is not completed, redirect to /onboarding
+  useEffect(() => {
+    if (activeOrg && activeOrg.onboardingCompleted === false) {
+      router.replace("/onboarding");
+    }
+  }, [activeOrg, router]);
 
   const currentMembership = useQuery(
     api.organizationUsers.getCurrentMembership,

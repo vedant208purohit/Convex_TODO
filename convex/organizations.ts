@@ -2289,3 +2289,102 @@ export const getStorageUrl = query({
     });
   },
 });
+
+export const saveOnboarding = mutation({
+  args: {
+    id: v.id("organizations"),
+    step: v.number(),
+    completed: v.optional(v.boolean()),
+
+    // Step 1: Organisation & Restaurant
+    organizationName: v.optional(v.string()),
+    restaurantName: v.optional(v.string()),
+    businessType: v.optional(v.string()),
+    locationsCount: v.optional(v.string()),
+
+    // Step 2: Location Information & Regional Preferences
+    addressLine1: v.optional(v.string()),
+    suiteUnit: v.optional(v.string()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    zipCode: v.optional(v.string()),
+    country: v.optional(v.string()),
+    phone: v.optional(v.string()),
+    currency: v.optional(v.string()),
+    language: v.optional(v.string()),
+    organizationTimeZone: v.optional(v.string()),
+
+    // Step 3: Operations & Fulfillment
+    isDineIn: v.optional(v.boolean()),
+    isTakeAway: v.optional(v.boolean()),
+    isDelivery: v.optional(v.boolean()),
+    floorModel: v.optional(v.string()),
+    deliveryFleetType: v.optional(v.string()),
+    operatingHoursTemplate: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.id);
+    if (!org || org.deletedAt !== undefined) {
+      throw new Error("Organization not found");
+    }
+
+    const updates: Record<string, any> = {
+      updatedAt: Date.now(),
+      onboardingStep: args.step,
+    };
+
+    if (args.completed !== undefined) {
+      updates.onboardingCompleted = args.completed;
+      if (args.completed) {
+        updates.onboardingCompletedAt = Date.now();
+      }
+    }
+
+    // Step 1 mappings
+    if (args.organizationName && args.organizationName.trim()) {
+      updates.legalEntityName = args.organizationName.trim();
+    }
+    if (args.restaurantName && args.restaurantName.trim()) {
+      updates.name = args.restaurantName.trim();
+    }
+    if (args.businessType) {
+      updates.businessType = args.businessType;
+    }
+    if (args.locationsCount) {
+      updates.locationsCount = args.locationsCount;
+    }
+
+    // Step 2 mappings
+    if (args.addressLine1 !== undefined) updates.addressLine1 = args.addressLine1;
+    if (args.suiteUnit !== undefined) updates.suiteUnit = args.suiteUnit;
+    if (args.city !== undefined) updates.city = args.city;
+    if (args.state !== undefined) updates.state = args.state;
+    if (args.zipCode !== undefined) updates.zipCode = args.zipCode;
+    if (args.country !== undefined) {
+      updates.country = args.country;
+      const curr = getCurrencyForCountry(args.country);
+      updates.defaultCurrency = args.currency || curr.code;
+      updates.defaultCurrencySymbol = curr.symbol;
+    } else if (args.currency) {
+      updates.defaultCurrency = args.currency;
+    }
+    if (args.phone !== undefined) updates.phone = args.phone;
+    if (args.language !== undefined) updates.language = args.language;
+    if (args.organizationTimeZone !== undefined) {
+      updates.organizationTimeZone = args.organizationTimeZone;
+    }
+
+    // Step 3 mappings
+    if (args.isDineIn !== undefined) updates.isDineIn = args.isDineIn;
+    if (args.isTakeAway !== undefined) updates.isTakeAway = args.isTakeAway;
+    if (args.isDelivery !== undefined) updates.isDelivery = args.isDelivery;
+    if (args.floorModel !== undefined) updates.floorModel = args.floorModel;
+    if (args.deliveryFleetType !== undefined) updates.deliveryFleetType = args.deliveryFleetType;
+    if (args.operatingHoursTemplate !== undefined) {
+      updates.operatingHoursTemplate = args.operatingHoursTemplate;
+    }
+
+    await ctx.db.patch(args.id, updates);
+    return { success: true, onboardingCompleted: updates.onboardingCompleted ?? org.onboardingCompleted ?? false };
+  },
+});
