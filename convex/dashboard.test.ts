@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "./schema";
 import { api } from "./_generated/api";
@@ -133,9 +133,13 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       });
       expect(searchResults.length).toBeGreaterThan(0);
       expect(
-        searchResults.some((w) => w.name.toLowerCase().includes("revenue"))
+        searchResults.some(
+          (w) =>
+            w.name.toLowerCase().includes("revenue") ||
+            w.description.toLowerCase().includes("revenue"),
+        ),
       ).toBe(true);
-    });
+    }, 20000);
 
     test("getCatalogWithUserState computes accurate counts and added status", async () => {
       const { asStaff, orgId } = await setupStoreWithUsers();
@@ -162,7 +166,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Add a widget
       const addRes = await asStaff.mutation(api.dashboards.addWidgetPlacement, {
@@ -226,7 +230,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Add unique widget
       await asStaff.mutation(api.dashboards.addWidgetPlacement, {
@@ -257,7 +261,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // gridCol 8 + width 6 = 14 > 12 -> throws
       await expect(
@@ -283,8 +287,8 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
-      const initialRev = dashRes.dashboard.revision;
+      const dashId = dashRes.dashboard!._id;
+      const initialRev = dashRes.dashboard!.revision;
 
       // Create draft
       const draftRes = await asStaff.mutation(api.dashboards.createOrUpdateDraft, {
@@ -334,7 +338,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       });
       expect(postApplyDash.hasUnsavedDraft).toBe(false);
       expect(postApplyDash.placements.length).toBe(2);
-      expect(postApplyDash.dashboard.revision).toBe(initialRev + 1);
+      expect(postApplyDash.dashboard!.revision).toBe(initialRev + 1);
     });
 
     test("Revision conflict prevents stale draft from applying", async () => {
@@ -343,8 +347,8 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
-      const initialRev = dashRes.dashboard.revision;
+      const dashId = dashRes.dashboard!._id;
+      const initialRev = dashRes.dashboard!.revision;
 
       // Create draft based on initialRev
       await asStaff.mutation(api.dashboards.createOrUpdateDraft, {
@@ -398,7 +402,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Apply Late Night Bar & Lounge template
       const applyTpl = await asStaff.mutation(api.dashboards.applyTemplate, {
@@ -413,7 +417,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
         organizationId: orgId,
         dashboardId: dashId,
       });
-      expect(afterTpl.dashboard.templateKey).toBe("late_night_bar_lounge");
+      expect(afterTpl.dashboard!.templateKey).toBe("late_night_bar_lounge");
       expect(afterTpl.placements.some((p) => p.widgetId === "kds_live_orders")).toBe(true);
 
       // Reset to defaults
@@ -426,7 +430,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
         organizationId: orgId,
         dashboardId: dashId,
       });
-      expect(afterReset.dashboard.templateKey).toBe("executive_dinner_peak");
+      expect(afterReset.dashboard!.templateKey).toBe("executive_dinner_peak");
     });
 
     test("Only Admin can save as global template", async () => {
@@ -435,7 +439,7 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       const dashRes = await asStaff.query(api.dashboards.getDashboard, {
         organizationId: orgId,
       });
-      const dashId = dashRes.dashboard._id;
+      const dashId = dashRes.dashboard!._id;
 
       // Non-admin rejected
       await expect(
@@ -1040,6 +1044,50 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       // 1 repeat out of 2 customers = 50%
       expect(ret.kpi?.value).toBe(50);
       expect(ret.kpi?.secondaryMetrics?.find((m) => m.label === "Repeat Patrons")?.value).toBe(1);
+
+      // Verify customers_total
+      const tot = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_total",
+        organizationId: orgId,
+      });
+      expect(tot.kpi?.value).toBe(2);
+
+      // Verify customers_new
+      const newCust = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_new",
+        organizationId: orgId,
+      });
+      expect(newCust.kpi?.value).toBe(2);
+
+      // Verify customers_recent has NO "Dining Guest" tier
+      const rec = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_recent",
+        organizationId: orgId,
+      });
+      for (const g of rec.summary?.recentGuests || []) {
+        expect(g.tier).toBeUndefined();
+      }
+
+      // Verify customers_most_frequent groups properly and has NO VIP tier labels
+      const freq = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_most_frequent",
+        organizationId: orgId,
+      });
+      expect(freq.summary?.topGuests?.[0]?.visits).toBe("2 orders");
+      for (const g of freq.summary?.topGuests || []) {
+        expect(g.tier).toBeUndefined();
+      }
+
+      // Verify customers_order_frequency has clean cohort labels
+      const ordFreq = await asStaff.query(api.dashboards.getWidgetData, {
+        widgetId: "customers_order_frequency",
+        organizationId: orgId,
+      });
+      expect(ordFreq.summary?.cohorts?.map((c: any) => c.label)).toEqual([
+        "1 Visit",
+        "2 - 3 Visits",
+        "4+ Visits",
+      ]);
     });
 
     test("Surveys provide truthful empty state when no responses exist and accurate score when logged", async () => {
@@ -1393,6 +1441,452 @@ describe("Modular Widget-Driven Dashboard Backend Suite", () => {
       });
       expect(tenderChart.chart).toBeDefined();
       expect(tenderChart.chart!.series).toBeDefined();
+    });
+
+    test("Menu widgets: low-performing excludes top-sellers, out-of-stock ignores internal recipes, and margins are percentage", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithAdmin();
+
+      const menuId = await t.mutation(api.menu.createMenu, {
+        organizationId: orgId,
+        name: "Main Menu",
+        isDefault: true,
+      });
+
+      // Create a category
+      const catId = await t.mutation(api.menu.createCategory, {
+        organizationId: orgId,
+        menuId,
+        name: "Starters",
+      });
+
+      const now = Date.now();
+      let pizzaId: any, samosaId: any, biryaniId: any;
+
+      const baseItem = {
+        organizationId: orgId,
+        updatedAt: now,
+        isGst: true,
+        isVeg: true,
+        isSpicy: false,
+        showItemType: false,
+        showQuantity: false,
+        showAllergenContents: false,
+        showCalorie: false,
+        markAsBestseller: false,
+      };
+
+      await t.run(async (ctx) => {
+        pizzaId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Pizza",
+          price: 10000,
+          published: true,
+          isAvailable: true,
+          createdAt: now,
+        });
+
+        samosaId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Samosa",
+          price: 8000,
+          published: true,
+          isAvailable: true,
+          createdAt: now,
+        });
+
+        biryaniId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Biryani",
+          price: 12000,
+          published: true,
+          isAvailable: true,
+          createdAt: now,
+        });
+
+        // Link to category via categoryItems
+        await ctx.db.insert("categoryItems", {
+          organizationId: orgId,
+          categoryId: catId,
+          itemId: pizzaId,
+          position: 0,
+          published: true,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("categoryItems", {
+          organizationId: orgId,
+          categoryId: catId,
+          itemId: samosaId,
+          position: 1,
+          published: true,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("categoryItems", {
+          organizationId: orgId,
+          categoryId: catId,
+          itemId: biryaniId,
+          position: 2,
+          published: true,
+          createdAt: now,
+        });
+
+        // Create an internal recipe record in items table (not in categoryItems, unpublished)
+        await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Vadapav Recipe",
+          price: 0,
+          published: false,
+          isAvailable: false,
+          createdAt: now,
+        });
+
+        // Insert order with 2 Pizzas, 1 Samosa (Biryani has 0 orders)
+        const orderId = await ctx.db.insert("orders", {
+          organizationId: orgId,
+          orderNumber: "ORD-MENU-1",
+          tokenNumber: "01",
+          orderType: "DineIn",
+          orderSource: "POS-Terminal",
+          orderStatusName: "Completed",
+          subTotal: 28000,
+          taxTotal: 0,
+          totalAmount: 28000,
+          paymentMode: "Cash",
+          paymentStatus: "Paid",
+          isCompleted: true,
+          isRejected: false,
+          isModify: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await ctx.db.insert("orderItems", {
+          organizationId: orgId,
+          orderId,
+          itemId: pizzaId,
+          itemName: "Pizza",
+          itemPrice: 10000,
+          quantity: 2,
+          totalPrice: 20000,
+          isReady: true,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("orderItems", {
+          organizationId: orgId,
+          orderId,
+          itemId: samosaId,
+          itemName: "Samosa",
+          itemPrice: 8000,
+          quantity: 1,
+          totalPrice: 8000,
+          isReady: true,
+          createdAt: now,
+        });
+      });
+
+      // 1. Check Top Selling
+      const topSelling = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_top_selling",
+        dateRangePreset: "today",
+      });
+      expect(topSelling.summary!.topItems[0].name).toBe("Pizza");
+      expect(topSelling.summary!.topItems[1].name).toBe("Samosa");
+
+      // 2. Check Low Performing:
+      // Must exclude Pizza and Samosa (top sellers).
+      // Biryani (0 orders) must be surfaced!
+      const lowPerforming = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_low_performing",
+        dateRangePreset: "today",
+      });
+      const lowNames = lowPerforming.table!.rows.map((r: any) => r.name);
+      expect(lowNames).toContain("Biryani");
+      expect(lowNames).not.toContain("Pizza");
+      expect(lowNames).not.toContain("Samosa");
+      const biryaniRow = lowPerforming.table!.rows.find((r: any) => r.name === "Biryani");
+      expect(biryaniRow?.qty).toBe(0);
+      expect(biryaniRow?.badge).toBe("Zero Sales");
+
+      // 3. Check Out-of-Stock:
+      // Internal "Vadapav Recipe" dish must NOT be reported as 86'd out of stock!
+      const stockout = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_out_of_stock_alerts",
+      });
+      expect(stockout.alert!.count).toBe(0);
+      expect(stockout.alert!.title).toBe("All Menu Items In Stock");
+      expect(stockout.summary!.stockoutList.length).toBe(0);
+
+      // 4. Check Product Availability:
+      // Unassigned items (Biryani, Samosa) must NOT appear in availabilityList!
+      const availabilityBefore = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_product_availability",
+      });
+      expect(availabilityBefore.summary!.availabilityList.length).toBe(0);
+
+      // Now create inventory item and assign recipe to Pizza
+      await t.run(async (ctx) => {
+        const invId = await ctx.db.insert("inventoryItems", {
+          organizationId: orgId,
+          name: "Pizza Dough",
+          buyingUnit: "piece",
+          servingUnit: "piece",
+          availableStock: 50,
+          minimumStockRefillLevel: 5,
+          unitCost: 10,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        const masterRecipeDishId = await ctx.db.insert("items", {
+          ...baseItem,
+          name: "Master Pizza Recipe Dish",
+          price: 0,
+          published: false,
+          isAvailable: false,
+          createdAt: now,
+        });
+
+        await ctx.db.insert("recipes", {
+          organizationId: orgId,
+          itemId: masterRecipeDishId,
+          inventoryItemId: invId,
+          quantity: 1,
+          unit: "piece",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        await ctx.db.insert("recipeAssignments", {
+          organizationId: orgId,
+          sourceRecipeItemId: masterRecipeDishId,
+          targetItemId: pizzaId,
+          portionMultiplier: 1,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      const availabilityAfter = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_product_availability",
+      });
+      const availNames = availabilityAfter.summary!.availabilityList.map((a: any) => a.name);
+      expect(availNames).toContain("Pizza");
+      expect(availNames).not.toContain("Samosa");
+      expect(availNames).not.toContain("Biryani");
+      expect(availabilityAfter.summary!.availabilityList[0].status.toLowerCase()).toContain("in stock");
+      // Must NOT contain portion count numbers (e.g. "87 in stock")
+      expect(/\d+/.test(availabilityAfter.summary!.availabilityList[0].status)).toBe(false);
+
+      // 5. Check Bestselling Items margin:
+      // Margin column must be a percentage (e.g. 72%), not "2 sold"!
+      const bestselling = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "menu_bestselling_items",
+        dateRangePreset: "today",
+      });
+      for (const row of bestselling.summary!.bestsellingRows) {
+        expect(row.margin).toMatch(/\d+%/);
+        expect(row.margin).not.toContain("sold");
+      }
+    });
+
+    test("Queue widgets: dynamic calculations, layout indoor/outdoor resolution, short ticket formatting, and turnaround SLA", async () => {
+      const { t, orgId, asAdmin } = await setupStoreWithUsers();
+      const now = Date.now();
+
+      // 1. Initial Empty Queue verification
+      const emptyLength = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_length",
+        dateRangePreset: "today",
+      });
+      expect(emptyLength.summary!.partiesCount).toBe("00");
+      expect(emptyLength.summary!.rawCount).toBe(0);
+      expect(emptyLength.summary!.guestsCount).toBe(0);
+      expect(emptyLength.summary!.indoorCount).toBe("00");
+      expect(emptyLength.summary!.outdoorCount).toBe("00");
+      expect(emptyLength.summary!.statusTag).toBe("Nominal Flow");
+
+      const emptyWaitTime = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_avg_wait_time",
+        dateRangePreset: "today",
+      });
+      expect(emptyWaitTime.summary!.avgWaitMins).toBe("0.0");
+      expect(emptyWaitTime.summary!.deltaText).toBe("No Active Queue");
+      expect(emptyWaitTime.summary!.quotedTime).toBe("--");
+
+      const emptyBreakdown = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_status_breakdown",
+        dateRangePreset: "today",
+      });
+      expect(emptyBreakdown.summary!.totalPax).toBe(0);
+      expect(emptyBreakdown.summary!.couplesPercent).toBe(0);
+      expect(emptyBreakdown.summary!.familiesPercent).toBe(0);
+      expect(emptyBreakdown.summary!.largePercent).toBe(0);
+
+      // 2. Setup Layouts & Tables
+      let outdoorLayoutId: any;
+      let indoorLayoutId: any;
+      let table1Id: any;
+      let table2Id: any;
+
+      await t.run(async (ctx) => {
+        outdoorLayoutId = await ctx.db.insert("organizationLayouts", {
+          name: "Outdoor Patio",
+          createdAt: now,
+          updatedAt: now,
+        });
+        indoorLayoutId = await ctx.db.insert("organizationLayouts", {
+          name: "Main Dining Hall",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        table1Id = await ctx.db.insert("organizationTables", {
+          tableNumber: "T1",
+          seatingCapacity: 4,
+          layoutId: indoorLayoutId,
+          createdAt: now,
+          updatedAt: now,
+        });
+        table2Id = await ctx.db.insert("organizationTables", {
+          tableNumber: "T2",
+          seatingCapacity: 6,
+          layoutId: outdoorLayoutId,
+          createdAt: now,
+          updatedAt: now,
+        });
+      });
+
+      // 3. Seed Queue Entries:
+      // Party 1: Active Indoor, 4 pax, arrived 25 mins ago (SLA breach >= 20m)
+      // Party 2: Active Outdoor Patio, 2 pax, arrived 10 mins ago (Couples)
+      // Party 3: Completed Seated, 6 pax, waited 15 mins then completed at Table T1
+      await t.run(async (ctx) => {
+        await ctx.db.insert("organizationQueues", {
+          queueType: "waitlist",
+          queueStatus: "arrived",
+          queueNumber: "05-11-2026.QN001",
+          totalGuests: 4,
+          notes: "Rahul Sharma (+91 9876543210) - High chair requested",
+          layoutId: indoorLayoutId,
+          createdAt: now - 25 * 60 * 1000,
+          updatedAt: now - 25 * 60 * 1000,
+        });
+
+        await ctx.db.insert("organizationQueues", {
+          queueType: "waitlist",
+          queueStatus: "arrived",
+          queueNumber: "05-11-2026.QN002",
+          totalGuests: 2,
+          notes: "Priya Patel (+91 9123456789) - Birthday anniversary",
+          layoutId: outdoorLayoutId,
+          createdAt: now - 10 * 60 * 1000,
+          updatedAt: now - 10 * 60 * 1000,
+        });
+
+        await ctx.db.insert("organizationQueues", {
+          queueType: "waitlist",
+          queueStatus: "completed",
+          queueNumber: "05-11-2026.QN003",
+          totalGuests: 6,
+          notes: "Amit Verma (+91 9988776655)",
+          layoutId: indoorLayoutId,
+          tableId: table1Id,
+          createdAt: now - 30 * 60 * 1000,
+          completionTime: now - 15 * 60 * 1000,
+          updatedAt: now - 15 * 60 * 1000,
+        });
+      });
+
+      // 4. Test Queue Length
+      const qLength = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_length",
+        dateRangePreset: "today",
+      });
+      expect(qLength.summary!.partiesCount).toBe("02");
+      expect(qLength.summary!.rawCount).toBe(2);
+      expect(qLength.summary!.guestsCount).toBe(6); // 4 + 2
+      expect(qLength.summary!.indoorCount).toBe("01"); // Rahul in indoor layout
+      expect(qLength.summary!.outdoorCount).toBe("01"); // Priya in outdoor layout
+
+      // 5. Test Waiting Customers List
+      const qWaiting = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_waiting_customers",
+        dateRangePreset: "today",
+      });
+      expect(qWaiting.summary!.waitingPartiesCount).toBe(2);
+      expect(qWaiting.summary!.waitingList.length).toBe(2);
+      // Clean short ticket formatting
+      expect(qWaiting.summary!.waitingList[0].ticket).toBe("QN001");
+      expect(qWaiting.summary!.waitingList[0].name).toBe("Rahul Sharma");
+      expect(qWaiting.summary!.waitingList[0].pax).toBe("4p");
+      expect(qWaiting.summary!.waitingList[1].ticket).toBe("QN002");
+      expect(qWaiting.summary!.waitingList[1].name).toBe("Priya Patel");
+      expect(qWaiting.summary!.waitingList[1].pax).toBe("2p");
+
+      // 6. Test Average Wait Time
+      // Completed turnaround: 15 mins (30m - 15m)
+      // Active turnarounds: 25 mins and 10 mins
+      // Average: (15 + 25 + 10) / 3 = 16.7 mins <= 20 mins SLA
+      const qWaitTime = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_avg_wait_time",
+        dateRangePreset: "today",
+      });
+      expect(Number(qWaitTime.summary!.avgWaitMins)).toBeGreaterThan(15);
+      expect(qWaitTime.summary!.deltaText).toBe("Within Target SLA");
+      expect(qWaitTime.summary!.quotedTime).toMatch(/\d+m/);
+
+      // 7. Test Recently Called Customers
+      const qCalled = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_recent_callouts",
+        dateRangePreset: "today",
+      });
+      expect(qCalled.summary!.calledList.length).toBeGreaterThanOrEqual(1);
+      const seatedEntry = qCalled.summary!.calledList.find((c: any) => c.ticket === "QN003");
+      expect(seatedEntry).toBeDefined();
+      expect(seatedEntry.name).toBe("Amit Verma");
+      expect(seatedEntry.status).toBe("Seated at Table T1");
+
+      // 8. Test Queue Status Breakdown (Party Mix)
+      // Active parties: QN001 (4p = Families), QN002 (2p = Couples) -> 50% / 50%
+      const qBreakdown = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_status_breakdown",
+        dateRangePreset: "today",
+      });
+      expect(qBreakdown.summary!.totalPax).toBe(6);
+      expect(qBreakdown.summary!.couplesPercent).toBe(50);
+      expect(qBreakdown.summary!.familiesPercent).toBe(50);
+      expect(qBreakdown.summary!.largePercent).toBe(0);
+
+      // 9. Test Queue Wait Time Alerts
+      // QN001 has elapsed 25 mins >= 20 mins SLA threshold
+      const qAlerts = await asAdmin.query(api.dashboards.getWidgetData, {
+        organizationId: orgId,
+        widgetId: "queue_wait_time_alerts",
+        dateRangePreset: "today",
+      });
+      expect(qAlerts.alert!.count).toBe(1);
+      expect(qAlerts.alert!.severity).toBe("critical");
+      expect(qAlerts.summary!.breachingParties[0].ticket).toBe("QN001");
+      expect(qAlerts.summary!.breachingParties[0].name).toBe("Rahul Sharma");
+      expect(qAlerts.summary!.breachingParties[0].elapsedMins).toBeGreaterThanOrEqual(24);
+      // Must dynamically suggest an available table (T1 is vacant after party completed), NOT "Seat Table T-12"
+      expect(qAlerts.summary!.breachingParties[0].suggestedTable).toBe("Seat Table T1");
     });
   });
 

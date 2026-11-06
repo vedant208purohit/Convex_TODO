@@ -89,7 +89,7 @@ async function resolveActiveUserDashboard(
   ctx: QueryCtx | MutationCtx,
   orgId: Id<"organizations">,
   userId: string
-): Promise<Doc<"dashboards">> {
+): Promise<Doc<"dashboards"> | null> {
   // Check user preferences
   const prefs = await ctx.db
     .query("dashboardPreferences")
@@ -181,7 +181,7 @@ async function resolveActiveUserDashboard(
     return created;
   }
 
-  // Fallback for read-only ctx when not yet created: pick first dashboard or throw
+  // Fallback for read-only ctx when not yet created: pick first dashboard or return null
   const anyDash = await ctx.db
     .query("dashboards")
     .withIndex("by_org", (q) => q.eq("organizationId", orgId))
@@ -189,7 +189,7 @@ async function resolveActiveUserDashboard(
 
   if (anyDash) return anyDash;
 
-  throw new Error("No active dashboard available. Please initialize default templates.");
+  return null;
 }
 
 // ==========================================
@@ -259,7 +259,7 @@ export const getCatalogWithUserState = query({
     const userRoles = await resolveUserRoles(ctx, org._id, identity.subject);
 
     // Resolve dashboard
-    let dashboard: Doc<"dashboards">;
+    let dashboard: Doc<"dashboards"> | null = null;
     if (args.dashboardId) {
       const d = await ctx.db.get(args.dashboardId);
       if (!d || d.organizationId !== org._id || d.deletedAt !== undefined) {
@@ -271,10 +271,12 @@ export const getCatalogWithUserState = query({
     }
 
     // Retrieve active placements
-    const placements = await ctx.db
-      .query("dashboardPlacements")
-      .withIndex("by_dashboard", (q) => q.eq("dashboardId", dashboard._id))
-      .collect();
+    const placements = dashboard
+      ? await ctx.db
+          .query("dashboardPlacements")
+          .withIndex("by_dashboard", (q) => q.eq("dashboardId", dashboard._id))
+          .collect()
+      : [];
 
     const placedWidgetMap = new Map<string, Doc<"dashboardPlacements">>();
     for (const p of placements) {
@@ -339,8 +341,8 @@ export const getCatalogWithUserState = query({
         totalWidgets,
         availableWidgets,
         alreadyOnDashboardCount: onDashboardWidgets,
-        activeDashboardId: dashboard._id,
-        activeDashboardName: dashboard.name,
+        activeDashboardId: dashboard?._id,
+        activeDashboardName: dashboard?.name,
       },
     };
   },
@@ -358,7 +360,7 @@ export const getDashboard = query({
   handler: async (ctx, args) => {
     const { org, identity } = await requireMember(ctx, args.organizationId);
 
-    let dashboard: Doc<"dashboards">;
+    let dashboard: Doc<"dashboards"> | null;
     if (args.dashboardId) {
       const d = await ctx.db.get(args.dashboardId);
       if (!d || d.organizationId !== org._id || d.deletedAt !== undefined) {
@@ -374,6 +376,35 @@ export const getDashboard = query({
       dashboard = d;
     } else {
       dashboard = await resolveActiveUserDashboard(ctx, org._id, identity.subject);
+    }
+
+    if (!dashboard) {
+      const defaultTpl = DEFAULT_DASHBOARD_TEMPLATES[0];
+      return {
+        dashboard: null,
+        placements: defaultTpl.placements.map((p, i) => ({
+          _id: `temp_${i}` as any,
+          _creationTime: Date.now(),
+          organizationId: org._id,
+          dashboardId: `temp_dash` as any,
+          widgetId: p.widgetId,
+          gridRow: p.gridRow,
+          gridCol: p.gridCol,
+          width: p.width,
+          height: p.height,
+          displayOrder: p.displayOrder,
+          isEnabled: p.isEnabled,
+          configuration: p.configuration,
+          configurationVersion: 1,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        })),
+        allPlacements: [],
+        hasUnsavedDraft: false,
+        draftBaseRevision: undefined,
+        draftPlacementsCount: 0,
+        requiresInitialization: true,
+      };
     }
 
     // Retrieve published placements
@@ -394,7 +425,13 @@ export const getDashboard = query({
       .first();
 
     const activePlacements = placements
-      .filter((p) => p.isEnabled)
+      .filter(
+        (p) =>
+          p.isEnabled &&
+          !p.widgetId.startsWith("inventory_") &&
+          !p.widgetId.startsWith("reports_") &&
+          !p.widgetId.startsWith("iot_")
+      )
       .sort((a, b) => a.displayOrder - b.displayOrder);
 
     return {
@@ -753,6 +790,7 @@ export const batchUpdatePlacements = mutation({
 export const createOrUpdateDraft = mutation({
   args: {
     dashboardId: v.id("dashboards"),
+    organizationId: v.optional(v.id("organizations")),
     baseRevision: v.number(),
     placements: v.array(widgetPlacementInputValidator),
   },
@@ -768,16 +806,56 @@ export const createOrUpdateDraft = mutation({
       );
     }
 
-    // Validate placements against catalog, boundaries & configs
-    for (const p of args.placements) {
+    // Validate placements against catalog, boundaries & configs (auto-packing if resized)
+    let currentFlowRow = 0;
+    let currentFlowCol = 0;
+
+    const sanitizedPlacements = args.placements.map((p, idx) => {
       if (!getWidgetDefinition(p.widgetId)) {
         throw new Error(`Invalid widget ID in draft: ${p.widgetId}`);
       }
-      validatePlacementBoundaries(p.gridCol, p.width, p.gridRow, p.height);
+      const width = Math.min(12, Math.max(1, p.width || 4));
+      const height = Math.max(1, p.height || 1);
+      let gridCol = p.gridCol;
+      let gridRow = p.gridRow;
+
+      // Auto-align placement coordinates to 12-col boundary if they overflow
+      if (gridCol < 0 || gridCol + width > 12) {
+        if (currentFlowCol + width > 12) {
+          currentFlowRow += 1;
+          currentFlowCol = 0;
+        }
+        gridCol = currentFlowCol;
+        gridRow = currentFlowRow;
+        currentFlowCol += width;
+        if (currentFlowCol >= 12) {
+          currentFlowRow += 1;
+          currentFlowCol = 0;
+        }
+      } else {
+        currentFlowRow = Math.max(currentFlowRow, gridRow);
+        currentFlowCol = gridCol + width;
+        if (currentFlowCol >= 12) {
+          currentFlowRow += 1;
+          currentFlowCol = 0;
+        }
+      }
+
+      validatePlacementBoundaries(gridCol, width, gridRow, height);
       if (p.configuration !== undefined) {
         validateWidgetConfiguration(p.widgetId, p.configuration);
       }
-    }
+
+      return {
+        ...p,
+        width,
+        height,
+        gridCol,
+        gridRow,
+        displayOrder: idx + 1,
+        configurationVersion: p.configurationVersion || 1,
+      };
+    });
 
     const existingDraft = await ctx.db
       .query("dashboardDrafts")
@@ -793,10 +871,7 @@ export const createOrUpdateDraft = mutation({
     if (existingDraft) {
       await ctx.db.patch(existingDraft._id, {
         baseRevision: args.baseRevision,
-        placements: args.placements.map((p) => ({
-          ...p,
-          configurationVersion: p.configurationVersion || 1,
-        })),
+        placements: sanitizedPlacements,
         updatedAt: now,
       });
       return { success: true, draftId: existingDraft._id };
@@ -806,10 +881,7 @@ export const createOrUpdateDraft = mutation({
         dashboardId: dashboard._id,
         userId: identity.subject,
         baseRevision: args.baseRevision,
-        placements: args.placements.map((p) => ({
-          ...p,
-          configurationVersion: p.configurationVersion || 1,
-        })),
+        placements: sanitizedPlacements,
         updatedAt: now,
       });
       return { success: true, draftId };
@@ -820,13 +892,14 @@ export const createOrUpdateDraft = mutation({
 export const getDraft = query({
   args: {
     dashboardId: v.id("dashboards"),
+    organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
     const identity = await requireAuth(ctx);
     const dashboard = await ctx.db.get(args.dashboardId);
     if (!dashboard) return null;
 
-    return await ctx.db
+    const draft = await ctx.db
       .query("dashboardDrafts")
       .withIndex("by_org_user_dashboard", (q) =>
         q
@@ -835,12 +908,24 @@ export const getDraft = query({
           .eq("dashboardId", dashboard._id)
       )
       .first();
+
+    if (!draft) return null;
+    return {
+      ...draft,
+      placements: draft.placements.filter(
+        (p) =>
+          !p.widgetId.startsWith("inventory_") &&
+          !p.widgetId.startsWith("reports_") &&
+          !p.widgetId.startsWith("iot_")
+      ),
+    };
   },
 });
 
 export const applyDraft = mutation({
   args: {
     dashboardId: v.id("dashboards"),
+    organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
     const identity = await requireAuth(ctx);
@@ -919,6 +1004,7 @@ export const applyDraft = mutation({
 export const discardDraft = mutation({
   args: {
     dashboardId: v.id("dashboards"),
+    organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
     const identity = await requireAuth(ctx);
@@ -961,7 +1047,7 @@ export const applyTemplate = mutation({
       throw new Error(`Template preset '${args.templateKey}' not found.`);
     }
 
-    let dashboard: Doc<"dashboards">;
+    let dashboard: Doc<"dashboards"> | null;
     if (args.dashboardId) {
       const d = await ctx.db.get(args.dashboardId);
       if (!d || d.organizationId !== org._id || d.deletedAt !== undefined) {
@@ -973,6 +1059,10 @@ export const applyTemplate = mutation({
       dashboard = d;
     } else {
       dashboard = await resolveActiveUserDashboard(ctx, org._id, identity.subject);
+    }
+
+    if (!dashboard) {
+      throw new Error("No active dashboard found to apply template to.");
     }
 
     // Delete existing placements on this dashboard
@@ -1029,11 +1119,18 @@ export const applyTemplate = mutation({
 
 export const resetToDefaults = mutation({
   args: {
-    dashboardId: v.id("dashboards"),
+    dashboardId: v.optional(v.id("dashboards")),
+    organizationId: v.optional(v.id("organizations")),
   },
   handler: async (ctx, args) => {
     const identity = await requireAuth(ctx);
-    const dashboard = await ctx.db.get(args.dashboardId);
+    let dashboard: Doc<"dashboards"> | null = null;
+    if (args.dashboardId) {
+      dashboard = await ctx.db.get(args.dashboardId);
+    } else {
+      const org = await resolveStoreOrganization(ctx, args.organizationId);
+      dashboard = await resolveActiveUserDashboard(ctx, org._id, identity.subject);
+    }
     if (!dashboard) throw new Error("Dashboard not found");
 
     if (dashboard.scope === "user" && dashboard.userId !== identity.subject) {

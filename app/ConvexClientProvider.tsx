@@ -383,7 +383,30 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
 
   const convex = useMemo(() => {
     if (!activeConvexUrl) return null;
-    return new ConvexReactClient(activeConvexUrl);
+    return new ConvexReactClient(activeConvexUrl, {
+      logger: {
+        logVerbose: (...args: any[]) => console.debug(...args),
+        log: (...args: any[]) => console.log(...args),
+        warn: (...args: any[]) => console.warn(...args),
+        error: (...args: any[]) => {
+          // If it's an application-level business logic ConvexError (e.g. out of stock, validation failure),
+          // log as console.warn so Next.js Turbopack dev overlay does not pop up a full-screen modal,
+          // while still remaining visible in developer console.
+          const isAppError = args.some(
+            (a) =>
+              typeof a === "string" &&
+              (a.includes("ConvexError") ||
+                a.includes("Server Error\nUncaught ConvexError") ||
+                a.includes("Uncaught ConvexError"))
+          );
+          if (isAppError) {
+            console.warn(...args);
+          } else {
+            console.error(...args);
+          }
+        },
+      },
+    });
   }, [activeConvexUrl]);
 
   if (!isLoaded) {

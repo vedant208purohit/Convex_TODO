@@ -14,8 +14,8 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   // ------------------------------------------
   {
     widgetId: "overview_net_revenue",
-    name: "Net Revenue & Velocity",
-    description: "Real-time net sales after discounts and refunds with previous period velocity comparison.",
+    name: "Net Sales",
+    description: "Sum of settled bills minus voids and refunds for the active trading period.",
     category: "Overview",
     subcategory: "Financials",
     widgetType: "kpi",
@@ -25,7 +25,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
       { width: 6, height: 1, label: "6 Col Default" },
       { width: 8, height: 2, label: "8 Col Velocity Stream" },
     ],
-    defaultDimensions: { width: 6, height: 1 },
+    defaultDimensions: { width: 4, height: 1 },
     requiredRole: "staff",
     supportedFilters: ["date_range", "order_type", "payment_mode"],
     supportsLiveUpdates: true,
@@ -36,8 +36,8 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_total_orders",
-    name: "Total Orders Volume",
-    description: "Total order counts across dine-in, takeaway, and digital delivery channels with deltas.",
+    name: "Total Orders",
+    description: "Gross ticket count processed across all dining and digital dispatch channels.",
     category: "Overview",
     subcategory: "Volume",
     widgetType: "kpi",
@@ -57,8 +57,8 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_average_order_value",
-    name: "Average Order Value (AOV)",
-    description: "Average customer bill size with historical period comparison and top-ticket tracking.",
+    name: "Average Order Value",
+    description: "Mean financial spend per guest check, factoring beverage and food items.",
     category: "Overview",
     subcategory: "Financials",
     widgetType: "kpi",
@@ -78,8 +78,8 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_active_orders",
-    name: "Active Kitchen & Floor Orders",
-    description: "Count of live uncompleted orders currently open on the floor or in preparation.",
+    name: "Active Orders",
+    description: "Running tables and takeaway tickets currently open and unpaid.",
     category: "Overview",
     subcategory: "Operational Pulse",
     widgetType: "kpi",
@@ -99,8 +99,8 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_pending_orders",
-    name: "Pending Billing / Acceptance",
-    description: "Orders awaiting cashier payment settlement or online store acceptance.",
+    name: "Pending Orders",
+    description: "Orders submitted to kitchen stations waiting for cook line acknowledgment.",
     category: "Overview",
     subcategory: "Operational Pulse",
     widgetType: "kpi",
@@ -120,17 +120,19 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_sales_trends",
-    name: "Revenue & Velocity Stream",
-    description: "Hourly sales demand graph and peak service distribution throughout the operating day.",
+    name: "Sales Trend",
+    description: "Hourly sales throughput curve tracking lunch rush and dinner peak against targets.",
     category: "Overview",
     subcategory: "Analytics",
     widgetType: "chart",
     dataProviderKey: "provider_overview_sales_trends",
     supportedSizes: [
+      { width: 4, height: 1, label: "1X1 Square (4 Cols)" },
+      { width: 6, height: 1, label: "6 Col Default" },
       { width: 8, height: 2, label: "8 Col Expanded (Recommended)" },
       { width: 12, height: 2, label: "12 Col Full Width" },
     ],
-    defaultDimensions: { width: 8, height: 2 },
+    defaultDimensions: { width: 6, height: 1 },
     requiredRole: "staff",
     supportedFilters: ["date_range"],
     supportsLiveUpdates: true,
@@ -141,17 +143,18 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_order_status_distribution",
-    name: "Orders by Status Distribution",
-    description: "Visual donut distribution of orders across New, In-Prep, Billed, and Completed stages.",
+    name: "Order Status Summary",
+    description: "Proportional split of order volume across completed, billed, in-prep, and cancelled.",
     category: "Overview",
     subcategory: "Analytics",
     widgetType: "chart",
     dataProviderKey: "provider_overview_order_status_distribution",
     supportedSizes: [
+      { width: 4, height: 1, label: "1X1 Square (4 Cols)" },
       { width: 4, height: 2, label: "4 Col Compact" },
       { width: 6, height: 2, label: "6 Col Default" },
     ],
-    defaultDimensions: { width: 6, height: 2 },
+    defaultDimensions: { width: 4, height: 1 },
     requiredRole: "staff",
     supportedFilters: ["date_range"],
     supportsLiveUpdates: true,
@@ -162,17 +165,18 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "overview_business_summary",
-    name: "Executive Business Summary",
-    description: "Aggregated gross sales, taxes, discounts, refunds, and net margins in one executive card.",
+    name: "Business Performance Summary",
+    description: "Consolidated executive card comparing revPASH, food cost %, and labor ratio.",
     category: "Overview",
     subcategory: "Financials",
     widgetType: "summary",
     dataProviderKey: "provider_overview_business_summary",
     supportedSizes: [
-      { width: 6, height: 2, label: "6 Col Default" },
+      { width: 6, height: 1, label: "6 Col Default (2X1 Strip)" },
+      { width: 6, height: 2, label: "6 Col Expanded" },
       { width: 12, height: 2, label: "12 Col Full Width" },
     ],
-    defaultDimensions: { width: 6, height: 2 },
+    defaultDimensions: { width: 6, height: 1 },
     requiredRole: "admin",
     supportedFilters: ["date_range"],
     supportsLiveUpdates: true,
@@ -187,7 +191,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   // ------------------------------------------
   {
     widgetId: "orders_live_feed",
-    name: "Live Order Feed",
+    name: "Live Orders Feed",
     description: "Incoming live orders and current stages across online and dine-in channels without switching screens.",
     category: "Orders",
     subcategory: "Live Queue",
@@ -209,7 +213,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "orders_by_status",
-    name: "Orders by Status",
+    name: "Order Status Breakdown",
     description: "Visual bar and donut distribution of New, In-Prep, Billed, and Completed orders with live progress.",
     category: "Orders",
     subcategory: "Breakdown",
@@ -230,7 +234,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "orders_total_volume",
-    name: "Orders Channel Breakdown",
+    name: "Total Orders",
     description: "Order count breakdown by fulfillment channel: DineIn, Takeaway, Online Delivery.",
     category: "Orders",
     subcategory: "Volume",
@@ -251,7 +255,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "orders_high_value",
-    name: "High-Value Orders Ledger",
+    name: "Top Orders by Value",
     description: "Ranked table of high-ticket dining folios exceeding target spend threshold.",
     category: "Orders",
     subcategory: "Folios",
@@ -272,7 +276,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "orders_delayed_alerts",
-    name: "Delayed Orders SLA Alerts",
+    name: "Delayed Orders Alert",
     description: "High-visibility alert banner highlighting tickets exceeding maximum kitchen preparation SLA.",
     category: "Orders",
     subcategory: "Alerts",
@@ -294,7 +298,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
   {
     widgetId: "orders_volume_over_time",
-    name: "Order Volume Over Time",
+    name: "Orders Over Time",
     description: "Time-series bar chart showing ticket count velocity throughout operating shifts.",
     category: "Orders",
     subcategory: "Analytics",
@@ -937,7 +941,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "cashier_shift_summary",
     name: "Current Shift Summary",
-    description: "Real-time aggregated gross intake, cash in drawer, and variance status for active shift.",
+    description: "Real-time aggregated gross intake, cash in hand, and digital settlements for active shift.",
     category: "Cashier",
     subcategory: "Shift Telemetry",
     widgetType: "kpi",
@@ -1478,7 +1482,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "menu_product_availability",
     name: "Product Availability & 86'd Items",
-    description: "Inventory stockout status, portion caps, and 86'd menu items.",
+    description: "Inventory stockout status and recipe-backed menu item availability.",
     category: "Menu",
     subcategory: "Availability",
     widgetType: "table",
@@ -1602,7 +1606,7 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "customers_returning",
     name: "Returning Customers & Retention",
-    description: "Repeat patrons with 2 or more historical dining visits and active loyalty points balance.",
+    description: "Repeat patrons with 2 or more historical dining visits.",
     category: "Customers",
     subcategory: "Retention & Loyalty",
     widgetType: "kpi",
@@ -1643,9 +1647,9 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "customers_most_frequent",
     name: "Most Frequent Customers",
-    description: "Ranked guest leaderboard by visit frequency, lifetime spend, and table reservation priority.",
+    description: "Ranked guest leaderboard by visit frequency and cumulative spend.",
     category: "Customers",
-    subcategory: "VIP Dining Club",
+    subcategory: "Top Patrons",
     widgetType: "table",
     dataProviderKey: "provider_customers_most_frequent",
     supportedSizes: [
@@ -1663,9 +1667,9 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   {
     widgetId: "customers_order_frequency",
     name: "Customer Order Frequency",
-    description: "Distribution of customer visits per month across one-time, occasional, and core regular diners.",
+    description: "Distribution of customer visit counts across one-time, occasional, and frequent diners.",
     category: "Customers",
-    subcategory: "Cohort Velocity",
+    subcategory: "Visit Frequency",
     widgetType: "chart",
     dataProviderKey: "provider_customers_order_frequency",
     supportedSizes: [
@@ -2062,13 +2066,40 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
   },
 ];
 
-// Fast Index Maps for Catalog Lookups
+// Fast Index Maps for Catalog Lookups with Canonical Aliases
+export const WIDGET_ALIASES: Record<string, string> = {
+  orders_high_value_ledger: "orders_high_value",
+  kds_delayed_orders_alert: "orders_delayed_alerts",
+  reports_hourly_velocity: "orders_volume_over_time",
+  orders_status_distribution: "orders_by_status",
+  orders_channel_breakdown: "orders_total_volume",
+  overview_orders_status_distribution: "overview_order_status_distribution",
+  overview_channel_breakdown: "overview_total_orders",
+};
+
 const CATALOG_BY_ID = new Map<string, WidgetDefinition>(
   WIDGET_CATALOG.map((w) => [w.widgetId, w])
 );
 
+// Register alias keys into index map
+for (const [alias, targetId] of Object.entries(WIDGET_ALIASES)) {
+  const target = CATALOG_BY_ID.get(targetId);
+  if (target) {
+    CATALOG_BY_ID.set(alias, { ...target, widgetId: alias });
+  }
+}
+
 export function getWidgetDefinition(widgetId: string): WidgetDefinition | undefined {
-  return CATALOG_BY_ID.get(widgetId);
+  const direct = CATALOG_BY_ID.get(widgetId);
+  if (direct) return direct;
+  const aliasTargetId = WIDGET_ALIASES[widgetId];
+  if (aliasTargetId) {
+    const target = CATALOG_BY_ID.get(aliasTargetId);
+    if (target) {
+      return { ...target, widgetId };
+    }
+  }
+  return undefined;
 }
 
 export function listAllWidgets(): WidgetDefinition[] {
@@ -2100,7 +2131,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
   {
     templateKey: "executive_dinner_peak",
     name: "Executive Dinner Peak",
-    description: "Designed for evening dinner rush: High-visibility revenue velocity, floor occupancy, KDS backlog, critical inventory alerts, and live order feed.",
+    description: "Designed for evening dinner rush: High-visibility revenue velocity, floor occupancy, KDS backlog, tableside pacing, and live order feed.",
     categoryTag: "Peak Service",
     placements: [
       {
@@ -2158,7 +2189,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
         isEnabled: true,
       },
       {
-        widgetId: "inventory_critical_reorder",
+        widgetId: "orders_live_feed",
         gridRow: 4,
         gridCol: 0,
         width: 6,
@@ -2180,7 +2211,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
   {
     templateKey: "breakfast_buffet_bakery",
     name: "Breakfast Buffet & Bakery",
-    description: "Optimized for morning breakfast rush: fast table turns, cashier cash drawer intake, takeaway order queue, and pastry inventory availability.",
+    description: "Optimized for morning breakfast rush: fast table turns, cashier cash drawer intake, live orders stream, and bestselling bakery items.",
     categoryTag: "Morning Shift",
     placements: [
       {
@@ -2211,7 +2242,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
         isEnabled: true,
       },
       {
-        widgetId: "orders_takeaway_pickup_counter",
+        widgetId: "orders_live_feed",
         gridRow: 1,
         gridCol: 0,
         width: 6,
@@ -2238,7 +2269,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
         isEnabled: true,
       },
       {
-        widgetId: "inventory_low_stock",
+        widgetId: "menu_bestselling_items",
         gridRow: 3,
         gridCol: 6,
         width: 6,
@@ -2313,7 +2344,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
   {
     templateKey: "financial_close_audit",
     name: "Financial Close & Audit",
-    description: "End-of-day reconciliation: complete tender breakdowns, refund and void audits, cashier session status, and daily sales report aggregates.",
+    description: "End-of-day reconciliation: complete tender breakdowns, refund and void audits, cashier session status, sales trends, and transaction history.",
     categoryTag: "Audit & Close",
     placements: [
       {
@@ -2326,7 +2357,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
         isEnabled: true,
       },
       {
-        widgetId: "reports_daily_sales_aggregate",
+        widgetId: "overview_sales_trends",
         gridRow: 0,
         gridCol: 6,
         width: 6,
@@ -2371,7 +2402,7 @@ export const DEFAULT_DASHBOARD_TEMPLATES: DashboardTemplatePreset[] = [
         isEnabled: true,
       },
       {
-        widgetId: "reports_payment_reconciliation",
+        widgetId: "cashier_transaction_history",
         gridRow: 3,
         gridCol: 4,
         width: 8,
