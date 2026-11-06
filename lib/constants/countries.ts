@@ -526,6 +526,59 @@ export function getCurrencyForCountry(codeOrName: string): {
   return master?.currency || { code: "INR", symbol: "₹" };
 }
 
+export interface OrganizationCurrencyInfo {
+  code: string;
+  symbol: string;
+  locale: string;
+  countryCode: string;
+}
+
+/**
+ * Authoritative Centralized Currency Resolver for Organizations.
+ * Resolves the store's ISO 4217 currency code, currency symbol, formatting locale, and country code.
+ * Strict resolution order:
+ * 1. Store explicit defaultCurrency & defaultCurrencySymbol if validly configured.
+ * 2. Country-based lookup in COUNTRIES_MASTER if org has country (e.g. 'AE' -> AED, 'US' -> USD).
+ * 3. Safe fallback to India ('IN', 'INR', '₹', 'en-IN') with diagnostics.
+ */
+export function resolveOrganizationCurrency(org?: {
+  country?: string | null;
+  defaultCurrency?: string | null;
+  defaultCurrencySymbol?: string | null;
+  billingAddress?: { country?: string | null } | null;
+} | null): OrganizationCurrencyInfo {
+  const countryParam = org?.country || org?.billingAddress?.country;
+  const master = getCountryMaster(countryParam || undefined);
+
+  const hasValidCurrency = Boolean(org?.defaultCurrency && org.defaultCurrency.trim());
+  const hasValidSymbol = Boolean(org?.defaultCurrencySymbol && org.defaultCurrencySymbol.trim());
+
+  if (hasValidCurrency && hasValidSymbol) {
+    const code = org!.defaultCurrency!.trim().toUpperCase();
+    const symbol = org!.defaultCurrencySymbol!.trim();
+    const locale = master?.locale || (isIndiaCountry(countryParam || undefined) ? "en-IN" : "en-US");
+    const countryCode = master?.isoCode || (isIndiaCountry(countryParam || undefined) ? "IN" : "US");
+    return { code, symbol, locale, countryCode };
+  }
+
+  if (master) {
+    return {
+      code: org?.defaultCurrency?.trim().toUpperCase() || master.currency.code,
+      symbol: org?.defaultCurrencySymbol?.trim() || master.currency.symbol,
+      locale: master.locale,
+      countryCode: master.isoCode,
+    };
+  }
+
+  // Safe Fallback to India ('IN') when organization country is missing
+  return {
+    code: org?.defaultCurrency?.trim().toUpperCase() || "INR",
+    symbol: org?.defaultCurrencySymbol?.trim() || "₹",
+    locale: "en-IN",
+    countryCode: "IN",
+  };
+}
+
 /**
  * Returns available timezone options for a given country.
  */
@@ -674,6 +727,8 @@ export function formatCurrencyAmount(
  * Centralized Price Formatter with Currency Symbol
  * Formats amount with attached currency symbol and country-specific number grouping.
  * Supports both paise/cents (isPaise = true, divides by 100) or decimal units (isPaise = false).
+ * Automatically spaces multi-letter symbols (e.g. 'AED 1,500.00', 'SAR 1,500.00')
+ * while keeping single-symbol prefixes compact (e.g. '₹1,500.00', '$1,500.00', '£1,500.00').
  */
 export function formatPriceWithSymbol(
   amount: number | string | undefined | null,
@@ -681,15 +736,35 @@ export function formatPriceWithSymbol(
   countryCodeOrName?: string,
   isPaise = false,
 ): string {
+  const cleanSym = symbol ? symbol.trim() : "";
+  const sep = cleanSym.length > 1 ? " " : "";
+
   if (amount === undefined || amount === null || amount === "") {
-    return symbol ? `${symbol} 0.00` : "0.00";
+    return cleanSym ? `${cleanSym}${sep}0.00` : "0.00";
   }
   let num = typeof amount === "number" ? amount : parseFloat(String(amount).replace(/[^0-9.-]+/g, ""));
   if (isNaN(num)) num = 0;
   if (isPaise) num = num / 100;
 
   const formattedNum = formatCurrencyAmount(num, countryCodeOrName);
-  return symbol ? `${symbol} ${formattedNum}` : formattedNum;
+  return cleanSym ? `${cleanSym}${sep}${formattedNum}` : formattedNum;
+}
+
+/**
+ * Format price directly using an organization's configuration.
+ */
+export function formatOrganizationPrice(
+  amount: number | string | undefined | null,
+  org?: {
+    country?: string | null;
+    defaultCurrency?: string | null;
+    defaultCurrencySymbol?: string | null;
+    billingAddress?: { country?: string | null } | null;
+  } | null,
+  isPaise = false,
+): string {
+  const currencyInfo = resolveOrganizationCurrency(org);
+  return formatPriceWithSymbol(amount, currencyInfo.symbol, currencyInfo.countryCode, isPaise);
 }
 
 /**

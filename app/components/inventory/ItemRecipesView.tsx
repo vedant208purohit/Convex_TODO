@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
-import { getCurrencyForCountry, formatStoreDateTime } from "@/lib/constants/countries";
+import { getCurrencyForCountry, formatStoreDateTime, resolveOrganizationCurrency } from "@/lib/constants/countries";
 import { Toast, type ToastMessage, type ToastType } from "@/app/components/Toast";
 
 function isValidConvexId(id: any): boolean {
@@ -35,11 +35,7 @@ export function ItemRecipesView({
   const organizations = useQuery(api.organizations.list);
   const activeOrg =
     organizations?.find((o) => o?._id === organizationId) || organizations?.[0];
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).symbol
-      : "₹");
+  const currencySymbol = resolveOrganizationCurrency(activeOrg).symbol;
 
   // Backend Queries
   const inventoryItems = useQuery(api.inventory.listInventoryItems, {

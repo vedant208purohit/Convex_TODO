@@ -14,6 +14,7 @@ import {
   formatPhoneNumberWithCountryCode,
   getTimezoneForCountry,
   getCurrencyForCountry,
+  resolveOrganizationCurrency,
 } from "../../../lib/constants/countries";
 import { DateRange, ChevronRightIcon } from "./ReportHeader";
 import {
@@ -58,11 +59,11 @@ export function OperationalReportView({
   activeOrg,
 }: OperationalReportViewProps) {
   // Centralized currency & timezone from countries.ts
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
   const resolvedCurrencySymbol =
     passedCurrencySymbol ||
-    getCurrencyForCountry(countryCode || "IN").symbol ||
-    "₹";
-  const storeTz = timezone || getTimezoneForCountry(countryCode || "IN");
+    orgCurrency.symbol;
+  const storeTz = timezone || getTimezoneForCountry(countryCode || orgCurrency.countryCode);
 
   // Settings -> Payment Modes query
   const paymentModesFromSettings = useQuery(api.organizationPaymentModes.list);

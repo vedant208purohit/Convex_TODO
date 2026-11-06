@@ -22,6 +22,7 @@ import {
   formatStoreTime,
   formatStoreDateTime,
   getTimezoneForCountry,
+  resolveOrganizationCurrency,
 } from "../../lib/constants/countries";
 
 function formatOrderPhoneDisplay(phone?: string): string {
@@ -555,18 +556,9 @@ export default function OrdersPage() {
   const storeTz =
     (activeOrg as any)?.timezone || getTimezoneForCountry(countryCode);
 
-  const currencySymbol =
-    activeOrg?.defaultCurrencySymbol &&
-      activeOrg.defaultCurrencySymbol !== "Rs." &&
-      activeOrg.defaultCurrencySymbol !== "RS." &&
-      activeOrg.defaultCurrencySymbol !== "Rs"
-      ? activeOrg.defaultCurrencySymbol
-      : getCurrencyForCountry(countryCode).symbol || "₹";
-  const currencyCode =
-    activeOrg?.defaultCurrency ||
-    (activeOrg?.country
-      ? getCurrencyForCountry(activeOrg.country).code
-      : "USD");
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
+  const currencySymbol = orgCurrency.symbol;
+  const currencyCode = orgCurrency.code;
 
   // Query Real Store Order Processes from DB
   const dbProcesses = useQuery(api.organizationOrderProcesses.list, {

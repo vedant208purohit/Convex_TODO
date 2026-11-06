@@ -27,10 +27,9 @@ function getJwtKid(token: string): string | null {
   }
 }
 
-// Default Clerk B expected key ID (modest-raptor-18)
-const DEFAULT_CLERK_KID_PREFIX = "ins_38xvc79";
-// Master Clerk A key ID prefix (neat-oyster-3072)
-const MASTER_CLERK_KID_PREFIX = "ins_3I5NHL8";
+// Configurable Clerk instance key ID prefixes
+const defaultKidPrefix = process.env.DEFAULT_CLERK_KID_PREFIX;
+const masterKidPrefix = process.env.MASTER_CLERK_KID_PREFIX;
 
 export default async function middleware(req: NextRequest, event: NextFetchEvent) {
   const sessionCookie = req.cookies.get("__session")?.value;
@@ -38,64 +37,70 @@ export default async function middleware(req: NextRequest, event: NextFetchEvent
 
   if (sessionCookie) {
     const kid = getJwtKid(sessionCookie);
-    // If cookie belongs to Master Clerk A or doesn't match Default Clerk B
-    if (kid && (kid.startsWith(MASTER_CLERK_KID_PREFIX) || !kid.startsWith(DEFAULT_CLERK_KID_PREFIX))) {
-      isMismatched = true;
-    }
-  }
-
-  if (isMismatched) {
-    // Strip foreign Clerk A session cookie before clerkMiddleware sees it to prevent Handshake crash
-    const nextHeaders = new Headers(req.headers);
-    const cookieHeader = req.headers.get("cookie") || "";
-    const filteredCookies = cookieHeader
-      .split(";")
-      .map((c) => c.trim())
-      .filter((c) => !c.startsWith("__session=") && !c.startsWith("__client_uat="))
-      .join("; ");
-
-    if (filteredCookies) {
-      nextHeaders.set("cookie", filteredCookies);
-    } else {
-      nextHeaders.delete("cookie");
+      const isDev = process.env.NODE_ENV !== "production";
+      if (kid) {
+        if (masterKidPrefix && kid.startsWith(masterKidPrefix)) {
+          isMismatched = true;
+        } else if (defaultKidPrefix && !kid.startsWith(defaultKidPrefix)) {
+          isMismatched = true;
+        } else if (isDev && (kid.startsWith("ins_3I5NHL8") || !kid.startsWith("ins_38xvc79"))) {
+          isMismatched = true;
+        }
+      }
     }
 
-    const cleanReq = new NextRequest(req.url, {
-      headers: nextHeaders,
-      method: req.method,
-    });
+    if (isMismatched) {
+      // Strip foreign Clerk A session cookie before clerkMiddleware sees it to prevent Handshake crash
+      const nextHeaders = new Headers(req.headers);
+      const cookieHeader = req.headers.get("cookie") || "";
+      const filteredCookies = cookieHeader
+        .split(";")
+        .map((c) => c.trim())
+        .filter((c) => !c.startsWith("__session=") && !c.startsWith("__client_uat="))
+        .join("; ");
+
+      if (filteredCookies) {
+        nextHeaders.set("cookie", filteredCookies);
+      } else {
+        nextHeaders.delete("cookie");
+      }
+
+      const cleanReq = new NextRequest(req.url, {
+        headers: nextHeaders,
+        method: req.method,
+      });
+
+      try {
+        const rawRes = await clerkHandler(cleanReq, event);
+        const res = rawRes instanceof NextResponse ? rawRes : NextResponse.next();
+        res.cookies.delete("__session");
+        res.cookies.delete("__client_uat");
+        return res;
+      } catch {
+        const res = NextResponse.redirect(new URL("/sign-in", req.url));
+        res.cookies.delete("__session");
+        res.cookies.delete("__client_uat");
+        return res;
+      }
+    }
 
     try {
-      const rawRes = await clerkHandler(cleanReq, event);
-      const res = rawRes instanceof NextResponse ? rawRes : NextResponse.next();
-      res.cookies.delete("__session");
-      res.cookies.delete("__client_uat");
-      return res;
-    } catch {
-      const res = NextResponse.redirect(new URL("/sign-in", req.url));
-      res.cookies.delete("__session");
-      res.cookies.delete("__client_uat");
-      return res;
+      return await clerkHandler(req, event);
+    } catch (error: any) {
+      if (error?.message?.includes("Handshake token verification failed") || error?.message?.includes("jwk-kid-mismatch")) {
+        const res = NextResponse.redirect(new URL("/sign-in", req.url));
+        res.cookies.delete("__session");
+        res.cookies.delete("__client_uat");
+        return res;
+      }
+      throw error;
     }
   }
 
-  try {
-    return await clerkHandler(req, event);
-  } catch (error: any) {
-    if (error?.message?.includes("Handshake token verification failed") || error?.message?.includes("jwk-kid-mismatch")) {
-      const res = NextResponse.redirect(new URL("/sign-in", req.url));
-      res.cookies.delete("__session");
-      res.cookies.delete("__client_uat");
-      return res;
-    }
-    throw error;
-  }
-}
-
-export const config = {
-  matcher: [
-    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|json|webp|png|jpg|jpeg|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
-    "/(api|trpc)(.*)",
-  ],
-};
+  export const config = {
+    matcher: [
+      "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|json|webp|png|jpg|jpeg|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+      "/(api|trpc)(.*)",
+    ],
+  };
 

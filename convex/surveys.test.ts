@@ -2038,6 +2038,296 @@ describe("Customer Feedback / RapidFire Survey Domain Tests", () => {
     // Verify that unrated customer verbatim is null and not fake text
     expect(reviewDetails?.review?.customerVerbatim ?? null).toBeNull();
   });
+
+  test("24. Customer review details displays item reviews when multiple attempts exist (published priority over subsequent drafts)", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+
+    const { orderId } = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const oId = await ctx.db.insert("orders", {
+        organizationId: orgId,
+        orderNumber: "#ORD-9901",
+        tokenNumber: "01",
+        orderType: "DineIn",
+        orderSource: "POS",
+        orderStatusName: "Completed",
+        isCompleted: true,
+        isRejected: false,
+        isModify: false,
+        subTotal: 1000,
+        taxTotal: 50,
+        totalAmount: 1050,
+        paymentMode: "Cash",
+        paymentStatus: "Paid",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId: oId,
+        itemName: "Butter Naan",
+        itemPrice: 7000,
+        quantity: 2,
+        totalPrice: 14000,
+        isReady: true,
+        createdAt: now,
+      });
+      return { orderId: oId };
+    });
+
+    const surveyId = await admin.mutation(api.surveys.create, {
+      name: "Table Review Survey",
+      introduction: "Rate your food",
+      afterSurveyContent: "Thanks!",
+      active: true,
+    });
+
+    const qDish = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      questionText: "Rate this dish",
+      type: "numeric",
+      position: 1,
+      frequency: "per_order_item",
+      validationRules: { presence: false },
+    });
+
+    // 1. Initial attempt created and submitted with a 5-star dish rating
+    const attempt1 = await admin.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+    });
+    expect(attempt1).not.toBeNull();
+
+    await admin.mutation(api.surveyAttempts.submit, {
+      attemptId: attempt1!.attemptId,
+      overallRating: 5,
+      answers: [
+        {
+          questionId: qDish,
+          orderItemName: "Butter Naan",
+          numericValue: 5,
+          answerText: "Crisp and buttery perfection",
+        },
+      ],
+    });
+
+    // 2. Later, a second draft attempt is created (e.g. staff previews receipt or guest rescans QR)
+    const now = Date.now() + 10000;
+    await t.run(async (ctx: any) => {
+      await ctx.db.insert("surveyAttempts", {
+        surveyId,
+        orderId,
+        published: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    // 3. getOrderReviewDetails must prioritize the published review with item answers, NOT the newer draft
+    const details = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+
+    expect(details?.hasReview).toBe(true);
+    expect(details?.review?.overallScore).toBe(5);
+    expect(details?.review?.itemsRatedCount).toBe(1);
+
+    const naan = details?.items.find((i) => i.itemName === "Butter Naan");
+    expect(naan?.customerScore).toBe(5);
+    expect(naan?.customerCritique).toBe("Crisp and buttery perfection");
+    expect(naan?.operationalStatus).toBe("Highly Commended");
+  });
+
+  test("25. Item review matching resilience (by itemId, orderItemId, and itemName)", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+
+    const { orderId, targetItem } = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const oId = await ctx.db.insert("orders", {
+        organizationId: orgId,
+        orderNumber: "#ORD-9902",
+        tokenNumber: "02",
+        orderType: "DineIn",
+        orderSource: "POS",
+        orderStatusName: "Completed",
+        isCompleted: true,
+        isRejected: false,
+        isModify: false,
+        subTotal: 1000,
+        taxTotal: 50,
+        totalAmount: 1050,
+        paymentMode: "Cash",
+        paymentStatus: "Paid",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const itemId = await ctx.db.insert("items", {
+        organizationId: orgId,
+        name: "Butter Naan",
+        price: 7000,
+        published: true,
+        isAvailable: true,
+        isGst: true,
+        isVeg: true,
+        isSpicy: false,
+        showQuantity: false,
+        markAsBestseller: true,
+        showCalorie: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      const oiId = await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId: oId,
+        itemId,
+        itemName: "Butter Naan",
+        itemPrice: 7000,
+        quantity: 2,
+        totalPrice: 14000,
+        isReady: true,
+        createdAt: now,
+      });
+
+      return {
+        orderId: oId,
+        targetItem: {
+          _id: oiId,
+          itemId,
+          itemName: "Butter Naan",
+        },
+      };
+    });
+
+    const surveyId = await admin.mutation(api.surveys.create, {
+      name: "Menu Items Test",
+      introduction: "Items review",
+      afterSurveyContent: "Done",
+      active: true,
+    });
+
+    const qDish = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      questionText: "Rate this dish",
+      type: "numeric",
+      position: 1,
+      frequency: "per_order_item",
+      validationRules: { presence: false },
+    });
+
+    const attempt = await admin.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+    });
+
+    // Submit answer using itemId (menu item ID), not line item _id, with lowercase name
+    await admin.mutation(api.surveyAttempts.submit, {
+      attemptId: attempt!.attemptId,
+      answers: [
+        {
+          questionId: qDish,
+          orderItemId: targetItem.itemId ? targetItem.itemId.toString() : "item_generic",
+          orderItemName: targetItem.itemName.toLowerCase(),
+          numericValue: 4,
+          answerText: "Good flavor and portion size",
+        },
+      ],
+    });
+
+    const details = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+
+    expect(details?.hasReview).toBe(true);
+    const itemMatch = details?.items.find((i) => i._id === targetItem._id);
+    expect(itemMatch?.customerScore).toBe(4);
+    expect(itemMatch?.customerCritique).toBe("Good flavor and portion size");
+    expect(itemMatch?.operationalStatus).toBe("Actionable (Service timing)");
+  });
+
+  test("26. In-progress / draft item review visibility before final submission", async () => {
+    const { t, orgId, admin } = await setupStoreWithAdmin();
+
+    const { orderId } = await t.run(async (ctx: any) => {
+      const now = Date.now();
+      const oId = await ctx.db.insert("orders", {
+        organizationId: orgId,
+        orderNumber: "#ORD-9903",
+        tokenNumber: "03",
+        orderType: "DineIn",
+        orderSource: "POS",
+        orderStatusName: "Completed",
+        isCompleted: true,
+        isRejected: false,
+        isModify: false,
+        subTotal: 1000,
+        taxTotal: 50,
+        totalAmount: 1050,
+        paymentMode: "Cash",
+        paymentStatus: "Paid",
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await ctx.db.insert("orderItems", {
+        organizationId: orgId,
+        orderId: oId,
+        itemName: "Butter Naan",
+        itemPrice: 7000,
+        quantity: 2,
+        totalPrice: 14000,
+        isReady: true,
+        createdAt: now,
+      });
+
+      return { orderId: oId };
+    });
+
+    const surveyId = await admin.mutation(api.surveys.create, {
+      name: "Draft Reviews",
+      introduction: "Draft feedback",
+      afterSurveyContent: "Thanks",
+      active: true,
+    });
+
+    const qDish = await admin.mutation(api.surveyQuestions.create, {
+      surveyId,
+      questionText: "Rate this dish",
+      type: "numeric",
+      position: 1,
+      frequency: "per_order_item",
+      validationRules: { presence: false },
+    });
+
+    const attempt = await admin.mutation(api.surveyAttempts.getOrCreateForOrder, {
+      orderId,
+    });
+
+    // Save draft answers (autosave) without calling submit mutation
+    await admin.mutation(api.surveyAttempts.saveDraftAnswers, {
+      attemptId: attempt!.attemptId,
+      overallRating: 4,
+      answers: [
+        {
+          questionId: qDish,
+          orderItemName: "Butter Naan",
+          numericValue: 4,
+          answerText: "Freshly made and hot",
+        },
+      ],
+    });
+
+    const details = await admin.query(api.surveyAttempts.getOrderReviewDetails, {
+      orderId,
+    });
+
+    // In-progress item review must be visible on the review details page
+    expect(details?.hasReview).toBe(true);
+    expect(details?.review?.overallScore).toBe(4);
+    expect(details?.review?.source).toContain("Customer Review");
+    const naan = details?.items.find((i) => i.itemName === "Butter Naan");
+    expect(naan?.customerScore).toBe(4);
+    expect(naan?.customerCritique).toBe("Freshly made and hot");
+  });
 });
 
 

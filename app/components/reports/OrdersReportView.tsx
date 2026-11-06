@@ -8,6 +8,7 @@ import {
   formatStoreTime,
   formatStoreDateTime,
   getCurrencyForCountry,
+  resolveOrganizationCurrency,
 } from "../../../lib/constants/countries";
 import { DateRange, ChevronRightIcon } from "./ReportHeader";
 import { Toast, type ToastMessage } from "../Toast";
@@ -41,13 +42,9 @@ export function OrdersReportView({
   onRangeChange,
   activeOrg,
 }: OrdersReportViewProps) {
-  const currencySymbol =
-    passedCurrencySymbol ||
-    activeOrg?.defaultCurrencySymbol ||
-    getCurrencyForCountry(countryCode || "IN").symbol ||
-    "₹";
-
-  const effectiveCountry = activeOrg?.country || countryCode || "IN";
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
+  const currencySymbol = passedCurrencySymbol || orgCurrency.symbol;
+  const effectiveCountry = activeOrg?.country || orgCurrency.countryCode || countryCode || "IN";
   const effectiveTimezone = activeOrg?.organizationTimeZone || timezone || "Asia/Kolkata";
 
   // Toast notifications

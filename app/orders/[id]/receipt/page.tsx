@@ -11,6 +11,7 @@ import { PosShell } from "@/app/components/PosShell";
 import {
   formatCurrencyAmount,
   formatStoreDateTime,
+  resolveOrganizationCurrency,
 } from "@/lib/constants/countries";
 
 export default function OrderReceiptPreviewPage() {
@@ -232,7 +233,9 @@ export default function OrderReceiptPreviewPage() {
   }
 
   // Derived financial computations
-  const currencySymbol = activeOrg?.defaultCurrencySymbol || activeOrg?.defaultCurrency || "₹";
+  const orgCurrency = resolveOrganizationCurrency(activeOrg);
+  const currencySymbol = orgCurrency.symbol;
+  const symbolPrefix = currencySymbol.length > 1 ? `${currencySymbol} ` : currencySymbol;
   const subTotalNum = (order.subTotal || 0) / 100;
   const taxTotalNum = (order.taxTotal || 0) / 100;
   const grandTotalNum = (order.totalAmount || 0) / 100;
@@ -433,10 +436,10 @@ export default function OrderReceiptPreviewPage() {
                         </div>
                         <span className="w-12 text-center text-[#1A1A1A] font-medium">{it.quantity}</span>
                         <span className="w-16 text-right text-[#5b5f64]">
-                          {currencySymbol}{((it.itemPrice || 0) / 100).toFixed(2)}
+                          {symbolPrefix}{((it.itemPrice || 0) / 100).toFixed(2)}
                         </span>
                         <span className="w-20 text-right font-bold text-[#1A1A1A]">
-                          {currencySymbol}{((it.totalPrice || 0) / 100).toFixed(2)}
+                          {symbolPrefix}{((it.totalPrice || 0) / 100).toFixed(2)}
                         </span>
                       </div>
                     ))}
@@ -449,15 +452,15 @@ export default function OrderReceiptPreviewPage() {
                   <div className="flex flex-col gap-1 py-1 text-xs">
                     <div className="flex justify-between text-[#5b5f64]">
                       <span>Subtotal ({items.length} items)</span>
-                      <span className="text-[#1A1A1A] font-semibold">{currencySymbol}{subTotalNum.toFixed(2)}</span>
+                      <span className="text-[#1A1A1A] font-semibold">{symbolPrefix}{subTotalNum.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-[#5b5f64]">
                       <span>CGST @ 2.5%</span>
-                      <span className="text-[#1A1A1A]">{currencySymbol}{cgst}</span>
+                      <span className="text-[#1A1A1A]">{symbolPrefix}{cgst}</span>
                     </div>
                     <div className="flex justify-between text-[#5b5f64]">
                       <span>SGST @ 2.5%</span>
-                      <span className="text-[#1A1A1A]">{currencySymbol}{sgst}</span>
+                      <span className="text-[#1A1A1A]">{symbolPrefix}{sgst}</span>
                     </div>
 
                     {/* Grand Total Bar */}
@@ -466,7 +469,7 @@ export default function OrderReceiptPreviewPage() {
                         Grand Total
                       </span>
                       <span className="text-lg font-extrabold text-black">
-                        {currencySymbol}{grandTotalNum.toFixed(2)}
+                        {symbolPrefix}{grandTotalNum.toFixed(2)}
                       </span>
                     </div>
 
