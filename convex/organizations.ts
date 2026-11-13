@@ -2318,9 +2318,9 @@ export const saveOnboarding = mutation({
     isDineIn: v.optional(v.boolean()),
     isTakeAway: v.optional(v.boolean()),
     isDelivery: v.optional(v.boolean()),
-    floorModel: v.optional(v.string()),
     deliveryFleetType: v.optional(v.string()),
     operatingHoursTemplate: v.optional(v.string()),
+    operationTiming: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     const org = await ctx.db.get(args.id);
@@ -2374,17 +2374,50 @@ export const saveOnboarding = mutation({
       updates.organizationTimeZone = args.organizationTimeZone;
     }
 
-    // Step 3 mappings
+    // Step 3 mappings (Service Modes & Operating Timings)
     if (args.isDineIn !== undefined) updates.isDineIn = args.isDineIn;
     if (args.isTakeAway !== undefined) updates.isTakeAway = args.isTakeAway;
     if (args.isDelivery !== undefined) updates.isDelivery = args.isDelivery;
-    if (args.floorModel !== undefined) updates.floorModel = args.floorModel;
     if (args.deliveryFleetType !== undefined) updates.deliveryFleetType = args.deliveryFleetType;
     if (args.operatingHoursTemplate !== undefined) {
       updates.operatingHoursTemplate = args.operatingHoursTemplate;
+    }
+    if (args.operationTiming !== undefined) {
+      updates.operationTiming = args.operationTiming;
     }
 
     await ctx.db.patch(args.id, updates);
     return { success: true, onboardingCompleted: updates.onboardingCompleted ?? org.onboardingCompleted ?? false };
   },
 });
+
+export const updateOnboardingChecklist = mutation({
+  args: {
+    id: v.id("organizations"),
+    completedItems: v.optional(v.array(v.number())),
+    dismissedBanner: v.optional(v.boolean()),
+    markCompleted: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const org = await ctx.db.get(args.id);
+    if (!org) throw new Error("Organization not found");
+
+    const updates: Record<string, any> = {
+      updatedAt: Date.now(),
+    };
+    if (args.completedItems !== undefined) {
+      updates.onboardingChecklist = args.completedItems;
+    }
+    if (args.dismissedBanner !== undefined) {
+      updates.onboardingDismissedBanner = args.dismissedBanner;
+    }
+    if (args.markCompleted === true) {
+      updates.onboardingCompleted = true;
+      updates.onboardingCompletedAt = Date.now();
+    }
+
+    await ctx.db.patch(args.id, updates);
+    return { success: true };
+  },
+});
+

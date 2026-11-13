@@ -17,8 +17,8 @@ export default function SignUpPage() {
             routing="path"
             path="/sign-up"
             signInUrl="/sign-in"
-            fallbackRedirectUrl="/"
-            forceRedirectUrl="/"
+            fallbackRedirectUrl="/onboarding"
+            forceRedirectUrl="/onboarding"
             appearance={{
               variables: {
                 colorPrimary: "#6366f1",
@@ -33,8 +33,6 @@ export default function SignUpPage() {
                 rootBox: "w-full",
                 cardBox: "w-full shadow-2xl rounded-xl",
                 card: "auth-clerk-card",
-                footer: "hidden",
-                footerAction: "hidden",
                 headerTitle: "text-white font-bold text-xl",
                 headerSubtitle: "text-slate-300 text-sm",
                 socialButtonsBlockButton:

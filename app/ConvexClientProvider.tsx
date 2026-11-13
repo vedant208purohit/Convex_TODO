@@ -22,7 +22,6 @@ interface StoreResolutionData {
 
 function StoreSessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const { signOut } = useClerk();
 
   const isAuthPage =
     pathname === "/sign-in" ||
@@ -30,11 +29,19 @@ function StoreSessionGuard({ children }: { children: ReactNode }) {
     pathname === "/sign-up" ||
     pathname.startsWith("/sign-up/") ||
     pathname === "/login" ||
-    pathname.startsWith("/login/");
+    pathname.startsWith("/login/") ||
+    pathname === "/onboarding" ||
+    pathname.startsWith("/onboarding/");
 
   if (isAuthPage) {
     return <>{children}</>;
   }
+
+  return <AuthenticatedStoreSessionGuard>{children}</AuthenticatedStoreSessionGuard>;
+}
+
+function AuthenticatedStoreSessionGuard({ children }: { children: ReactNode }) {
+  const { signOut } = useClerk();
 
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
@@ -280,6 +287,7 @@ function StoreSessionGuard({ children }: { children: ReactNode }) {
 }
 
 function DynamicConvexProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { signOut } = useClerk();
 
@@ -379,7 +387,10 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
 
   const resolvedUrl = resolutionState.data?.deploymentUrl;
   const staticFallbackUrl = process.env.NEXT_PUBLIC_CONVEX_URL || null;
-  const activeConvexUrl = isSignedIn ? resolvedUrl : (staticFallbackUrl || resolvedUrl);
+
+  // Fallback to static Convex URL if resolution fails or if user is on onboarding/setting up their store
+  const activeConvexUrl =
+    resolvedUrl || staticFallbackUrl;
 
   const convex = useMemo(() => {
     if (!activeConvexUrl) return null;
@@ -442,7 +453,9 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (resolutionState.error || !convex) {
+  const isOnboardingPage = pathname === "/onboarding" || pathname.startsWith("/onboarding/");
+
+  if ((resolutionState.error || !convex) && !isOnboardingPage && !staticFallbackUrl) {
     const isUnassigned = resolutionState.errorCode === "STORE_NOT_ASSIGNED";
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
@@ -483,6 +496,17 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
               Sign Out
             </button>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!convex) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center bg-[#fdf8f7] text-[#1c1b1b]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ff5722] border-t-transparent" />
+          <p className="text-sm font-medium text-stone-600">Initializing store database...</p>
         </div>
       </div>
     );

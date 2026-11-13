@@ -175,6 +175,8 @@ export default defineSchema({
     operatingHoursTemplate: v.optional(v.string()), // "standard" | "custom" | "later"
     suiteUnit: v.optional(v.string()),
     language: v.optional(v.string()),
+    onboardingDismissedBanner: v.optional(v.boolean()),
+    onboardingChecklist: v.optional(v.array(v.number())),
   })
     .index("by_legacy_id", ["legacyId"])
     .index("by_slug", ["slug"]),

@@ -116,6 +116,16 @@ export async function GET(req: Request) {
     else if (countryCode === "CA") currency = "CAD";
     else if (countryCode === "AU") currency = "AUD";
 
+    // Country-based timezone fallback if Google Timezone API is disabled/empty
+    if (!timezone) {
+      if (countryCode === "IN") timezone = "Asia/Kolkata";
+      else if (countryCode === "GB") timezone = "Europe/London";
+      else if (countryCode === "AE") timezone = "Asia/Dubai";
+      else if (countryCode === "FR" || countryCode === "DE" || countryCode === "IT" || countryCode === "ES") timezone = "Europe/Paris";
+      else if (countryCode === "AU") timezone = "Australia/Sydney";
+      else if (countryCode === "CA" || countryCode === "US") timezone = "America/New_York";
+    }
+
     return NextResponse.json({
       placeId,
       name: result.name || "",
@@ -140,6 +150,9 @@ export async function GET(req: Request) {
       dineIn: result.dine_in ?? true,
       takeout: result.takeout ?? true,
       delivery: result.delivery ?? false,
+      servesBeer: result.serves_beer ?? false,
+      servesWine: result.serves_wine ?? false,
+      servesVegetarianFood: result.serves_vegetarian_food ?? false,
     });
   } catch (error: any) {
     console.error("Error in place details route:", error);

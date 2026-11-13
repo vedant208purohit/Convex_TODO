@@ -211,12 +211,17 @@ export default function DashboardPage() {
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
 
-  // Onboarding guard: If organization exists and onboarding is not completed, redirect to /onboarding
+  // Onboarding guard:
+  // If user has no organization yet OR organization has not completed onboarding, redirect to /onboarding
   useEffect(() => {
-    if (activeOrg && activeOrg.onboardingCompleted === false) {
-      router.replace("/onboarding");
+    if (organizations !== undefined) {
+      if (organizations.length === 0) {
+        router.replace("/onboarding");
+      } else if (activeOrg && activeOrg.onboardingCompleted !== true) {
+        router.replace("/onboarding");
+      }
     }
-  }, [activeOrg, router]);
+  }, [organizations, activeOrg, router]);
 
   const currentMembership = useQuery(
     api.organizationUsers.getCurrentMembership,

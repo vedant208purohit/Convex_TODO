@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useUser, useClerk } from "@clerk/nextjs";
+import { OnboardingLaunchChecklist } from "./components/OnboardingLaunchChecklist";
 
 // Business types from Screen 1
 const BUSINESS_TYPES = [
@@ -81,11 +82,21 @@ export default function OnboardingPage() {
 
   // Step 3 State: Operations & Fulfillment
   const [isDineIn, setIsDineIn] = useState(true);
-  const [floorModel, setFloorModel] = useState<"table" | "counter" | "hybrid">("table");
   const [isPickup, setIsPickup] = useState(true);
   const [isDelivery, setIsDelivery] = useState(true);
   const [deliveryFleetType, setDeliveryFleetType] = useState<"inhouse" | "thirdparty" | "blended">("blended");
   const [operatingHours, setOperatingHours] = useState<"standard" | "custom" | "later">("standard");
+  const [customSchedule, setCustomSchedule] = useState<{
+    weekdayStart: string;
+    weekdayEnd: string;
+    weekendStart: string;
+    weekendEnd: string;
+  }>({
+    weekdayStart: "11:00",
+    weekdayEnd: "22:00",
+    weekendStart: "11:00",
+    weekendEnd: "23:00",
+  });
 
   const [savingStep, setSavingStep] = useState(false);
 
@@ -95,15 +106,15 @@ export default function OnboardingPage() {
   // Initialize from active organization if present
   useEffect(() => {
     if (activeOrg) {
-      // Check if already completed onboarding -> Immediately redirect away
-      if (activeOrg.onboardingCompleted) {
-        router.replace("/dashboard");
-        return;
-      }
-
-      // Resume step if previously saved
-      if (activeOrg.onboardingStep && activeOrg.onboardingStep >= 1 && activeOrg.onboardingStep <= 3) {
+      // If store is already provisioned (organization exists), lock directly into Step 4 (Launch Checklist)
+      // to prevent re-entering or re-submitting Steps 1-3.
+      if (activeOrg.onboardingStep && activeOrg.onboardingStep >= 4) {
+        setActiveStep(4);
+      } else if (activeOrg.onboardingStep && activeOrg.onboardingStep >= 1 && activeOrg.onboardingStep <= 3) {
         setActiveStep(activeOrg.onboardingStep);
+      } else {
+        // If an organization record already exists in the store, default to Step 4
+        setActiveStep(4);
       }
 
       // Step 1
@@ -133,7 +144,6 @@ export default function OnboardingPage() {
       if (activeOrg.isDineIn !== undefined) setIsDineIn(activeOrg.isDineIn);
       if (activeOrg.isTakeAway !== undefined) setIsPickup(activeOrg.isTakeAway);
       if (activeOrg.isDelivery !== undefined) setIsDelivery(activeOrg.isDelivery);
-      if (activeOrg.floorModel) setFloorModel(activeOrg.floorModel as any);
       if (activeOrg.deliveryFleetType) setDeliveryFleetType(activeOrg.deliveryFleetType as any);
       if (activeOrg.operatingHoursTemplate) setOperatingHours(activeOrg.operatingHoursTemplate as any);
     }
@@ -216,14 +226,70 @@ export default function OnboardingPage() {
       if (details.country) setCountry(details.country);
       if (details.phoneNumber) setPhoneNumber(details.phoneNumber);
       if (details.currency) setCurrency(details.currency);
-      if (details.timezone) setTimezone(details.timezone);
+      if (details.timezone) {
+        setTimezone(details.timezone);
+      } else if (details.country === "IN") {
+        setTimezone("Asia/Kolkata");
+      } else if (details.country === "GB") {
+        setTimezone("Europe/London");
+      } else if (details.country === "AE") {
+        setTimezone("Asia/Dubai");
+      }
 
-      // Auto-detect business type & fulfillment if present
-      if (details.types && Array.isArray(details.types)) {
-        if (details.types.includes("cafe")) setBusinessType("cafe");
-        else if (details.types.includes("bakery")) setBusinessType("bakery");
-        else if (details.types.includes("bar")) setBusinessType("bar");
-        else if (details.types.includes("meal_takeaway")) setBusinessType("qsr");
+      // Auto-detect business type with comprehensive Google classification
+      const placeTypes: string[] = Array.isArray(details.types) ? details.types : [];
+      const placeNameLower: string = (details.name || place.name || "").toLowerCase();
+
+      // Priority 1: Bakery / Dessert
+      if (
+        placeTypes.includes("bakery") ||
+        placeNameLower.includes("bakery") ||
+        placeNameLower.includes("cake") ||
+        placeNameLower.includes("dessert") ||
+        placeNameLower.includes("sweets")
+      ) {
+        setBusinessType("bakery");
+      }
+      // Priority 2: Cafe / Coffee Shop
+      else if (
+        placeTypes.includes("cafe") ||
+        placeNameLower.includes("cafe") ||
+        placeNameLower.includes("coffee") ||
+        placeNameLower.includes("tea")
+      ) {
+        setBusinessType("cafe");
+      }
+      // Priority 3: Bar & Pub (ONLY if truly a night venue, bar type, or serves beer/wine, and not a family/dining restaurant)
+      else if (
+        (placeTypes.includes("bar") ||
+          placeTypes.includes("night_club") ||
+          placeNameLower.includes("bar & pub") ||
+          placeNameLower.includes("brewery") ||
+          placeNameLower.includes("pub")) &&
+        (details.servesBeer || details.servesWine) &&
+        !placeTypes.includes("restaurant")
+      ) {
+        setBusinessType("bar");
+      }
+      // Priority 4: Quick Service / Fast Food / Food Truck
+      else if (
+        placeTypes.includes("meal_takeaway") &&
+        !details.dineIn
+      ) {
+        setBusinessType("qsr");
+      }
+      // Priority 5: Full-Service Restaurant (Dine-in dining room, Indian/Kathiyawadi restaurant, Bistro, Fine Dining)
+      else if (
+        placeTypes.includes("restaurant") ||
+        details.dineIn ||
+        placeNameLower.includes("restaurant") ||
+        placeNameLower.includes("bistro") ||
+        placeNameLower.includes("kathiyawadi") ||
+        placeNameLower.includes("dhaba")
+      ) {
+        setBusinessType("fsg");
+      } else {
+        setBusinessType("fsg");
       }
 
       if (details.dineIn !== undefined) setIsDineIn(details.dineIn);
@@ -236,18 +302,6 @@ export default function OnboardingPage() {
       setStreetAddress(place.address);
     }
   };
-
-  // If activeOrg is loading or user is already completed
-  if (activeOrg && activeOrg.onboardingCompleted) {
-    return (
-      <div className="min-h-screen w-full flex items-center justify-center bg-[#fbf7f4]">
-        <div className="flex flex-col items-center gap-3">
-          <span className="material-symbols-outlined text-4xl text-neutral-800 animate-spin">progress_activity</span>
-          <p className="font-sans text-sm text-neutral-600">Redirecting to Dashboard...</p>
-        </div>
-      </div>
-    );
-  }
 
   // Handle Step 1 Submit
   const handleStep1Submit = async (e: React.FormEvent) => {
@@ -337,32 +391,118 @@ export default function OnboardingPage() {
 
   // Handle Step 3 Final Submit
   const handleStep3Submit = async () => {
+    // Validation: At least one service mode must remain enabled (matching Settings > Features)
+    if (!isDineIn && !isPickup && !isDelivery) {
+      showToast("Service Mode Required", "Please select at least one fulfillment modality (Dine-In, Pickup, or Delivery).");
+      return;
+    }
+
     setSavingStep(true);
 
     try {
-      if (activeOrg) {
-        await saveOnboardingMutation({
-          id: activeOrg._id,
-          step: 3,
-          completed: true,
-          isDineIn,
-          isTakeAway: isPickup,
-          isDelivery,
-          floorModel,
-          deliveryFleetType,
-          operatingHoursTemplate: operatingHours,
+      // Construct standard 7-day operational timing matching Settings > Organization > Operational Timings
+      const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+      let generatedOperationTiming: Record<string, any> | undefined = undefined;
+
+      if (operatingHours === "standard") {
+        // 11:00 AM – 10:00 PM (22:00) every day
+        generatedOperationTiming = {};
+        DAYS.forEach((day) => {
+          generatedOperationTiming![day] = {
+            is_open: true,
+            is_open_all_day: false,
+            hours: [{ start_time: "11:00", end_time: "22:00" }],
+          };
+        });
+      } else if (operatingHours === "custom") {
+        // Weekdays (Mon-Fri) vs Weekends (Sat-Sun)
+        generatedOperationTiming = {};
+        DAYS.forEach((day) => {
+          const isWeekend = day === "Saturday" || day === "Sunday";
+          generatedOperationTiming![day] = {
+            is_open: true,
+            is_open_all_day: false,
+            hours: [
+              {
+                start_time: isWeekend ? customSchedule.weekendStart : customSchedule.weekdayStart,
+                end_time: isWeekend ? customSchedule.weekendEnd : customSchedule.weekdayEnd,
+              },
+            ],
+          };
+        });
+      } else if (operatingHours === "later") {
+        // Defer Schedule: Keep default 11:00 – 23:59 or existing
+        generatedOperationTiming = {};
+        DAYS.forEach((day) => {
+          generatedOperationTiming![day] = {
+            is_open: true,
+            is_open_all_day: false,
+            hours: [{ start_time: "11:00", end_time: "23:59" }],
+          };
         });
       }
 
-      showToast("Onboarding Completed", "Launching PREST POS Studio...");
-      setTimeout(() => {
-        setSavingStep(false);
-        router.push("/dashboard");
-      }, 1200);
+      // If this is a new store (no activeOrg yet), trigger full store provisioning (Creates dedicated Convex project)
+      if (!activeOrg) {
+        const res = await fetch("/api/store/provision", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            organizationName: orgName.trim(),
+            restaurantName: restName.trim(),
+            businessType,
+            locationsCount,
+            addressLine1: streetAddress.trim(),
+            suiteUnit: suiteUnit.trim(),
+            city: city.trim(),
+            state: state.trim(),
+            zipCode: zipCode.trim(),
+            country: country.trim(),
+            phone: phoneNumber.trim(),
+            currency: currency.trim(),
+            language: language.trim(),
+            organizationTimeZone: timezone.trim(),
+            isDineIn,
+            isTakeAway: isPickup,
+            isDelivery,
+            deliveryFleetType,
+            operatingHoursTemplate: operatingHours,
+            operationTiming: generatedOperationTiming,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          throw new Error(data.error || "Failed to provision new store.");
+        }
+
+        showToast("Store Created", "Dedicated backend provisioned! Opening Launch Checklist...");
+        setTimeout(() => {
+          setSavingStep(false);
+          setActiveStep(4);
+        }, 1000);
+        return;
+      }
+
+      await saveOnboardingMutation({
+        id: activeOrg._id,
+        step: 4,
+        completed: false,
+        isDineIn,
+        isTakeAway: isPickup,
+        isDelivery,
+        deliveryFleetType,
+        operatingHoursTemplate: operatingHours,
+        operationTiming: generatedOperationTiming,
+      });
+
+      showToast("Store Configured", "Opening Setup Checklist...");
+      setSavingStep(false);
+      setActiveStep(4);
     } catch (err) {
       console.error(err);
       setSavingStep(false);
-      router.push("/dashboard");
+      setActiveStep(4);
     }
   };
 
@@ -410,7 +550,13 @@ export default function OnboardingPage() {
               {/* Progress Bar Active Portion */}
               <div
                 className={`absolute top-1/2 left-0 h-0.5 bg-[#1f1f1f] -translate-y-1/2 z-0 transition-all duration-300 ${
-                  activeStep === 1 ? "w-1/4" : activeStep === 2 ? "w-2/3" : "w-full"
+                  activeStep === 1
+                    ? "w-[12%]"
+                    : activeStep === 2
+                    ? "w-[38%]"
+                    : activeStep === 3
+                    ? "w-[68%]"
+                    : "w-full"
                 }`}
               ></div>
 
@@ -418,14 +564,19 @@ export default function OnboardingPage() {
               <div className="relative z-10 flex flex-col items-center">
                 <button
                   type="button"
-                  onClick={() => setActiveStep(1)}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shadow-sm ring-4 ring-[#fbf7f4] transition-colors cursor-pointer ${
-                    activeStep === 1
-                      ? "bg-[#1f1f1f] text-white"
-                      : "bg-[#e9e1dd] text-[#1d1b1a]"
+                  disabled={Boolean(activeOrg)}
+                  onClick={() => {
+                    if (!activeOrg) setActiveStep(1);
+                  }}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shadow-sm ring-4 ring-[#fbf7f4] transition-colors ${
+                    activeOrg
+                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-not-allowed opacity-80"
+                      : activeStep === 1
+                      ? "bg-[#1f1f1f] text-white cursor-pointer"
+                      : "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
                   }`}
                 >
-                  {activeStep > 1 ? (
+                  {activeStep > 1 || activeOrg ? (
                     <span className="material-symbols-outlined text-sm font-bold">check</span>
                   ) : (
                     "1"
@@ -437,18 +588,21 @@ export default function OnboardingPage() {
               <div className="relative z-10 flex flex-col items-center">
                 <button
                   type="button"
+                  disabled={Boolean(activeOrg)}
                   onClick={() => {
-                    if (orgName && restName) setActiveStep(2);
+                    if (!activeOrg && orgName && restName) setActiveStep(2);
                   }}
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors ${
-                    activeStep === 2
+                    activeOrg
+                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-not-allowed opacity-80"
+                      : activeStep === 2
                       ? "bg-[#1f1f1f] text-white font-semibold cursor-pointer"
                       : activeStep > 2
                       ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
                       : "bg-[#eee7e3] text-[#4d4541] cursor-pointer"
                   }`}
                 >
-                  {activeStep > 2 ? (
+                  {activeStep > 2 || activeOrg ? (
                     <span className="material-symbols-outlined text-sm font-bold">check</span>
                   ) : (
                     "2"
@@ -460,26 +614,58 @@ export default function OnboardingPage() {
               <div className="relative z-10 flex flex-col items-center">
                 <button
                   type="button"
+                  disabled={Boolean(activeOrg)}
                   onClick={() => {
-                    if (orgName && restName) setActiveStep(3);
+                    if (!activeOrg && orgName && restName) setActiveStep(3);
+                  }}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors ${
+                    activeOrg
+                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-not-allowed opacity-80"
+                      : activeStep === 3
+                      ? "bg-[#1f1f1f] text-white font-semibold cursor-pointer"
+                      : activeStep > 3
+                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
+                      : "bg-[#eee7e3] text-[#4d4541] cursor-pointer"
+                  }`}
+                >
+                  {activeStep > 3 || activeOrg ? (
+                    <span className="material-symbols-outlined text-sm font-bold">check</span>
+                  ) : (
+                    "3"
+                  )}
+                </button>
+              </div>
+
+              {/* Step 4 */}
+              <div className="relative z-10 flex flex-col items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeOrg || (orgName && restName)) setActiveStep(4);
                   }}
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors cursor-pointer ${
-                    activeStep === 3
+                    activeStep === 4
                       ? "bg-[#1f1f1f] text-white font-semibold"
                       : "bg-[#eee7e3] text-[#4d4541]"
                   }`}
                 >
-                  3
+                  4
                 </button>
               </div>
             </div>
 
             {/* Stepper Text Details */}
             <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wider text-[#645d58]">Step {activeStep} of 3</span>
+              <span className="text-xs uppercase tracking-wider text-[#645d58]">Step {activeStep} of 4</span>
               <span className="text-[#645d58]">•</span>
               <span className="text-xs font-semibold text-[#1d1b1a] uppercase tracking-wider">
-                {activeStep === 1 ? "Organisation" : activeStep === 2 ? "Location" : "Operations"}
+                {activeStep === 1
+                  ? "Organisation"
+                  : activeStep === 2
+                  ? "Location"
+                  : activeStep === 3
+                  ? "Operations"
+                  : "Launch Checklist"}
               </span>
             </div>
           </div>
@@ -1252,12 +1438,15 @@ export default function OnboardingPage() {
                             onChange={(e) => setTimezone(e.target.value)}
                             className="w-full bg-white border border-[#d0c4be] rounded-lg px-3 py-2.5 text-sm text-[#1d1b1a] focus:outline-none focus:border-[#1f1f1f] appearance-none cursor-pointer"
                           >
+                            <option value="Asia/Kolkata">Asia/Kolkata (IST - India Standard Time)</option>
+                            <option value="Asia/Dubai">Asia/Dubai (GST - Gulf Standard Time)</option>
+                            <option value="Europe/London">Europe/London (GMT / BST)</option>
+                            <option value="Europe/Paris">Europe/Paris (CET)</option>
+                            <option value="America/New_York">America/New_York (EST / EDT)</option>
+                            <option value="America/Chicago">America/Chicago (CST / CDT)</option>
+                            <option value="America/Denver">America/Denver (MST / MDT)</option>
                             <option value="America/Los_Angeles">America/Los_Angeles (PST - Pacific Time)</option>
-                            <option value="America/New_York">America/New_York (EST)</option>
-                            <option value="America/Chicago">America/Chicago (CST)</option>
-                            <option value="America/Denver">America/Denver (MST)</option>
-                            <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
-                            <option value="Europe/London">Europe/London (GMT)</option>
+                            <option value="Australia/Sydney">Australia/Sydney (AEST)</option>
                           </select>
                           <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-[#645d58] text-sm">
                             expand_more
@@ -1364,53 +1553,6 @@ export default function OnboardingPage() {
                           <span className="material-symbols-outlined text-sm font-bold">check</span>
                         </div>
                       </div>
-
-                      {/* Sub-Option Pills: Service Type */}
-                      {isDineIn && (
-                        <div
-                          className="mt-4 pt-4 bg-white/70 rounded-lg p-3 border border-[#eadfd6]"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span className="text-xs text-[#645d58] uppercase tracking-wider block mb-2 font-medium">
-                            Hospitality Floor Model
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setFloorModel("table")}
-                              className={`px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
-                                floorModel === "table"
-                                  ? "bg-[#1f1f1f] text-white font-medium"
-                                  : "bg-[#faf2ee] text-[#1d1b1a] hover:bg-[#eee7e3]"
-                              }`}
-                            >
-                              Table Service
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setFloorModel("counter")}
-                              className={`px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
-                                floorModel === "counter"
-                                  ? "bg-[#1f1f1f] text-white font-medium"
-                                  : "bg-[#faf2ee] text-[#1d1b1a] hover:bg-[#eee7e3]"
-                              }`}
-                            >
-                              Counter Service
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setFloorModel("hybrid")}
-                              className={`px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
-                                floorModel === "hybrid"
-                                  ? "bg-[#1f1f1f] text-white font-medium"
-                                  : "bg-[#faf2ee] text-[#1d1b1a] hover:bg-[#eee7e3]"
-                              }`}
-                            >
-                              Hybrid / Both
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
 
                     {/* Card 2: Pickup / Takeout */}
@@ -1469,53 +1611,6 @@ export default function OnboardingPage() {
                           <span className="material-symbols-outlined text-sm font-bold">check</span>
                         </div>
                       </div>
-
-                      {/* Sub-Option Pills: Delivery Logistics */}
-                      {isDelivery && (
-                        <div
-                          className="mt-4 pt-4 bg-white/70 rounded-lg p-3 border border-[#eadfd6]"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <span className="text-xs text-[#645d58] uppercase tracking-wider block mb-2 font-medium">
-                            Courier Fleet Logistics
-                          </span>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setDeliveryFleetType("inhouse")}
-                              className={`px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
-                                deliveryFleetType === "inhouse"
-                                  ? "bg-[#1f1f1f] text-white font-medium"
-                                  : "bg-[#faf2ee] text-[#1d1b1a] hover:bg-[#eee7e3]"
-                              }`}
-                            >
-                              In-House Couriers
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeliveryFleetType("thirdparty")}
-                              className={`px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
-                                deliveryFleetType === "thirdparty"
-                                  ? "bg-[#1f1f1f] text-white font-medium"
-                                  : "bg-[#faf2ee] text-[#1d1b1a] hover:bg-[#eee7e3]"
-                              }`}
-                            >
-                              Third-Party Partners
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeliveryFleetType("blended")}
-                              className={`px-3.5 py-1.5 rounded-full text-xs transition-colors cursor-pointer ${
-                                deliveryFleetType === "blended"
-                                  ? "bg-[#1f1f1f] text-white font-medium"
-                                  : "bg-[#faf2ee] text-[#1d1b1a] hover:bg-[#eee7e3]"
-                              }`}
-                            >
-                              Blended / Both
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -1596,6 +1691,78 @@ export default function OnboardingPage() {
                       </div>
                     </label>
                   </div>
+
+                  {/* Custom Schedule Details Drawer/Panel when "Custom by Day" is selected */}
+                  {operatingHours === "custom" && (
+                    <div className="p-4 bg-[#faf2ee] border border-[#eadfd6] rounded-xl space-y-3.5 mt-1 transition-all">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-[#1d1b1a] uppercase tracking-wider">
+                          Configure Weekend vs Weekday Shifts
+                        </span>
+                        <span className="text-[11px] text-[#645d58]">Syncs with Settings &gt; Operational Timings</span>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {/* Weekday Shift */}
+                        <div className="bg-white p-3.5 rounded-lg border border-[#eadfd6] space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-[#1d1b1a]">Mon – Fri (Weekdays)</span>
+                            <span className="text-[11px] px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded font-medium">Open</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-[#645d58] block mb-0.5">Start Time</label>
+                              <input
+                                type="time"
+                                value={customSchedule.weekdayStart}
+                                onChange={(e) => setCustomSchedule({ ...customSchedule, weekdayStart: e.target.value })}
+                                className="w-full text-xs bg-[#faf2ee] border border-[#eadfd6] rounded px-2 py-1.5 text-[#1d1b1a] focus:outline-none"
+                              />
+                            </div>
+                            <span className="text-xs text-[#645d58] mt-3.5">—</span>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-[#645d58] block mb-0.5">End Time</label>
+                              <input
+                                type="time"
+                                value={customSchedule.weekdayEnd}
+                                onChange={(e) => setCustomSchedule({ ...customSchedule, weekdayEnd: e.target.value })}
+                                className="w-full text-xs bg-[#faf2ee] border border-[#eadfd6] rounded px-2 py-1.5 text-[#1d1b1a] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Weekend Shift */}
+                        <div className="bg-white p-3.5 rounded-lg border border-[#eadfd6] space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-medium text-[#1d1b1a]">Sat – Sun (Weekends)</span>
+                            <span className="text-[11px] px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded font-medium">Open</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1">
+                              <label className="text-[10px] text-[#645d58] block mb-0.5">Start Time</label>
+                              <input
+                                type="time"
+                                value={customSchedule.weekendStart}
+                                onChange={(e) => setCustomSchedule({ ...customSchedule, weekendStart: e.target.value })}
+                                className="w-full text-xs bg-[#faf2ee] border border-[#eadfd6] rounded px-2 py-1.5 text-[#1d1b1a] focus:outline-none"
+                              />
+                            </div>
+                            <span className="text-xs text-[#645d58] mt-3.5">—</span>
+                            <div className="flex-1">
+                              <label className="text-[10px] text-[#645d58] block mb-0.5">End Time</label>
+                              <input
+                                type="time"
+                                value={customSchedule.weekendEnd}
+                                onChange={(e) => setCustomSchedule({ ...customSchedule, weekendEnd: e.target.value })}
+                                className="w-full text-xs bg-[#faf2ee] border border-[#eadfd6] rounded px-2 py-1.5 text-[#1d1b1a] focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Callout */}
@@ -1640,12 +1807,15 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* Footnote Metadata */}
-          <footer className="text-center text-xs text-[#645d58] pb-4 flex items-center justify-center gap-4">
-            <span>Encrypted &amp; PCI-DSS Level 1 Compliant</span>
-            <span>•</span>
-            <span>PREST Hospitality Systems Inc.</span>
-          </footer>
+          {/* ================= STEP 4 SCREEN: LAUNCH CHECKLIST ================= */}
+          {activeStep === 4 && (
+            <OnboardingLaunchChecklist
+              organizationId={activeOrg?._id}
+              orgName={orgName}
+              restName={restName}
+              userFullName={user?.fullName || undefined}
+            />
+          )}
         </div>
       </main>
     </div>

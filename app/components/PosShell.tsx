@@ -714,6 +714,7 @@ export function PosShell({
     currentMembership?.userId &&
     currentMembership.userId === activeOrg.ownerClerkId
   );
+  const isOnboardingIncomplete = Boolean(activeOrg && activeOrg.onboardingCompleted !== true);
   const isPendingInvitation = !isOwner && Boolean(
     currentMembership && (
       (currentMembership as any).status === "invited" ||
@@ -755,6 +756,36 @@ export function PosShell({
   }, [isPendingInvitation, hasTicket, activeOrg?._id, acceptError, isAccepting]);
 
   if (!isMarketplacePage && organizations !== undefined && (organizations.length === 0 || currentMembership === null)) {
+    if (organizations.length === 0) {
+      return (
+        <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
+          <div className="w-full max-w-md rounded-2xl border border-stone-200 bg-white p-8 shadow-sm text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-stone-100 text-stone-700">
+              <span className="material-symbols-outlined text-[24px]">storefront</span>
+            </div>
+            <h2 className="text-xl font-semibold text-stone-900">Get Started with PREST</h2>
+            <p className="mt-2 text-sm text-stone-600 leading-relaxed">
+              You haven't set up your store workspace yet. Start the onboarding wizard to configure your restaurant.
+            </p>
+            <div className="mt-6 flex flex-col gap-2">
+              <Link
+                href="/onboarding"
+                className="w-full rounded-xl bg-stone-900 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800 text-center cursor-pointer shadow-xs"
+              >
+                Start Store Onboarding
+              </Link>
+              <button
+                onClick={() => signOut({ redirectUrl: "/sign-in" })}
+                className="w-full rounded-xl border border-stone-200 py-2.5 text-xs font-medium text-stone-600 transition hover:bg-stone-50 cursor-pointer"
+              >
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
         <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
@@ -969,6 +1000,9 @@ export function PosShell({
         {/* Navigation */}
         <nav ref={navRef} className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
           {navItems.map((item) => {
+            const effectiveHref =
+              isOnboardingIncomplete && item.href === "/dashboard" ? "/onboarding" : item.href;
+            const updatedItem = { ...item, href: effectiveHref };
             if (item.href === "/menu") {
               if (isCollapsed) {
                 return (
@@ -1218,8 +1252,8 @@ export function PosShell({
             const isCaptainDisabled = item.href === "/captain" && !isDineInActive;
             return (
               <NavLink
-                key={item.href}
-                {...item}
+                key={updatedItem.href}
+                {...updatedItem}
                 isCollapsed={isCollapsed}
                 disabled={isCaptainDisabled || item.disabled}
                 disabledTooltip={
@@ -1268,6 +1302,15 @@ export function PosShell({
             <span className="text-xs font-semibold text-stone-800 bg-stone-100 px-2.5 py-1 rounded border border-[#eadfd6]">
               {branchName}
             </span>
+            {isOnboardingIncomplete && (
+              <Link
+                href="/onboarding"
+                className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#1f1f1f] hover:bg-black text-white text-xs font-medium rounded-lg shadow-xs transition-colors cursor-pointer ml-2"
+              >
+                <span className="material-symbols-outlined text-xs">arrow_back</span>
+                <span>Back to Onboarding Checklist</span>
+              </Link>
+            )}
           </div>
           <div className="flex flex-1 justify-end items-center gap-4">
             <button
