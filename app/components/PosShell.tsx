@@ -626,7 +626,7 @@ export function PosShell({
   const [isInventoryExpanded, setIsInventoryExpanded] = useState(isInventoryPage);
   const [isMarketplaceExpanded, setIsMarketplaceExpanded] = useState(isMarketplacePage);
   const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
       return localStorage.getItem("pos_main_sidebar_collapsed") === "true";
     }
     return false;
@@ -635,7 +635,7 @@ export function PosShell({
   const toggleSidebar = () => {
     setIsCollapsed((prev) => {
       const next = !prev;
-      if (typeof window !== "undefined") {
+      if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
         localStorage.setItem("pos_main_sidebar_collapsed", String(next));
       }
       return next;
@@ -723,7 +723,7 @@ export function PosShell({
 
   const [hasTicket, setHasTicket] = useState(false);
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    if (typeof window !== "undefined" && typeof localStorage !== "undefined") {
       const search = window.location.search;
       if (search.includes("__clerk_ticket") || search.includes("__clerk_status=sign_in")) {
         setHasTicket(true);

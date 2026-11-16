@@ -541,6 +541,14 @@ export interface OrganizationCurrencyInfo {
  * 2. Country-based lookup in COUNTRIES_MASTER if org has country (e.g. 'AE' -> AED, 'US' -> USD).
  * 3. Safe fallback to India ('IN', 'INR', '₹', 'en-IN') with diagnostics.
  */
+export interface OrganizationCurrencyInfo {
+  code: string;
+  currencyCode: string;
+  symbol: string;
+  locale: string;
+  countryCode: string;
+}
+
 export function resolveOrganizationCurrency(org?: {
   country?: string | null;
   defaultCurrency?: string | null;
@@ -558,22 +566,28 @@ export function resolveOrganizationCurrency(org?: {
     const symbol = org!.defaultCurrencySymbol!.trim();
     const locale = master?.locale || (isIndiaCountry(countryParam || undefined) ? "en-IN" : "en-US");
     const countryCode = master?.isoCode || (isIndiaCountry(countryParam || undefined) ? "IN" : "US");
-    return { code, symbol, locale, countryCode };
+    return { code, currencyCode: code, symbol, locale, countryCode };
   }
 
   if (master) {
+    const code = org?.defaultCurrency?.trim().toUpperCase() || master.currency.code;
+    const symbol = org?.defaultCurrencySymbol?.trim() || (org?.defaultCurrency ? getCurrencySymbol(code) : master.currency.symbol);
     return {
-      code: org?.defaultCurrency?.trim().toUpperCase() || master.currency.code,
-      symbol: org?.defaultCurrencySymbol?.trim() || master.currency.symbol,
+      code,
+      currencyCode: code,
+      symbol,
       locale: master.locale,
       countryCode: master.isoCode,
     };
   }
 
   // Safe Fallback to India ('IN') when organization country is missing
+  const fallbackCode = org?.defaultCurrency?.trim().toUpperCase() || "INR";
+  const fallbackSymbol = org?.defaultCurrencySymbol?.trim() || getCurrencySymbol(fallbackCode);
   return {
-    code: org?.defaultCurrency?.trim().toUpperCase() || "INR",
-    symbol: org?.defaultCurrencySymbol?.trim() || "₹",
+    code: fallbackCode,
+    currencyCode: fallbackCode,
+    symbol: fallbackSymbol,
     locale: "en-IN",
     countryCode: "IN",
   };
@@ -748,6 +762,148 @@ export function formatPriceWithSymbol(
 
   const formattedNum = formatCurrencyAmount(num, countryCodeOrName);
   return cleanSym ? `${cleanSym}${sep}${formattedNum}` : formattedNum;
+}
+
+/**
+ * Returns currency decimal digits according to ISO 4217 minor unit precision
+ * (e.g. 2 for INR, AED, USD, EUR, GBP; 0 for JPY, KRW, VND; 3 for BHD, KWD, OMR).
+ */
+export function getCurrencyDecimalDigits(currencyCodeOrCountry?: string): number {
+  if (!currencyCodeOrCountry) return 2;
+  const upper = currencyCodeOrCountry.toUpperCase().trim();
+  if (["JPY", "KRW", "VND", "CLF"].includes(upper)) return 0;
+  if (["BHD", "KWD", "OMR", "TND", "JOD", "IQD", "LYD"].includes(upper)) return 3;
+  return 2;
+}
+
+/**
+ * Resolves standard IETF BCP 47 locale for a currency code with regional grouping standards.
+ */
+export function getCurrencyLocale(currencyCode?: string, countryCode?: string): string {
+  if (countryCode) {
+    const master = getCountryMaster(countryCode);
+    if (master?.locale) return master.locale;
+  }
+  const upper = (currencyCode || "INR").toUpperCase().trim();
+  const map: Record<string, string> = {
+    INR: "en-IN",
+    AED: "en-AE",
+    USD: "en-US",
+    GBP: "en-GB",
+    EUR: "en-IE",
+    SAR: "en-SA",
+    SGD: "en-SG",
+    AUD: "en-AU",
+    CAD: "en-CA",
+    NZD: "en-NZ",
+    ZAR: "en-ZA",
+    JPY: "ja-JP",
+    CNY: "zh-CN",
+    QAR: "ar-QA",
+    KWD: "ar-KW",
+    BHD: "ar-BH",
+    OMR: "ar-OM",
+  };
+  return map[upper] || (upper === "INR" ? "en-IN" : "en-US");
+}
+
+/**
+ * Centralized currency symbol resolver for ISO 4217 currency codes.
+ */
+export function getCurrencySymbol(currencyCode = "INR"): string {
+  const upper = (currencyCode || "INR").toUpperCase().trim();
+  if (upper === "INR") return "₹";
+  if (upper === "USD") return "$";
+  if (upper === "EUR") return "€";
+  if (upper === "GBP") return "£";
+  if (upper === "AED") return "AED";
+  if (upper === "SAR") return "SAR";
+  if (upper === "SGD") return "S$";
+  if (upper === "AUD") return "A$";
+  if (upper === "CAD") return "C$";
+  if (upper === "JPY") return "¥";
+  return upper;
+}
+
+/**
+ * Converts major units to minor units (e.g. 15.00 INR -> 1500 paise, 44.00 AED -> 4400 fils).
+ */
+export function toMinorUnits(amount: number | string, currencyCode = "INR"): number {
+  const num = typeof amount === "number" ? amount : parseFloat(String(amount).replace(/[^0-9.-]+/g, ""));
+  if (isNaN(num)) return 0;
+  const decimals = getCurrencyDecimalDigits(currencyCode);
+  return Math.round(num * Math.pow(10, decimals));
+}
+
+/**
+ * Converts minor units to major units (e.g. 1500 paise -> 15.00 INR, 4400 fils -> 44.00 AED).
+ */
+export function fromMinorUnits(minorUnits: number | string, currencyCode = "INR"): number {
+  const num = typeof minorUnits === "number" ? minorUnits : parseFloat(String(minorUnits).replace(/[^0-9.-]+/g, ""));
+  if (isNaN(num)) return 0;
+  const decimals = getCurrencyDecimalDigits(currencyCode);
+  return num / Math.pow(10, decimals);
+}
+
+export interface FormatCurrencyOptions {
+  isMinorUnits?: boolean;
+  decimals?: number;
+  minimumFractionDigits?: number;
+  maximumFractionDigits?: number;
+  countryCode?: string;
+}
+
+/**
+ * Centralized ISO 4217 Currency Formatter.
+ * Respects ISO 4217 currency code, regional decimal precision, integer minor units,
+ * and appropriate locale conventions without manual string slicing or floating-point drift.
+ *
+ * Examples:
+ *   formatCurrency(1500, "INR", "en-IN") -> "₹1,500.00"
+ *   formatCurrency(1500, "AED", "en-AE") -> "AED 1,500.00"
+ *   formatCurrency(1500, "USD", "en-US") -> "$1,500.00"
+ *   formatCurrency(150000, "INR", undefined, { isMinorUnits: true }) -> "₹1,500.00"
+ */
+export function formatCurrency(
+  amount: number | string | undefined | null,
+  currencyCode = "INR",
+  locale?: string,
+  options?: FormatCurrencyOptions,
+): string {
+  if (amount === undefined || amount === null || amount === "") return "0.00";
+  const num = typeof amount === "number" ? amount : parseFloat(String(amount).replace(/[^0-9.-]+/g, ""));
+  if (isNaN(num)) return "0.00";
+
+  const curr = (currencyCode || "INR").toUpperCase().trim();
+  const decimals = options?.decimals !== undefined ? options.decimals : getCurrencyDecimalDigits(curr);
+  const loc = locale || getCurrencyLocale(curr, options?.countryCode);
+  const major = options?.isMinorUnits ? num / Math.pow(10, decimals) : num;
+
+  const minDigits = options?.minimumFractionDigits !== undefined ? options.minimumFractionDigits : decimals;
+  const maxDigits = options?.maximumFractionDigits !== undefined ? options.maximumFractionDigits : decimals;
+
+  try {
+    return new Intl.NumberFormat(loc, {
+      style: "currency",
+      currency: curr,
+      minimumFractionDigits: minDigits,
+      maximumFractionDigits: maxDigits,
+    }).format(major);
+  } catch {
+    return `${curr} ${major.toFixed(decimals)}`;
+  }
+}
+
+/**
+ * Shorthand helper for minor units (paise/cents/fils) financial formatting.
+ */
+export function formatCurrencyMinor(
+  amountMinor: number | string | undefined | null,
+  currencyCode = "INR",
+  locale?: string,
+  options?: Omit<FormatCurrencyOptions, "isMinorUnits">,
+): string {
+  return formatCurrency(amountMinor, currencyCode, locale, { ...options, isMinorUnits: true });
 }
 
 /**

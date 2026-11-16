@@ -6,6 +6,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/login(.*)",
   "/api/printers(.*)",
+  "/api/payments/razorpay/webhook(.*)",
+  "/api/marketplace/razorpay/webhook(.*)",
 ]);
 
 const clerkHandler = clerkMiddleware(async (auth, req) => {

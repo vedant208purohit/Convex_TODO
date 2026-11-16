@@ -546,8 +546,8 @@ function resolveCurrencyAndSymbol(
   }
 
   return {
-    defaultCurrency: explicitCurrency || "USD",
-    defaultCurrencySymbol: explicitSymbol || "$",
+    defaultCurrency: explicitCurrency || "INR",
+    defaultCurrencySymbol: explicitSymbol || "₹",
   };
 }
 
