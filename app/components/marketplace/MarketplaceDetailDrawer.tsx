@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { MarketplaceApp } from "./types";
+import { RazorpayIcon } from "./MarketplaceCard";
 
 interface MarketplaceDetailDrawerProps {
   isOpen: boolean;
@@ -20,11 +22,278 @@ export function MarketplaceDetailDrawer({
   onClose,
   onActionClick,
 }: MarketplaceDetailDrawerProps) {
+  // Close drawer on Escape key press
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen || !app) return null;
 
+  const isRazorpay = app.slug === "razorpay" || app.iconName === "razorpay";
+  const isRazorpayConnected = Boolean(
+    isRazorpay &&
+      (isPurchased ||
+        app.isInstalled ||
+        app.statusType === "live" ||
+        app.badge === "Connected" ||
+        (app as any).configuration?.connected ||
+        (app as any).credentials ||
+        (app as any).connected)
+  );
+  const isRazorpayAttention = Boolean(
+    isRazorpay && (app.statusType === "attention" || app.actionType === "fix")
+  );
   const appPrice = app.priceAmount > 0 ? app.priceAmount : 5000;
   const isWhatsApp = app.slug === "prest-whatsapp-automation";
 
+  // Dedicated Screen 2: Razorpay Provider Details Drawer
+  if (isRazorpay) {
+    return (
+      <div className="fixed inset-0 z-50 flex justify-end" id="razorpayDetailDrawer">
+        {/* Semi-transparent dark overlay with backdrop blur */}
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-[4px] transition-opacity duration-300 cursor-pointer"
+          onClick={onClose}
+          aria-label="Close drawer overlay"
+        />
+
+        {/* Slide-in Drawer Container: ~560px on desktop, full width on mobile */}
+        <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="Razorpay Details"
+          className="relative z-50 w-full sm:w-[480px] md:w-[560px] max-w-full bg-white h-screen shadow-2xl flex flex-col transform transition-transform duration-300 ease-out translate-x-0 border-l border-[#e7e5e4] overflow-hidden"
+        >
+          {/* Fixed Drawer Header */}
+          <div className="px-6 sm:px-8 py-5 sm:py-6 border-b border-[#e7e5e4] flex items-center justify-between shrink-0 bg-white">
+            <div className="flex items-center gap-4 sm:gap-5 min-w-0">
+              {/* Authentic Razorpay Logo container */}
+              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-[#0c0a09] text-white flex items-center justify-center shrink-0 shadow-sm border border-[#0c0a09]">
+                <RazorpayIcon className="w-8 h-8 sm:w-9 sm:h-9 text-white" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl sm:text-2xl font-bold text-[#0c0a09] tracking-tight leading-tight">
+                    Razorpay
+                  </h2>
+                  {isRazorpayConnected && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Connected
+                    </span>
+                  )}
+                  {isRazorpayAttention && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-red-600" />
+                      Action Required
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-[#5e5e5e] font-normal mt-0.5 truncate">
+                  India&apos;s Leading Payment Gateway
+                </p>
+              </div>
+            </div>
+
+            {/* Close button in top-right corner */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-9 h-9 rounded-full flex items-center justify-center bg-[#fdf8f7] hover:bg-[#f1edec] text-[#5e5e5e] hover:text-[#0c0a09] transition-colors cursor-pointer border border-[#e7e5e4] shrink-0"
+              aria-label="Close details drawer"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          {/* Independently Scrollable Body Content */}
+          <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6">
+            {/* About Section */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-[#5e5e5e]">
+                About
+              </h3>
+              <p className="text-sm sm:text-[15px] text-[#0c0a09] leading-relaxed font-normal">
+                Accept online payments through UPI, Cards, Wallets, EMI and Net Banking. Razorpay provides a unified platform to manage your entire financial flow with high success rates and instant settlements.
+              </p>
+            </div>
+
+            {/* Core Capabilities Section */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-[#5e5e5e]">
+                Core Capabilities
+              </h3>
+
+              <div className="grid gap-3.5">
+                {/* Card 1: UPI Payments */}
+                <div className="p-5 rounded-2xl border border-[#e7e5e4] bg-[#fdf8f7] transition-all hover:border-stone-400 hover:shadow-xs">
+                  <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-white border border-[#e7e5e4] flex items-center justify-center text-[#0c0a09] shrink-0 shadow-2xs">
+                      <span className="material-symbols-outlined text-[24px]">account_balance_wallet</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm sm:text-base font-bold text-[#0c0a09] leading-tight">
+                        UPI Payments
+                      </h4>
+                      <div className="flex flex-wrap gap-2 mt-3.5">
+                        {["PhonePe", "Google Pay", "Paytm", "BHIM"].map((appName) => (
+                          <span
+                            key={appName}
+                            className="inline-flex items-center px-3 py-1 rounded-full bg-white border border-[#e7e5e4] text-[#0c0a09] text-xs font-medium shadow-2xs"
+                          >
+                            {appName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Multiple Payment Methods */}
+                <div className="p-5 rounded-2xl border border-[#e7e5e4] bg-[#fdf8f7] transition-all hover:border-stone-400 hover:shadow-xs">
+                  <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-white border border-[#e7e5e4] flex items-center justify-center text-[#0c0a09] shrink-0 shadow-2xs">
+                      <span className="material-symbols-outlined text-[24px]">credit_card</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm sm:text-base font-bold text-[#0c0a09] leading-tight">
+                        Multiple Payment Methods
+                      </h4>
+                      <p className="text-xs text-[#5e5e5e] mt-1 leading-normal">
+                        Support for every customer preference.
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {["Cards", "Wallets", "Net Banking", "EMI"].map((method) => (
+                          <span
+                            key={method}
+                            className="inline-flex items-center px-3 py-1 rounded-lg bg-white border border-[#e7e5e4] text-[#0c0a09] text-xs font-medium shadow-2xs"
+                          >
+                            {method}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 3: Payment Tracking */}
+                <div className="p-5 rounded-2xl border border-[#e7e5e4] bg-[#fdf8f7] transition-all hover:border-stone-400 hover:shadow-xs">
+                  <div className="flex items-start gap-4">
+                    <div className="w-11 h-11 rounded-xl bg-white border border-[#e7e5e4] flex items-center justify-center text-[#0c0a09] shrink-0 shadow-2xs">
+                      <span className="material-symbols-outlined text-[24px]">analytics</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-sm sm:text-base font-bold text-[#0c0a09] leading-tight">
+                        Payment Tracking
+                      </h4>
+                      <p className="text-xs text-[#5e5e5e] mt-1 leading-normal">
+                        Real-time lifecycle monitoring.
+                      </p>
+                      <ul className="space-y-1.5 mt-3">
+                        {["Transactions", "Refunds", "Settlements"].map((item) => (
+                          <li key={item} className="flex items-center gap-2 text-xs text-[#0c0a09] font-medium">
+                            <span className="material-symbols-outlined text-[16px] text-[#0c0a09]">
+                              check_circle
+                            </span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Integration Illustration Section */}
+            <div className="relative w-full h-44 sm:h-48 rounded-2xl overflow-hidden border border-[#e7e5e4] bg-[#fdf8f7] flex items-center justify-center">
+              {/* Architectural Grid / Wave Diagram Pattern */}
+              <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#0c0a09_1px,transparent_1px)] [background-size:16px_16px]" />
+              <div className="absolute inset-0 flex items-center justify-around px-8 opacity-20 pointer-events-none">
+                <div className="w-16 h-20 rounded-lg border border-[#0c0a09] border-dashed flex items-center justify-center">
+                  <span className="material-symbols-outlined text-2xl text-[#0c0a09]">point_of_sale</span>
+                </div>
+                <div className="flex-1 h-0.5 border-t-2 border-dashed border-[#0c0a09] mx-4" />
+                <div className="w-16 h-20 rounded-lg border border-[#0c0a09] border-dashed flex items-center justify-center">
+                  <span className="material-symbols-outlined text-2xl text-[#0c0a09]">sync_alt</span>
+                </div>
+              </div>
+              {/* Center Floating Pill */}
+              <div className="relative z-10 bg-white/95 backdrop-blur-sm px-4 py-1.5 rounded-full shadow-sm border border-[#e7e5e4] flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-[#0c0a09] animate-pulse" />
+                <span className="text-xs font-semibold tracking-wide text-[#0c0a09]">
+                  Integration Ready
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky Drawer Footer with Dynamic Razorpay action */}
+          <div className="p-5 sm:p-6 bg-white border-t border-[#e7e5e4] shrink-0 flex items-center gap-3">
+            {isRazorpayConnected ? (
+              <>
+                <Link
+                  href="/marketplace/razorpay/dashboard"
+                  onClick={() => {
+                    onClose();
+                  }}
+                  className="flex-1 py-3.5 sm:py-4 px-6 rounded-xl bg-[#0c0a09] text-white hover:bg-[#262626] active:bg-[#171717] active:scale-[0.99] font-semibold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer group"
+                >
+                  <span className="material-symbols-outlined text-[18px]">dashboard</span>
+                  <span>Open Dashboard</span>
+                </Link>
+                <Link
+                  href="/marketplace/razorpay/settings"
+                  onClick={() => {
+                    onClose();
+                  }}
+                  className="py-3.5 sm:py-4 px-4 rounded-xl bg-[#fafaf9] hover:bg-[#f5f5f4] text-[#0c0a09] border border-[#e7e5e4] font-semibold text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  title="Payment Gateway Settings"
+                >
+                  <span className="material-symbols-outlined text-[18px]">settings</span>
+                </Link>
+              </>
+            ) : isRazorpayAttention ? (
+              <Link
+                href="/marketplace?flow=razorpay-api-keys"
+                onClick={() => {
+                  onClose();
+                  onActionClick(app);
+                }}
+                className="w-full py-3.5 sm:py-4 px-6 rounded-xl bg-amber-600 text-white hover:bg-amber-700 active:scale-[0.99] font-semibold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">build</span>
+                <span>Fix Connection</span>
+              </Link>
+            ) : (
+              <Link
+                href="/marketplace/razorpay/connect"
+                onClick={() => {
+                  onClose();
+                  onActionClick(app);
+                }}
+                className="w-full py-3.5 sm:py-4 px-6 rounded-xl bg-[#0c0a09] text-white hover:bg-[#262626] active:bg-[#171717] active:scale-[0.99] font-semibold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all shadow-md cursor-pointer group"
+              >
+                <span>Connect Razorpay</span>
+                <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
+                  arrow_forward
+                </span>
+              </Link>
+            )}
+          </div>
+        </aside>
+      </div>
+    );
+  }
+
+  // Standard Drawer for other marketplace apps (preserved as-is)
   return (
     <>
       {/* Backdrop Scrim */}
@@ -77,14 +346,16 @@ export function MarketplaceDetailDrawer({
               <div className="flex flex-col min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   <span
-                    className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold tracking-wide flex items-center gap-1.5 ${isPurchased
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-semibold tracking-wide flex items-center gap-1.5 ${
+                      isPurchased
                         ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                         : "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
-                      }`}
+                    }`}
                   >
                     <span
-                      className={`w-1.5 h-1.5 rounded-full ${isPurchased ? "bg-emerald-500" : "bg-[#0c0a09]"
-                        }`}
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isPurchased ? "bg-emerald-500" : "bg-[#0c0a09]"
+                      }`}
                     />
                     {isPurchased ? "Installed" : "Paid • Purchase Required"}
                   </span>
@@ -262,8 +533,9 @@ export function MarketplaceDetailDrawer({
                 Wallet: <strong className="font-mono">₹{walletBalance.toLocaleString("en-IN")}</strong>
               </span>
               <span
-                className={`w-2 h-2 rounded-full ml-0.5 shrink-0 ${walletBalance >= appPrice ? "bg-emerald-500" : "bg-amber-500"
-                  }`}
+                className={`w-2 h-2 rounded-full ml-0.5 shrink-0 ${
+                  walletBalance >= appPrice ? "bg-emerald-500" : "bg-amber-500"
+                }`}
               />
             </div>
           </div>
