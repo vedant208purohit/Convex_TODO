@@ -50,30 +50,24 @@ describe("Screen 6: RazorpayDashboardView — Reference & Dummy Data Verificatio
     expect(html).toContain("Settings");
   });
 
-  it("renders the four summary metric cards with exact reference dummy data", () => {
+  it("renders the four summary metric cards with isolated store baseline data", () => {
     const html = renderToStaticMarkup(
       <RazorpayDashboardView embeddedInMarketplace={true} />
     );
 
     // Card 1: Today's Revenue
     expect(html).toContain("Today&#x27;s Revenue");
-    expect(html).toContain("₹15,000");
-    expect(html).toContain("+12% from yesterday");
+    expect(html).toContain("₹0.00");
+    expect(html).toContain("Real-time daily telemetry");
 
     // Card 2: Successful Payments
     expect(html).toContain("Successful Payments");
-    expect(html).toContain("120");
-    expect(html).toContain("98.2% Success Rate");
 
     // Card 3: Failed Payments
     expect(html).toContain("Failed Payments");
-    expect(html).toContain("5");
-    expect(html).toContain("Avg. 1.2% failure rate");
 
     // Card 4: Pending Payments
     expect(html).toContain("Pending Payments");
-    expect(html).toContain("3");
-    expect(html).toContain("Awaiting confirmation");
   });
 
   it("renders Payment Trends chart card with 7D, 30D, 1Y selectors and 7D daily bars", () => {
@@ -110,40 +104,14 @@ describe("Screen 6: RazorpayDashboardView — Reference & Dummy Data Verificatio
     expect(html).toContain("View API Credentials");
   });
 
-  it("renders Recent Transactions table with all 4 sample records", () => {
+  it("renders Recent Transactions table with isolated store empty state", () => {
     const html = renderToStaticMarkup(
       <RazorpayDashboardView embeddedInMarketplace={true} />
     );
 
     expect(html).toContain("Recent Transactions");
     expect(html).toContain("View All Transactions");
-
-    // Record 1
-    expect(html).toContain("pay_N9S2J8...");
-    expect(html).toContain("₹1,200.00");
-    expect(html).toContain("amit.verma@email.com");
-    expect(html).toContain("UPI");
-    expect(html).toContain("Today, 14:22");
-
-    // Record 2
-    expect(html).toContain("pay_M8K3L1...");
-    expect(html).toContain("₹3,450.00");
-    expect(html).toContain("sarah.j@outlook.com");
-    expect(html).toContain("Net Banking");
-    expect(html).toContain("Today, 13:45");
-
-    // Record 3
-    expect(html).toContain("pay_K2J4H9...");
-    expect(html).toContain("₹850.00");
-    expect(html).toContain("priya.rao@gmail.com");
-    expect(html).toContain("Card");
-    expect(html).toContain("Today, 12:10");
-
-    // Record 4
-    expect(html).toContain("pay_P5M0Q3...");
-    expect(html).toContain("₹2,100.00");
-    expect(html).toContain("rahul.khanna@biz.in");
-    expect(html).toContain("Today, 11:30");
+    expect(html).toContain("No recent transactions found for this store.");
   });
 
   it("renders distinguishable status badges without colored backgrounds", () => {

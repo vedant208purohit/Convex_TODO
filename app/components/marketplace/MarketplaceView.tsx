@@ -16,6 +16,11 @@ import { MarketplaceCard } from "./MarketplaceCard";
 import { MarketplacePurchaseModal } from "./MarketplacePurchaseModal";
 import { MarketplaceDetailDrawer } from "./MarketplaceDetailDrawer";
 import { MarketplaceWalletView } from "./MarketplaceWalletView";
+import { RazorpayMethodSelection } from "./RazorpayMethodSelection";
+import { RazorpayApiKeysForm } from "./RazorpayApiKeysForm";
+import { RazorpayOnboardingIntro } from "./RazorpayOnboardingIntro";
+import { RazorpaySuccessView } from "./RazorpaySuccessView";
+import { RazorpayDashboardView } from "./RazorpayDashboardView";
 import { Toast, type ToastMessage } from "../Toast";
 
 export function MarketplaceView() {
@@ -24,7 +29,36 @@ export function MarketplaceView() {
 
   // 1. URL & Filter State
   const tabParam = searchParams.get("tab") as MarketplaceTab | null;
+  const flowParam = searchParams.get("flow");
   const [internalTab, setInternalTab] = useState<MarketplaceTab>("explore");
+  const [internalRazorpayFlow, setInternalRazorpayFlow] = useState<
+    "select-method" | "api-keys" | "onboarding" | "success" | "dashboard" | null
+  >(
+    flowParam === "razorpay-dashboard"
+      ? "dashboard"
+      : flowParam === "razorpay-success"
+        ? "success"
+        : flowParam === "razorpay-api-keys"
+          ? "api-keys"
+          : flowParam === "razorpay-onboarding"
+            ? "onboarding"
+            : flowParam === "razorpay-connect"
+              ? "select-method"
+              : null
+  );
+
+  const razorpayFlow =
+    flowParam === "razorpay-dashboard"
+      ? "dashboard"
+      : flowParam === "razorpay-success"
+        ? "success"
+        : flowParam === "razorpay-api-keys"
+          ? "api-keys"
+          : flowParam === "razorpay-onboarding"
+            ? "onboarding"
+            : flowParam === "razorpay-connect"
+              ? "select-method"
+              : internalRazorpayFlow;
 
   const activeTab: MarketplaceTab =
     tabParam && ["explore", "installed", "categories", "purchases", "wallet"].includes(tabParam)
@@ -92,6 +126,39 @@ export function MarketplaceView() {
   // Handle Action Button Clicks
   const handleActionClick = async (app: MarketplaceApp) => {
     const isHero = app.slug === "prest-whatsapp-automation";
+    const isRazorpay = app.slug === "razorpay" || app.iconName === "razorpay";
+
+    if (isRazorpay) {
+      const isConnected =
+        Boolean(app.isInstalled) ||
+        app.statusType === "live" ||
+        app.actionType === "open" ||
+        Boolean((app as any).configuration?.connected);
+
+      if (isConnected) {
+        setIsDrawerOpen(false);
+        setInternalRazorpayFlow("dashboard");
+        router.push("/marketplace/razorpay/dashboard");
+        return;
+      }
+
+      if (app.actionType === "fix" || app.statusType === "attention") {
+        setIsDrawerOpen(false);
+        setInternalRazorpayFlow("api-keys");
+        router.push("/marketplace?flow=razorpay-api-keys", { scroll: false });
+        return;
+      }
+
+      if (isDrawerOpen) {
+        setIsDrawerOpen(false);
+        setInternalRazorpayFlow("select-method");
+        router.push("/marketplace/razorpay/connect");
+      } else {
+        setSelectedApp(app);
+        setIsDrawerOpen(true);
+      }
+      return;
+    }
 
     if (isHero) {
       if (app.isInstalled) {
@@ -168,16 +235,101 @@ export function MarketplaceView() {
     <PosShell
       title="Marketplace"
       subtitle={
-        activeTab === "wallet"
-          ? "Wallet"
-          : activeTab === "installed"
-            ? "Installed Products"
-            : activeTab === "purchases"
-              ? "Subscriptions & Purchases"
-              : "Integrations & Extensions"
+        razorpayFlow === "dashboard"
+          ? "Razorpay Payments"
+          : razorpayFlow === "success"
+            ? "Connection Success"
+            : razorpayFlow === "api-keys"
+              ? "API Keys Setup"
+              : razorpayFlow === "onboarding"
+                ? "Razorpay Onboarding"
+                : razorpayFlow === "select-method"
+                  ? "Razorpay Setup"
+                  : activeTab === "wallet"
+                    ? "Wallet"
+                    : activeTab === "installed"
+                      ? "Installed Products"
+                      : activeTab === "purchases"
+                        ? "Subscriptions & Purchases"
+                        : "Integrations & Extensions"
       }
     >
-      {activeTab === "categories" ? (
+      {razorpayFlow === "dashboard" ? (
+        <RazorpayDashboardView embeddedInMarketplace={true} />
+      ) : razorpayFlow === "success" ? (
+        <RazorpaySuccessView
+          embeddedInMarketplace={true}
+          onGoToDashboard={() => {
+            setInternalRazorpayFlow("dashboard");
+            router.push("/marketplace/razorpay/dashboard");
+          }}
+          onReturnToMarketplace={() => {
+            setInternalRazorpayFlow(null);
+            router.push("/marketplace", { scroll: false });
+          }}
+        />
+      ) : razorpayFlow === "onboarding" ? (
+        <RazorpayOnboardingIntro
+          embeddedInMarketplace={true}
+          onBack={() => {
+            setInternalRazorpayFlow("select-method");
+            router.push("/marketplace?flow=razorpay-connect", { scroll: false });
+          }}
+          onContinue={() => {
+            setInternalRazorpayFlow("success");
+            router.push("/marketplace?flow=razorpay-success", { scroll: false });
+          }}
+        />
+      ) : razorpayFlow === "api-keys" ? (
+        <RazorpayApiKeysForm
+          embeddedInMarketplace={true}
+          onBack={() => {
+            setInternalRazorpayFlow("select-method");
+            router.push("/marketplace?flow=razorpay-connect", { scroll: false });
+          }}
+          onVerify={async ({ keyId, keySecret }) => {
+            const cleanKeyId = (keyId || "").trim().replace(/^['"]|['"]$/g, "");
+            const cleanKeySecret = (keySecret || "").trim().replace(/^['"]|['"]$/g, "");
+            const res = await fetch("/api/payments/razorpay/connect", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                key_id: cleanKeyId,
+                key_secret: cleanKeySecret,
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || "Failed to verify and connect Razorpay API keys.");
+            }
+            setInternalRazorpayFlow("success");
+            const queryParams = new URLSearchParams({
+              flow: "razorpay-success",
+              method: "api_keys",
+              mode: data.accountMode || "live",
+              name: data.merchantName || "",
+              mid: data.merchantId || cleanKeyId,
+            });
+            router.push(`/marketplace?${queryParams.toString()}`, { scroll: false });
+          }}
+        />
+      ) : razorpayFlow === "select-method" ? (
+        <RazorpayMethodSelection
+          embeddedInMarketplace={true}
+          onBackToMarketplace={() => {
+            setInternalRazorpayFlow(null);
+            router.push("/marketplace", { scroll: false });
+          }}
+          onSelectApiKeys={() => {
+            setInternalRazorpayFlow("api-keys");
+            router.push("/marketplace?flow=razorpay-api-keys", { scroll: false });
+          }}
+          onSelectOnboarding={() => {
+            setInternalRazorpayFlow("onboarding");
+            router.push("/marketplace?flow=razorpay-onboarding", { scroll: false });
+          }}
+        />
+      ) : activeTab === "categories" ? (
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center min-h-[460px]">
           <div className="w-16 h-16 rounded-2xl bg-[#fdf8f7] flex items-center justify-center text-[#0c0a09] mb-4 shadow-2xs border border-[#e7e5e4]">
             <span className="material-symbols-outlined text-[32px]">category</span>
