@@ -117,6 +117,10 @@ export async function GET(req: NextRequest) {
         to: to || null,
         search: search || null,
       },
+      storeCurrency:
+        typeof queryResult.storeCurrency === "object"
+          ? queryResult.storeCurrency?.code || "INR"
+          : queryResult.storeCurrency || storeContext.storeCurrency || "INR",
       syncResult: syncResult || undefined,
     });
   } catch (err: any) {

@@ -157,9 +157,27 @@ export async function GET(req: NextRequest) {
     }
 
     // 5. Evaluate Check 3: Webhook Telemetry
+    const host =
+      req.headers.get("x-forwarded-host") ||
+      req.headers.get("host") ||
+      "localhost:3000";
+    const proto =
+      req.headers.get("x-forwarded-proto") ||
+      (host.includes("localhost") ? "http" : "https");
+    const webhookUrl = `${proto}://${host}/api/payments/razorpay/webhook?store=${storeContext.storeSlug || "default"}`;
+
+    const rawWebhookStatus = healthData.webhook.status;
+    let webhookStatusLabel = "Pending Setup";
+    if (rawWebhookStatus === "healthy") webhookStatusLabel = "Active";
+    else if (rawWebhookStatus === "awaiting_events") webhookStatusLabel = "Awaiting First Event";
+    else if (rawWebhookStatus === "degraded") webhookStatusLabel = "Degraded";
+    else if (rawWebhookStatus === "inactive") webhookStatusLabel = "Inactive";
+
     const webhookReport = {
-      status: healthData.webhook.status,
+      status: rawWebhookStatus,
+      statusLabel: webhookStatusLabel,
       configured: healthData.webhook.configured,
+      webhookUrl,
       lastReceivedAt: healthData.webhook.lastReceivedAt,
       lastProcessedAt: healthData.webhook.lastProcessedAt,
       pendingEvents: healthData.webhook.pendingEvents,
@@ -209,6 +227,7 @@ export async function GET(req: NextRequest) {
         api: apiReport,
         webhook: webhookReport,
         sync: syncReport,
+        recentActivity: healthData.recentActivity || [],
         checkedAt: now,
       },
     });

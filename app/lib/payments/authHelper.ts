@@ -1,6 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../convex/_generated/api";
+import { resolveOrganizationCurrency, type OrganizationCurrencyInfo } from "../../../lib/constants/countries";
 import crypto from "crypto";
 
 export interface AuthenticatedStoreContext {
@@ -10,6 +11,12 @@ export interface AuthenticatedStoreContext {
   orgId: string;
   slug: string;
   storeName?: string;
+  storeCountry?: string;
+  defaultCurrency?: string;
+  defaultCurrencySymbol?: string;
+  organizationTimeZone?: string;
+  storeCurrency?: string;
+  storeCurrencyInfo?: OrganizationCurrencyInfo;
 }
 
 /**
@@ -58,6 +65,22 @@ export async function requireStoreAdminContext(req?: Request): Promise<Authentic
     process.env.NEXT_PUBLIC_MASTER_POS_URL ||
     "http://localhost:3001";
 
+  let targetSlug: string | undefined;
+  let targetOrgId: string | undefined;
+  if (req) {
+    try {
+      const url = new URL(req.url);
+      targetSlug = url.searchParams.get("slug") || url.searchParams.get("store") || undefined;
+      targetOrgId = url.searchParams.get("organizationId") || url.searchParams.get("orgId") || undefined;
+    } catch {}
+    if (!targetSlug && (req as any).headers?.get) {
+      targetSlug =
+        (req as any).headers.get("x-store-slug") ||
+        (req as any).headers.get("x-selected-store") ||
+        undefined;
+    }
+  }
+
   if (bridgeSecret && userId && !userId.startsWith("test_")) {
     try {
       const resolveTimestamp = Date.now();
@@ -75,7 +98,11 @@ export async function requireStoreAdminContext(req?: Request): Promise<Authentic
             "x-bridge-signature": resolveSignature,
             "x-bridge-timestamp": resolveTimestamp.toString(),
           },
-          body: JSON.stringify({ defaultClerkId: userId }),
+          body: JSON.stringify({
+            defaultClerkId: userId,
+            slug: targetSlug,
+            organizationId: targetOrgId,
+          }),
           cache: "no-store",
         }
       );
@@ -145,6 +172,12 @@ export async function requireStoreAdminContext(req?: Request): Promise<Authentic
     throw err;
   }
 
+  const resolvedCurrencyInfo = resolveOrganizationCurrency({
+    country: adminContext.country,
+    defaultCurrency: adminContext.defaultCurrency,
+    defaultCurrencySymbol: adminContext.defaultCurrencySymbol,
+  });
+
   return {
     userId,
     userEmail,
@@ -152,6 +185,12 @@ export async function requireStoreAdminContext(req?: Request): Promise<Authentic
     orgId: adminContext.organizationId,
     slug: adminContext.slug,
     storeName: adminContext.name,
+    storeCountry: adminContext.country,
+    defaultCurrency: adminContext.defaultCurrency,
+    defaultCurrencySymbol: adminContext.defaultCurrencySymbol,
+    organizationTimeZone: adminContext.organizationTimeZone,
+    storeCurrency: resolvedCurrencyInfo.code,
+    storeCurrencyInfo: resolvedCurrencyInfo,
   };
 }
 

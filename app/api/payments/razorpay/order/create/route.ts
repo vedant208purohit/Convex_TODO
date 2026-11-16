@@ -23,7 +23,9 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { amountMinor, currency = "INR", receipt, internalOrderId, notes } = body;
+    const storeCurrency = storeContext.storeCurrency || "INR";
+    const { amountMinor, currency, receipt, internalOrderId, notes } = body;
+    const resolvedCurrency = (currency || storeCurrency).toUpperCase();
 
     const parsedAmount = Math.round(Number(amountMinor || 0));
     if (!parsedAmount || parsedAmount <= 0) {
@@ -79,7 +81,7 @@ export async function POST(req: NextRequest) {
       },
       {
         amountMinor: parsedAmount,
-        currency: currency.toUpperCase(),
+        currency: resolvedCurrency,
         receipt: receipt || `rcpt_pos_${Date.now().toString().slice(-8)}`,
         internalOrderId,
         notes,
@@ -103,7 +105,7 @@ export async function POST(req: NextRequest) {
       provider: "razorpay",
       orderId: orderResult.orderId,
       amountMinor: parsedAmount,
-      currency: currency.toUpperCase(),
+      currency: resolvedCurrency,
       keyId: decrypted.keyId, // Public Key ID required by checkout modal
       connectionId: connection._id,
       internalOrderId,

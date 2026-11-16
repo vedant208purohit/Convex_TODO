@@ -664,10 +664,20 @@ export const listCatalog = query({
     const activeInstallations = installations.filter((inst) => inst.status !== "uninstalled");
     const installedMap = new Map(activeInstallations.map((inst) => [inst.appSlug, inst]));
 
+    // Check payment gateway connections for this store organization
+    const paymentConnections = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+      .collect();
+
+    const razorpayConn = paymentConnections.find(
+      (c) => c.provider === "razorpay" && c.status !== "disconnected"
+    );
+
     // 4. Merge listings with organization installation state
     let apps = listings.map((l) => {
       const inst = installedMap.get(l.slug);
-      const isInstalled = Boolean(inst);
+      let isInstalled = Boolean(inst);
 
       let statusText = l.statusText;
       let statusType = l.statusType;
@@ -694,6 +704,30 @@ export const listCatalog = query({
         }
       }
 
+      // Check authoritative payment gateway connection for Razorpay
+      if (l.slug === "razorpay") {
+        if (razorpayConn) {
+          if (razorpayConn.status === "connected") {
+            isInstalled = true;
+            statusText = "Connected & Active";
+            statusType = "live";
+            actionText = "Open Dashboard";
+            actionType = "open";
+          } else if (razorpayConn.status === "needs_attention" || razorpayConn.status === "error") {
+            isInstalled = true;
+            statusText = "Connection Needs Attention";
+            statusType = "attention";
+            actionText = "Fix Connection";
+            actionType = "fix";
+          } else if (razorpayConn.status === "pending") {
+            statusText = "Verification In Progress";
+            statusType = "pending";
+            actionText = "Verifying...";
+            actionType = "pending";
+          }
+        }
+      }
+
       const effectiveId =
         typeof l._id === "string" && (l._id.startsWith("fake_id_") || l._id === l.slug)
           ? l.slug
@@ -707,7 +741,12 @@ export const listCatalog = query({
         vendor: l.vendor,
         category: l.category,
         description: l.description,
-        badge: isInstalled ? "Installed" : l.badge,
+        badge:
+          l.slug === "razorpay" && razorpayConn?.status === "connected"
+            ? "Connected"
+            : isInstalled
+              ? "Installed"
+              : l.badge,
         iconName: l.iconName,
         rating: l.rating,
         version: l.version,
@@ -719,11 +758,21 @@ export const listCatalog = query({
         actionText,
         actionType,
         isInstalled,
-        installedAt: inst?.installedAt,
+        installedAt: inst?.installedAt || razorpayConn?.connectedAt,
         practicalFeatures: l.practicalFeatures,
         prerequisites: l.prerequisites,
         permissions: l.permissions,
         terms: l.terms,
+        configuration:
+          l.slug === "razorpay" && razorpayConn
+            ? {
+                connected: razorpayConn.status === "connected",
+                status: razorpayConn.status,
+                accountMode: razorpayConn.accountMode,
+                merchantName: razorpayConn.merchantName,
+                providerAccountId: razorpayConn.providerAccountId,
+              }
+            : inst?.configuration,
       };
     });
 
@@ -732,7 +781,10 @@ export const listCatalog = query({
     if (activeTab === "installed") {
       apps = apps.filter((app) => app.isInstalled);
     } else if (activeTab === "purchases") {
-      apps = apps.filter((app) => app.priceAmount > 0 && app.isInstalled);
+      // Subscriptions & Purchases tab: includes connected subscriptions (such as Razorpay) and paid apps
+      apps = apps.filter(
+        (app) => (app.priceAmount > 0 || app.slug === "razorpay") && app.isInstalled
+      );
     }
 
     // 6. Apply Category Filtering

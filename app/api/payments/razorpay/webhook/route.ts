@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import crypto from "crypto";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../../convex/_generated/api";
+import { decryptCredentials } from "../../../../../convex/paymentGatewayCrypto";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ function verifySignature(rawBody: string, signature: string, secret: string): bo
 export async function POST(req: NextRequest) {
   const startTime = Date.now();
   try {
-    // 1. Read raw body text before any parsing to preserve byte accuracy for HMAC
+    // 1. Read raw body text before any parsing to preserve exact byte sequence for HMAC-SHA256
     const rawBody = await req.text();
     const signature = req.headers.get("x-razorpay-signature") || "";
 
@@ -92,38 +93,85 @@ export async function POST(req: NextRequest) {
 
     const convexClient = new ConvexHttpClient(convexUrl);
 
-    // 3. Resolve webhook secret
-    let webhookSecret =
-      process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ||
-      process.env.RZ_KEY_SECRET?.trim() ||
-      process.env.RAZORPAY_KEY_SECRET?.trim() ||
-      "";
+    // 3. Resolve store-specific payment gateway connection & encrypted credentials
+    const connDetails = await convexClient.query(
+      api.paymentGateways.getWebhookVerificationDetails,
+      { provider: "razorpay" }
+    ).catch(() => null);
 
-    // If no environment secret is set, inspect the store connection metadata
-    if (!webhookSecret) {
+    let webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || "";
+
+    if (connDetails?.encryptedCredentials) {
       try {
-        const connections = await convexClient.query(api.paymentGateways.listConnections, {
-          provider: "razorpay",
-        });
-        const activeConn = connections.find((c) => c.status === "connected") || connections[0];
-        if (activeConn?.metadata?.webhookSecret) {
-          webhookSecret = String(activeConn.metadata.webhookSecret).trim();
+        const decrypted = await decryptCredentials(connDetails.encryptedCredentials);
+        if (decrypted.webhookSecret) {
+          webhookSecret = String(decrypted.webhookSecret).trim();
         }
-      } catch {
-        // Fallback to empty if connection lookup fails
+      } catch (decryptErr) {
+        console.warn("[Razorpay Webhook]: Failed decrypting connection credentials:", decryptErr);
       }
     }
 
-    // 4. Validate signature - mandatory when secret is present or in production
-    const isMock = webhookSecret === "mock" || process.env.BYPASS_WEBHOOK_SIGNATURE === "true";
-    const signatureVerified = Boolean(
-      signature && webhookSecret && verifySignature(rawBody, signature, webhookSecret)
-    );
+    if (!webhookSecret && connDetails?.metadata?.webhookSecret) {
+      webhookSecret = String(connDetails.metadata.webhookSecret).trim();
+    }
 
-    if (webhookSecret && !isMock && !signatureVerified) {
-      console.warn("[Razorpay Webhook Warning]: Invalid or missing webhook signature.");
+    // 4. Strict Signature Verification
+    if (!signature) {
+      if (connDetails) {
+        await convexClient.mutation(api.paymentGateways.processWebhookEvent, {
+          organizationId: connDetails.organizationId,
+          connectionId: connDetails.connectionId,
+          provider: "razorpay",
+          providerEventId: `missing_sig_${Date.now()}`,
+          eventType: "unknown",
+          payload: rawBody,
+          signatureVerified: false,
+        }).catch(() => {});
+      }
       return NextResponse.json(
-        { success: false, error: "Invalid webhook signature" },
+        { success: false, error: "Missing x-razorpay-signature header." },
+        { status: 400 }
+      );
+    }
+
+    if (!webhookSecret) {
+      if (connDetails) {
+        await convexClient.mutation(api.paymentGateways.processWebhookEvent, {
+          organizationId: connDetails.organizationId,
+          connectionId: connDetails.connectionId,
+          provider: "razorpay",
+          providerEventId: `no_secret_${Date.now()}`,
+          eventType: "unknown",
+          payload: rawBody,
+          signatureVerified: false,
+        }).catch(() => {});
+      }
+      return NextResponse.json(
+        {
+          success: false,
+          error: "WEBHOOK_NOT_CONFIGURED: Webhook secret has not been configured for this store.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const signatureVerified = verifySignature(rawBody, signature, webhookSecret);
+    if (!signatureVerified) {
+      console.warn("[Razorpay Webhook Warning]: Invalid webhook signature.");
+      if (connDetails) {
+        await convexClient.mutation(api.paymentGateways.processWebhookEvent, {
+          organizationId: connDetails.organizationId,
+          connectionId: connDetails.connectionId,
+          provider: "razorpay",
+          providerEventId: `invalid_sig_${Date.now()}`,
+          eventType: "unknown",
+          payload: rawBody,
+          signatureVerified: false,
+        }).catch(() => {});
+      }
+      return NextResponse.json(
+        { success: false, error: "Invalid webhook signature." },
         { status: 400 }
       );
     }
@@ -134,7 +182,7 @@ export async function POST(req: NextRequest) {
       payload = JSON.parse(rawBody);
     } catch {
       return NextResponse.json(
-        { success: false, error: "Invalid JSON payload" },
+        { success: false, error: "Invalid JSON payload." },
         { status: 400 }
       );
     }
@@ -142,7 +190,7 @@ export async function POST(req: NextRequest) {
     const eventType = payload.event;
     if (!eventType) {
       return NextResponse.json(
-        { success: false, error: "Missing event type in webhook payload" },
+        { success: false, error: "Missing event type in webhook payload." },
         { status: 400 }
       );
     }
@@ -162,11 +210,13 @@ export async function POST(req: NextRequest) {
 
     // 7. Persist and process event atomically in Convex
     const result = await convexClient.mutation(api.paymentGateways.processWebhookEvent, {
+      organizationId: connDetails?.organizationId,
+      connectionId: connDetails?.connectionId,
       provider: "razorpay",
       providerEventId,
       eventType,
       payload: rawBody,
-      signatureVerified,
+      signatureVerified: true,
     });
 
     const elapsedMs = Date.now() - startTime;
@@ -184,11 +234,11 @@ export async function POST(req: NextRequest) {
       { status: 200 }
     );
   } catch (err: any) {
-    console.error("[Razorpay Webhook Handler Error]:", err);
+    console.error("[Razorpay Webhook Handler Error]:", err?.message || err);
     return NextResponse.json(
       {
         success: false,
-        error: err.message || "Failed processing webhook notification",
+        error: "Failed processing webhook notification.",
       },
       { status: 500 }
     );

@@ -117,6 +117,7 @@ export async function GET(req: NextRequest) {
         total: queryResult.total,
         hasMore: queryResult.hasMore,
       },
+      kpis: queryResult.kpis,
       filters: {
         status: status || null,
         method: method || null,
@@ -125,6 +126,10 @@ export async function GET(req: NextRequest) {
         search: search || null,
       },
       lastSyncedAt: connection.lastSyncAt || null,
+      storeCurrency:
+        typeof queryResult.storeCurrency === "object"
+          ? queryResult.storeCurrency?.code || "INR"
+          : queryResult.storeCurrency || storeContext.storeCurrency || "INR",
       syncResult: syncResult || undefined,
     });
   } catch (err: any) {

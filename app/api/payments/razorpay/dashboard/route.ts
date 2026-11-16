@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireStoreAdminContext } from "../../../../lib/payments/authHelper";
 import { api } from "../../../../../convex/_generated/api";
+import { formatCurrencyMinor, resolveOrganizationCurrency } from "../../../../../lib/constants/countries";
 
 export const dynamic = "force-dynamic";
 
@@ -65,19 +66,6 @@ function getTimezoneBoundaries(tz = "Asia/Kolkata", now = Date.now()) {
   return { startOfTodayMs, endOfTodayMs, startOfMonthMs, endOfMonthMs };
 }
 
-function formatCurrency(minorAmount: number, currency = "INR"): string {
-  const major = minorAmount / 100;
-  try {
-    return new Intl.NumberFormat(currency === "INR" ? "en-IN" : "en-US", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(major);
-  } catch {
-    return `${currency} ${major.toFixed(2)}`;
-  }
-}
 
 export async function GET(req: NextRequest) {
   try {
@@ -140,7 +128,25 @@ export async function GET(req: NextRequest) {
       }
     );
 
-    const primaryCurrency = analytics.primaryCurrency || "INR";
+    const storeCurrencyInfo = resolveOrganizationCurrency({
+      country: storeContext.storeCountry,
+      defaultCurrency: storeContext.defaultCurrency,
+      defaultCurrencySymbol: storeContext.defaultCurrencySymbol,
+    });
+
+    const primaryCurrency =
+      (typeof analytics.storeCurrency === "string" ? analytics.storeCurrency : null) ||
+      analytics.primaryCurrency ||
+      storeContext.storeCurrency ||
+      storeCurrencyInfo.code ||
+      "INR";
+    const locale = storeCurrencyInfo.locale || (primaryCurrency === "INR" ? "en-IN" : "en-US");
+    const currencySymbol = storeCurrencyInfo.symbol || (primaryCurrency === "INR" ? "₹" : primaryCurrency);
+
+    const activeCurrencies = Object.keys(analytics.currencies || {});
+    const isSingleForeign = activeCurrencies.length === 1 && activeCurrencies[0] !== primaryCurrency;
+    const effectiveDisplayCurrency = isSingleForeign ? activeCurrencies[0] : primaryCurrency;
+    const effectiveLocale = isSingleForeign ? (effectiveDisplayCurrency === "USD" ? "en-US" : locale) : locale;
 
     return NextResponse.json({
       success: true,
@@ -149,28 +155,60 @@ export async function GET(req: NextRequest) {
           grossMinor: analytics.todayRevenue.grossMinor,
           refundsMinor: analytics.todayRevenue.refundsMinor,
           netMinor: analytics.todayRevenue.netMinor,
-          formattedGross: formatCurrency(analytics.todayRevenue.grossMinor, primaryCurrency),
-          formattedRefunds: formatCurrency(analytics.todayRevenue.refundsMinor, primaryCurrency),
-          formattedNet: formatCurrency(analytics.todayRevenue.netMinor, primaryCurrency),
-          currency: primaryCurrency,
+          formattedGross: formatCurrencyMinor(analytics.todayRevenue.grossMinor, effectiveDisplayCurrency, effectiveLocale),
+          formattedRefunds: formatCurrencyMinor(analytics.todayRevenue.refundsMinor, effectiveDisplayCurrency, effectiveLocale),
+          formattedNet: formatCurrencyMinor(analytics.todayRevenue.netMinor, effectiveDisplayCurrency, effectiveLocale),
+          currency: effectiveDisplayCurrency,
         },
         monthlyRevenue: {
           grossMinor: analytics.monthlyRevenue.grossMinor,
           refundsMinor: analytics.monthlyRevenue.refundsMinor,
           netMinor: analytics.monthlyRevenue.netMinor,
-          formattedGross: formatCurrency(analytics.monthlyRevenue.grossMinor, primaryCurrency),
-          formattedRefunds: formatCurrency(analytics.monthlyRevenue.refundsMinor, primaryCurrency),
-          formattedNet: formatCurrency(analytics.monthlyRevenue.netMinor, primaryCurrency),
-          currency: primaryCurrency,
+          formattedGross: formatCurrencyMinor(analytics.monthlyRevenue.grossMinor, effectiveDisplayCurrency, effectiveLocale),
+          formattedRefunds: formatCurrencyMinor(analytics.monthlyRevenue.refundsMinor, effectiveDisplayCurrency, effectiveLocale),
+          formattedNet: formatCurrencyMinor(analytics.monthlyRevenue.netMinor, effectiveDisplayCurrency, effectiveLocale),
+          currency: effectiveDisplayCurrency,
         },
         successfulPayments: analytics.successfulPayments,
         failedPayments: analytics.failedPayments,
         pendingPayments: analytics.pendingPayments,
+        successfulPaymentsMetrics: {
+          count: analytics.successfulPayments,
+          amountMinor: analytics.successfulGrossMinor || 0,
+          formattedGross: formatCurrencyMinor(analytics.successfulGrossMinor || 0, effectiveDisplayCurrency, effectiveLocale),
+        },
+        failedPaymentsMetrics: {
+          count: analytics.failedPayments,
+          amountMinor: analytics.failedGrossMinor || 0,
+          formattedGross: formatCurrencyMinor(analytics.failedGrossMinor || 0, effectiveDisplayCurrency, effectiveLocale),
+        },
+        pendingPaymentsMetrics: {
+          count: analytics.pendingPayments,
+          amountMinor: analytics.pendingGrossMinor || 0,
+          formattedGross: formatCurrencyMinor(analytics.pendingGrossMinor || 0, effectiveDisplayCurrency, effectiveLocale),
+        },
+        totalPaymentsMetrics: {
+          count: (analytics.successfulPayments || 0) + (analytics.failedPayments || 0) + (analytics.pendingPayments || 0),
+          amountMinor: analytics.totalGrossMinor || 0,
+          formattedGross: formatCurrencyMinor(analytics.totalGrossMinor || 0, effectiveDisplayCurrency, effectiveLocale),
+        },
         refundCount: analytics.refundCount,
         successRate: analytics.successRate,
+        failureRate: analytics.failureRate ?? 0,
         currency: primaryCurrency,
+        currencySymbol,
+        storeCurrency: primaryCurrency,
+        storeCurrencyInfo: {
+          code: storeCurrencyInfo.code,
+          symbol: storeCurrencyInfo.symbol,
+          locale: storeCurrencyInfo.locale,
+          countryCode: storeCurrencyInfo.countryCode,
+        },
         currencies: analytics.currencies,
+        paymentTrends: analytics.paymentTrends,
       },
+      storeCurrency: primaryCurrency,
+      storeCurrencyInfo,
       connection: {
         id: connection.connectionId,
         status: connection.status,
@@ -184,6 +222,12 @@ export async function GET(req: NextRequest) {
         endOfToday: boundaries.endOfTodayMs,
         startOfMonth: boundaries.startOfMonthMs,
         endOfMonth: boundaries.endOfMonthMs,
+      },
+      store: {
+        id: storeContext.orgId,
+        name: storeContext.storeName,
+        slug: storeContext.slug,
+        country: storeContext.storeCountry,
       },
       timezone: storeTz,
       generatedAt: Date.now(),

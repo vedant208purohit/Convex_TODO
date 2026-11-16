@@ -1,8 +1,10 @@
 import { mutation, query, internalMutation, internalQuery, internalAction } from "./_generated/server";
 import { internal, api } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { requireAuth, resolveStoreOrganization } from "./organizationUsers";
 import { encryptCredentials, decryptCredentials, maskKeyIdentifier } from "./paymentGatewayCrypto";
+import { resolveOrganizationCurrency, formatCurrencyMinor } from "../lib/constants/countries";
 import {
   PublicGatewayConnection,
   PaymentConnectionType,
@@ -141,6 +143,53 @@ export const getConnectionCredentials = query({
 });
 
 /**
+ * Server-to-server query to retrieve encrypted credentials for webhook verification.
+ * Does not require Clerk user session since incoming webhooks originate from payment provider servers.
+ */
+export const getWebhookVerificationDetails = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    provider: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const provider = args.provider || "razorpay";
+    let org: any = null;
+    if (args.organizationId) {
+      org = await ctx.db.get(args.organizationId);
+    } else {
+      org = await ctx.db.query("organizations").first();
+    }
+    if (!org) return null;
+
+    const connections = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org_and_provider", (q) =>
+        q.eq("organizationId", org._id).eq("provider", provider)
+      )
+      .collect();
+
+    const conn =
+      connections.find((c) => c.status === "connected") ||
+      connections.find((c) => c.status === "disconnected") ||
+      connections[0];
+
+    if (!conn) return null;
+
+    return {
+      connectionId: conn._id,
+      organizationId: org._id,
+      storeSlug: org.slug,
+      provider: conn.provider,
+      accountMode: conn.accountMode,
+      status: conn.status,
+      encryptedCredentials: conn.encryptedCredentials,
+      encryptionKeyVersion: conn.encryptionKeyVersion,
+      metadata: conn.metadata,
+    };
+  },
+});
+
+/**
  * Updates merchant metadata on an existing connection.
  */
 export const updateConnectionMetadata = mutation({
@@ -164,6 +213,60 @@ export const updateConnectionMetadata = mutation({
 
     await ctx.db.patch(args.connectionId, patch);
     return args.connectionId;
+  },
+});
+
+/**
+ * Configures or updates the store-specific webhook secret securely using authenticated encryption.
+ */
+export const updateWebhookSecret = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    connectionId: v.id("payment_gateway_connections"),
+    webhookSecret: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const conn = await ctx.db.get(args.connectionId);
+    if (!conn || conn.organizationId !== org._id) {
+      throw new Error("Connection not found for this store");
+    }
+
+    let existingBundle: any = {};
+    if (conn.encryptedCredentials) {
+      try {
+        existingBundle = await decryptCredentials(conn.encryptedCredentials);
+      } catch (err: any) {
+        console.warn("Failed decrypting existing credentials during webhook secret update:", err?.message);
+      }
+    }
+
+    const cleanSecret = args.webhookSecret.trim();
+    const updatedBundle = {
+      ...existingBundle,
+      webhookSecret: cleanSecret,
+    };
+
+    const encrypted = await encryptCredentials(updatedBundle, 1);
+    const now = Date.now();
+
+    const metadata = {
+      ...(conn.metadata || {}),
+      webhookConfigured: Boolean(cleanSecret),
+      webhookConfiguredAt: now,
+      webhookSecretLast4: cleanSecret ? cleanSecret.slice(-4) : undefined,
+    };
+
+    await ctx.db.patch(args.connectionId, {
+      encryptedCredentials: encrypted.encryptedString,
+      encryptionKeyVersion: encrypted.version,
+      credentialsUpdatedAt: now,
+      metadata,
+      updatedAt: now,
+    });
+
+    return { success: true, connectionId: args.connectionId, configured: Boolean(cleanSecret) };
   },
 });
 
@@ -223,12 +326,24 @@ export const saveConnection = mutation({
     let encryptionKeyVersion = existing?.encryptionKeyVersion;
     let credentialsUpdatedAt = existing?.credentialsUpdatedAt;
 
+    const effectiveMetadata = {
+      ...(existing?.metadata || {}),
+      ...(args.metadata || {}),
+    };
+
     if (args.rawCredentials) {
+      if (args.rawCredentials.webhookSecret) {
+        effectiveMetadata.webhookConfigured = true;
+        effectiveMetadata.webhookConfiguredAt = now;
+        effectiveMetadata.webhookSecretLast4 = args.rawCredentials.webhookSecret.trim().slice(-4);
+      }
       const encrypted = await encryptCredentials(args.rawCredentials, 1);
       encryptedCredentials = encrypted.encryptedString;
       encryptionKeyVersion = encrypted.version;
       credentialsUpdatedAt = now;
     }
+
+    let effectiveConnectionId: Id<"payment_gateway_connections">;
 
     if (existing) {
       await ctx.db.patch(existing._id, {
@@ -243,43 +358,120 @@ export const saveConnection = mutation({
         disconnectedAt: args.status === "disconnected" ? now : undefined,
         lastVerifiedAt: args.status === "connected" ? now : existing.lastVerifiedAt,
         isDefault: args.isDefault ?? existing.isDefault,
-        metadata: args.metadata ?? existing.metadata,
+        metadata: effectiveMetadata,
         updatedAt: now,
       });
 
-      return existing._id;
+      effectiveConnectionId = existing._id;
+    } else {
+      // If marked as default, unset previous default
+      if (args.isDefault) {
+        for (const conn of existingConnections) {
+          if (conn.isDefault) {
+            await ctx.db.patch(conn._id, { isDefault: false, updatedAt: now });
+          }
+        }
+      }
+
+      effectiveConnectionId = await ctx.db.insert("payment_gateway_connections", {
+        organizationId: org._id,
+        provider: args.provider,
+        connectionType: args.connectionType,
+        providerAccountId: args.providerAccountId,
+        merchantName: args.merchantName,
+        accountMode: args.accountMode,
+        status: args.status,
+        encryptedCredentials,
+        encryptionKeyVersion,
+        credentialsUpdatedAt,
+        connectedAt: args.status === "connected" ? now : undefined,
+        disconnectedAt: undefined,
+        lastVerifiedAt: args.status === "connected" ? now : undefined,
+        isDefault: args.isDefault ?? existingConnections.length === 0,
+        metadata: effectiveMetadata,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
-    // If marked as default, unset previous default
-    if (args.isDefault) {
-      for (const conn of existingConnections) {
-        if (conn.isDefault) {
-          await ctx.db.patch(conn._id, { isDefault: false, updatedAt: now });
+    // Keep marketplaceInstallations in sync for Razorpay
+    if (args.provider === "razorpay") {
+      const instStatus =
+        args.status === "connected"
+          ? "live"
+          : args.status === "needs_attention"
+            ? "attention"
+            : args.status === "disconnected"
+              ? "uninstalled"
+              : "installed";
+      const instStatusText =
+        args.status === "connected"
+          ? "Connected & Active"
+          : args.status === "needs_attention"
+            ? "Connection Needs Attention"
+            : "Not Connected";
+      const instActionType =
+        args.status === "connected"
+          ? "open"
+          : args.status === "needs_attention"
+            ? "fix"
+            : "install";
+
+      const existingInst = await ctx.db
+        .query("marketplaceInstallations")
+        .withIndex("by_org_and_app", (q) =>
+          q.eq("organizationId", org._id).eq("appSlug", "razorpay")
+        )
+        .first();
+
+      if (existingInst) {
+        await ctx.db.patch(existingInst._id, {
+          status: instStatus,
+          statusText: instStatusText,
+          actionType: instActionType,
+          uninstalledAt: args.status === "disconnected" ? now : undefined,
+          configuration: {
+            connected: args.status === "connected",
+            status: args.status,
+            accountMode: args.accountMode,
+            merchantName: args.merchantName,
+            providerAccountId: args.providerAccountId,
+          },
+          updatedAt: now,
+        });
+      } else if (args.status !== "disconnected") {
+        const listing = await ctx.db
+          .query("marketplaceListings")
+          .withIndex("by_slug", (q) => q.eq("slug", "razorpay"))
+          .first();
+
+        if (listing) {
+          await ctx.db.insert("marketplaceInstallations", {
+            organizationId: org._id,
+            listingId: listing._id,
+            appSlug: "razorpay",
+            status: instStatus,
+            statusText: instStatusText,
+            actionType: instActionType,
+            isPaid: true,
+            licenseType: "subscription",
+            installedAt: now,
+            installedByUserId: "system",
+            configuration: {
+              connected: args.status === "connected",
+              status: args.status,
+              accountMode: args.accountMode,
+              merchantName: args.merchantName,
+              providerAccountId: args.providerAccountId,
+            },
+            createdAt: now,
+            updatedAt: now,
+          });
         }
       }
     }
 
-    const connectionId = await ctx.db.insert("payment_gateway_connections", {
-      organizationId: org._id,
-      provider: args.provider,
-      connectionType: args.connectionType,
-      providerAccountId: args.providerAccountId,
-      merchantName: args.merchantName,
-      accountMode: args.accountMode,
-      status: args.status,
-      encryptedCredentials,
-      encryptionKeyVersion,
-      credentialsUpdatedAt,
-      connectedAt: args.status === "connected" ? now : undefined,
-      disconnectedAt: undefined,
-      lastVerifiedAt: args.status === "connected" ? now : undefined,
-      isDefault: args.isDefault ?? existingConnections.length === 0,
-      metadata: args.metadata,
-      createdAt: now,
-      updatedAt: now,
-    });
-
-    return connectionId;
+    return effectiveConnectionId;
   },
 });
 
@@ -338,9 +530,20 @@ export const recordTransaction = mutation({
       .first();
 
     if (existing) {
+      const parsedAmountMinor =
+        args.amountMinor !== undefined && args.amountMinor !== null
+          ? Math.round(Number(args.amountMinor))
+          : existing.amountMinor;
+
       await ctx.db.patch(existing._id, {
         providerOrderId: args.providerOrderId ?? existing.providerOrderId,
         internalOrderId: args.internalOrderId ?? existing.internalOrderId,
+        amountMinor: parsedAmountMinor,
+        currency: args.currency || existing.currency,
+        paymentMethod: args.paymentMethod || existing.paymentMethod,
+        customerName: args.customerName || existing.customerName,
+        customerEmail: args.customerEmail || existing.customerEmail,
+        customerPhone: args.customerPhone || existing.customerPhone,
         status: args.status,
         providerStatus: args.providerStatus,
         paidAt: args.paidAt ?? existing.paidAt,
@@ -355,6 +558,8 @@ export const recordTransaction = mutation({
       return { transactionId: existing._id, alreadyExists: true };
     }
 
+    const safeAmountMinor = Math.round(Number(args.amountMinor || 0));
+
     const transactionId = await ctx.db.insert("payment_transactions", {
       organizationId: orgId,
       connectionId: args.connectionId,
@@ -366,7 +571,7 @@ export const recordTransaction = mutation({
       customerName: args.customerName,
       customerEmail: args.customerEmail,
       customerPhone: args.customerPhone,
-      amountMinor: args.amountMinor,
+      amountMinor: safeAmountMinor,
       currency: args.currency,
       paymentMethod: args.paymentMethod,
       status: args.status,
@@ -377,7 +582,7 @@ export const recordTransaction = mutation({
       errorMessage: args.errorMessage,
       refundedAmountMinor: args.refundedAmountMinor ?? 0,
       metadata: args.metadata,
-      createdAt: now,
+      createdAt: args.paidAt || args.failedAt || now,
       updatedAt: now,
     });
 
@@ -644,7 +849,17 @@ export const reserveRefund = mutation({
       (r) => r.status === "processed" || (r.status === "pending" && now - (r.createdAt || 0) < 60 * 1000)
     );
     const totalCommittedOrReserved = activeRefunds.reduce((sum, r) => sum + r.amountMinor, 0);
-    const remainingBalance = txn.amountMinor - totalCommittedOrReserved;
+    const rawTxAmount =
+      typeof txn.amountMinor === "number" && txn.amountMinor > 0
+        ? Math.round(txn.amountMinor)
+        : typeof (txn as any).amount === "number" && (txn as any).amount > 0
+          ? Math.round((txn as any).amount)
+          : typeof (txn as any).amountPaise === "number" && (txn as any).amountPaise > 0
+            ? Math.round((txn as any).amountPaise)
+            : typeof (txn as any).grossMinor === "number" && (txn as any).grossMinor > 0
+              ? Math.round((txn as any).grossMinor)
+              : 0;
+    const remainingBalance = Math.max(rawTxAmount - totalCommittedOrReserved, 0);
 
     if (args.amountMinor > remainingBalance) {
       throw new Error(
@@ -1060,8 +1275,176 @@ export const listTransactions = query({
     const page = Math.max(args.page || 1, 1);
     const limit = Math.min(Math.max(args.limit || 10, 1), 100);
     const skip = (page - 1) * limit;
-    const paginated = records.slice(skip, skip + limit);
+
+    const storeCurrencyInfo = resolveOrganizationCurrency(org);
+    const storeCurrencyCode = (storeCurrencyInfo.code || "INR").toUpperCase();
+
+    // Helper to resiliently extract integer minor units regardless of historical schema naming
+    function extractTransactionAmountMinor(r: any): number {
+      if (typeof r?.amountMinor === "number" && !isNaN(r.amountMinor)) {
+        return Math.round(r.amountMinor);
+      }
+      if (typeof r?.amount === "number" && !isNaN(r.amount)) {
+        return Math.round(r.amount);
+      }
+      if (typeof r?.amount_minor === "number" && !isNaN(r.amount_minor)) {
+        return Math.round(r.amount_minor);
+      }
+      if (typeof r?.grossMinor === "number" && !isNaN(r.grossMinor)) {
+        return Math.round(r.grossMinor);
+      }
+      if (typeof r?.amountPaise === "number" && !isNaN(r.amountPaise)) {
+        return Math.round(r.amountPaise);
+      }
+      if (typeof r?.amountMinor === "string") {
+        const p = parseFloat(r.amountMinor);
+        if (!isNaN(p)) return Math.round(p);
+      }
+      if (typeof r?.amount === "string") {
+        const p = parseFloat(r.amount);
+        if (!isNaN(p)) return Math.round(p);
+      }
+      return 0;
+    }
+
+    const paginated = records.slice(skip, skip + limit).map((r) => ({
+      ...r,
+      amountMinor: extractTransactionAmountMinor(r),
+    }));
     const hasMore = skip + limit < total;
+
+    // Calculate aggregated financial KPIs across all matching transactions in this filter/range
+    let successfulCount = 0;
+    let successfulAmountMinor = 0;
+    let failedCount = 0;
+    let failedAmountMinor = 0;
+    let pendingCount = 0;
+    let pendingAmountMinor = 0;
+    let totalAmountMinor = 0;
+
+    const currencyBuckets: Record<
+      string,
+      {
+        totalMinor: number;
+        successfulMinor: number;
+        failedMinor: number;
+        pendingMinor: number;
+        totalCount: number;
+        successfulCount: number;
+        failedCount: number;
+        pendingCount: number;
+      }
+    > = {};
+
+    function getBucket(curr: string) {
+      const c = (curr || storeCurrencyCode).toUpperCase();
+      if (!currencyBuckets[c]) {
+        currencyBuckets[c] = {
+          totalMinor: 0,
+          successfulMinor: 0,
+          failedMinor: 0,
+          pendingMinor: 0,
+          totalCount: 0,
+          successfulCount: 0,
+          failedCount: 0,
+          pendingCount: 0,
+        };
+      }
+      return currencyBuckets[c];
+    }
+
+    for (const r of records) {
+      const amt = extractTransactionAmountMinor(r);
+      const txCurr = (r.currency || storeCurrencyCode).toUpperCase();
+      const b = getBucket(txCurr);
+
+      b.totalCount++;
+      b.totalMinor += amt;
+      totalAmountMinor += amt;
+
+      if (r.status === "captured" || r.status === "partially_refunded" || r.status === "refunded") {
+        successfulCount++;
+        b.successfulCount++;
+        b.successfulMinor += amt;
+        successfulAmountMinor += amt;
+      } else if (r.status === "failed") {
+        failedCount++;
+        b.failedCount++;
+        b.failedMinor += amt;
+        failedAmountMinor += amt;
+      } else if (r.status === "pending" || r.status === "authorized" || r.status === "created") {
+        pendingCount++;
+        b.pendingCount++;
+        b.pendingMinor += amt;
+        pendingAmountMinor += amt;
+      }
+    }
+
+    const evaluated = successfulCount + failedCount;
+    const successRate = evaluated > 0 ? Math.round((successfulCount / evaluated) * 1000) / 10 : 100;
+    const failureRate = evaluated > 0 ? Math.round((failedCount / evaluated) * 1000) / 10 : 0;
+
+    const presentCurrencies = Object.keys(currencyBuckets);
+    const storeBucket = currencyBuckets[storeCurrencyCode] || {
+      totalMinor: 0,
+      successfulMinor: 0,
+      failedMinor: 0,
+      pendingMinor: 0,
+      totalCount: 0,
+      successfulCount: 0,
+      failedCount: 0,
+      pendingCount: 0,
+    };
+
+    const isSingleForeignCurrency =
+      presentCurrencies.length === 1 && presentCurrencies[0] !== storeCurrencyCode;
+    const dominantCurrency = isSingleForeignCurrency ? presentCurrencies[0] : storeCurrencyCode;
+
+    function buildFormattedAmount(
+      bucketMinor: number,
+      metricType: "total" | "successful" | "failed" | "pending"
+    ): string {
+      if (isSingleForeignCurrency) {
+        return formatCurrencyMinor(bucketMinor, dominantCurrency);
+      }
+
+      const storeAmt =
+        metricType === "total"
+          ? storeBucket.totalMinor
+          : metricType === "successful"
+            ? storeBucket.successfulMinor
+            : metricType === "failed"
+              ? storeBucket.failedMinor
+              : storeBucket.pendingMinor;
+
+      const baseFormatted = formatCurrencyMinor(storeAmt, storeCurrencyCode, storeCurrencyInfo.locale);
+
+      const foreignParts: string[] = [];
+      for (const curr of presentCurrencies) {
+        if (curr === storeCurrencyCode) continue;
+        const fb = currencyBuckets[curr];
+        const fAmt =
+          metricType === "total"
+            ? fb.totalMinor
+            : metricType === "successful"
+              ? fb.successfulMinor
+              : metricType === "failed"
+                ? fb.failedMinor
+                : fb.pendingMinor;
+        if (fAmt > 0) {
+          foreignParts.push(formatCurrencyMinor(fAmt, curr));
+        }
+      }
+
+      if (foreignParts.length > 0) {
+        if (storeAmt === 0) {
+          return foreignParts.join(" + ");
+        }
+        return `${baseFormatted} (+ ${foreignParts.join(", ")})`;
+      }
+
+      return baseFormatted;
+    }
 
     return {
       transactions: paginated,
@@ -1069,6 +1452,35 @@ export const listTransactions = query({
       page,
       limit,
       hasMore,
+      storeCurrency: storeCurrencyCode,
+      dominantCurrency,
+      storeCurrencyInfo,
+      kpis: {
+        total: {
+          count: total,
+          amountMinor: totalAmountMinor,
+          formattedAmount: buildFormattedAmount(totalAmountMinor, "total"),
+        },
+        successful: {
+          count: successfulCount,
+          amountMinor: successfulAmountMinor,
+          formattedAmount: buildFormattedAmount(successfulAmountMinor, "successful"),
+        },
+        failed: {
+          count: failedCount,
+          amountMinor: failedAmountMinor,
+          formattedAmount: buildFormattedAmount(failedAmountMinor, "failed"),
+        },
+        pending: {
+          count: pendingCount,
+          amountMinor: pendingAmountMinor,
+          formattedAmount: buildFormattedAmount(pendingAmountMinor, "pending"),
+        },
+        currencies: currencyBuckets,
+        dominantCurrency,
+        successRate,
+        failureRate,
+      },
     };
   },
 });
@@ -1166,6 +1578,7 @@ export const listRefunds = query({
       page,
       limit,
       hasMore,
+      storeCurrency: resolveOrganizationCurrency(org).code,
     };
   },
 });
@@ -1252,6 +1665,7 @@ export const listSettlements = query({
       page,
       limit,
       hasMore,
+      storeCurrency: resolveOrganizationCurrency(org).code,
     };
   },
 });
@@ -1320,15 +1734,26 @@ export const getTransactionForRefund = query({
     }
 
     const conn = await ctx.db.get(txn.connectionId);
+    const rawAmount =
+      typeof txn.amountMinor === "number" && txn.amountMinor > 0
+        ? Math.round(txn.amountMinor)
+        : typeof (txn as any).amount === "number" && (txn as any).amount > 0
+          ? Math.round((txn as any).amount)
+          : typeof (txn as any).amountPaise === "number" && (txn as any).amountPaise > 0
+            ? Math.round((txn as any).amountPaise)
+            : typeof (txn as any).grossMinor === "number" && (txn as any).grossMinor > 0
+              ? Math.round((txn as any).grossMinor)
+              : 0;
+
     const totalRefunded = txn.refundedAmountMinor || 0;
-    const refundableBalance = Math.max(txn.amountMinor - totalRefunded, 0);
+    const refundableBalance = Math.max(rawAmount - totalRefunded, 0);
 
     return {
       transactionId: txn._id,
       connectionId: txn.connectionId,
       provider: txn.provider,
       providerPaymentId: txn.providerPaymentId,
-      amountMinor: txn.amountMinor,
+      amountMinor: rawAmount,
       currency: txn.currency,
       refundedAmountMinor: totalRefunded,
       refundableBalanceMinor: refundableBalance,
@@ -1436,8 +1861,15 @@ export const getDashboardAnalytics = query({
     const org = await resolveStoreOrganization(ctx, args.organizationId);
     const provider = args.provider || "razorpay";
 
-    // 1. Fetch transactions for this store organization within the current month date range
-    const queryStartMs = Math.min(args.startOfMonthMs, args.startOfTodayMs) - 24 * 60 * 60 * 1000;
+    // 1. Resolve store operating currency from authoritative store configuration
+    const storeCurrencyInfo = resolveOrganizationCurrency(org);
+    const primaryCurrency = storeCurrencyInfo.code;
+
+    // 2. Fetch transactions for this store organization within the query date range (including past year for trends)
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+    const oneYearAgoMs = args.startOfTodayMs - 366 * ONE_DAY_MS;
+    const queryStartMs = Math.min(args.startOfMonthMs, args.startOfTodayMs, oneYearAgoMs);
+
     let txns: any[];
     if (args.connectionId) {
       txns = await ctx.db
@@ -1459,7 +1891,7 @@ export const getDashboardAnalytics = query({
       txns = txns.filter((t) => t.provider === provider);
     }
 
-    // 2. Fetch refunds for this store organization within the current month date range
+    // 3. Fetch refunds for this store organization within the query date range
     let refunds: any[];
     if (args.connectionId) {
       refunds = await ctx.db
@@ -1481,8 +1913,6 @@ export const getDashboardAnalytics = query({
       refunds = refunds.filter((r) => r.provider === provider);
     }
 
-    const primaryCurrency = txns[0]?.currency || "INR";
-
     let todayGrossMinor = 0;
     let monthGrossMinor = 0;
     let todayRefundsMinor = 0;
@@ -1491,6 +1921,10 @@ export const getDashboardAnalytics = query({
     let successfulPayments = 0;
     let failedPayments = 0;
     let pendingPayments = 0;
+    let successfulGrossMinor = 0;
+    let failedGrossMinor = 0;
+    let pendingGrossMinor = 0;
+    let totalGrossMinor = 0;
 
     const currencies: Record<
       string,
@@ -1520,52 +1954,88 @@ export const getDashboardAnalytics = query({
       return currencies[curr];
     }
 
+    function extractTransactionAmountMinor(r: any): number {
+      if (typeof r?.amountMinor === "number" && !isNaN(r.amountMinor)) {
+        return Math.round(r.amountMinor);
+      }
+      if (typeof r?.amount === "number" && !isNaN(r.amount)) {
+        return Math.round(r.amount);
+      }
+      if (typeof r?.amount_minor === "number" && !isNaN(r.amount_minor)) {
+        return Math.round(r.amount_minor);
+      }
+      if (typeof r?.grossMinor === "number" && !isNaN(r.grossMinor)) {
+        return Math.round(r.grossMinor);
+      }
+      if (typeof r?.amountPaise === "number" && !isNaN(r.amountPaise)) {
+        return Math.round(r.amountPaise);
+      }
+      if (typeof r?.amountMinor === "string") {
+        const p = parseFloat(r.amountMinor);
+        if (!isNaN(p)) return Math.round(p);
+      }
+      if (typeof r?.amount === "string") {
+        const p = parseFloat(r.amount);
+        if (!isNaN(p)) return Math.round(p);
+      }
+      return 0;
+    }
+
     for (const t of txns) {
-      const bucket = getCurrencyBucket(t.currency || primaryCurrency);
+      const txCurr = t.currency || primaryCurrency;
+      const bucket = getCurrencyBucket(txCurr);
       const effectivePaidTime = t.paidAt || t.createdAt;
+      const tAmt = extractTransactionAmountMinor(t);
 
       if (t.status === "captured" || t.status === "partially_refunded" || t.status === "refunded") {
         successfulPayments++;
         bucket.successfulPayments++;
+        if (txCurr === primaryCurrency) successfulGrossMinor += tAmt;
+        totalGrossMinor += tAmt;
 
         if (effectivePaidTime >= args.startOfTodayMs && effectivePaidTime <= args.endOfTodayMs) {
-          if (t.currency === primaryCurrency) {
-            todayGrossMinor += t.amountMinor;
+          if (txCurr === primaryCurrency) {
+            todayGrossMinor += tAmt;
           }
-          bucket.todayGrossMinor += t.amountMinor;
+          bucket.todayGrossMinor += tAmt;
         }
 
         if (effectivePaidTime >= args.startOfMonthMs && effectivePaidTime <= args.endOfMonthMs) {
-          if (t.currency === primaryCurrency) {
-            monthGrossMinor += t.amountMinor;
+          if (txCurr === primaryCurrency) {
+            monthGrossMinor += tAmt;
           }
-          bucket.monthGrossMinor += t.amountMinor;
+          bucket.monthGrossMinor += tAmt;
         }
       } else if (t.status === "failed") {
         failedPayments++;
         bucket.failedPayments++;
+        if (txCurr === primaryCurrency) failedGrossMinor += tAmt;
+        totalGrossMinor += tAmt;
       } else if (t.status === "pending" || t.status === "authorized" || t.status === "created") {
         pendingPayments++;
         bucket.pendingPayments++;
+        if (txCurr === primaryCurrency) pendingGrossMinor += tAmt;
+        totalGrossMinor += tAmt;
       }
     }
 
     let refundCount = 0;
     for (const r of refunds) {
+      const refCurr = r.currency || primaryCurrency;
       if (r.status === "processed") {
         refundCount++;
-        const bucket = getCurrencyBucket(r.currency || primaryCurrency);
+        const bucket = getCurrencyBucket(refCurr);
         const effectiveRefundTime = r.processedAt || r.initiatedAt;
 
         if (effectiveRefundTime >= args.startOfTodayMs && effectiveRefundTime <= args.endOfTodayMs) {
-          if (r.currency === primaryCurrency) {
+          if (refCurr === primaryCurrency) {
             todayRefundsMinor += r.amountMinor;
           }
           bucket.todayRefundsMinor += r.amountMinor;
         }
 
         if (effectiveRefundTime >= args.startOfMonthMs && effectiveRefundTime <= args.endOfMonthMs) {
-          if (r.currency === primaryCurrency) {
+          if (refCurr === primaryCurrency) {
             monthRefundsMinor += r.amountMinor;
           }
           bucket.monthRefundsMinor += r.amountMinor;
@@ -1583,9 +2053,130 @@ export const getDashboardAnalytics = query({
       totalEvaluated > 0
         ? Math.round((successfulPayments / totalEvaluated) * 1000) / 10
         : 100;
+    const failureRate =
+      totalEvaluated > 0
+        ? Math.round((failedPayments / totalEvaluated) * 1000) / 10
+        : 0;
+
+    // 4. Compute dynamic payment trends across 7D, 30D, and 1Y ranges using actual store transactions
+    // 7D Trend: 7 daily bars ending with today (args.endOfTodayMs)
+    const trend7D: { label: string; value: number; formattedAmount: string; isLatest?: boolean; amountMinor: number }[] = [];
+    let max7DMinor = 0;
+    for (let i = 0; i < 7; i++) {
+      const dayStart = args.startOfTodayMs - (6 - i) * ONE_DAY_MS;
+      const dayEnd = dayStart + ONE_DAY_MS - 1;
+      const d = new Date(dayStart);
+      const dayLabel = d.toLocaleDateString(storeCurrencyInfo.locale || "en-IN", { weekday: "short" });
+
+      const dayTotalMinor = txns
+        .filter((t) => {
+          const tTime = t.paidAt || t.createdAt;
+          const tCurr = t.currency || primaryCurrency;
+          return (
+            tCurr === primaryCurrency &&
+            (t.status === "captured" || t.status === "partially_refunded" || t.status === "refunded") &&
+            tTime >= dayStart &&
+            tTime <= dayEnd
+          );
+        })
+        .reduce((sum, t) => sum + (t.amountMinor || 0), 0);
+
+      if (dayTotalMinor > max7DMinor) max7DMinor = dayTotalMinor;
+      trend7D.push({
+        label: i === 6 ? "Today" : dayLabel,
+        value: 0,
+        amountMinor: dayTotalMinor,
+        formattedAmount: formatCurrencyMinor(dayTotalMinor, primaryCurrency, storeCurrencyInfo.locale),
+        isLatest: i === 6,
+      });
+    }
+    for (const point of trend7D) {
+      point.value = max7DMinor > 0 ? Math.round((point.amountMinor / max7DMinor) * 100) : 0;
+    }
+
+    // 30D Trend: 4 weekly bars ending with today
+    const trend30D: { label: string; value: number; formattedAmount: string; isLatest?: boolean; amountMinor: number }[] = [];
+    let max30DMinor = 0;
+    for (let w = 0; w < 4; w++) {
+      const weekStart = args.endOfTodayMs - (4 - w) * 7 * ONE_DAY_MS + 1;
+      const weekEnd = weekStart + 7 * ONE_DAY_MS - 1;
+
+      const weekTotalMinor = txns
+        .filter((t) => {
+          const tTime = t.paidAt || t.createdAt;
+          const tCurr = t.currency || primaryCurrency;
+          return (
+            tCurr === primaryCurrency &&
+            (t.status === "captured" || t.status === "partially_refunded" || t.status === "refunded") &&
+            tTime >= weekStart &&
+            tTime <= weekEnd
+          );
+        })
+        .reduce((sum, t) => sum + (t.amountMinor || 0), 0);
+
+      if (weekTotalMinor > max30DMinor) max30DMinor = weekTotalMinor;
+      trend30D.push({
+        label: `Week ${w + 1}`,
+        value: 0,
+        amountMinor: weekTotalMinor,
+        formattedAmount: formatCurrencyMinor(weekTotalMinor, primaryCurrency, storeCurrencyInfo.locale),
+        isLatest: w === 3,
+      });
+    }
+    for (const point of trend30D) {
+      point.value = max30DMinor > 0 ? Math.round((point.amountMinor / max30DMinor) * 100) : 0;
+    }
+
+    // 1Y Trend: 12 monthly bars ending with current month
+    const trend1Y: { label: string; value: number; formattedAmount: string; isLatest?: boolean; amountMinor: number }[] = [];
+    let max1YMinor = 0;
+    const currentYear = new Date(args.endOfTodayMs).getUTCFullYear();
+    const currentMonthIdx = new Date(args.endOfTodayMs).getUTCMonth();
+    for (let m = 0; m < 12; m++) {
+      const targetMonthDate = new Date(Date.UTC(currentYear, currentMonthIdx - (11 - m), 1, 0, 0, 0));
+      const mStart = targetMonthDate.getTime();
+      const nextMonthDate = new Date(Date.UTC(currentYear, currentMonthIdx - (11 - m) + 1, 1, 0, 0, 0));
+      const mEnd = nextMonthDate.getTime() - 1;
+      const mLabel = targetMonthDate.toLocaleDateString(storeCurrencyInfo.locale || "en-IN", { month: "short" });
+
+      const monthTotalMinor = txns
+        .filter((t) => {
+          const tTime = t.paidAt || t.createdAt;
+          const tCurr = t.currency || primaryCurrency;
+          return (
+            tCurr === primaryCurrency &&
+            (t.status === "captured" || t.status === "partially_refunded" || t.status === "refunded") &&
+            tTime >= mStart &&
+            tTime <= mEnd
+          );
+        })
+        .reduce((sum, t) => sum + (t.amountMinor || 0), 0);
+
+      if (monthTotalMinor > max1YMinor) max1YMinor = monthTotalMinor;
+      trend1Y.push({
+        label: mLabel,
+        value: 0,
+        amountMinor: monthTotalMinor,
+        formattedAmount: formatCurrencyMinor(monthTotalMinor, primaryCurrency, storeCurrencyInfo.locale),
+        isLatest: m === 11,
+      });
+    }
+    for (const point of trend1Y) {
+      point.value = max1YMinor > 0 ? Math.round((point.amountMinor / max1YMinor) * 100) : 0;
+    }
+
+    const paymentTrends = {
+      "7D": trend7D,
+      "30D": trend30D,
+      "1Y": trend1Y,
+    };
 
     return {
       organizationId: org._id,
+      storeName: org.name,
+      storeCountry: org.country,
+      storeCurrency: primaryCurrency,
+      storeCurrencyInfo,
       primaryCurrency,
       todayRevenue: {
         grossMinor: todayGrossMinor,
@@ -1602,9 +2193,15 @@ export const getDashboardAnalytics = query({
       successfulPayments,
       failedPayments,
       pendingPayments,
+      successfulGrossMinor,
+      failedGrossMinor,
+      pendingGrossMinor,
+      totalGrossMinor,
       refundCount,
       successRate,
+      failureRate,
       currencies,
+      paymentTrends,
     };
   },
 });
@@ -1658,6 +2255,10 @@ export const processWebhookEvent = mutation({
     }
 
     // 3. Upsert the payment_webhook_events record
+    let eventCategory = "payment";
+    if (args.eventType.startsWith("refund.")) eventCategory = "refund";
+    else if (args.eventType.startsWith("settlement.")) eventCategory = "settlement";
+
     let eventRecordId = existingEvent?._id;
     if (!existingEvent || !eventRecordId) {
       eventRecordId = await ctx.db.insert("payment_webhook_events", {
@@ -1666,20 +2267,33 @@ export const processWebhookEvent = mutation({
         provider: args.provider,
         providerEventId: args.providerEventId,
         eventType: args.eventType,
+        eventCategory,
         payload: args.payload,
         signatureVerified: args.signatureVerified,
-        processingStatus: "processing",
+        processingStatus: args.signatureVerified ? "processing" : "failed",
         attemptCount: 1,
         receivedAt: now,
+        lastError: args.signatureVerified ? undefined : "UNVERIFIED_SIGNATURE: Webhook signature verification failed.",
         createdAt: now,
         updatedAt: now,
       });
     } else {
       await ctx.db.patch(eventRecordId, {
-        processingStatus: "processing",
+        eventCategory,
+        signatureVerified: args.signatureVerified,
+        processingStatus: args.signatureVerified ? "processing" : "failed",
         attemptCount: (existingEvent.attemptCount || 1) + 1,
+        lastError: args.signatureVerified ? undefined : "UNVERIFIED_SIGNATURE: Webhook signature verification failed.",
         updatedAt: now,
       });
+    }
+
+    if (!args.signatureVerified) {
+      return {
+        eventId: eventRecordId,
+        success: false,
+        error: "Signature verification failed. Unverified events are not processed.",
+      };
     }
 
     // 4. Parse payload
@@ -2077,6 +2691,24 @@ export const disconnectGatewayConnection = mutation({
       updatedAt: now,
     });
 
+    if (provider === "razorpay") {
+      const existingInst = await ctx.db
+        .query("marketplaceInstallations")
+        .withIndex("by_org_and_app", (q) =>
+          q.eq("organizationId", org._id).eq("appSlug", "razorpay")
+        )
+        .first();
+      if (existingInst) {
+        await ctx.db.patch(existingInst._id, {
+          status: "uninstalled",
+          statusText: "Not Connected",
+          actionType: "install",
+          uninstalledAt: now,
+          updatedAt: now,
+        });
+      }
+    }
+
     return {
       success: true,
       connectionId: conn._id,
@@ -2229,21 +2861,32 @@ export const getIntegrationHealthData = query({
     }
 
     const hasWebhookSecret = Boolean(
-      conn?.metadata?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET
+      conn?.metadata?.webhookConfigured ||
+      conn?.metadata?.webhookSecret ||
+      process.env.RAZORPAY_WEBHOOK_SECRET
     );
 
-    let webhookStatus: "healthy" | "warning" | "degraded" | "not_configured" | "unknown" =
+    const verifiedEvents = webhookEvents.filter((e) => e.signatureVerified === true);
+    const processedEvents = webhookEvents.filter(
+      (e) => e.signatureVerified === true && e.processingStatus === "processed"
+    );
+    const recentFailedEvents = webhookEvents.filter(
+      (e) => e.processingStatus === "failed" && e.receivedAt >= oneDayAgo
+    );
+
+    let webhookStatus: "healthy" | "awaiting_events" | "warning" | "degraded" | "not_configured" | "inactive" =
       "not_configured";
-    if (hasWebhookSecret) {
-      if (failedEvents > 0 && (!lastProcessedAt || lastProcessedAt < oneDayAgo)) {
-        webhookStatus = "degraded";
-      } else if (totalEvents > 0) {
-        webhookStatus = "healthy";
-      } else {
-        webhookStatus = "healthy"; // Configured & ready for transactions
-      }
+
+    if (!conn || conn.status === "disconnected") {
+      webhookStatus = "inactive";
+    } else if (!hasWebhookSecret) {
+      webhookStatus = "not_configured";
+    } else if (recentFailedEvents.length > 0 && (!lastProcessedAt || lastProcessedAt < oneDayAgo)) {
+      webhookStatus = "degraded";
+    } else if (processedEvents.length > 0) {
+      webhookStatus = "healthy";
     } else {
-      webhookStatus = totalEvents > 0 ? "warning" : "not_configured";
+      webhookStatus = "awaiting_events";
     }
 
     // 3. Sync Telemetry

@@ -8,11 +8,7 @@ export async function POST(req: NextRequest) {
     const rawBody = await req.text();
     const signature = req.headers.get("x-razorpay-signature");
 
-    const webhookSecret =
-      process.env.RAZORPAY_WEBHOOK_SECRET?.trim() ||
-      process.env.RZ_KEY_SECRET?.trim() ||
-      process.env.RAZORPAY_KEY_SECRET?.trim() ||
-      "";
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim() || "";
 
     // Verify webhook signature if secret and signature are provided
     if (webhookSecret && signature && !webhookSecret.includes("mock")) {

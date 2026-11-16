@@ -82,24 +82,26 @@ export async function POST(req: NextRequest) {
       keySecret: decrypted.keySecret,
     };
 
+    const effectiveConnId = connection.connectionId || connection._id;
+
     const [txResult, rfResult, stlResult] = await Promise.allSettled([
       PaymentSyncEngine.syncTransactions({
         convexClient: storeContext.storeConvexClient,
-        connectionId: connection._id,
+        connectionId: effectiveConnId,
         adapter,
         credentials,
         syncType: "manual",
       }),
       PaymentSyncEngine.syncRefunds({
         convexClient: storeContext.storeConvexClient,
-        connectionId: connection._id,
+        connectionId: effectiveConnId,
         adapter,
         credentials,
         syncType: "manual",
       }),
       PaymentSyncEngine.syncSettlements({
         convexClient: storeContext.storeConvexClient,
-        connectionId: connection._id,
+        connectionId: effectiveConnId,
         adapter,
         credentials,
         syncType: "manual",

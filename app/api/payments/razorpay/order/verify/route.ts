@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
     }
 
     const amountMinor = paymentData?.amountMinor || 0;
-    const currency = paymentData?.currency || "INR";
+    const currency = paymentData?.currency || storeContext.storeCurrency || "INR";
     const paymentMethod = paymentData?.paymentMethod || "card";
     const paidAt = paymentData?.paidAt || Date.now();
 

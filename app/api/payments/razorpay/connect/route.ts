@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 import { getPaymentAdapter } from "../../../../lib/payments/registry";
 import { requireStoreAdminContext } from "../../../../lib/payments/authHelper";
 import { PaymentSyncEngine } from "../../../../lib/payments/syncEngine";
@@ -40,6 +41,10 @@ export async function POST(req: NextRequest) {
 
     const key_id = String(body?.key_id || body?.keyId || "").trim().replace(/^['"]|['"]$/g, "");
     const key_secret = String(body?.key_secret || body?.keySecret || "").trim().replace(/^['"]|['"]$/g, "");
+    let webhook_secret = String(body?.webhook_secret || body?.webhookSecret || "").trim();
+    if (!webhook_secret) {
+      webhook_secret = `whsec_${crypto.randomBytes(16).toString("hex")}`;
+    }
 
     if (!key_id) {
       return NextResponse.json(
@@ -120,11 +125,14 @@ export async function POST(req: NextRequest) {
         rawCredentials: {
           keyId: key_id.trim(),
           keySecret: key_secret.trim(),
+          webhookSecret: webhook_secret,
         },
         isDefault: true,
         metadata: {
           isProfileAvailable: profileResult.is_profile_available ?? false,
           connectedVia: "api_keys",
+          webhookConfigured: true,
+          webhookSecretLast4: webhook_secret.slice(-4),
         },
       }
     );

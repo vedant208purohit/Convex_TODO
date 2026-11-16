@@ -108,13 +108,16 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    const storeCurrency = storeContext.storeCurrency || "INR";
+
     if (!connection.encryptedCredentials) {
       return NextResponse.json({
         success: true,
         supportsManualSettlement: false,
         isBalanceAvailable: false,
         availableBalanceMinor: null,
-        currency: "INR",
+        currency: storeCurrency,
+        storeCurrency,
         settlementDestination,
         explanation:
           "Payment gateway credentials are not available for balance inspection.",
@@ -140,7 +143,7 @@ export async function GET(req: NextRequest) {
       supportsManualSettlement: false,
       isBalanceAvailable: false,
       availableBalanceMinor: null,
-      currency: "INR",
+      currency: storeCurrency,
       explanation:
         "Settlement timing depends on your Razorpay settlement configuration and banking eligibility.",
     };
@@ -161,7 +164,8 @@ export async function GET(req: NextRequest) {
       supportsManualSettlement: eligibility.supportsManualSettlement ?? false,
       isBalanceAvailable: eligibility.isBalanceAvailable ?? false,
       availableBalanceMinor: eligibility.availableBalanceMinor ?? null,
-      currency: eligibility.currency || "INR",
+      currency: eligibility.currency || storeCurrency,
+      storeCurrency,
       settlementDestination,
       explanation: eligibility.explanation,
     });

@@ -120,6 +120,10 @@ export async function GET(req: NextRequest) {
         to: to || null,
         search: search || null,
       },
+      storeCurrency:
+        typeof queryResult.storeCurrency === "object"
+          ? queryResult.storeCurrency?.code || "INR"
+          : queryResult.storeCurrency || storeContext.storeCurrency || "INR",
       syncResult: syncResult || undefined,
     });
   } catch (err: any) {
@@ -201,7 +205,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Determine refund amount in minor units
-    let finalAmountMinor: number;
+    let isPartialRefund = false;
+    let effectiveAmountMinor = txnEligibility.refundableBalanceMinor;
+
     if (requestedAmountMinor !== undefined) {
       if (!Number.isInteger(requestedAmountMinor) || requestedAmountMinor <= 0) {
         return NextResponse.json(
@@ -223,10 +229,19 @@ export async function POST(req: NextRequest) {
           { status: 400 }
         );
       }
-      finalAmountMinor = requestedAmountMinor;
-    } else {
-      // Full refund
-      finalAmountMinor = txnEligibility.refundableBalanceMinor;
+      effectiveAmountMinor = requestedAmountMinor;
+      isPartialRefund = requestedAmountMinor < txnEligibility.refundableBalanceMinor;
+    }
+
+    if (effectiveAmountMinor <= 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          code: "INVALID_REFUND_AMOUNT",
+          error: "Refund amount must be greater than zero.",
+        },
+        { status: 400 }
+      );
     }
 
     // Generate or resolve a stable, deterministic idempotency key for this refund
@@ -234,7 +249,7 @@ export async function POST(req: NextRequest) {
       req.headers.get("idempotency-key") ||
       body.idempotencyKey ||
       body.receipt ||
-      `ref_${paymentId}_${finalAmountMinor}`
+      `ref_${paymentId}_${effectiveAmountMinor}`
     ).trim();
 
     // 2. Pre-reserve refund in database: enforces balance check, race protection & idempotency
@@ -246,7 +261,7 @@ export async function POST(req: NextRequest) {
           organizationId: storeContext.orgId,
           connectionId: txnEligibility.connectionId,
           providerPaymentId: paymentId,
-          amountMinor: finalAmountMinor,
+          amountMinor: effectiveAmountMinor,
           idempotencyKey,
           reason: notes?.reason || notes?.comment,
           speed: speed === "optimum" ? "optimum" : "normal",
@@ -316,18 +331,29 @@ export async function POST(req: NextRequest) {
 
     const decrypted = await decryptCredentials(connection.encryptedCredentials!);
 
-    // 4. Call Razorpay API to execute the refund with stable idempotency receipt
+    // 4. Call Razorpay API to execute the refund
     const adapter = getPaymentAdapter("razorpay");
     let refundResult: any;
     try {
+      const cleanNotes: Record<string, string> = {};
+      if (notes && typeof notes === "object") {
+        for (const [k, v] of Object.entries(notes)) {
+          if (v !== undefined && v !== null) {
+            cleanNotes[String(k).slice(0, 40)] = String(v).slice(0, 255);
+          }
+        }
+      }
+      if (idempotencyKey) {
+        cleanNotes.idempotency_key = String(idempotencyKey).slice(0, 255);
+      }
+
       refundResult = await adapter.createRefund(
         { keyId: decrypted.keyId || "", keySecret: decrypted.keySecret || "" },
         paymentId,
         {
-          amount: finalAmountMinor,
-          speed: speed === "optimum" ? "optimum" : "normal",
-          receipt: idempotencyKey,
-          notes: { ...notes, idempotencyKey },
+          ...(isPartialRefund ? { amount: effectiveAmountMinor } : {}),
+          ...(speed === "optimum" ? { speed: "optimum" } : {}),
+          notes: cleanNotes,
         }
       );
     } catch (createErr: any) {
@@ -368,6 +394,8 @@ export async function POST(req: NextRequest) {
         },
       }
     );
+
+    const finalAmountMinor = refundResult.amountMinor || effectiveAmountMinor;
 
     return NextResponse.json({
       success: true,
