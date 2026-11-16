@@ -27,6 +27,10 @@ export default function OnboardingPage() {
 
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+  const currentMembership = useQuery(
+    api.organizationUsers.getCurrentMembership,
+    activeOrg ? { organizationId: activeOrg._id } : "skip"
+  );
   const saveOnboardingMutation = useMutation(api.organizations.saveOnboarding);
 
   const [activeStep, setActiveStep] = useState<number>(1);
@@ -106,6 +110,24 @@ export default function OnboardingPage() {
   // Initialize from active organization if present
   useEffect(() => {
     if (activeOrg) {
+      const isOwner = Boolean(
+        activeOrg.ownerClerkId && user?.id && activeOrg.ownerClerkId === user.id
+      );
+      const isStaff = !isOwner && currentMembership && !currentMembership.userType?.includes("admin");
+
+      // If store is already provisioned and employee is not the store owner/admin,
+      // they don't do store setup onboarding. Redirect them straight onto the dashboard!
+      if (isStaff) {
+        router.replace("/dashboard");
+        return;
+      }
+
+      // If checklist is already completed by owner, redirect straight to dashboard
+      if (activeOrg.onboardingCompleted) {
+        router.replace("/dashboard");
+        return;
+      }
+
       // If store is already provisioned (organization exists), lock directly into Step 4 (Launch Checklist)
       // to prevent re-entering or re-submitting Steps 1-3.
       if (activeOrg.onboardingStep && activeOrg.onboardingStep >= 4) {
@@ -147,7 +169,7 @@ export default function OnboardingPage() {
       if (activeOrg.deliveryFleetType) setDeliveryFleetType(activeOrg.deliveryFleetType as any);
       if (activeOrg.operatingHoursTemplate) setOperatingHours(activeOrg.operatingHoursTemplate as any);
     }
-  }, [activeOrg, router]);
+  }, [activeOrg, currentMembership, user?.id, router]);
 
   // Real Google Places Autocomplete Query
   const fetchPlacesPredictions = async (query: string) => {
@@ -746,7 +768,6 @@ export default function OnboardingPage() {
                             <span className="material-symbols-outlined text-[13px] text-[#645d58]">location_on</span>
                             Google Places Real-Time
                           </span>
-                          <span className="text-xs text-[#645d58] bg-[#faf2ee] px-2 py-0.5 rounded border border-[#eadfd6]/60">Front-of-House</span>
                         </div>
                       </div>
 

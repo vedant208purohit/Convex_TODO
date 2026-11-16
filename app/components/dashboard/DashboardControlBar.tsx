@@ -41,7 +41,7 @@ export function DashboardControlBar({
 
   return (
     <section className="sticky top-0 z-30 w-full bg-secondary-container/95 backdrop-blur-md px-margin py-2 shadow-xs transition-all duration-200 border-b border-outline-variant/30">
-      <div className="max-w-[1440px] mx-auto flex flex-wrap items-center justify-between gap-y-2 gap-x-space-md">
+      <div className="w-full flex flex-wrap items-center justify-between gap-y-2 gap-x-space-md">
         {/* Left Cluster: Engine Status + Calendar */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-on-primary shadow-xs">

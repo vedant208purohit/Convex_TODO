@@ -211,22 +211,29 @@ export default function DashboardPage() {
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
 
-  // Onboarding guard:
-  // If user has no organization yet OR organization has not completed onboarding, redirect to /onboarding
-  useEffect(() => {
-    if (organizations !== undefined) {
-      if (organizations.length === 0) {
-        router.replace("/onboarding");
-      } else if (activeOrg && activeOrg.onboardingCompleted !== true) {
-        router.replace("/onboarding");
-      }
-    }
-  }, [organizations, activeOrg, router]);
-
   const currentMembership = useQuery(
     api.organizationUsers.getCurrentMembership,
     activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
+
+  // Onboarding guard:
+  // Only store owners and admins who haven't completed store setup are redirected to /onboarding.
+  // Regular employees (cashiers, captains, chefs, etc.) enter the operational app directly.
+  useEffect(() => {
+    if (organizations !== undefined && currentMembership !== undefined) {
+      if (organizations.length === 0) {
+        router.replace("/onboarding");
+      } else if (activeOrg && activeOrg.onboardingCompleted !== true) {
+        const isOwner = Boolean(
+          activeOrg.ownerClerkId && currentMembership?.userId && activeOrg.ownerClerkId === currentMembership.userId
+        );
+        const isAdmin = Boolean(currentMembership?.userType?.includes("admin"));
+        if (isOwner || isAdmin) {
+          router.replace("/onboarding");
+        }
+      }
+    }
+  }, [organizations, activeOrg, currentMembership, router]);
 
   const dashboardData = useQuery(
     api.dashboards.getDashboard,
@@ -701,13 +708,9 @@ export default function DashboardPage() {
         />
 
         {/* Main 12-Column Canvas Layout */}
-        <div
-          className={`p-margin mx-auto w-full transition-all duration-300 ${
-            gridResolution === "Compact 1200px" ? "max-w-[1200px]" : "max-w-[1440px]"
-          }`}
-        >
+        <div className="p-margin w-full transition-all duration-300">
           <div
-            className="grid grid-cols-12 gap-gutter relative"
+            className="grid grid-cols-12 gap-gutter relative w-full"
             id="layout-grid"
             onDragOver={(e) => {
               e.preventDefault();
