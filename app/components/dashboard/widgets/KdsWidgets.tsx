@@ -65,7 +65,7 @@ export function KdsLiveOrdersWidget({
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-auto">
+      <div className="bg-[#fcf8f5] border border-[#f3ede6] rounded-lg p-space-md flex flex-col gap-space-sm my-auto">
         <div className="flex items-center justify-between text-on-surface">
           <span className="font-label-md text-label-md uppercase tracking-wider text-secondary">
             Workstation Traffic
@@ -275,7 +275,7 @@ export function KdsStationQueueWidget({
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-auto">
+      <div className="bg-[#fcf8f5] border border-[#f3ede6] rounded-lg p-space-md flex flex-col gap-space-sm my-auto">
         <div className="flex items-center justify-between bg-surface-container-lowest px-space-sm py-1.5 rounded-full">
           <span className="font-label-sm text-label-sm text-on-surface font-semibold truncate">
             {stationName}
@@ -570,7 +570,7 @@ export function KdsAvgPrepTimeWidget({
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-md flex flex-col gap-space-sm my-auto">
+      <div className="bg-[#fcf8f5] border border-[#f3ede6] rounded-lg p-space-md flex flex-col gap-space-sm my-auto">
         <div className="flex items-baseline justify-between">
           <div className="flex items-baseline gap-1">
             <span className="font-display-sm text-display-sm text-on-surface">

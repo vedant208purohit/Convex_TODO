@@ -73,6 +73,7 @@ interface Props {
     | string;
   fromTimestamp?: number;
   toTimestamp?: number;
+  onResetDefaults?: () => void;
 }
 
 interface ModuleCategory {
@@ -338,6 +339,7 @@ export function AddWidgetDrawer({
   dateRangePreset,
   fromTimestamp,
   toTimestamp,
+  onResetDefaults,
 }: Props) {
   // Default directly to Overview so user sees the 8 curated overview widgets right away
   const [selectedCategory, setSelectedCategory] = useState<string>("Overview");
@@ -1266,6 +1268,31 @@ export function AddWidgetDrawer({
                 );
               })}
             </nav>
+
+            {onResetDefaults && (
+              <div className="mt-auto p-4 border-t border-[#ece5de]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        "Are you sure you want to reset your dashboard layout to default? Any custom widget arrangements will be replaced."
+                      )
+                    ) {
+                      onResetDefaults();
+                      onClose();
+                    }
+                  }}
+                  className="w-full flex items-center justify-center gap-1.5 py-2 px-3 text-xs font-medium text-stone-500 hover:text-stone-900 hover:bg-[#ece5de] rounded-lg transition-colors cursor-pointer"
+                  title="Reset to factory default widgets layout"
+                >
+                  <span className="material-symbols-outlined text-[16px]">
+                    restart_alt
+                  </span>
+                  <span>Reset to Defaults</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* ========================================================= */}

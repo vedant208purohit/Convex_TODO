@@ -981,7 +981,7 @@ export function PosShell({
   }
 
   return (
-    <div className="h-screen bg-[#f5f5f5] text-[#1c1b1b] font-sans flex overflow-hidden">
+    <div className="h-screen bg-[#fdf8f7] text-[#1c1b1b] font-sans flex overflow-hidden">
       {/* SideNavBar */}
       <aside
         className={`hidden shrink-0 flex-col border-r border-[#e7e5e4] bg-[#fdf8f7] lg:flex h-full transition-all duration-300 ease-in-out relative z-50 ${isCollapsed ? "w-20 overflow-visible" : "w-64 overflow-hidden"
@@ -1318,7 +1318,7 @@ export function PosShell({
       </aside>
 
       {/* Main Content Wrapper */}
-      <div className="flex min-w-0 flex-1 flex-col bg-[#f5f5f5] h-full overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col bg-[#fdf8f7] h-full overflow-hidden">
         {/* TopAppBar */}
         <header className="w-full h-16 border-b border-[#e7e5e4] bg-[#fdf8f7] flex justify-between items-center px-6 lg:px-8 z-40 relative shrink-0">
           <div className="flex items-center gap-3">
@@ -1422,16 +1422,6 @@ export function PosShell({
                 </div>
               )}
             </div>
-
-            {isOnboardingIncomplete && (
-              <Link
-                href="/onboarding"
-                className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#1f1f1f] hover:bg-black text-white text-xs font-medium rounded-lg shadow-xs transition-colors cursor-pointer ml-2"
-              >
-                <span className="material-symbols-outlined text-xs">arrow_back</span>
-                <span>Back to Onboarding Checklist</span>
-              </Link>
-            )}
           </div>
           <div className="flex flex-1 justify-end items-center gap-4">
             <button

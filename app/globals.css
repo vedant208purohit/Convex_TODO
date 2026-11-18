@@ -23,12 +23,12 @@
   color-scheme: light !important;
   --background: #fdf8f7;
   --foreground: #1c1b1b;
-  --color-canvas: #f5f5f5;
-  --color-canvas-soft: #fafafa;
+  --color-canvas: #fdf8f7;
+  --color-canvas-soft: #fff8f5;
   --color-surface: #fdf8f7;
-  --color-surface-bright: #fdf8f7;
-  --color-surface-container: #f1edec;
-  --color-surface-container-low: #f7f3f2;
+  --color-surface-bright: #fff8f5;
+  --color-surface-container: #fcf8f5;
+  --color-surface-container-low: #faf2ee;
   --color-surface-container-lowest: #ffffff;
   --color-surface-variant: #e6e1e1;
   --color-hairline: #e7e5e4;
