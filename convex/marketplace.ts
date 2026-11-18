@@ -180,24 +180,123 @@ export const DEFAULT_CATALOG_LISTINGS = [
   {
     slug: "stripe",
     title: "Stripe",
-    subtitle: "Global card processing and foreign currency billing.",
+    subtitle: "Connect your Stripe account to accept payments for eligible restaurant orders.",
     vendor: "STRIPE",
     category: "Payments",
     description:
-      "International credit card acceptance and currency exchange for boutique hotel guests, visiting tourists, and global private events.",
-    badge: "Available",
-    iconName: "credit_card",
+      "Connect your Stripe account to accept payments for eligible restaurant orders and manage payment activity directly through Prest.",
+    badge: "Recommended for Restaurants",
+    iconName: "stripe",
     rating: "4.9/5",
-    version: "v4.0.0",
-    statusText: "Available",
+    version: "v4.2.0",
+    statusText: "Not Connected",
     statusType: "available",
-    priceText: "2.9% + ₹30",
+    priceText: "Pay-as-you-go",
     priceAmount: 0,
     isOneTime: true,
-    actionText: "View Details",
-    actionType: "details",
+    actionText: "Connect",
+    actionType: "install",
+    practicalFeatures: [
+      {
+        icon: "point_of_sale",
+        title: "Dine-in & POS",
+        description: "Accept card-present payments at counter terminals and handheld mobile POS units.",
+      },
+      {
+        icon: "shopping_cart",
+        title: "Online Orders",
+        description: "Process guest pickup, direct digital ordering, and scheduled delivery payments.",
+      },
+      {
+        icon: "qr_code_2",
+        title: "QR Payments",
+        description: "Seamless tabletop QR bill payments without guest app installations.",
+      },
+      {
+        icon: "phone_iphone",
+        title: "Apple Pay",
+        description: "One-touch contactless checkout via Apple Pay and digital wallets.",
+      },
+      {
+        icon: "credit_card",
+        title: "Cards",
+        description: "Process Visa, Mastercard, American Express, and international diner cards.",
+      },
+    ],
+    prerequisites: [
+      {
+        icon: "check_circle",
+        title: "Active Stripe Account",
+        detail: "Standard or Custom Stripe account with activated merchant payouts.",
+      },
+      {
+        icon: "check_circle",
+        title: "Store Currency Configuration",
+        detail: "Compatible settlement currency matching your restaurant operating jurisdiction.",
+      },
+    ],
+    permissions: ["Payments Read/Write", "Refunds Management", "Webhook Ingestion"],
+    terms: {
+      licenseType: "Standard Merchant Processor Terms",
+      platformSurcharge: "0% Prest platform surcharge",
+      taxes: "Standard interchange and processor fees apply",
+    },
     isPublished: true,
-    displayOrder: 6,
+    displayOrder: 2.5,
+  },
+  {
+    slug: "paypal-commerce",
+    title: "PayPal Commerce",
+    subtitle: "Enable diners to pay with PayPal and Venmo for online pick-up orders and catering reservations.",
+    vendor: "PAYPAL",
+    category: "Payments",
+    description:
+      "Enable diners to pay with PayPal and Venmo for online pick-up orders and catering reservations.",
+    badge: "Alternative",
+    iconName: "paypal",
+    rating: "4.7/5",
+    version: "v2.4.0",
+    statusText: "Not Installed",
+    statusType: "available",
+    priceText: "Standard Processing",
+    priceAmount: 0,
+    isOneTime: true,
+    actionText: "Install App",
+    actionType: "install",
+    practicalFeatures: [
+      { icon: "payments", title: "Venmo", description: "Direct Venmo wallet support for mobile diners." },
+      { icon: "storefront", title: "Online Pickup", description: "Pay online before curbside pickup." },
+      { icon: "schedule", title: "Pay Later", description: "Flexible payment plans for large catering orders." },
+    ],
+    isPublished: true,
+    displayOrder: 4.1,
+  },
+  {
+    slug: "adyen",
+    title: "Adyen",
+    subtitle: "Unified terminal and e-commerce payment infrastructure designed for restaurant groups and franchise multi-location venues.",
+    vendor: "ADYEN",
+    category: "Payments",
+    badge: "Enterprise",
+    iconName: "adyen",
+    rating: "4.8/5",
+    version: "v3.1.0",
+    statusText: "Not Installed",
+    statusType: "available",
+    priceText: "Enterprise Rates",
+    priceAmount: 0,
+    isOneTime: true,
+    actionText: "Install App",
+    actionType: "install",
+    description:
+      "Unified terminal and e-commerce payment infrastructure designed for restaurant groups and franchise multi-location venues.",
+    practicalFeatures: [
+      { icon: "terminal", title: "Smart Terminals", description: "Countertop and portable Android terminals." },
+      { icon: "domain", title: "Franchise Groups", description: "Multi-merchant hierarchy and consolidated payouts." },
+      { icon: "sync_alt", title: "Unified Flow", description: "Single reporting ledger across online and in-person." },
+    ],
+    isPublished: true,
+    displayOrder: 4.2,
   },
   {
     slug: "shiprocket",
@@ -674,6 +773,10 @@ export const listCatalog = query({
       (c) => c.provider === "razorpay" && c.status !== "disconnected"
     );
 
+    const stripeConn = paymentConnections.find(
+      (c) => c.provider === "stripe" && c.status !== "disconnected"
+    );
+
     // 4. Merge listings with organization installation state
     let apps = listings.map((l) => {
       const inst = installedMap.get(l.slug);
@@ -728,6 +831,35 @@ export const listCatalog = query({
         }
       }
 
+      // Check authoritative payment gateway connection for Stripe
+      if (l.slug === "stripe") {
+        if (stripeConn) {
+          if (stripeConn.status === "connected") {
+            isInstalled = true;
+            statusText = "Connected";
+            statusType = "live";
+            actionText = "Manage";
+            actionType = "open";
+          } else if (stripeConn.status === "needs_attention" || stripeConn.status === "error") {
+            isInstalled = true;
+            statusText = "Connection Needs Attention";
+            statusType = "attention";
+            actionText = "Fix Connection";
+            actionType = "fix";
+          } else if (stripeConn.status === "pending") {
+            statusText = "Verification In Progress";
+            statusType = "pending";
+            actionText = "Verifying...";
+            actionType = "pending";
+          }
+        } else {
+          statusText = "Not Connected";
+          statusType = "available";
+          actionText = "Connect";
+          actionType = "install";
+        }
+      }
+
       const effectiveId =
         typeof l._id === "string" && (l._id.startsWith("fake_id_") || l._id === l.slug)
           ? l.slug
@@ -742,11 +874,15 @@ export const listCatalog = query({
         category: l.category,
         description: l.description,
         badge:
-          l.slug === "razorpay" && razorpayConn?.status === "connected"
+          l.slug === "stripe" && stripeConn?.status === "connected"
             ? "Connected"
-            : isInstalled
-              ? "Installed"
-              : l.badge,
+            : l.slug === "stripe"
+              ? "Recommended for Restaurants"
+              : l.slug === "razorpay" && razorpayConn?.status === "connected"
+                ? "Connected"
+                : isInstalled
+                  ? "Installed"
+                  : l.badge,
         iconName: l.iconName,
         rating: l.rating,
         version: l.version,
@@ -758,21 +894,29 @@ export const listCatalog = query({
         actionText,
         actionType,
         isInstalled,
-        installedAt: inst?.installedAt || razorpayConn?.connectedAt,
+        installedAt: inst?.installedAt || razorpayConn?.connectedAt || stripeConn?.connectedAt,
         practicalFeatures: l.practicalFeatures,
         prerequisites: l.prerequisites,
         permissions: l.permissions,
         terms: l.terms,
         configuration:
-          l.slug === "razorpay" && razorpayConn
+          l.slug === "stripe" && stripeConn
             ? {
-                connected: razorpayConn.status === "connected",
-                status: razorpayConn.status,
-                accountMode: razorpayConn.accountMode,
-                merchantName: razorpayConn.merchantName,
-                providerAccountId: razorpayConn.providerAccountId,
+                connected: stripeConn.status === "connected",
+                status: stripeConn.status,
+                accountMode: stripeConn.accountMode,
+                merchantName: stripeConn.merchantName,
+                providerAccountId: stripeConn.providerAccountId,
               }
-            : inst?.configuration,
+            : l.slug === "razorpay" && razorpayConn
+              ? {
+                  connected: razorpayConn.status === "connected",
+                  status: razorpayConn.status,
+                  accountMode: razorpayConn.accountMode,
+                  merchantName: razorpayConn.merchantName,
+                  providerAccountId: razorpayConn.providerAccountId,
+                }
+              : inst?.configuration,
       };
     });
 
@@ -781,9 +925,9 @@ export const listCatalog = query({
     if (activeTab === "installed") {
       apps = apps.filter((app) => app.isInstalled);
     } else if (activeTab === "purchases") {
-      // Subscriptions & Purchases tab: includes connected subscriptions (such as Razorpay) and paid apps
+      // Subscriptions & Purchases tab: includes connected subscriptions (such as Razorpay and Stripe) and paid apps
       apps = apps.filter(
-        (app) => (app.priceAmount > 0 || app.slug === "razorpay") && app.isInstalled
+        (app) => (app.priceAmount > 0 || app.slug === "razorpay" || app.slug === "stripe") && app.isInstalled
       );
     }
 

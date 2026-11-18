@@ -65,6 +65,7 @@ import type * as razorpay from "../razorpay.js";
 import type * as reports from "../reports.js";
 import type * as smsProvider from "../smsProvider.js";
 import type * as stations from "../stations.js";
+import type * as stripe from "../stripe.js";
 import type * as surveyAttempts from "../surveyAttempts.js";
 import type * as surveyQuestions from "../surveyQuestions.js";
 import type * as surveys from "../surveys.js";
@@ -136,6 +137,7 @@ declare const fullApi: ApiFromModules<{
   reports: typeof reports;
   smsProvider: typeof smsProvider;
   stations: typeof stations;
+  stripe: typeof stripe;
   surveyAttempts: typeof surveyAttempts;
   surveyQuestions: typeof surveyQuestions;
   surveys: typeof surveys;

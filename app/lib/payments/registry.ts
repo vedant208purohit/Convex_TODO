@@ -1,5 +1,6 @@
 import { PaymentProviderAdapter } from "./types";
 import { RazorpayProviderAdapter } from "./adapters/RazorpayProviderAdapter";
+import { StripeProviderAdapter } from "./adapters/StripeProviderAdapter";
 
 /**
  * Centralized Provider Adapter Registry
@@ -13,6 +14,7 @@ class PaymentProviderRegistry {
   constructor() {
     // Register initial providers
     this.registerAdapter(new RazorpayProviderAdapter());
+    this.registerAdapter(new StripeProviderAdapter());
   }
 
   registerAdapter(adapter: PaymentProviderAdapter): void {

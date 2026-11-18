@@ -942,6 +942,7 @@ export const create = mutation({
     transferHoldTime: v.optional(v.number()),
 
     // Payment Gateway Secrets
+    activePaymentGateway: v.optional(v.string()),
     razorPayKeyId: v.optional(v.string()),
     razorPayApiKey: v.optional(v.string()),
     stripePublishableKey: v.optional(v.string()),
@@ -1475,6 +1476,7 @@ export const update = mutation({
     transferHoldTime: v.optional(v.number()),
 
     // Payment Gateway Secrets
+    activePaymentGateway: v.optional(v.string()),
     razorPayKeyId: v.optional(v.string()),
     razorPayApiKey: v.optional(v.string()),
     stripePublishableKey: v.optional(v.string()),
