@@ -6,6 +6,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useUser, useClerk } from "@clerk/nextjs";
 import { OnboardingLaunchChecklist } from "./components/OnboardingLaunchChecklist";
+import { useStoreResolution } from "../ConvexClientProvider";
 
 // Business types from Screen 1
 const BUSINESS_TYPES = [
@@ -25,7 +26,11 @@ export default function OnboardingPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
 
-  const organizations = useQuery(api.organizations.list);
+  const { activeOrganization } = useStoreResolution();
+  const organizations = useQuery(
+    api.organizations.list,
+    activeOrganization ? {} : "skip"
+  );
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
   const currentMembership = useQuery(
     api.organizationUsers.getCurrentMembership,
@@ -529,7 +534,10 @@ export default function OnboardingPage() {
   const userEmail = user?.primaryEmailAddress?.emailAddress || "owner@restaurant.com";
   const userInitials = (user?.firstName ? user.firstName[0] : "P") + (user?.lastName ? user.lastName[0] : "S");
 
-  if (organizations === undefined) {
+  // Only show the loading spinner if the user already has a provisioned store
+  // and we are waiting for that store's data to load the Step 4 Launch Checklist.
+  // For new users without a store (activeOrganization is null), immediately render Step 1!
+  if (organizations === undefined && Boolean(activeOrganization)) {
     return (
       <div className="min-h-screen w-full flex items-center justify-center bg-[#fbf7f4]">
         <div className="flex flex-col items-center gap-3">

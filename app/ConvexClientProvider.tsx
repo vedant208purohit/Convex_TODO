@@ -60,16 +60,19 @@ interface StoreResolutionData {
 
 function StoreSessionGuard({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const currentPath =
+    pathname ||
+    (typeof window !== "undefined" ? window.location.pathname : "");
 
   const isAuthPage =
-    pathname === "/sign-in" ||
-    pathname.startsWith("/sign-in/") ||
-    pathname === "/sign-up" ||
-    pathname.startsWith("/sign-up/") ||
-    pathname === "/login" ||
-    pathname.startsWith("/login/") ||
-    pathname === "/onboarding" ||
-    pathname.startsWith("/onboarding/");
+    currentPath === "/sign-in" ||
+    currentPath.startsWith("/sign-in/") ||
+    currentPath === "/sign-up" ||
+    currentPath.startsWith("/sign-up/") ||
+    currentPath === "/login" ||
+    currentPath.startsWith("/login/") ||
+    currentPath === "/onboarding" ||
+    currentPath.startsWith("/onboarding/");
 
   if (isAuthPage) {
     return <>{children}</>;
@@ -148,6 +151,14 @@ function AuthenticatedStoreSessionGuard({ children }: { children: ReactNode }) {
   }
 
   if (organizations.length === 0 || currentMembership === null) {
+    if (typeof window !== "undefined") {
+      const currentPath = window.location.pathname;
+      if (currentPath !== "/onboarding" && !currentPath.startsWith("/onboarding/")) {
+        window.location.href = "/onboarding";
+        return null;
+      }
+    }
+
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
         <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-8 shadow-sm text-center">
@@ -572,6 +583,31 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
         if (isCancelled) return;
 
         if (!res.ok || !data.success || !data.deploymentUrl) {
+          const isStoreNotAssigned =
+            data.code === "STORE_NOT_ASSIGNED" || res.status === 404;
+          const currentPath =
+            pathname ||
+            (typeof window !== "undefined" ? window.location.pathname : "");
+          const isOnboarding =
+            currentPath === "/onboarding" || currentPath.startsWith("/onboarding/");
+
+          // If the store is not assigned for this user, automatically redirect them to /onboarding
+          // so they can set up and provision their restaurant!
+          if (isStoreNotAssigned) {
+            if (!isOnboarding && typeof window !== "undefined") {
+              window.location.href = "/onboarding";
+              return;
+            }
+
+            setResolutionState({
+              loading: false,
+              error: null,
+              errorCode: null,
+              data: null,
+            });
+            return;
+          }
+
           let errorMsg = data.error || "Failed to resolve your store database.";
           if (data.code === "STORE_NOT_ASSIGNED") {
             errorMsg =
@@ -644,7 +680,9 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
   }, [isLoaded, isSignedIn, userId]);
 
   const resolvedUrl = resolutionState.data?.deploymentUrl;
-  const staticFallbackUrl = process.env.NEXT_PUBLIC_CONVEX_URL || null;
+  const staticFallbackUrl =
+    process.env.NEXT_PUBLIC_CONVEX_URL ||
+    "https://gregarious-chicken-229.convex.cloud";
 
   // Fallback to static Convex URL if resolution fails or if user is on onboarding/setting up their store
   const activeConvexUrl =
@@ -711,7 +749,21 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (resolutionState.error) {
+  const currentPath =
+    pathname ||
+    (typeof window !== "undefined" ? window.location.pathname : "");
+  const isOnboardingPage =
+    currentPath === "/onboarding" || currentPath.startsWith("/onboarding/");
+
+  if (
+    resolutionState.error &&
+    !(isOnboardingPage && resolutionState.errorCode === "STORE_NOT_ASSIGNED")
+  ) {
+    if (resolutionState.errorCode === "STORE_NOT_ASSIGNED" && !isOnboardingPage && typeof window !== "undefined") {
+      window.location.href = "/onboarding";
+      return null;
+    }
+
     const isUnassigned = resolutionState.errorCode === "STORE_NOT_ASSIGNED";
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
@@ -762,7 +814,11 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (storeSelectionPrompt && (resolutionState.data?.availableStores?.length || 0) > 1) {
+  if (
+    storeSelectionPrompt &&
+    (resolutionState.data?.availableStores?.length || 0) > 1 &&
+    !isOnboardingPage
+  ) {
     return (
       <StoreResolutionContext.Provider
         value={{
