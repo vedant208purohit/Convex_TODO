@@ -6,6 +6,7 @@ import { UserButton, useClerk } from "@clerk/nextjs";
 import { ReactNode, useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import { useStoreResolution } from "../ConvexClientProvider";
 
 // ==========================================
 // PIXEL-PERFECT SIDEBAR SVG ICONS
@@ -709,16 +710,41 @@ export function PosShell({
   const isDineInActive = activeOrg?.isDineIn !== false;
   const branchName = activeOrg?.name || (isMarketplacePage ? "The Grand Bistro HQ" : "Flagship Main Store");
 
+  const { activeOrganization, availableStores, switchStore, openStoreSelector, isSwitching } = useStoreResolution();
+  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
+  const storeDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (storeDropdownRef.current && !storeDropdownRef.current.contains(event.target as Node)) {
+        setStoreDropdownOpen(false);
+      }
+    }
+    if (storeDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [storeDropdownOpen]);
+
   const isOwner = Boolean(
     activeOrg?.ownerClerkId &&
     currentMembership?.userId &&
     currentMembership.userId === activeOrg.ownerClerkId
   );
-  const isOnboardingIncomplete = Boolean(activeOrg && activeOrg.onboardingCompleted !== true);
+
+  const areAllChecklistStepsCompleted = Boolean(
+    activeOrg?.onboardingCompleted === true ||
+    (Array.isArray(activeOrg?.onboardingChecklist) &&
+      [1, 2, 3, 4, 5, 6].every((id) => activeOrg.onboardingChecklist?.includes(id)))
+  );
+
+  const isOnboardingIncomplete = Boolean(
+    isOwner && activeOrg && !areAllChecklistStepsCompleted
+  );
   const isPendingInvitation = !isOwner && Boolean(
     currentMembership && (
       (currentMembership as any).status === "invited" ||
-      (!(currentMembership as any).status && !(currentMembership as any).userType?.includes("admin"))
+      !(currentMembership as any).status
     )
   );
 
@@ -732,10 +758,10 @@ export function PosShell({
     }
   }, []);
 
-  // Only auto-sync invitation acceptance IF user came directly from email invitation ticket
+  // Auto-sync invitation acceptance when user arrives with ticket or pending invitation
   useEffect(() => {
     let isMounted = true;
-    if (isPendingInvitation && hasTicket && activeOrg?._id && !isAccepting && !acceptError) {
+    if (isPendingInvitation && activeOrg?._id && !isAccepting && !acceptError) {
       setIsAccepting(true);
       acceptInvitationMutation({ organizationId: activeOrg._id })
         .catch((err: any) => {
@@ -753,7 +779,7 @@ export function PosShell({
     return () => {
       isMounted = false;
     };
-  }, [isPendingInvitation, hasTicket, activeOrg?._id, acceptError, isAccepting]);
+  }, [isPendingInvitation, activeOrg?._id, acceptError, isAccepting]);
 
   if (!isMarketplacePage && organizations !== undefined && (organizations.length === 0 || currentMembership === null)) {
     if (organizations.length === 0) {
@@ -1000,9 +1026,7 @@ export function PosShell({
         {/* Navigation */}
         <nav ref={navRef} className="flex-1 py-4 flex flex-col gap-1.5 overflow-y-auto min-h-0">
           {navItems.map((item) => {
-            const effectiveHref =
-              isOnboardingIncomplete && item.href === "/dashboard" ? "/onboarding" : item.href;
-            const updatedItem = { ...item, href: effectiveHref };
+            const updatedItem = item;
             if (item.href === "/menu") {
               if (isCollapsed) {
                 return (
@@ -1296,12 +1320,109 @@ export function PosShell({
       {/* Main Content Wrapper */}
       <div className="flex min-w-0 flex-1 flex-col bg-[#f5f5f5] h-full overflow-hidden">
         {/* TopAppBar */}
-        <header className="w-full h-16 border-b border-[#e7e5e4] bg-[#fdf8f7] flex justify-between items-center px-6 lg:px-8 z-30 shrink-0">
+        <header className="w-full h-16 border-b border-[#e7e5e4] bg-[#fdf8f7] flex justify-between items-center px-6 lg:px-8 z-40 relative shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-xs font-semibold tracking-wider uppercase text-stone-400 font-mono">Store Branch:</span>
-            <span className="text-xs font-semibold text-stone-800 bg-stone-100 px-2.5 py-1 rounded border border-[#eadfd6]">
-              {branchName}
-            </span>
+            <div className="relative z-50" ref={storeDropdownRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (availableStores.length > 1) {
+                    setStoreDropdownOpen((prev) => !prev);
+                  }
+                }}
+                disabled={isSwitching}
+                className={`inline-flex items-center gap-1.5 text-xs font-semibold text-[#141010] bg-[#f1edec] hover:bg-[#e7e5e4] px-3 py-1.5 rounded-lg border border-[#e7e5e4] transition-colors ${
+                  availableStores.length > 1
+                    ? "cursor-pointer shadow-2xs"
+                    : "cursor-default"
+                }`}
+                title={availableStores.length > 1 ? "Click to switch store" : undefined}
+              >
+                <span>{isSwitching ? "Switching store..." : branchName}</span>
+                {availableStores.length > 1 && (
+                  <svg
+                    className={`w-3.5 h-3.5 text-stone-500 transition-transform ${
+                      storeDropdownOpen ? "rotate-180" : ""
+                    }`}
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )}
+              </button>
+
+              {storeDropdownOpen && availableStores.length > 1 && (
+                <div className="absolute left-0 mt-2 w-64 rounded-xl border border-[#e7e5e4] bg-white p-2 shadow-2xl z-[100] animate-in fade-in zoom-in-95 duration-100">
+                  <div className="px-2.5 py-1.5 text-[10px] font-semibold text-[#78716c] uppercase tracking-wider border-b border-[#e7e5e4] mb-1">
+                    Your Restaurants ({availableStores.length})
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-1">
+                    {availableStores.map((store) => {
+                      const isCurrent =
+                        store.id === activeOrganization?.id ||
+                        store.name === branchName ||
+                        store.slug === activeOrg?.slug;
+                      return (
+                        <button
+                          key={store.id}
+                          type="button"
+                          disabled={isCurrent || isSwitching}
+                          onClick={async () => {
+                            setStoreDropdownOpen(false);
+                            await switchStore(store.id);
+                          }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors text-left ${
+                            isCurrent
+                              ? "bg-[#faf9f8] text-[#141010] font-semibold border border-[#141010] cursor-default"
+                              : "text-[#141010] hover:bg-[#f1edec] cursor-pointer"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                            <div
+                              className={`w-6 h-6 rounded-full flex items-center justify-center font-serif text-[11px] font-bold shrink-0 border ${
+                                isCurrent
+                                  ? "bg-[#141010] text-white border-[#141010]"
+                                  : "bg-[#f1edec] text-[#141010] border-[#e7e5e4]"
+                              }`}
+                            >
+                              {store.name.charAt(0).toUpperCase()}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="truncate font-medium">{store.name}</span>
+                              <span className="text-[10px] text-[#78716c] capitalize">Role: {store.role}</span>
+                            </div>
+                          </div>
+                          {isCurrent && (
+                            <span className="shrink-0 text-[10px] font-semibold text-white bg-[#141010] px-2 py-0.5 rounded-full">
+                              Current
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-1.5 mt-1 border-t border-[#e7e5e4]">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setStoreDropdownOpen(false);
+                        openStoreSelector();
+                      }}
+                      className="w-full text-center py-1.5 text-xs font-semibold text-[#141010] hover:bg-[#f1edec] rounded-lg transition-colors cursor-pointer"
+                    >
+                      Choose Restaurant...
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {isOnboardingIncomplete && (
               <Link
                 href="/onboarding"

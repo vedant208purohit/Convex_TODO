@@ -3,9 +3,46 @@
 import { ConvexReactClient, useQuery, useMutation } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { useAuth, useClerk } from "@clerk/nextjs";
-import { ReactNode, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { usePathname } from "next/navigation";
 import { api } from "../convex/_generated/api";
+
+export interface AvailableStore {
+  id: string;
+  slug: string;
+  name: string;
+  role: string;
+  status: string;
+}
+
+export interface StoreResolutionContextValue {
+  activeOrganization: { id?: string; slug?: string; name?: string } | null;
+  availableStores: AvailableStore[];
+  switchStore: (orgId: string) => Promise<void>;
+  openStoreSelector: () => void;
+  isSwitching: boolean;
+}
+
+export const StoreResolutionContext = createContext<StoreResolutionContextValue>({
+  activeOrganization: null,
+  availableStores: [],
+  switchStore: async () => {},
+  openStoreSelector: () => {},
+  isSwitching: false,
+});
+
+export function useStoreResolution() {
+  return useContext(StoreResolutionContext);
+}
 
 interface StoreResolutionData {
   organization?: {
@@ -18,6 +55,7 @@ interface StoreResolutionData {
     role: string;
     status: string;
   };
+  availableStores?: AvailableStore[];
 }
 
 function StoreSessionGuard({ children }: { children: ReactNode }) {
@@ -71,14 +109,14 @@ function AuthenticatedStoreSessionGuard({ children }: { children: ReactNode }) {
   const isPendingInvitation = !isOwner && Boolean(
     currentMembership && (
       (currentMembership as any).status === "invited" ||
-      (!(currentMembership as any).status && !(currentMembership as any).userType?.includes("admin"))
+      !(currentMembership as any).status
     )
   );
 
-  // Only auto-sync invitation acceptance IF user came directly from email invitation ticket
+  // Auto-sync invitation acceptance when user arrives with ticket or pending invitation
   useEffect(() => {
     let isMounted = true;
-    if (isPendingInvitation && hasTicket && activeOrg?._id && !isAccepting && !acceptError) {
+    if (isPendingInvitation && activeOrg?._id && !isAccepting && !acceptError) {
       setIsAccepting(true);
       acceptInvitationMutation({ organizationId: activeOrg._id })
         .catch((err: any) => {
@@ -96,13 +134,13 @@ function AuthenticatedStoreSessionGuard({ children }: { children: ReactNode }) {
     return () => {
       isMounted = false;
     };
-  }, [isPendingInvitation, hasTicket, activeOrg?._id, acceptError, isAccepting]);
+  }, [isPendingInvitation, activeOrg?._id, acceptError, isAccepting]);
 
   if (organizations === undefined || (activeOrg && currentMembership === undefined)) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#fdf8f7] text-[#1c1b1b]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ff5722] border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#141010] border-t-transparent" />
           <p className="text-sm font-medium text-stone-600">Verifying store access...</p>
         </div>
       </div>
@@ -286,10 +324,112 @@ function AuthenticatedStoreSessionGuard({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+function StoreSelectorModal({
+  stores,
+  currentOrgId,
+  onSelect,
+  isSwitching,
+}: {
+  stores: AvailableStore[];
+  currentOrgId?: string;
+  onSelect: (orgId: string) => Promise<void>;
+  isSwitching: boolean;
+}) {
+  const { signOut } = useClerk();
+
+  return (
+    <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+      <div className="w-full max-w-lg rounded-2xl bg-white p-6 sm:p-8 shadow-2xl border border-[#e7e5e4]">
+        <div className="flex items-center justify-between border-b border-[#e7e5e4] pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-[#f1edec] border border-[#e7e5e4] flex items-center justify-center font-serif font-bold text-lg text-[#141010] shrink-0">
+              P
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-[#141010] tracking-tight">Select Restaurant</h2>
+              <p className="text-xs text-[#78716c]">Choose which restaurant you want to work at today</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => signOut({ redirectUrl: "/sign-in" })}
+            className="text-xs font-medium text-[#78716c] hover:text-[#141010] px-2.5 py-1.5 rounded-lg hover:bg-[#f1edec] transition-colors cursor-pointer"
+          >
+            Sign Out
+          </button>
+        </div>
+
+        <div className="mt-5 space-y-2.5 max-h-72 overflow-y-auto pr-1">
+          {stores.map((store) => {
+            const isCurrent = store.id === currentOrgId;
+            return (
+              <button
+                key={store.id}
+                type="button"
+                disabled={isSwitching}
+                onClick={() => onSelect(store.id)}
+                className={`w-full flex items-center justify-between p-4 rounded-xl border transition-all text-left cursor-pointer group ${
+                  isCurrent
+                    ? "border-2 border-[#141010] bg-[#faf9f8] shadow-xs"
+                    : "border-[#e7e5e4] bg-white hover:border-[#141010] hover:bg-[#faf9f8]"
+                }`}
+              >
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center font-serif font-bold text-sm shrink-0 border ${
+                      isCurrent
+                        ? "bg-[#141010] text-white border-[#141010]"
+                        : "bg-[#f1edec] text-[#141010] border-[#e7e5e4] group-hover:bg-[#e7e5e4]"
+                    }`}
+                  >
+                    {store.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-semibold text-sm text-[#141010] truncate">
+                      {store.name}
+                    </span>
+                    <span className="text-xs text-[#78716c] capitalize">
+                      Role: <strong className="font-medium text-[#141010]">{store.role}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  {isCurrent && (
+                    <span className="text-[10px] font-semibold tracking-wide uppercase text-white bg-[#141010] px-2.5 py-0.5 rounded-full">
+                      Current
+                    </span>
+                  )}
+                  <span
+                    className={`text-xs font-semibold flex items-center gap-1 group-hover:translate-x-0.5 transition-transform ${
+                      isCurrent
+                        ? "text-[#141010]"
+                        : "text-[#78716c] group-hover:text-[#141010]"
+                    }`}
+                  >
+                    {isSwitching ? "Opening..." : "Enter →"}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 text-center text-xs text-[#a8a29e]">
+          You can also switch restaurants at any time from the top header bar inside the POS.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function DynamicConvexProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { signOut } = useClerk();
+  const lastResolvedUserIdRef = useRef<string | null>(null);
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [storeSelectionPrompt, setStoreSelectionPrompt] = useState(false);
 
   const [resolutionState, setResolutionState] = useState<{
     loading: boolean;
@@ -303,6 +443,69 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     data: null,
   });
 
+  const switchStore = useCallback(
+    async (orgId: string) => {
+      if (typeof window !== "undefined" && userId) {
+        sessionStorage.setItem(`prest_session_store_chosen_${userId}`, orgId);
+        localStorage.setItem(`prest_active_store_${userId}`, orgId);
+      }
+      setIsSwitching(true);
+      setResolutionState((prev) => ({ ...prev, loading: true, error: null }));
+      try {
+        const res = await fetch(
+          `/api/auth/resolve-store?organizationId=${encodeURIComponent(orgId)}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            signal: AbortSignal.timeout(12000),
+            cache: "no-store",
+          }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success && data.deploymentUrl) {
+          lastResolvedUserIdRef.current = userId;
+          setResolutionState({
+            loading: false,
+            error: null,
+            errorCode: null,
+            data: {
+              organization: data.organization,
+              deploymentUrl: data.deploymentUrl,
+              user: data.user,
+              availableStores: data.availableStores || [],
+            },
+          });
+          setStoreSelectionPrompt(false);
+          if (typeof window !== "undefined" && window.location.pathname !== "/dashboard") {
+            window.location.href = "/dashboard";
+          }
+        } else {
+          setResolutionState((prev) => ({
+            ...prev,
+            loading: false,
+            error: data.error || "Failed to switch store.",
+            errorCode: data.code || "SWITCH_FAILED",
+          }));
+        }
+      } catch (err: any) {
+        const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError";
+        setResolutionState((prev) => ({
+          ...prev,
+          loading: false,
+          error: isTimeout
+            ? "Switching store timed out. Please try again."
+            : err?.message || "Failed to switch store.",
+          errorCode: isTimeout ? "GATEWAY_TIMEOUT" : "NETWORK_ERROR",
+        }));
+      } finally {
+        setIsSwitching(false);
+      }
+    },
+    [userId]
+  );
+
   useEffect(() => {
     let isCancelled = false;
 
@@ -310,6 +513,7 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
       if (!isLoaded) return;
 
       if (!isSignedIn || !userId) {
+        lastResolvedUserIdRef.current = null;
         setResolutionState({
           loading: false,
           error: null,
@@ -319,15 +523,47 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // If store is already resolved for this user, do not re-fetch and unmount on every internal route navigation
+      if (resolutionState.data?.deploymentUrl && lastResolvedUserIdRef.current === userId) {
+        return;
+      }
+
       setResolutionState((prev) => ({ ...prev, loading: true, error: null }));
 
       try {
-        const search = typeof window !== "undefined" ? window.location.search : "";
+        if (typeof window !== "undefined") {
+          localStorage.removeItem("prest_active_store_org_id");
+        }
+
+        const userKey = `prest_active_store_${userId}`;
+        const sessionKey = `prest_session_store_chosen_${userId}`;
+        const sessionChosenOrgId =
+          typeof window !== "undefined" ? sessionStorage.getItem(sessionKey) : null;
+
+        const currentSearch = typeof window !== "undefined" ? window.location.search : "";
+        const searchParams = new URLSearchParams(currentSearch);
+        const rawUrlTarget =
+          searchParams.get("organizationId") ||
+          searchParams.get("orgId") ||
+          searchParams.get("slug") ||
+          searchParams.get("store");
+
+        // If the URL has an explicit target (?slug=... or ?organizationId=...), prioritize it!
+        // Otherwise, if the user already chose a store during this active browser session, use that.
+        // If neither, do NOT auto-inject storedOrgId into the request so that Master returns all available stores
+        // and we can prompt the user to choose their store!
+        if (sessionChosenOrgId && !rawUrlTarget) {
+          searchParams.set("organizationId", sessionChosenOrgId);
+        }
+
+        const search = searchParams.toString() ? `?${searchParams.toString()}` : "";
+
         const res = await fetch(`/api/auth/resolve-store${search}`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
           },
+          signal: AbortSignal.timeout(12000),
           cache: "no-store",
         });
 
@@ -346,6 +582,9 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
           } else if (data.code === "DEPLOYMENT_UNAVAILABLE") {
             errorMsg =
               "Your store database is currently provisioning or deploying. Please wait a few moments.";
+          } else if (data.code === "GATEWAY_TIMEOUT") {
+            errorMsg =
+              "Connecting to store directory timed out. Please click Retry Connection.";
           }
 
           setResolutionState({
@@ -357,6 +596,21 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        lastResolvedUserIdRef.current = userId;
+        const availableStores = data.availableStores || [];
+
+        // If user belongs to multiple stores, and did NOT arrive with an explicit link (?slug or ?orgId),
+        // and hasn't chosen a store in this session -> prompt them to choose!
+        if (availableStores.length > 1 && !rawUrlTarget && !sessionChosenOrgId) {
+          setStoreSelectionPrompt(true);
+        } else {
+          setStoreSelectionPrompt(false);
+          if (data.organization?.id && typeof window !== "undefined") {
+            sessionStorage.setItem(sessionKey, data.organization.id);
+            localStorage.setItem(userKey, data.organization.id);
+          }
+        }
+
         setResolutionState({
           loading: false,
           error: null,
@@ -365,14 +619,18 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
             organization: data.organization,
             deploymentUrl: data.deploymentUrl,
             user: data.user,
+            availableStores,
           },
         });
       } catch (err: any) {
         if (isCancelled) return;
+        const isTimeout = err?.name === "TimeoutError" || err?.name === "AbortError";
         setResolutionState({
           loading: false,
-          error: "Unable to reach store resolution service. Check your connection.",
-          errorCode: "NETWORK_ERROR",
+          error: isTimeout
+            ? "Connecting to store database timed out. Please click Retry Connection."
+            : "Unable to reach store resolution service. Check your connection.",
+          errorCode: isTimeout ? "GATEWAY_TIMEOUT" : "NETWORK_ERROR",
           data: null,
         });
       }
@@ -424,7 +682,7 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#fdf8f7] text-[#1c1b1b]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ff5722] border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#141010] border-t-transparent" />
           <p className="text-sm font-medium text-stone-600">Initializing POS session...</p>
         </div>
       </div>
@@ -446,16 +704,14 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#fdf8f7] text-[#1c1b1b]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ff5722] border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#141010] border-t-transparent" />
           <p className="text-sm font-medium text-stone-700">Connecting to store database...</p>
         </div>
       </div>
     );
   }
 
-  const isOnboardingPage = pathname === "/onboarding" || pathname.startsWith("/onboarding/");
-
-  if ((resolutionState.error || !convex) && !isOnboardingPage && !staticFallbackUrl) {
+  if (resolutionState.error) {
     const isUnassigned = resolutionState.errorCode === "STORE_NOT_ASSIGNED";
     return (
       <div className="flex h-screen w-full flex-col items-center justify-center bg-[#fdf8f7] p-6 text-[#1c1b1b]">
@@ -476,20 +732,25 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
               />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold text-stone-900">{isUnassigned ? "No Store Assigned" : "Store Access Denied"}</h2>
+          <h2 className="text-xl font-semibold text-stone-900">{isUnassigned ? "No Store Assigned" : "Store Connection Error"}</h2>
           <p className="mt-2 text-sm text-stone-600 leading-relaxed">
-            {resolutionState.error || "Unable to locate an authorized store database for your account."}
+            {resolutionState.error}
           </p>
           <div className="mt-6 flex flex-col gap-2">
             {!isUnassigned && (
               <button
-                onClick={() => window.location.reload()}
-                className="w-full rounded-xl bg-stone-900 py-2.5 text-sm font-medium text-white transition hover:bg-stone-800"
+                type="button"
+                onClick={() => {
+                  lastResolvedUserIdRef.current = null;
+                  window.location.reload();
+                }}
+                className="w-full rounded-xl bg-stone-900 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-800 cursor-pointer shadow"
               >
                 Retry Connection
               </button>
             )}
             <button
+              type="button"
               onClick={() => signOut({ redirectUrl: "/sign-in" })}
               className="w-full rounded-xl border border-stone-200 py-2.5 text-sm font-medium text-stone-700 transition hover:bg-stone-50 cursor-pointer"
             >
@@ -501,11 +762,45 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  if (storeSelectionPrompt && (resolutionState.data?.availableStores?.length || 0) > 1) {
+    return (
+      <StoreResolutionContext.Provider
+        value={{
+          activeOrganization: resolutionState.data?.organization || null,
+          availableStores: resolutionState.data?.availableStores || [],
+          switchStore,
+          openStoreSelector: () => setStoreSelectionPrompt(true),
+          isSwitching,
+        }}
+      >
+        <StoreSelectorModal
+          stores={resolutionState.data?.availableStores || []}
+          currentOrgId={resolutionState.data?.organization?.id}
+          onSelect={async (orgId) => {
+            if (typeof window !== "undefined" && userId) {
+              sessionStorage.setItem(`prest_session_store_chosen_${userId}`, orgId);
+              localStorage.setItem(`prest_active_store_${userId}`, orgId);
+            }
+            setStoreSelectionPrompt(false);
+            if (resolutionState.data?.organization?.id === orgId) {
+              if (typeof window !== "undefined" && window.location.pathname !== "/dashboard") {
+                window.location.href = "/dashboard";
+              }
+            } else {
+              await switchStore(orgId);
+            }
+          }}
+          isSwitching={isSwitching}
+        />
+      </StoreResolutionContext.Provider>
+    );
+  }
+
   if (!convex) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[#fdf8f7] text-[#1c1b1b]">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ff5722] border-t-transparent" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#141010] border-t-transparent" />
           <p className="text-sm font-medium text-stone-600">Initializing store database...</p>
         </div>
       </div>
@@ -513,11 +808,42 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-      <StoreSessionGuard>
-        {children}
-      </StoreSessionGuard>
-    </ConvexProviderWithClerk>
+    <StoreResolutionContext.Provider
+      value={{
+        activeOrganization: resolutionState.data?.organization || null,
+        availableStores: resolutionState.data?.availableStores || [],
+        switchStore,
+        openStoreSelector: () => setStoreSelectionPrompt(true),
+        isSwitching,
+      }}
+    >
+      {storeSelectionPrompt && (resolutionState.data?.availableStores?.length || 0) > 1 && (
+        <StoreSelectorModal
+          stores={resolutionState.data?.availableStores || []}
+          currentOrgId={resolutionState.data?.organization?.id}
+          onSelect={async (orgId) => {
+            if (typeof window !== "undefined" && userId) {
+              sessionStorage.setItem(`prest_session_store_chosen_${userId}`, orgId);
+              localStorage.setItem(`prest_active_store_${userId}`, orgId);
+            }
+            setStoreSelectionPrompt(false);
+            if (resolutionState.data?.organization?.id === orgId) {
+              if (typeof window !== "undefined" && window.location.pathname !== "/dashboard") {
+                window.location.href = "/dashboard";
+              }
+            } else {
+              await switchStore(orgId);
+            }
+          }}
+          isSwitching={isSwitching}
+        />
+      )}
+      <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
+        <StoreSessionGuard>
+          {children}
+        </StoreSessionGuard>
+      </ConvexProviderWithClerk>
+    </StoreResolutionContext.Provider>
   );
 }
 

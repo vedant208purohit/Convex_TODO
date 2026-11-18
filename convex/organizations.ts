@@ -1925,38 +1925,9 @@ export const initializeStore = mutation({
       await ctx.db.patch(args.id, patchPayload);
     }
 
-    // 1. Prep Stations Seeding (Idempotent)
-    const existingStations = await ctx.db
-      .query("stations")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.id))
-      .collect();
-
-    if (existingStations.length === 0) {
-      await ctx.db.insert("stations", {
-        organizationId: args.id,
-        name: "Main",
-        isMain: true,
-        createdAt: now,
-      });
-    }
-
-    // 3. Payment Modes Seeding (Idempotent)
-    const existingPaymentModes = await ctx.db
-      .query("paymentModes")
-      .withIndex("by_org", (q) => q.eq("organizationId", args.id))
-      .collect();
-
-    if (existingPaymentModes.length === 0) {
-      const modes = ["Cash", "Credit Card", "Debit Card", "UPI"];
-      for (const mode of modes) {
-        await ctx.db.insert("paymentModes", {
-          organizationId: args.id,
-          name: mode,
-          active: true,
-          createdAt: now,
-        });
-      }
-    }
+    // Note: Stations and Payment Modes are NOT auto-seeded here.
+    // They are left empty so that the onboarding setup checklist reflects
+    // actual user configuration, with country-specific quick suggestions provided in Settings.
 
     // 4. Inventory Categories Seeding (Idempotent)
     const existingCategories = await ctx.db

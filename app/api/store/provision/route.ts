@@ -408,6 +408,49 @@ export async function POST(req: Request) {
       console.warn("Owner user creation warning:", uErr);
     }
 
+    // Register store and owner in Master POS so resolve-store finds it immediately
+    const masterConvexUrl =
+      process.env.MASTER_CONVEX_URL ||
+      process.env.NEXT_PUBLIC_MASTER_CONVEX_URL ||
+      "https://agreeable-turtle-697.convex.cloud";
+
+    try {
+      const masterClient = new ConvexHttpClient(masterConvexUrl);
+      const masterOrgId: any = await masterClient.mutation(
+        "organizations:registerStoreForBridge" as any,
+        {
+          secret: provisioningSecret,
+          name: targetName,
+          slug,
+          deploymentUrl: currentConvexUrl,
+          ownerClerkId: userId,
+          country: country || undefined,
+          state: state || undefined,
+          city: city || undefined,
+          phone: phone || undefined,
+        }
+      );
+
+      if (masterOrgId && userId) {
+        await masterClient.mutation("users:create" as any, {
+          organizationId: masterOrgId,
+          defaultClerkId: userId,
+          firstName: user?.firstName || "",
+          lastName: user?.lastName || "",
+          email: user?.primaryEmailAddress?.emailAddress || "",
+          role: "owner",
+          status: "active",
+          secret: provisioningSecret,
+        });
+        console.log(`[Store Provisioning] Registered store and owner in Master POS (org: ${masterOrgId})`);
+      }
+    } catch (masterErr: any) {
+      console.warn(
+        "[Store Provisioning Warning] Master POS registration failed:",
+        masterErr?.message || masterErr
+      );
+    }
+
     return NextResponse.json({
       success: true,
       deploymentUrl: currentConvexUrl,

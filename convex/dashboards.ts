@@ -32,44 +32,43 @@ import { executeWidgetDataProvider } from "./dashboardDataProviders";
 // ==========================================
 
 function canUserAccessWidget(
-  userRoles: string[],
-  requiredRole?: "any" | "staff" | "cashier" | "captain" | "admin"
+  _userRoles: string[],
+  _requiredRole?: "any" | "staff" | "cashier" | "captain" | "admin"
 ): boolean {
-  if (!requiredRole || requiredRole === "any") return true;
-
-  const normalizedRoles = userRoles.map((r) => (r || "").trim().toLowerCase());
-  const isAdmin = normalizedRoles.some((r) =>
-    ["admin", "store_admin", "org_admin", "super_admin"].includes(r)
-  );
-  if (isAdmin) return true;
-
-  if (requiredRole === "admin") return isAdmin;
-  if (requiredRole === "staff") return true; // Any authenticated store member
-  if (requiredRole === "cashier") {
-    return normalizedRoles.includes("cashier");
-  }
-  if (requiredRole === "captain") {
-    return (
-      normalizedRoles.includes("captain") ||
-      normalizedRoles.includes("waiter") ||
-      normalizedRoles.includes("cashier")
-    );
-  }
-
+  // All authenticated store members can view and access all dashboard widgets
   return true;
 }
 
 async function resolveUserRoles(
   ctx: QueryCtx | MutationCtx,
   orgId: Id<"organizations">,
-  userId: string
+  userId: string,
+  userEmail?: string
 ): Promise<string[]> {
-  const member = await ctx.db
+  const org = await ctx.db.get(orgId);
+  if (org && (!org.ownerClerkId || org.ownerClerkId === userId)) {
+    return ["admin"];
+  }
+
+  let member = await ctx.db
     .query("organizationUsers")
     .withIndex("by_user_and_org", (q) =>
       q.eq("userId", userId).eq("organizationId", orgId)
     )
     .first();
+
+  if (!member && userEmail) {
+    const allMembers = await ctx.db
+      .query("organizationUsers")
+      .withIndex("by_org", (q) => q.eq("organizationId", orgId))
+      .collect();
+    member =
+      allMembers.find(
+        (m) =>
+          m.deletedAt === undefined &&
+          m.email?.toLowerCase() === userEmail.toLowerCase()
+      ) || null;
+  }
 
   if (!member || member.deletedAt !== undefined) {
     return ["staff"];
@@ -204,7 +203,7 @@ export const listAvailableWidgets = query({
   },
   handler: async (ctx, args) => {
     const { org, identity } = await requireMember(ctx, args.organizationId);
-    const userRoles = await resolveUserRoles(ctx, org._id, identity.subject);
+    const userRoles = await resolveUserRoles(ctx, org._id, identity.subject, identity.email);
 
     let widgets = WIDGET_CATALOG;
 
@@ -256,7 +255,7 @@ export const getCatalogWithUserState = query({
   },
   handler: async (ctx, args) => {
     const { org, identity } = await requireMember(ctx, args.organizationId);
-    const userRoles = await resolveUserRoles(ctx, org._id, identity.subject);
+    const userRoles = await resolveUserRoles(ctx, org._id, identity.subject, identity.email);
 
     // Resolve dashboard
     let dashboard: Doc<"dashboards"> | null = null;
@@ -368,7 +367,7 @@ export const getDashboard = query({
       }
       // Ownership check: user dashboards can only be read by their owner or store admin
       if (d.scope === "user" && d.userId !== identity.subject) {
-        const userRoles = await resolveUserRoles(ctx, org._id, identity.subject);
+        const userRoles = await resolveUserRoles(ctx, org._id, identity.subject, identity.email);
         if (!canUserAccessWidget(userRoles, "admin")) {
           throw new Error("Forbidden. You do not have access to this private dashboard.");
         }
@@ -1329,7 +1328,7 @@ export const getWidgetData = query({
       throw new Error(`Widget ID '${args.widgetId}' not found in catalog.`);
     }
 
-    const userRoles = await resolveUserRoles(ctx, org._id, identity.subject);
+    const userRoles = await resolveUserRoles(ctx, org._id, identity.subject, identity.email);
     if (!canUserAccessWidget(userRoles, widgetDef.requiredRole)) {
       throw new Error(`Forbidden. Insufficient permissions for widget: ${widgetDef.name}`);
     }

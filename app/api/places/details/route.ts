@@ -42,7 +42,11 @@ export async function GET(req: Request) {
     // Parse Address Components
     let streetNumber = "";
     let route = "";
-    let city = "";
+    let locality = "";
+    let postalTown = "";
+    let sublocality1 = "";
+    let sublocality2 = "";
+    let adminArea2 = ""; // District / Municipality (e.g. Vadodara)
     let state = "";
     let stateCode = "";
     let country = "";
@@ -58,12 +62,20 @@ export async function GET(req: Request) {
       if (types.includes("route")) {
         route = comp.long_name;
       }
-      if (
-        types.includes("locality") ||
-        types.includes("postal_town") ||
-        types.includes("sublocality_level_1")
-      ) {
-        if (!city) city = comp.long_name;
+      if (types.includes("locality")) {
+        locality = comp.long_name;
+      }
+      if (types.includes("postal_town")) {
+        postalTown = comp.long_name;
+      }
+      if (types.includes("sublocality_level_1")) {
+        sublocality1 = comp.long_name;
+      }
+      if (types.includes("sublocality_level_2")) {
+        sublocality2 = comp.long_name;
+      }
+      if (types.includes("administrative_area_level_2")) {
+        adminArea2 = comp.long_name;
       }
       if (types.includes("administrative_area_level_1")) {
         state = comp.long_name;
@@ -77,6 +89,13 @@ export async function GET(req: Request) {
         postalCode = comp.long_name;
       }
     }
+
+    // Determine actual City:
+    // 1. Primary City is `locality` (e.g. "Vadodara")
+    // 2. UK / regional uses `postal_town`
+    // 3. Fallback to `administrative_area_level_2` (District / City)
+    // 4. Fallback to sublocality (e.g. "Tarsali") ONLY if no real city is returned
+    const city = locality || postalTown || adminArea2 || sublocality1 || sublocality2 || "";
 
     const streetAddress =
       [streetNumber, route].filter(Boolean).join(" ") ||
@@ -132,7 +151,8 @@ export async function GET(req: Request) {
       formattedAddress: result.formatted_address || result.vicinity || "",
       streetAddress,
       city,
-      state: stateCode || state,
+      state: state || stateCode,
+      stateCode: stateCode || state,
       stateFullName: state,
       country: countryCode || country,
       countryFullName: country,

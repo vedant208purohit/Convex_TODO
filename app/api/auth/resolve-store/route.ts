@@ -121,6 +121,7 @@ export async function resolveStoreForAuthenticatedUser(request?: Request) {
         "x-bridge-timestamp": timestamp.toString(),
       },
       body: JSON.stringify(bridgePayload),
+      signal: AbortSignal.timeout(10000),
       // Short cache lifetime / no-store to prevent stale deployment resolutions
       cache: "no-store",
     });
@@ -155,19 +156,24 @@ export async function resolveStoreForAuthenticatedUser(request?: Request) {
         organization: data.organization,
         deploymentUrl: data.deployment?.url || data.deploymentUrl,
         user: data.user,
+        availableStores: data.availableStores || [],
       },
       { status: 200 },
     );
   } catch (error: unknown) {
     console.error("Failed to connect to Master bridge:", error);
+    const isTimeout =
+      error instanceof Error &&
+      (error.name === "TimeoutError" || error.name === "AbortError");
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Unable to reach Master control plane to resolve store deployment.",
-        code: "BRIDGE_UNREACHABLE",
+        error: isTimeout
+          ? "Connection to Master store directory timed out. Please try again."
+          : "Unable to reach Master control plane to resolve store deployment.",
+        code: isTimeout ? "GATEWAY_TIMEOUT" : "BRIDGE_UNREACHABLE",
       },
-      { status: 502 },
+      { status: isTimeout ? 504 : 502 },
     );
   }
 }

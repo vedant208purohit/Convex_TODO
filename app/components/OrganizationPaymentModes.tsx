@@ -106,6 +106,9 @@ export function OrganizationPaymentModes() {
   // ------------------------------------------
   // CONVEX HOOKS & AUTH SAFEGUARDS
   // ------------------------------------------
+  const organizations = useQuery(api.organizations.list);
+  const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+
   const paymentModesRaw = useQuery(api.organizationPaymentModes.list);
   const isLoading = paymentModesRaw === undefined;
   const paymentModes = useMemo(() => paymentModesRaw || [], [paymentModesRaw]);
@@ -114,6 +117,42 @@ export function OrganizationPaymentModes() {
   const updateMode = useMutation(api.organizationPaymentModes.update);
   const toggleActiveMode = useMutation(api.organizationPaymentModes.toggleActive);
   const removeMode = useMutation(api.organizationPaymentModes.remove);
+
+  const [addingPresetName, setAddingPresetName] = useState<string | null>(null);
+
+  // Country-based recommended presets
+  const countryCode = (activeOrg?.country || "IN").toUpperCase();
+  const isIndia = countryCode === "IN" || countryCode === "INDIA";
+
+  const recommendedPresets = useMemo(() => {
+    if (isIndia) {
+      return [
+        { name: "Cash", subtext: "Physical Currency" },
+        { name: "UPI", subtext: "GPay / PhonePe / Paytm" },
+        { name: "Credit Card", subtext: "Visa / Mastercard / RuPay" },
+        { name: "Debit Card", subtext: "Direct Bank POS" },
+      ];
+    }
+    return [
+      { name: "Cash", subtext: "Physical Currency" },
+      { name: "Credit Card", subtext: "Visa / Mastercard / Amex" },
+      { name: "Debit Card", subtext: "Bank Debit Card" },
+      { name: "Digital Wallet", subtext: "Apple Pay / Google Pay" },
+    ];
+  }, [isIndia]);
+
+  const handleAddPreset = async (presetName: string) => {
+    if (addingPresetName) return;
+    setAddingPresetName(presetName);
+    try {
+      await createMode({ name: presetName, active: true });
+      showToast(`Added ${presetName} to payment modes!`, "success");
+    } catch (err: any) {
+      showToast(err?.message || `Failed to add ${presetName}.`, "error");
+    } finally {
+      setAddingPresetName(null);
+    }
+  };
 
   // ------------------------------------------
   // LOCAL UI STATES & REFS
@@ -372,6 +411,54 @@ export function OrganizationPaymentModes() {
           </article>
         </section>
 
+        {/* Country Default Recommendations Tray */}
+        {recommendedPresets.some((p) => !paymentModes.some((m) => m.name.toLowerCase() === p.name.toLowerCase())) && (
+          <div className="bg-amber-50/60 border border-amber-200/70 rounded-xl p-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <span className="text-[11px] font-semibold text-amber-900 uppercase tracking-wide">
+                  {isIndia ? "Popular in India" : "Standard Payment Methods"}
+                </span>
+                <p className="text-xs text-amber-800/80">
+                  Click to quickly add these payment methods to your checkout.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2.5">
+              {recommendedPresets.map((preset) => {
+                const alreadyAdded = paymentModes.some(
+                  (m) => m.name.toLowerCase() === preset.name.toLowerCase()
+                );
+                return (
+                  <div
+                    key={preset.name}
+                    className="flex items-center justify-between p-2.5 bg-white border border-amber-100 rounded-lg shadow-2xs"
+                  >
+                    <div>
+                      <p className="text-xs font-semibold text-stone-900">{preset.name}</p>
+                      <p className="text-[10px] text-stone-500">{preset.subtext}</p>
+                    </div>
+                    {alreadyAdded ? (
+                      <span className="text-[11px] font-medium text-emerald-600 px-2 py-0.5 bg-emerald-50 rounded">
+                        Added
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleAddPreset(preset.name)}
+                        disabled={addingPresetName === preset.name}
+                        className="text-xs font-semibold px-2.5 py-1 bg-stone-900 hover:bg-black text-white rounded-md transition cursor-pointer disabled:opacity-50"
+                      >
+                        {addingPresetName === preset.name ? "Adding..." : "+ Add"}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       {/* Main Payment Modes Table Card */}
       <section aria-labelledby="modes-heading" className="bg-[#ffffff] border border-[#eadfd6] rounded-xl shadow-none overflow-hidden">
         {/* Card Header & Live Search Bar */}
@@ -436,15 +523,34 @@ export function OrganizationPaymentModes() {
                   </tr>
                 ))
               ) : filteredModes.length === 0 ? (
-                // Empty State Row
+                // Empty State Row with Quick Add
                 <tr>
                   <td colSpan={4} className="py-12 text-center text-[#5e5e5e]">
-                    <div className="flex flex-col items-center justify-center space-y-2">
+                    <div className="flex flex-col items-center justify-center space-y-3 max-w-sm mx-auto">
                       <CreditCardOffIcon className="w-10 h-10 text-neutral-300" />
-                      <p className="font-garamond text-xl font-medium text-[#141010]">No payment modes found</p>
-                      <p className="text-xs text-[#5e5e5e]">
-                        {searchQuery ? `No methods match "${searchQuery}".` : "Add a payment mode to enable settlement options."}
-                      </p>
+                      <div>
+                        <p className="font-garamond text-xl font-medium text-[#141010]">No payment modes configured</p>
+                        <p className="text-xs text-[#5e5e5e] mt-1">
+                          {searchQuery
+                            ? `No methods match "${searchQuery}".`
+                            : "Add a payment method manually, or select one from the recommendations above."}
+                        </p>
+                      </div>
+                      {!searchQuery && (
+                        <div className="flex flex-wrap gap-2 justify-center pt-2">
+                          {recommendedPresets.slice(0, 3).map((p) => (
+                            <button
+                              key={p.name}
+                              type="button"
+                              onClick={() => handleAddPreset(p.name)}
+                              disabled={addingPresetName === p.name}
+                              className="text-xs font-medium px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 rounded-lg transition border border-stone-200 cursor-pointer"
+                            >
+                              + Add {p.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>

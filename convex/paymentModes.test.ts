@@ -523,8 +523,8 @@ describe("Payment Modes Domain Unit & Integration Tests", () => {
   // ----------------------------------------------------
   // 7. Store Initialization & Seed Compatibility
   // ----------------------------------------------------
-  describe("Store Initialization & Seed Compatibility", () => {
-    test("initializeStore seeds 4 default payment modes idempotently", async () => {
+  describe("Store Initialization & Clean State", () => {
+    test("initializeStore leaves payment modes clean and unseeded for user setup", async () => {
       const t = convexTest(schema, modules);
 
       const orgId = await t.mutation(api.organizations.create, {
@@ -541,22 +541,8 @@ describe("Payment Modes Domain Unit & Integration Tests", () => {
         organizationId: orgId,
       });
 
-      expect(modes.length).toBe(4);
-      expect(modes.map((m) => m.name)).toEqual([
-        "Cash",
-        "Credit Card",
-        "Debit Card",
-        "UPI",
-      ]);
-
-      // Re-running initializeStore does not duplicate payment modes
-      await asOwner.mutation(api.organizations.initializeStore, { id: orgId });
-
-      const modesAfterReinit = await asOwner.query(api.paymentModes.list, {
-        organizationId: orgId,
-      });
-
-      expect(modesAfterReinit.length).toBe(4);
+      // Payment modes are now unseeded by default so users can pick their preferred country methods
+      expect(modes.length).toBe(0);
     });
   });
 
@@ -574,6 +560,14 @@ describe("Payment Modes Domain Unit & Integration Tests", () => {
 
       const asAdmin = t.withIdentity({ subject: "admin_owner_1" });
       await asAdmin.mutation(api.organizations.initializeStore, { id: orgId });
+
+      // Explicitly seed payment modes for Cashier testing
+      for (const mode of ["Cash", "Credit Card", "Debit Card", "UPI"]) {
+        await asAdmin.mutation(api.paymentModes.create, {
+          organizationId: orgId,
+          name: mode,
+        });
+      }
 
       // Create a Cashier user
       const cashierClerkId = "cashier_user_pos_1";
@@ -770,13 +764,17 @@ describe("Payment Modes Domain Unit & Integration Tests", () => {
       const asAdminB = t.withIdentity({ subject: "admin_b" });
       await asAdminB.mutation(api.organizations.initializeStore, { id: orgBId });
 
-      // In Store A, disable Cash
+      // In Store A, seed and disable Cash
+      await asAdminA.mutation(api.paymentModes.create, { organizationId: orgAId, name: "Cash" });
       const modesA = await asAdminA.query(api.paymentModes.list, { organizationId: orgAId });
       const cashA = modesA.find((m) => m.name === "Cash");
       await asAdminA.mutation(api.paymentModes.update, {
         id: cashA!._id,
         active: false,
       });
+
+      // In Store B, seed Cash
+      await asAdminB.mutation(api.paymentModes.create, { organizationId: orgBId, name: "Cash" });
 
       // Store A Cashier query should NOT see Cash
       const cashierListA = await asAdminA.query(api.paymentModes.list, {
@@ -791,7 +789,7 @@ describe("Payment Modes Domain Unit & Integration Tests", () => {
         activeOnly: true,
       });
       expect(cashierListB.some((m) => m.name === "Cash")).toBe(true);
-      expect(cashierListB.length).toBe(4);
+      expect(cashierListB.length).toBe(1);
     });
   });
 });

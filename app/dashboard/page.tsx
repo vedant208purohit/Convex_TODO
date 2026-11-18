@@ -217,23 +217,16 @@ export default function DashboardPage() {
   );
 
   // Onboarding guard:
-  // Only store owners and admins who haven't completed store setup are redirected to /onboarding.
-  // Regular employees (cashiers, captains, chefs, etc.) enter the operational app directly.
+  // If no store organization exists at all, redirect to /onboarding to create one.
+  // Once an organization exists, allow access to the dashboard. The user can always
+  // use the "Back to Onboarding Checklist" button in the top bar whenever they wish to view the checklist.
   useEffect(() => {
     if (organizations !== undefined && currentMembership !== undefined) {
       if (organizations.length === 0) {
         router.replace("/onboarding");
-      } else if (activeOrg && activeOrg.onboardingCompleted !== true) {
-        const isOwner = Boolean(
-          activeOrg.ownerClerkId && currentMembership?.userId && activeOrg.ownerClerkId === currentMembership.userId
-        );
-        const isAdmin = Boolean(currentMembership?.userType?.includes("admin"));
-        if (isOwner || isAdmin) {
-          router.replace("/onboarding");
-        }
       }
     }
-  }, [organizations, activeOrg, currentMembership, router]);
+  }, [organizations, currentMembership, router]);
 
   const dashboardData = useQuery(
     api.dashboards.getDashboard,

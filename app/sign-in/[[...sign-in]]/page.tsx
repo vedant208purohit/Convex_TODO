@@ -52,9 +52,24 @@ export default function SignInPage() {
                 dividerRow: "text-slate-400",
                 dividerLine: "bg-slate-700",
                 dividerText: "text-slate-300 text-xs uppercase font-medium",
+                footerAction: "text-slate-400 text-sm",
+                footerActionText: "text-slate-400 text-sm",
+                footerActionLink: "text-indigo-400 hover:text-indigo-300 font-semibold",
               },
             }}
           />
+        </div>
+
+        <div className="mt-4 text-center">
+          <p className="text-sm text-slate-400">
+            Don&apos;t have an account?{" "}
+            <a
+              href="/sign-up"
+              className="text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-2 transition-colors"
+            >
+              Sign up
+            </a>
+          </p>
         </div>
 
         <p className="auth-footer">Secure restaurant workspace for authorized users.</p>

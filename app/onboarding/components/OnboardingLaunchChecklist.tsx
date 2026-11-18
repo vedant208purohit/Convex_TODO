@@ -33,6 +33,10 @@ export function OnboardingLaunchChecklist({
     api.menu.listMenus,
     effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
   );
+  const allItems = useQuery(
+    api.menu.listAllItems,
+    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
+  );
   const storeMenu = useQuery(
     api.menu.getOrganizationMenu,
     effectiveOrgId ? { organizationId: effectiveOrgId, allMenus: true } : "skip"
@@ -75,6 +79,7 @@ export function OnboardingLaunchChecklist({
     // Item 1: Add your menu -> auto-completes if menus, categories, or items exist
     if (id === 1) {
       if (menus && menus.length > 0) return true;
+      if (allItems && (allItems.items?.length > 0 || allItems.length > 0)) return true;
       if (storeMenu && Array.isArray(storeMenu) && storeMenu.length > 0) return true;
     }
     // Item 2: Configure taxes -> auto-completes if tax components are configured
@@ -204,8 +209,21 @@ export function OnboardingLaunchChecklist({
   }).format(new Date());
 
   const [navigating, setNavigating] = useState(false);
+  const [skipping, setSkipping] = useState(false);
 
   const allCompleted = doneCount === CHECKLIST_ITEMS.length;
+
+  // Auto-mark onboardingCompleted as true in database when all 6 steps are completed
+  useEffect(() => {
+    if (allCompleted && currentOrg && currentOrg.onboardingCompleted !== true) {
+      const completedIds = CHECKLIST_ITEMS.map((item) => item.id);
+      updateChecklistMutation({
+        id: currentOrg._id,
+        completedItems: completedIds,
+        markCompleted: true,
+      }).catch((e) => console.warn("Auto-completing onboarding checklist:", e));
+    }
+  }, [allCompleted, currentOrg, updateChecklistMutation]);
 
   const handleProceed = async () => {
     if (!allCompleted || !currentOrg) {
@@ -219,10 +237,21 @@ export function OnboardingLaunchChecklist({
         completedItems: completedIds,
         markCompleted: true,
       });
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err) {
       console.error("Failed to complete onboarding:", err);
       setNavigating(false);
+    }
+  };
+
+  const handleSkipForNow = () => {
+    setSkipping(true);
+    // Mark temporary session skip in sessionStorage so they can explore dashboard during this session
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("onboarding_session_skipped", "true");
+      window.location.href = "/dashboard";
+    } else {
+      router.push("/dashboard");
     }
   };
 
@@ -414,10 +443,19 @@ export function OnboardingLaunchChecklist({
         </div>
 
         {/* Bottom Navigation to Dashboard */}
-        <div className="pt-6 flex justify-end">
+        <div className="pt-6 flex items-center justify-between gap-4 border-t border-[#eadfd6]">
           <button
             type="button"
-            disabled={!allCompleted || navigating}
+            disabled={skipping || navigating}
+            onClick={handleSkipForNow}
+            className="text-xs sm:text-sm font-medium text-[#645d58] hover:text-[#1d1b1a] hover:underline transition-colors cursor-pointer py-2 px-1 disabled:opacity-50"
+          >
+            {skipping ? "Skipping to Dashboard..." : "Skip for now"}
+          </button>
+
+          <button
+            type="button"
+            disabled={!allCompleted || navigating || skipping}
             onClick={handleProceed}
             className={`px-6 py-3 rounded-lg text-sm font-medium transition shadow-md flex items-center gap-2 ${
               allCompleted

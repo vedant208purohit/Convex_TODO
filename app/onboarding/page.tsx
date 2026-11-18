@@ -113,31 +113,29 @@ export default function OnboardingPage() {
       const isOwner = Boolean(
         activeOrg.ownerClerkId && user?.id && activeOrg.ownerClerkId === user.id
       );
-      const isStaff = !isOwner && currentMembership && !currentMembership.userType?.includes("admin");
 
-      // If store is already provisioned and employee is not the store owner/admin,
-      // they don't do store setup onboarding. Redirect them straight onto the dashboard!
-      if (isStaff) {
+      // If store is already provisioned and the user is NOT the store owner (e.g. invited staff or invited admin),
+      // they do not perform store setup onboarding. Redirect them straight into the dashboard!
+      if (!isOwner && currentMembership) {
         router.replace("/dashboard");
         return;
       }
 
-      // If checklist is already completed by owner, redirect straight to dashboard
-      if (activeOrg.onboardingCompleted) {
+      const areAllStepsCompleted = Boolean(
+        activeOrg.onboardingCompleted === true ||
+        (Array.isArray(activeOrg.onboardingChecklist) &&
+          [1, 2, 3, 4, 5, 6].every((id) => activeOrg.onboardingChecklist?.includes(id)))
+      );
+
+      // If checklist is already completed, redirect straight to dashboard
+      if (areAllStepsCompleted) {
         router.replace("/dashboard");
         return;
       }
 
-      // If store is already provisioned (organization exists), lock directly into Step 4 (Launch Checklist)
-      // to prevent re-entering or re-submitting Steps 1-3.
-      if (activeOrg.onboardingStep && activeOrg.onboardingStep >= 4) {
-        setActiveStep(4);
-      } else if (activeOrg.onboardingStep && activeOrg.onboardingStep >= 1 && activeOrg.onboardingStep <= 3) {
-        setActiveStep(activeOrg.onboardingStep);
-      } else {
-        // If an organization record already exists in the store, default to Step 4
-        setActiveStep(4);
-      }
+      // If organization already exists in store database, lock strictly into Step 4 (Launch Checklist).
+      // Owners cannot go back to Steps 1, 2, or 3 once the organization has been provisioned.
+      setActiveStep(4);
 
       // Step 1
       if (activeOrg.legalEntityName) setOrgName(activeOrg.legalEntityName);
@@ -243,7 +241,7 @@ export default function OnboardingPage() {
       }
       if (details.streetAddress) setStreetAddress(details.streetAddress);
       if (details.city) setCity(details.city);
-      if (details.state) setState(details.state);
+      if (details.stateFullName || details.state) setState(details.stateFullName || details.state);
       if (details.postalCode) setZipCode(details.postalCode);
       if (details.country) setCountry(details.country);
       if (details.phoneNumber) setPhoneNumber(details.phoneNumber);
@@ -501,7 +499,7 @@ export default function OnboardingPage() {
         showToast("Store Created", "Dedicated backend provisioned! Opening Launch Checklist...");
         setTimeout(() => {
           setSavingStep(false);
-          setActiveStep(4);
+          window.location.href = "/onboarding";
         }, 1000);
         return;
       }
@@ -530,6 +528,19 @@ export default function OnboardingPage() {
 
   const userEmail = user?.primaryEmailAddress?.emailAddress || "owner@restaurant.com";
   const userInitials = (user?.firstName ? user.firstName[0] : "P") + (user?.lastName ? user.lastName[0] : "S");
+
+  if (organizations === undefined) {
+    return (
+      <div className="min-h-screen w-full flex items-center justify-center bg-[#fbf7f4]">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1f1f1f] border-t-transparent" />
+          <p className="text-xs font-medium text-[#645d58] uppercase tracking-wider">
+            Loading restaurant workspace...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen w-full bg-[#fbf7f4] text-[#1d1b1a] font-sans antialiased selection:bg-[#e9e1dd]">
@@ -564,136 +575,102 @@ export default function OnboardingPage() {
             </div>
           </header>
 
-          {/* Stepper Indicator */}
-          <div className="w-full max-w-2xl mb-8 flex flex-col items-center">
-            <div className="flex items-center justify-between w-full max-w-md relative mb-3">
-              {/* Background Connecting Line */}
-              <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-[#e9e1dd] -translate-y-1/2 z-0"></div>
-              {/* Progress Bar Active Portion */}
-              <div
-                className={`absolute top-1/2 left-0 h-0.5 bg-[#1f1f1f] -translate-y-1/2 z-0 transition-all duration-300 ${
-                  activeStep === 1
-                    ? "w-[12%]"
-                    : activeStep === 2
-                    ? "w-[38%]"
-                    : activeStep === 3
-                    ? "w-[68%]"
-                    : "w-full"
-                }`}
-              ></div>
-
-              {/* Step 1 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <button
-                  type="button"
-                  disabled={Boolean(activeOrg)}
-                  onClick={() => {
-                    if (!activeOrg) setActiveStep(1);
-                  }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shadow-sm ring-4 ring-[#fbf7f4] transition-colors ${
-                    activeOrg
-                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-not-allowed opacity-80"
-                      : activeStep === 1
-                      ? "bg-[#1f1f1f] text-white cursor-pointer"
-                      : "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
-                  }`}
-                >
-                  {activeStep > 1 || activeOrg ? (
-                    <span className="material-symbols-outlined text-sm font-bold">check</span>
-                  ) : (
-                    "1"
-                  )}
-                </button>
-              </div>
-
-              {/* Step 2 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <button
-                  type="button"
-                  disabled={Boolean(activeOrg)}
-                  onClick={() => {
-                    if (!activeOrg && orgName && restName) setActiveStep(2);
-                  }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors ${
-                    activeOrg
-                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-not-allowed opacity-80"
+          {/* Stepper Indicator: Only rendered for new, unprovisioned stores in Steps 1-3 */}
+          {!activeOrg && activeStep < 4 && (
+            <div className="w-full max-w-2xl mb-8 flex flex-col items-center">
+              <div className="flex items-center justify-between w-full max-w-xs relative mb-3">
+                {/* Background Connecting Line */}
+                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-[#e9e1dd] -translate-y-1/2 z-0"></div>
+                {/* Progress Bar Active Portion */}
+                <div
+                  className={`absolute top-1/2 left-0 h-0.5 bg-[#1f1f1f] -translate-y-1/2 z-0 transition-all duration-300 ${
+                    activeStep === 1
+                      ? "w-[15%]"
                       : activeStep === 2
-                      ? "bg-[#1f1f1f] text-white font-semibold cursor-pointer"
-                      : activeStep > 2
-                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
-                      : "bg-[#eee7e3] text-[#4d4541] cursor-pointer"
+                      ? "w-[50%]"
+                      : "w-full"
                   }`}
-                >
-                  {activeStep > 2 || activeOrg ? (
-                    <span className="material-symbols-outlined text-sm font-bold">check</span>
-                  ) : (
-                    "2"
-                  )}
-                </button>
+                ></div>
+
+                {/* Step 1 */}
+                <div className="relative z-10 flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => setActiveStep(1)}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold shadow-sm ring-4 ring-[#fbf7f4] transition-colors ${
+                      activeStep === 1
+                        ? "bg-[#1f1f1f] text-white cursor-pointer"
+                        : "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
+                    }`}
+                  >
+                    {activeStep > 1 ? (
+                      <span className="material-symbols-outlined text-sm font-bold">check</span>
+                    ) : (
+                      "1"
+                    )}
+                  </button>
+                </div>
+
+                {/* Step 2 */}
+                <div className="relative z-10 flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (orgName && restName) setActiveStep(2);
+                    }}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors ${
+                      activeStep === 2
+                        ? "bg-[#1f1f1f] text-white font-semibold cursor-pointer"
+                        : activeStep > 2
+                        ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
+                        : "bg-[#eee7e3] text-[#4d4541] cursor-pointer"
+                    }`}
+                  >
+                    {activeStep > 2 ? (
+                      <span className="material-symbols-outlined text-sm font-bold">check</span>
+                    ) : (
+                      "2"
+                    )}
+                  </button>
+                </div>
+
+                {/* Step 3 */}
+                <div className="relative z-10 flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (orgName && restName) setActiveStep(3);
+                    }}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors ${
+                      activeStep === 3
+                        ? "bg-[#1f1f1f] text-white font-semibold cursor-pointer"
+                        : activeStep > 3
+                        ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
+                        : "bg-[#eee7e3] text-[#4d4541] cursor-pointer"
+                    }`}
+                  >
+                    3
+                  </button>
+                </div>
               </div>
 
-              {/* Step 3 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <button
-                  type="button"
-                  disabled={Boolean(activeOrg)}
-                  onClick={() => {
-                    if (!activeOrg && orgName && restName) setActiveStep(3);
-                  }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors ${
-                    activeOrg
-                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-not-allowed opacity-80"
-                      : activeStep === 3
-                      ? "bg-[#1f1f1f] text-white font-semibold cursor-pointer"
-                      : activeStep > 3
-                      ? "bg-[#e9e1dd] text-[#1d1b1a] cursor-pointer"
-                      : "bg-[#eee7e3] text-[#4d4541] cursor-pointer"
-                  }`}
-                >
-                  {activeStep > 3 || activeOrg ? (
-                    <span className="material-symbols-outlined text-sm font-bold">check</span>
-                  ) : (
-                    "3"
-                  )}
-                </button>
-              </div>
-
-              {/* Step 4 */}
-              <div className="relative z-10 flex flex-col items-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (activeOrg || (orgName && restName)) setActiveStep(4);
-                  }}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs ring-4 ring-[#fbf7f4] transition-colors cursor-pointer ${
-                    activeStep === 4
-                      ? "bg-[#1f1f1f] text-white font-semibold"
-                      : "bg-[#eee7e3] text-[#4d4541]"
-                  }`}
-                >
-                  4
-                </button>
+              {/* Stepper Text Details */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs uppercase tracking-wider text-[#645d58]">Step {activeStep} of 3</span>
+                <span className="text-[#645d58]">•</span>
+                <span className="text-xs font-semibold text-[#1d1b1a] uppercase tracking-wider">
+                  {activeStep === 1
+                    ? "Organisation"
+                    : activeStep === 2
+                    ? "Location"
+                    : "Operations"}
+                </span>
               </div>
             </div>
-
-            {/* Stepper Text Details */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-wider text-[#645d58]">Step {activeStep} of 4</span>
-              <span className="text-[#645d58]">•</span>
-              <span className="text-xs font-semibold text-[#1d1b1a] uppercase tracking-wider">
-                {activeStep === 1
-                  ? "Organisation"
-                  : activeStep === 2
-                  ? "Location"
-                  : activeStep === 3
-                  ? "Operations"
-                  : "Launch Checklist"}
-              </span>
-            </div>
-          </div>
+          )}
 
           {/* ================= STEP 1 SCREEN ================= */}
-          {activeStep === 1 && (
+          {!activeOrg && activeStep === 1 && (
             <>
               {/* Editorial Section Header */}
               <div className="text-center max-w-xl mb-8">
@@ -1162,7 +1139,7 @@ export default function OnboardingPage() {
           )}
 
           {/* ================= STEP 2 SCREEN ================= */}
-          {activeStep === 2 && (
+          {!activeOrg && activeStep === 2 && (
             <>
               {/* Title Block */}
               <div className="text-center max-w-xl mx-auto mb-8">
@@ -1515,7 +1492,7 @@ export default function OnboardingPage() {
           )}
 
           {/* ================= STEP 3 SCREEN ================= */}
-          {activeStep === 3 && (
+          {!activeOrg && activeStep === 3 && (
             <>
               {/* Editorial Title & Header */}
               <div className="text-center max-w-xl mb-8">
@@ -1829,11 +1806,11 @@ export default function OnboardingPage() {
           )}
 
           {/* ================= STEP 4 SCREEN: LAUNCH CHECKLIST ================= */}
-          {activeStep === 4 && (
+          {(activeOrg || activeStep === 4) && (
             <OnboardingLaunchChecklist
               organizationId={activeOrg?._id}
-              orgName={orgName}
-              restName={restName}
+              orgName={orgName || activeOrg?.legalEntityName || activeOrg?.name || "Restaurant"}
+              restName={restName || activeOrg?.name || "Store"}
               userFullName={user?.fullName || undefined}
             />
           )}
