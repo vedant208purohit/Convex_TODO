@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { MarketplaceApp } from "./types";
-import { RazorpayIcon } from "./MarketplaceCard";
+import { RazorpayIcon, StripeIcon } from "./MarketplaceCard";
 
 interface MarketplaceDetailDrawerProps {
   isOpen: boolean;
@@ -287,6 +287,217 @@ export function MarketplaceDetailDrawer({
                 </span>
               </Link>
             )}
+          </div>
+        </aside>
+      </div>
+    );
+  }
+
+  // Dedicated Screen 1 & 2 Preview: Stripe Provider Details Drawer
+  const isStripe = app.slug === "stripe" || app.iconName === "stripe";
+  const isStripeConnected = Boolean(
+    isStripe &&
+      (isPurchased ||
+        app.isInstalled ||
+        app.statusType === "live" ||
+        app.badge === "Connected" ||
+        (app as any).configuration?.connected ||
+        (app as any).credentials ||
+        (app as any).connected)
+  );
+
+  if (isStripe) {
+    return (
+      <div className="fixed inset-0 z-50 flex justify-end" id="stripeDetailDrawer">
+        {/* Semi-transparent dark overlay with backdrop blur */}
+        <div
+          className="fixed inset-0 bg-[#1e1b19]/40 backdrop-blur-[2px] transition-opacity duration-300 cursor-pointer"
+          onClick={onClose}
+          aria-label="Close drawer overlay"
+        />
+
+        {/* Slide-in Drawer Container: ~560px on desktop, full width on mobile */}
+        <aside
+          role="dialog"
+          aria-modal="true"
+          aria-label="Stripe Payments Details"
+          className="relative z-50 w-full sm:w-[500px] md:w-[580px] max-w-full bg-[#fff8f5] h-screen shadow-2xl flex flex-col transform transition-transform duration-300 ease-out translate-x-0 border-l border-[#e0d8d5] overflow-hidden"
+        >
+          {/* Fixed Drawer Header */}
+          <div className="px-6 sm:px-8 py-5 sm:py-6 border-b border-[#e0d8d5] flex items-center justify-between shrink-0 bg-[#fff8f5]">
+            <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+              {/* Authentic Stripe dark square container */}
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-lg bg-[#19191b] text-white flex items-center justify-center shrink-0 shadow-sm border border-[#33302e]">
+                <StripeIcon className="w-7 h-7 sm:w-8 sm:h-8 text-white" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <div className="flex items-center gap-2">
+                  <h2 className="font-garamond text-xl sm:text-2xl font-normal text-[#1e1b19] tracking-tight leading-tight">
+                    Stripe Payments
+                  </h2>
+                  {isStripeConnected ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-semibold bg-[#f4ece8] text-[#645d58] border border-[#e0d8d5]">
+                      Official
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#645d58] tracking-wide mt-0.5 truncate">
+                  Restaurant Payment Provider
+                </p>
+              </div>
+            </div>
+
+            {/* Close button in top-right corner */}
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 text-[#645d58] hover:text-[#1e1b19] hover:bg-[#ebe1da]/50 rounded-full transition-colors cursor-pointer shrink-0"
+              aria-label="Close details drawer"
+            >
+              <span className="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+
+          {/* Independently Scrollable Body Content */}
+          <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-6 space-y-6 sm:space-y-7 bg-[#fff8f5]">
+            {/* Intro paragraph & Primary Highlight Box */}
+            <div className="space-y-3.5">
+              <p className="text-[14px] sm:text-[15px] text-[#444748] leading-relaxed">
+                Connect Stripe to receive customer payments for your restaurant and manage payment activity through Prest.
+              </p>
+
+              <div className="bg-[#ffffff] rounded-lg p-5 border border-[#e0d8d5] shadow-2xs">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-[#645d58] mb-1.5">
+                  Accept Restaurant Payments
+                </h4>
+                <p className="text-xs sm:text-sm text-[#444748] leading-relaxed">
+                  Stripe processes eligible customer payments made through your connected restaurant ordering and payment channels. Connect your account to manage payment activity from Prest.
+                </p>
+              </div>
+            </div>
+
+            {/* Section: Restaurant Benefits */}
+            <div>
+              <div className="flex items-baseline justify-between mb-3 border-b border-[#e0d8d5] pb-2">
+                <h3 className="font-garamond text-lg text-[#1e1b19] font-normal">
+                  Restaurant Benefits
+                </h3>
+                <span className="text-xs text-[#7f7570] font-medium">Prest &amp; Stripe Core</span>
+              </div>
+
+              {/* 4 Bento Benefit Cards (2x2 Grid) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
+                {/* 1. Accept Customer Payments */}
+                <div className="bg-[#ffffff] border border-[#e0d8d5] rounded-lg p-4 sm:p-4.5 hover:border-[#1e1b19] transition-colors shadow-2xs">
+                  <div className="w-8 h-8 rounded-md bg-[#faf2ee] border border-[#e0d8d5] flex items-center justify-center text-[#1e1b19] mb-3">
+                    <span className="material-symbols-outlined text-[18px]">payments</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-[#1e1b19] mb-1">
+                    Accept Customer Payments
+                  </h4>
+                  <p className="text-xs text-[#645d58] leading-relaxed">
+                    Receive payments for eligible restaurant orders through your connected Stripe account.
+                  </p>
+                </div>
+
+                {/* 2. Track Payments */}
+                <div className="bg-[#ffffff] border border-[#e0d8d5] rounded-lg p-4 sm:p-4.5 hover:border-[#1e1b19] transition-colors shadow-2xs">
+                  <div className="w-8 h-8 rounded-md bg-[#faf2ee] border border-[#e0d8d5] flex items-center justify-center text-[#1e1b19] mb-3">
+                    <span className="material-symbols-outlined text-[18px]">query_stats</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-[#1e1b19] mb-1">
+                    Track Payments
+                  </h4>
+                  <p className="text-xs text-[#645d58] leading-relaxed">
+                    View payment status and related transaction information from Prest.
+                  </p>
+                </div>
+
+                {/* 3. Manage Refunds */}
+                <div className="bg-[#ffffff] border border-[#e0d8d5] rounded-lg p-4 sm:p-4.5 hover:border-[#1e1b19] transition-colors shadow-2xs">
+                  <div className="w-8 h-8 rounded-md bg-[#faf2ee] border border-[#e0d8d5] flex items-center justify-center text-[#1e1b19] mb-3">
+                    <span className="material-symbols-outlined text-[18px]">assignment_return</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-[#1e1b19] mb-1">
+                    Manage Refunds
+                  </h4>
+                  <p className="text-xs text-[#645d58] leading-relaxed">
+                    Manage eligible payment refunds using the connected Stripe integration.
+                  </p>
+                </div>
+
+                {/* 4. Monitor Payouts */}
+                <div className="bg-[#ffffff] border border-[#e0d8d5] rounded-lg p-4 sm:p-4.5 hover:border-[#1e1b19] transition-colors shadow-2xs">
+                  <div className="w-8 h-8 rounded-md bg-[#faf2ee] border border-[#e0d8d5] flex items-center justify-center text-[#1e1b19] mb-3">
+                    <span className="material-symbols-outlined text-[18px]">account_balance</span>
+                  </div>
+                  <h4 className="text-sm font-semibold text-[#1e1b19] mb-1">
+                    Monitor Payouts
+                  </h4>
+                  <p className="text-xs text-[#645d58] leading-relaxed">
+                    View payout information reported by Stripe, where available.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Before Connecting Notice Box */}
+            <div className="bg-[#faf2ee] rounded-lg p-4 border border-[#e0d8d5] flex items-start gap-3">
+              <span className="material-symbols-outlined text-[#645d58] text-[20px] mt-0.5 shrink-0">
+                info
+              </span>
+              <div className="min-w-0">
+                <h5 className="text-xs font-semibold uppercase tracking-wider text-[#1e1b19] mb-1">
+                  Before Connecting
+                </h5>
+                <p className="text-xs text-[#645d58] leading-relaxed">
+                  Make sure you can access your Stripe account and the required account credentials or authorization permissions.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Fixed Drawer Footer */}
+          <div className="px-6 sm:px-8 py-4 sm:py-5 border-t border-[#e0d8d5] bg-[#fff8f5] flex items-center gap-3 shrink-0">
+            {isStripeConnected ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onActionClick(app);
+                }}
+                className="flex-1 py-3.5 sm:py-4 px-6 rounded-xl bg-[#1e1b19] text-white hover:bg-[#33302e] font-semibold text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">tune</span>
+                <span>Manage Stripe</span>
+              </button>
+            ) : (
+              <Link
+                href="/marketplace/stripe/connect"
+                onClick={() => {
+                  onClose();
+                  onActionClick(app);
+                }}
+                className="flex-1 py-3.5 sm:py-4 px-6 rounded-xl bg-[#1e1b19] text-white hover:bg-[#33302e] font-semibold text-sm sm:text-base flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer group"
+              >
+                <span>Connect Stripe</span>
+                <span className="material-symbols-outlined text-[18px] group-hover:translate-x-1 transition-transform">
+                  arrow_forward
+                </span>
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={onClose}
+              className="py-3.5 sm:py-4 px-5 rounded-xl bg-white hover:bg-[#faf2ee] text-[#1e1b19] font-medium text-sm transition-colors cursor-pointer border border-[#e0d8d5] shrink-0"
+            >
+              Close
+            </button>
           </div>
         </aside>
       </div>

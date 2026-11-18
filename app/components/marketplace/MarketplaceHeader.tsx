@@ -75,15 +75,25 @@ export function MarketplaceHeader({
     maximumFractionDigits: 2,
   })}`;
 
+  const isPaymentsCategory = activeCategory === "Payments";
+
   return (
     <div className="flex flex-col gap-3 sm:gap-3.5 w-full">
       {/* Main Title Section with Wallet Card */}
       <section className="flex flex-col gap-1.5 font-sans">
         <div className="flex items-center gap-1.5 text-[#5e5e5e] text-[11px] sm:text-xs font-medium">
-          <span className="hover:text-[#0c0a09] transition-colors">Marketplace</span>
+          <button
+            type="button"
+            onClick={() => onCategoryChange("all")}
+            className="hover:text-[#0c0a09] transition-colors cursor-pointer"
+          >
+            Marketplace
+          </button>
           <span className="material-symbols-outlined text-[13px] sm:text-[14px]">chevron_right</span>
           <span className="text-[#0c0a09] font-semibold truncate">
-            {activeTab === "installed"
+            {isPaymentsCategory
+              ? "Payment Integrations"
+              : activeTab === "installed"
               ? "Installed Products"
               : activeTab === "purchases"
               ? "Subscriptions & Purchases"
@@ -94,14 +104,32 @@ export function MarketplaceHeader({
         </div>
 
         {/* Title & Wallet on Same Horizontal Row */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
-          <h1 className="font-garamond text-[28px] sm:text-[32px] md:text-[36px] text-[#0c0a09] tracking-tight font-normal leading-tight">
-            {activeTab === "installed"
-              ? "Installed Products"
-              : activeTab === "purchases"
-              ? "Subscriptions & Purchases"
-              : "Marketplace"}
-          </h1>
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
+          <div className="flex flex-col gap-0.5 min-w-0">
+            {isPaymentsCategory && (
+              <span className="text-[10px] sm:text-[11px] font-bold tracking-widest text-[#78716c] uppercase">
+                Financial Services &amp; POS
+              </span>
+            )}
+            <h1 className="font-garamond text-[28px] sm:text-[32px] md:text-[36px] text-[#0c0a09] tracking-tight font-normal leading-tight">
+              {isPaymentsCategory
+                ? "Payment Integrations"
+                : activeTab === "installed"
+                ? "Installed Products"
+                : activeTab === "purchases"
+                ? "Subscriptions & Purchases"
+                : "Marketplace"}
+            </h1>
+            <p className="text-[#5e5e5e] text-xs sm:text-[14px] max-w-2xl leading-relaxed mt-1 font-normal">
+              {isPaymentsCategory
+                ? "Connect payment providers to accept and manage payments for your restaurant, table-side checkout, and online orders."
+                : activeTab === "installed"
+                ? "Manage, configure credentials, and inspect operational telemetry for apps actively integrated with your POS register."
+                : activeTab === "purchases"
+                ? "Review your active software licenses, recurring add-on subscriptions, and billing invoices."
+                : "Everything your restaurant needs, all in one place. Integrate seamless payment gateways, conversational automations, and operational intelligence."}
+            </p>
+          </div>
 
           {/* Real-Time Wallet Balance + Add Money Action */}
           <div className="flex items-center gap-2 sm:gap-2.5 shrink-0 flex-wrap sm:flex-nowrap w-full sm:w-auto">
@@ -141,14 +169,6 @@ export function MarketplaceHeader({
             </button>
           </div>
         </div>
-
-        <p className="text-[#5e5e5e] text-xs sm:text-[14px] max-w-2xl leading-relaxed mt-0.5 font-normal">
-          {activeTab === "installed"
-            ? "Manage, configure credentials, and inspect operational telemetry for apps actively integrated with your POS register."
-            : activeTab === "purchases"
-            ? "Review your active software licenses, recurring add-on subscriptions, and billing invoices."
-            : "Everything your restaurant needs, all in one place. Integrate seamless payment gateways, conversational automations, and operational intelligence."}
-        </p>
       </section>
 
       {/* 3. Navigation & Filter Bar Section */}
@@ -167,7 +187,9 @@ export function MarketplaceHeader({
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder={
-                  activeTab === "installed"
+                  isPaymentsCategory
+                    ? "Search payment apps..."
+                    : activeTab === "installed"
                     ? "Search installed apps..."
                     : activeTab === "purchases"
                     ? "Search subscriptions..."
@@ -266,27 +288,50 @@ export function MarketplaceHeader({
             })}
           </div>
 
-          {/* Desktop Sort Dropdown (hidden on < lg) */}
-          <div className="relative shrink-0 hidden lg:block" ref={sortDropdownRef}>
+          {/* Desktop Filter & Sort Controls (hidden on < lg) */}
+          <div className="flex items-center gap-2 shrink-0 hidden lg:flex">
             <button
               type="button"
-              onClick={() => setIsSortOpen((prev) => !prev)}
-              className="h-9 sm:h-10 inline-flex items-center gap-2 px-3.5 bg-white hover:bg-[#fdf8f7] border border-[#e7e5e4] rounded-lg text-xs font-medium text-[#0c0a09] transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#0c0a09]"
+              onClick={() => {
+                if (activeCategory === "Payments") {
+                  onCategoryChange("all");
+                } else {
+                  onCategoryChange("Payments");
+                }
+              }}
+              className={`h-9 sm:h-10 inline-flex items-center gap-1.5 px-3.5 border rounded-lg text-xs font-medium transition-all shadow-2xs cursor-pointer ${
+                isPaymentsCategory
+                  ? "bg-[#0c0a09] text-white border-[#0c0a09]"
+                  : "bg-white hover:bg-[#fdf8f7] text-[#0c0a09] border-[#e7e5e4]"
+              }`}
+              title="Filter categories"
             >
-              <span className="text-[10px] uppercase tracking-wider text-[#5e5e5e] font-semibold">
-                Sort by:
+              <span className={`material-symbols-outlined text-[16px] ${isPaymentsCategory ? "text-white" : "text-[#5e5e5e]"}`}>
+                tune
               </span>
-              <span className="font-semibold text-[#0c0a09]">
-                {selectedSortLabel}
-              </span>
-              <span
-                className={`material-symbols-outlined text-[16px] text-[#5e5e5e] transition-transform duration-200 ${
-                  isSortOpen ? "rotate-180" : ""
-                }`}
-              >
-                expand_more
-              </span>
+              <span>Filter</span>
             </button>
+
+            <div className="relative shrink-0" ref={sortDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setIsSortOpen((prev) => !prev)}
+                className="h-9 sm:h-10 inline-flex items-center gap-2 px-3.5 bg-white hover:bg-[#fdf8f7] border border-[#e7e5e4] rounded-lg text-xs font-medium text-[#0c0a09] transition-all shadow-2xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-[#0c0a09]"
+              >
+                <span className="material-symbols-outlined text-[16px] text-[#5e5e5e]">
+                  swap_vert
+                </span>
+                <span className="font-semibold text-[#0c0a09]">
+                  Sort
+                </span>
+                <span
+                  className={`material-symbols-outlined text-[16px] text-[#5e5e5e] transition-transform duration-200 ${
+                    isSortOpen ? "rotate-180" : ""
+                  }`}
+                >
+                  expand_more
+                </span>
+              </button>
 
             {isSortOpen && (
               <div className="absolute right-0 top-full mt-1.5 w-48 bg-white border border-[#e7e5e4] rounded-xl shadow-xl py-1.5 z-50 animate-fadeIn font-sans">
@@ -313,6 +358,7 @@ export function MarketplaceHeader({
                 })}
               </div>
             )}
+            </div>
           </div>
         </div>
       </section>

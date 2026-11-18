@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
@@ -21,6 +21,22 @@ import { RazorpayApiKeysForm } from "./RazorpayApiKeysForm";
 import { RazorpayOnboardingIntro } from "./RazorpayOnboardingIntro";
 import { RazorpaySuccessView } from "./RazorpaySuccessView";
 import { RazorpayDashboardView } from "./RazorpayDashboardView";
+import { StripeMethodSelection } from "./StripeMethodSelection";
+import { StripeApiKeysForm } from "./StripeApiKeysForm";
+import { StripeOnboard } from "./StripeOnboard";
+import { StripeSuccessView } from "./StripeSuccessView";
+import { StripeDashboardView } from "./StripeDashboardView";
+import { StripeTransactionsView } from "./StripeTransactionsView";
+import { StripeRefundsView } from "./StripeRefundsView";
+import { StripePayoutsView } from "./StripePayoutsView";
+import { StripeRequestPayoutView } from "./StripeRequestPayoutView";
+import { StripeReviewPayoutView } from "./StripeReviewPayoutView";
+import { StripeProcessingWithdrawalView } from "./StripeProcessingWithdrawalView";
+import { StripeWithdrawalSuccessView } from "./StripeWithdrawalSuccessView";
+import { StripePayoutDetailsView } from "./StripePayoutDetailsView";
+import { StripeInsightsView } from "./StripeInsightsView";
+import { StripeHealthView } from "./StripeHealthView";
+import { StripeSettingsView } from "./StripeSettingsView";
 import { Toast, type ToastMessage } from "../Toast";
 
 export function MarketplaceView() {
@@ -29,6 +45,8 @@ export function MarketplaceView() {
 
   // 1. URL & Filter State
   const tabParam = searchParams.get("tab") as MarketplaceTab | null;
+  const categoryParam = searchParams.get("category");
+  const appParam = searchParams.get("app");
   const flowParam = searchParams.get("flow");
   const [internalTab, setInternalTab] = useState<MarketplaceTab>("explore");
   const [internalRazorpayFlow, setInternalRazorpayFlow] = useState<
@@ -69,7 +87,11 @@ export function MarketplaceView() {
     setInternalTab(tab);
     router.push(`/marketplace?tab=${tab}`, { scroll: false });
   };
-  const [activeCategory, setActiveCategory] = useState<MarketplaceCategory>("all");
+  const [activeCategory, setActiveCategory] = useState<MarketplaceCategory>(
+    categoryParam === "Payments" || categoryParam === "payments" || tabParam === ("payments" as any)
+      ? "Payments"
+      : "all"
+  );
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [sortOption, setSortOption] = useState<MarketplaceSortOption>("recommended");
 
@@ -95,6 +117,17 @@ export function MarketplaceView() {
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedApp, setSelectedApp] = useState<MarketplaceApp | null>(null);
+
+  // Auto-open drawer if requested via URL query (e.g. ?app=stripe)
+  useEffect(() => {
+    if (appParam && filteredApps.length > 0 && !selectedApp) {
+      const match = filteredApps.find((a) => a.slug === appParam || a.id === appParam);
+      if (match) {
+        setSelectedApp(match);
+        setIsDrawerOpen(true);
+      }
+    }
+  }, [appParam, filteredApps, selectedApp]);
 
   // 5. Standard Toast Notification State
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -133,7 +166,11 @@ export function MarketplaceView() {
         Boolean(app.isInstalled) ||
         app.statusType === "live" ||
         app.actionType === "open" ||
-        Boolean((app as any).configuration?.connected);
+        app.actionText === "Manage" ||
+        app.badge === "Connected" ||
+        Boolean((app as any).configuration?.connected) ||
+        Boolean((app as any).credentials) ||
+        Boolean((app as any).connected);
 
       if (isConnected) {
         setIsDrawerOpen(false);
@@ -157,6 +194,29 @@ export function MarketplaceView() {
         setSelectedApp(app);
         setIsDrawerOpen(true);
       }
+      return;
+    }
+
+    const isStripe = app.slug === "stripe" || app.iconName === "stripe";
+    if (isStripe) {
+      const isConnected =
+        Boolean(app.isInstalled) ||
+        app.statusType === "live" ||
+        app.actionType === "open" ||
+        app.actionText === "Manage" ||
+        app.badge === "Connected" ||
+        Boolean((app as any).configuration?.connected) ||
+        Boolean((app as any).credentials) ||
+        Boolean((app as any).connected);
+
+      if (isConnected) {
+        setIsDrawerOpen(false);
+        router.push("/marketplace?flow=stripe-dashboard", { scroll: false });
+        return;
+      }
+
+      setIsDrawerOpen(false);
+      router.push("/marketplace?flow=stripe-connect", { scroll: false });
       return;
     }
 
@@ -235,23 +295,27 @@ export function MarketplaceView() {
     <PosShell
       title="Marketplace"
       subtitle={
-        razorpayFlow === "dashboard"
-          ? "Razorpay Payments"
-          : razorpayFlow === "success"
-            ? "Connection Success"
-            : razorpayFlow === "api-keys"
-              ? "API Keys Setup"
-              : razorpayFlow === "onboarding"
-                ? "Razorpay Onboarding"
-                : razorpayFlow === "select-method"
-                  ? "Razorpay Setup"
-                  : activeTab === "wallet"
-                    ? "Wallet"
-                    : activeTab === "installed"
-                      ? "Installed Products"
-                      : activeTab === "purchases"
-                        ? "Subscriptions & Purchases"
-                        : "Integrations & Extensions"
+        flowParam === "stripe-api-keys"
+          ? "Stripe Credentials Setup"
+          : flowParam === "stripe-connect"
+            ? "Stripe Setup"
+            : razorpayFlow === "dashboard"
+            ? "Razorpay Payments"
+            : razorpayFlow === "success"
+              ? "Connection Success"
+              : razorpayFlow === "api-keys"
+                ? "API Keys Setup"
+                : razorpayFlow === "onboarding"
+                  ? "Razorpay Onboarding"
+                  : razorpayFlow === "select-method"
+                    ? "Razorpay Setup"
+                    : activeTab === "wallet"
+                      ? "Wallet"
+                      : activeTab === "installed"
+                        ? "Installed Products"
+                        : activeTab === "purchases"
+                          ? "Subscriptions & Purchases"
+                          : "Integrations & Extensions"
       }
     >
       {razorpayFlow === "dashboard" ? (
@@ -311,6 +375,162 @@ export function MarketplaceView() {
               mid: data.merchantId || cleanKeyId,
             });
             router.push(`/marketplace?${queryParams.toString()}`, { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-api-keys" ? (
+        <StripeApiKeysForm
+          embeddedInMarketplace={true}
+          onBack={() => {
+            router.push("/marketplace?flow=stripe-connect", { scroll: false });
+          }}
+          onVerify={async ({ publishableKey, secretKey }) => {
+            const res = await fetch("/api/payments/stripe/connect", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                publishableKey,
+                secretKey,
+              }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+              throw new Error(data.error || "Failed to verify and connect Stripe credentials.");
+            }
+            showToast("Stripe Connected Successfully!", "success", `${data.accountMode?.toUpperCase()} mode active`);
+            router.push("/marketplace?flow=stripe-dashboard", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-success" ? (
+        <StripeSuccessView
+          embeddedInMarketplace={true}
+          onGoToDashboard={() => {
+            router.push("/marketplace?flow=stripe-dashboard", { scroll: false });
+          }}
+          onReturnToMarketplace={() => {
+            router.push("/marketplace?category=Payments", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-dashboard" ||
+        flowParam === "stripe-transactions" ||
+        flowParam === "stripe-refunds" ||
+        flowParam === "stripe-payouts" ||
+        flowParam === "stripe-insights" ||
+        flowParam === "stripe-health" ||
+        flowParam === "stripe-settings" ? (
+        <StripeDashboardView
+          embeddedInMarketplace={true}
+          initialTab={
+            flowParam === "stripe-transactions"
+              ? "Transactions"
+              : flowParam === "stripe-refunds"
+                ? "Refunds"
+                : flowParam === "stripe-payouts"
+                  ? "Payouts"
+                  : flowParam === "stripe-insights"
+                    ? "Insights"
+                    : flowParam === "stripe-health"
+                      ? "Health"
+                      : flowParam === "stripe-settings"
+                        ? "Settings"
+                        : "Dashboard"
+          }
+          onNavigateToTransactions={() => {
+            router.push("/marketplace?flow=stripe-transactions", { scroll: false });
+          }}
+          onNavigateToRefunds={() => {
+            router.push("/marketplace?flow=stripe-refunds", { scroll: false });
+          }}
+          onNavigateToPayouts={() => {
+            router.push("/marketplace?flow=stripe-payouts", { scroll: false });
+          }}
+          onNavigateToHealth={() => {
+            router.push("/marketplace?flow=stripe-health", { scroll: false });
+          }}
+          onNavigateToSettings={() => {
+            router.push("/marketplace?flow=stripe-settings", { scroll: false });
+          }}
+          onNavigateToInsights={() => {
+            router.push("/marketplace?flow=stripe-insights", { scroll: false });
+          }}
+          onBackToMarketplace={() => {
+            router.push("/marketplace?category=Payments", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-request-payout" ? (
+        <StripeRequestPayoutView
+          embeddedInMarketplace={true}
+          onBackToPayouts={() => {
+            router.push("/marketplace?flow=stripe-payouts", { scroll: false });
+          }}
+          onContinueToReview={(amount) => {
+            router.push(`/marketplace?flow=stripe-review-payout&amount=${amount}`, { scroll: false });
+          }}
+          onNavigateToRefunds={() => {
+            router.push("/marketplace?flow=stripe-refunds", { scroll: false });
+          }}
+          onNavigateToTransactions={() => {
+            router.push("/marketplace?flow=stripe-transactions", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-review-payout" ? (
+        <StripeReviewPayoutView
+          embeddedInMarketplace={true}
+          onBack={() => {
+            router.push("/marketplace?flow=stripe-request-payout", { scroll: false });
+          }}
+          onConfirmPayout={(amount) => {
+            router.push(`/marketplace?flow=stripe-processing-payout&amount=${amount}`, { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-processing-payout" ? (
+        <StripeProcessingWithdrawalView
+          embeddedInMarketplace={true}
+          onComplete={() => {
+            showToast("Withdrawal processed successfully", "success", "Funds dispatched to primary account");
+            router.push("/marketplace?flow=stripe-withdrawal-success", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-withdrawal-success" ? (
+        <StripeWithdrawalSuccessView
+          embeddedInMarketplace={true}
+          onViewHistory={() => {
+            router.push("/marketplace?flow=stripe-payouts", { scroll: false });
+          }}
+          onBackToDashboard={() => {
+            router.push("/marketplace?flow=stripe-dashboard", { scroll: false });
+          }}
+          onViewDetails={(id) => {
+            router.push(`/marketplace?flow=stripe-payout-details&id=${encodeURIComponent(id)}`, { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-payout-details" ? (
+        <StripePayoutDetailsView
+          embeddedInMarketplace={true}
+          onBack={() => {
+            router.push("/marketplace?flow=stripe-payouts", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-connect" ? (
+        <StripeMethodSelection
+          embeddedInMarketplace={true}
+          onBackToMarketplace={() => {
+            router.push("/marketplace?category=Payments", { scroll: false });
+          }}
+          onSelectExistingAccount={() => {
+            router.push("/marketplace?flow=stripe-api-keys", { scroll: false });
+          }}
+          onSelectNewAccount={() => {
+            router.push("/marketplace?flow=stripe-onboarding", { scroll: false });
+          }}
+        />
+      ) : flowParam === "stripe-onboarding" ? (
+        <StripeOnboard
+          embeddedInMarketplace={true}
+          onBackToMarketplace={() => {
+            router.push("/marketplace?flow=stripe-connect", { scroll: false });
+          }}
+          onContinueWithStripe={() => {
+            showToast("Stripe Onboarding Window Ready", "success", "Stripe verification session initialized.");
           }}
         />
       ) : razorpayFlow === "select-method" ? (
@@ -411,6 +631,75 @@ export function MarketplaceView() {
                   />
                 ))}
               </section>
+
+              {/* Restaurant Operational Info Bento Cards (Rendered for Payments view matching reference design) */}
+              {activeCategory === "Payments" && (
+                <section
+                  id="restaurant-operational-bento"
+                  aria-label="Restaurant Operational Standards"
+                  className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 mt-2 sm:mt-4"
+                >
+                  {/* Card 1: Direct POS & Table Sync */}
+                  <div className="bg-[#FAF6F0] rounded-2xl p-5 sm:p-6 border border-[#E5DFD7] flex flex-col justify-between min-h-[190px] shadow-2xs">
+                    <div>
+                      <div className="w-9 h-9 rounded-lg bg-white/80 border border-[#E5DFD7] flex items-center justify-center text-[#0c0a09] mb-4">
+                        <span className="material-symbols-outlined text-[20px]">point_of_sale</span>
+                      </div>
+                      <h3 className="font-garamond text-lg sm:text-xl font-normal text-[#0c0a09] leading-snug">
+                        Direct POS &amp; Table Sync
+                      </h3>
+                      <p className="text-xs sm:text-[13px] text-[#5e5e5e] mt-2 leading-relaxed font-sans">
+                        Every guest transaction maps automatically to bill numbers, server assignments, and inventory batch deductions in real time.
+                      </p>
+                    </div>
+                    <div className="pt-4 mt-2 border-t border-[#E5DFD7]/60">
+                      <span className="text-[10px] tracking-wider font-semibold text-[#8C827A] uppercase">
+                        Zero Manual Reconciliation
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 2: Hospitality PCI-DSS Standards */}
+                  <div className="bg-[#FAF6F0] rounded-2xl p-5 sm:p-6 border border-[#E5DFD7] flex flex-col justify-between min-h-[190px] shadow-2xs">
+                    <div>
+                      <div className="w-9 h-9 rounded-lg bg-white/80 border border-[#E5DFD7] flex items-center justify-center text-[#0c0a09] mb-4">
+                        <span className="material-symbols-outlined text-[20px]">verified_user</span>
+                      </div>
+                      <h3 className="font-garamond text-lg sm:text-xl font-normal text-[#0c0a09] leading-snug">
+                        Hospitality PCI-DSS Standards
+                      </h3>
+                      <p className="text-xs sm:text-[13px] text-[#5e5e5e] mt-2 leading-relaxed font-sans">
+                        End-to-end tokenized card present and contactless payments to ensure stringent hospitality compliance across all POS stations.
+                      </p>
+                    </div>
+                    <div className="pt-4 mt-2 border-t border-[#E5DFD7]/60">
+                      <span className="text-[10px] tracking-wider font-semibold text-[#8C827A] uppercase">
+                        Bank-Grade Encryption
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Card 3: Automated Shift Payouts */}
+                  <div className="bg-[#FAF6F0] rounded-2xl p-5 sm:p-6 border border-[#E5DFD7] flex flex-col justify-between min-h-[190px] shadow-2xs">
+                    <div>
+                      <div className="w-9 h-9 rounded-lg bg-white/80 border border-[#E5DFD7] flex items-center justify-center text-[#0c0a09] mb-4">
+                        <span className="material-symbols-outlined text-[20px]">account_balance</span>
+                      </div>
+                      <h3 className="font-garamond text-lg sm:text-xl font-normal text-[#0c0a09] leading-snug">
+                        Automated Shift Payouts
+                      </h3>
+                      <p className="text-xs sm:text-[13px] text-[#5e5e5e] mt-2 leading-relaxed font-sans">
+                        Track tips, server pooled gratuities, and morning batch settlements directly to your business account with daily payout feeds.
+                      </p>
+                    </div>
+                    <div className="pt-4 mt-2 border-t border-[#E5DFD7]/60">
+                      <span className="text-[10px] tracking-wider font-semibold text-[#8C827A] uppercase">
+                        Next-Day Availability
+                      </span>
+                    </div>
+                  </div>
+                </section>
+              )}
 
               {/* Empty Search Feedback */}
               {filteredApps.length === 0 && (

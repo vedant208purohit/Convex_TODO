@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Toast, ToastMessage } from "./Toast";
@@ -293,10 +294,16 @@ function TimingScheduleDisplay({ timings }: { timings: any }) {
   );
 }
 
-type TabType = "general" | "serviceModes" | "cashier" | "kds";
+type TabType = "general" | "serviceModes" | "cashier" | "kds" | "paymentGateway";
 
 export function OrganizationFeatures() {
-  const [activeTab, setActiveTab] = useState<TabType>("general");
+  const searchParams = useSearchParams();
+  const initialSubtab = (searchParams?.get("subtab") || searchParams?.get("tab")) as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialSubtab && ["general", "serviceModes", "cashier", "kds", "paymentGateway"].includes(initialSubtab)
+      ? initialSubtab
+      : "general"
+  );
 
   // Feedback notifications (Standard Toast matching Menu page)
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -493,6 +500,8 @@ export function OrganizationFeatures() {
               <span>{activeModesCount} of 5 Modes Active</span>
             ) : activeTab === "kds" ? (
               <span>{activeKdsFlagsCount} of {KDS_FEATURES_CONFIG.length} Flags Active</span>
+            ) : activeTab === "paymentGateway" ? (
+              <span>1 Active Primary Gateway</span>
             ) : (
               <span>Store Features Active</span>
             )}
@@ -500,11 +509,11 @@ export function OrganizationFeatures() {
         </div>
 
         {/* Horizontal Header Tabs */}
-        <div className="flex items-center gap-8 text-sm font-medium pt-1">
+        <div className="flex items-center gap-8 text-sm font-medium pt-1 overflow-x-auto">
           <button
             type="button"
             onClick={() => setActiveTab("general")}
-            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === "general"
                 ? "text-[#141010] border-b-2 border-[#0c0a09] font-semibold"
                 : "text-[#5e5e5e] hover:text-[#141010]"
@@ -517,7 +526,7 @@ export function OrganizationFeatures() {
           <button
             type="button"
             onClick={() => setActiveTab("serviceModes")}
-            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === "serviceModes"
                 ? "text-[#141010] border-b-2 border-[#0c0a09] font-semibold"
                 : "text-[#5e5e5e] hover:text-[#141010]"
@@ -530,7 +539,7 @@ export function OrganizationFeatures() {
           <button
             type="button"
             onClick={() => setActiveTab("cashier")}
-            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === "cashier"
                 ? "text-[#141010] border-b-2 border-[#0c0a09] font-semibold"
                 : "text-[#5e5e5e] hover:text-[#141010]"
@@ -543,7 +552,7 @@ export function OrganizationFeatures() {
           <button
             type="button"
             onClick={() => setActiveTab("kds")}
-            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
               activeTab === "kds"
                 ? "text-[#141010] border-b-2 border-[#0c0a09] font-semibold"
                 : "text-[#5e5e5e] hover:text-[#141010]"
@@ -551,6 +560,19 @@ export function OrganizationFeatures() {
           >
             <span>Kitchen & KDS</span>
             {activeTab === "kds" && <span className="w-1.5 h-1.5 rounded-full bg-[#0c0a09]" />}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("paymentGateway")}
+            className={`pb-2.5 transition-colors cursor-pointer flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === "paymentGateway"
+                ? "text-[#141010] border-b-2 border-[#0c0a09] font-semibold"
+                : "text-[#5e5e5e] hover:text-[#141010]"
+            }`}
+          >
+            <span>Payment Gateway Selection</span>
+            {activeTab === "paymentGateway" && <span className="w-1.5 h-1.5 rounded-full bg-[#0c0a09]" />}
           </button>
         </div>
       </div>
@@ -587,6 +609,12 @@ export function OrganizationFeatures() {
           <KdsPrintingSection
             getFeatureFlag={getFeatureFlag}
             handleFeatureToggle={handleFeatureToggle}
+          />
+        )}
+        {activeTab === "paymentGateway" && (
+          <PaymentGatewaySection
+            org={org}
+            showToast={showToast}
           />
         )}
 
@@ -2071,6 +2099,399 @@ function KdsPrintingSection({ getFeatureFlag, handleFeatureToggle }: KdsPrinting
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ==========================================
+// 5. PAYMENT GATEWAY SELECTION SECTION
+// ==========================================
+
+interface PaymentGatewaySectionProps {
+  org: any;
+  showToast: (text: string, type?: "success" | "error") => void;
+}
+
+function PaymentGatewaySection({ org, showToast }: PaymentGatewaySectionProps) {
+  const router = useRouter();
+  const gatewayData = useQuery(api.paymentGateways.getActivePaymentGateway, {});
+  const setActiveGatewayMutation = useMutation(api.paymentGateways.setActivePaymentGateway);
+
+  const [pendingGateway, setPendingGateway] = useState<"razorpay" | "stripe" | null>(null);
+  const [isSwitching, setIsSwitching] = useState(false);
+
+  const activeGateway = gatewayData?.activeGateway ?? (org?.activePaymentGateway as "razorpay" | "stripe" | null) ?? null;
+  const razorpayConn = gatewayData?.razorpay;
+  const stripeConn = gatewayData?.stripe;
+
+  const isRazorpayConnected = Boolean(
+    razorpayConn?.status === "connected" ||
+    (org?.razorPayKeyId && org?.razorPayApiKey)
+  );
+  const isStripeConnected = Boolean(
+    stripeConn?.status === "connected" ||
+    (org?.stripePublishableKey && org?.stripeSecretKey)
+  );
+
+  const handleActivateClick = (target: "razorpay" | "stripe") => {
+    if (target === "razorpay" && !isRazorpayConnected) {
+      showToast("Cannot activate Razorpay: gateway is not connected. Please connect credentials first.", "error");
+      return;
+    }
+    if (target === "stripe" && !isStripeConnected) {
+      showToast("Cannot activate Stripe: gateway is not connected. Please connect credentials first.", "error");
+      return;
+    }
+
+    if (activeGateway === target) {
+      return;
+    }
+
+    // If switching from one active gateway to another, prompt confirmation
+    if (activeGateway && activeGateway !== target) {
+      setPendingGateway(target);
+      return;
+    }
+
+    executeActivation(target);
+  };
+
+  const executeActivation = async (provider: "razorpay" | "stripe" | "none") => {
+    setIsSwitching(true);
+    try {
+      await setActiveGatewayMutation({
+        organizationId: org?._id,
+        provider,
+      });
+      showToast(
+        provider === "none"
+          ? "Customer online payment gateway deactivated."
+          : `Active customer payment gateway switched to ${provider === "stripe" ? "Stripe" : "Razorpay"}.`
+      );
+      setPendingGateway(null);
+    } catch (err: any) {
+      showToast(err.message || "Failed to update payment gateway selection", "error");
+    } finally {
+      setIsSwitching(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-4xl pb-12 font-sans">
+      {/* Header Description */}
+      <div className="p-5 bg-white border border-[#e7e5e4] rounded-lg shadow-xs">
+        <div className="flex items-center gap-2.5 mb-1.5">
+          <span className="w-2.5 h-2.5 rounded-full bg-[#141010]" />
+          <h2 className="text-base font-semibold text-[#141010] tracking-tight">
+            Customer Checkout Gateway Selection
+          </h2>
+        </div>
+        <p className="text-xs text-[#5e5e5e] leading-relaxed">
+          Configure which connected payment gateway is used for online customer ordering and tableside checkout in pos-user.
+          Only one primary payment gateway can be active at a time for your store. Historical transactions, refunds, and payouts remain fully accessible regardless of the active selection.
+        </p>
+      </div>
+
+      {/* Neither Connected Warning */}
+      {!isRazorpayConnected && !isStripeConnected && (
+        <div className="p-5 bg-[#fff8f5] border border-[#e0d8d5] rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-full bg-[#faebe3] text-[#9e2a2b] flex items-center justify-center shrink-0 mt-0.5">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#141010]">No Payment Gateways Connected</p>
+              <p className="text-xs text-[#5e5e5e] mt-0.5">
+                Connect your Razorpay or Stripe merchant account through the Marketplace before selecting a primary gateway.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => router.push("/marketplace?category=Payments")}
+              className="px-3 py-1.5 bg-[#141010] text-white rounded text-xs font-semibold hover:bg-black transition-colors cursor-pointer"
+            >
+              Open Marketplace
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Gateway Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {/* ============================================================ */}
+        {/* CARD 1: RAZORPAY */}
+        {/* ============================================================ */}
+        <div
+          className={`p-6 bg-white rounded-lg border transition-all relative flex flex-col justify-between ${
+            activeGateway === "razorpay"
+              ? "border-[#141010] ring-1 ring-[#141010] shadow-sm"
+              : "border-[#e7e5e4] hover:border-[#a8a29e]"
+          }`}
+        >
+          {activeGateway === "razorpay" && (
+            <span className="absolute top-3.5 right-3.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#141010] text-white uppercase tracking-wider">
+              <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Active Gateway
+            </span>
+          )}
+
+          <div>
+            {/* Header info */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-[#141010] text-white flex items-center justify-center font-bold text-base font-serif shadow-xs">
+                R
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#141010]">Razorpay</h3>
+                <p className="text-[11px] text-[#78716c]">UPI, Indian Credit/Debit Cards, Netbanking & Wallets</p>
+              </div>
+            </div>
+
+            {/* Status pills */}
+            <div className="flex items-center gap-2 mb-4">
+              {isRazorpayConnected ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#ecfdf5] border border-[#a7f3d0] text-emerald-800 text-[11px] font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                  Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-stone-100 border border-stone-200 text-[#78716c] text-[11px] font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                  Not Connected
+                </span>
+              )}
+
+              {isRazorpayConnected && (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border ${
+                  razorpayConn?.accountMode === "live"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}>
+                  {razorpayConn?.accountMode === "live" ? "Live Mode" : "Test Mode"}
+                </span>
+              )}
+            </div>
+
+            {/* Merchant Details */}
+            <div className="space-y-1.5 py-3 border-t border-b border-[#f5f5f4] text-xs text-[#5e5e5e] mb-4">
+              <div className="flex justify-between">
+                <span>Account Name:</span>
+                <span className="font-mono text-[#141010] font-medium">
+                  {razorpayConn?.merchantName || org?.name || "Connected Merchant"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Account ID:</span>
+                <span className="font-mono text-[#141010]">
+                  {razorpayConn?.maskedKeyId || (org?.razorPayKeyId ? `rzp_...${org.razorPayKeyId.slice(-4)}` : "—")}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Supported Currencies:</span>
+                <span className="text-[#141010]">India (INR ₹)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action button */}
+          <div className="pt-2">
+            {activeGateway === "razorpay" ? (
+              <div className="w-full py-2.5 bg-[#f5f5f4] text-[#141010] border border-[#e7e5e4] rounded text-xs font-semibold text-center flex items-center justify-center gap-1.5">
+                <svg className="w-4 h-4 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Currently Active Checkout Gateway
+              </div>
+            ) : isRazorpayConnected ? (
+              <button
+                type="button"
+                onClick={() => handleActivateClick("razorpay")}
+                disabled={isSwitching}
+                className="w-full py-2.5 bg-[#141010] text-white hover:bg-black rounded text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                <span>Select as Active Gateway</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.push("/marketplace?category=Payments")}
+                className="w-full py-2.5 border border-[#e7e5e4] bg-[#fafaf9] text-[#141010] hover:bg-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5 text-[#78716c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span>Connect in Marketplace</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* ============================================================ */}
+        {/* CARD 2: STRIPE */}
+        {/* ============================================================ */}
+        <div
+          className={`p-6 bg-white rounded-lg border transition-all relative flex flex-col justify-between ${
+            activeGateway === "stripe"
+              ? "border-[#141010] ring-1 ring-[#141010] shadow-sm"
+              : "border-[#e7e5e4] hover:border-[#a8a29e]"
+          }`}
+        >
+          {activeGateway === "stripe" && (
+            <span className="absolute top-3.5 right-3.5 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#141010] text-white uppercase tracking-wider">
+              <svg className="w-3 h-3 text-white" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+              Active Gateway
+            </span>
+          )}
+
+          <div>
+            {/* Header info */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-[#141010] text-white flex items-center justify-center font-bold text-base font-serif shadow-xs">
+                S
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-[#141010]">Stripe</h3>
+                <p className="text-[11px] text-[#78716c]">Global Credit/Debit Cards, Apple Pay, Google Pay</p>
+              </div>
+            </div>
+
+            {/* Status pills */}
+            <div className="flex items-center gap-2 mb-4">
+              {isStripeConnected ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#ecfdf5] border border-[#a7f3d0] text-emerald-800 text-[11px] font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                  Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-stone-100 border border-stone-200 text-[#78716c] text-[11px] font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-stone-400" />
+                  Not Connected
+                </span>
+              )}
+
+              {isStripeConnected && (
+                <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider border ${
+                  stripeConn?.accountMode === "live"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-amber-50 text-amber-700 border-amber-200"
+                }`}>
+                  {stripeConn?.accountMode === "live" ? "Live Mode" : "Test Mode"}
+                </span>
+              )}
+            </div>
+
+            {/* Merchant Details */}
+            <div className="space-y-1.5 py-3 border-t border-b border-[#f5f5f4] text-xs text-[#5e5e5e] mb-4">
+              <div className="flex justify-between">
+                <span>Account Name:</span>
+                <span className="font-mono text-[#141010] font-medium">
+                  {stripeConn?.merchantName || org?.name || "Connected Merchant"}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Account ID:</span>
+                <span className="font-mono text-[#141010]">
+                  {stripeConn?.providerAccountId || (org?.stripePublishableKey ? `pk_...${org.stripePublishableKey.slice(-4)}` : "—")}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Supported Currencies:</span>
+                <span className="text-[#141010]">Multi-Currency (USD, EUR, GBP, INR)</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Action button */}
+          <div className="pt-2">
+            {activeGateway === "stripe" ? (
+              <div className="w-full py-2.5 bg-[#f5f5f4] text-[#141010] border border-[#e7e5e4] rounded text-xs font-semibold text-center flex items-center justify-center gap-1.5">
+                <svg className="w-4 h-4 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+                Currently Active Checkout Gateway
+              </div>
+            ) : isStripeConnected ? (
+              <button
+                type="button"
+                onClick={() => handleActivateClick("stripe")}
+                disabled={isSwitching}
+                className="w-full py-2.5 bg-[#141010] text-white hover:bg-black rounded text-xs font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs disabled:opacity-50"
+              >
+                <span>Select as Active Gateway</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => router.push("/marketplace/stripe")}
+                className="w-full py-2.5 border border-[#e7e5e4] bg-[#fafaf9] text-[#141010] hover:bg-white rounded text-xs font-medium transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <svg className="w-3.5 h-3.5 text-[#78716c]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span>Connect in Marketplace</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Confirmation Modal for Gateway Switch */}
+      {pendingGateway && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white border border-[#e7e5e4] rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-[#141010]">
+                  Switch Active Payment Gateway?
+                </h3>
+                <p className="text-xs text-[#78716c]">
+                  Active checkout gateway will change to {pendingGateway === "stripe" ? "Stripe" : "Razorpay"}.
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-[#5e5e5e] leading-relaxed">
+              Switching from <strong>{activeGateway === "stripe" ? "Stripe" : "Razorpay"}</strong> to{" "}
+              <strong>{pendingGateway === "stripe" ? "Stripe" : "Razorpay"}</strong> will immediately route all customer checkouts in <code>pos-user</code> through {pendingGateway === "stripe" ? "Stripe" : "Razorpay"}.
+              Historical payments, refunds, and reconciliation data for your previous gateway will remain fully preserved in your ledger.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setPendingGateway(null)}
+                disabled={isSwitching}
+                className="px-4 py-2 border border-[#e7e5e4] text-[#141010] hover:bg-[#fafaf9] rounded text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => executeActivation(pendingGateway)}
+                disabled={isSwitching}
+                className="px-4 py-2 bg-[#141010] hover:bg-black text-white rounded text-xs font-semibold cursor-pointer disabled:opacity-50"
+              >
+                {isSwitching ? "Activating..." : `Activate ${pendingGateway === "stripe" ? "Stripe" : "Razorpay"}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

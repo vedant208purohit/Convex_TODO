@@ -37,19 +37,94 @@ const mockRazorpayAppGenuinelyConnected: MarketplaceApp = {
   ...({ configuration: { connected: true } } as any),
 };
 
-const mockStripeApp: MarketplaceApp = {
+const mockStripeAppNotConnected: MarketplaceApp = {
   id: "app-stripe",
   slug: "stripe",
   title: "Stripe",
-  subtitle: "Global payment processing platform.",
+  subtitle: "Connect your Stripe account to accept payments for eligible restaurant orders.",
   vendor: "STRIPE",
   category: "Payments",
-  description: "Global credit and debit card processing.",
-  badge: "Available",
-  iconName: "credit_card",
-  statusText: "Available",
+  description:
+    "Connect your Stripe account to accept payments for eligible restaurant orders and manage payment activity directly through Prest.",
+  badge: "Recommended for Restaurants",
+  iconName: "stripe",
+  rating: "4.9/5",
+  version: "v4.2.0",
+  statusText: "Not Connected",
   statusType: "available",
   priceText: "Standard MDR",
+  priceAmount: 0,
+  actionText: "Connect",
+  actionType: "install",
+  isInstalled: false,
+};
+
+const mockStripeAppConnected: MarketplaceApp = {
+  ...mockStripeAppNotConnected,
+  isInstalled: true,
+  statusText: "Connected",
+  statusType: "live",
+  badge: "Connected",
+  actionText: "Manage",
+  actionType: "open",
+  ...({ configuration: { connected: true } } as any),
+};
+
+const mockPayPalCommerceApp: MarketplaceApp = {
+  id: "app-paypal",
+  slug: "paypal-commerce",
+  title: "PayPal Commerce",
+  subtitle: "Enable diners to pay with PayPal and Venmo for online pick-up orders and catering reservations.",
+  vendor: "PAYPAL",
+  category: "Payments",
+  description: "Enable diners to pay with PayPal and Venmo for online pick-up orders and catering reservations.",
+  badge: "Alternative",
+  iconName: "paypal",
+  rating: "4.7/5",
+  version: "v2.4.0",
+  statusText: "Not Installed",
+  statusType: "available",
+  priceText: "Standard Processing",
+  priceAmount: 0,
+  actionText: "Install App",
+  actionType: "install",
+  isInstalled: false,
+};
+
+const mockAdyenApp: MarketplaceApp = {
+  id: "app-adyen",
+  slug: "adyen",
+  title: "Adyen",
+  subtitle: "Unified terminal and e-commerce payment infrastructure designed for restaurant groups and franchise multi-location venues.",
+  vendor: "ADYEN",
+  category: "Payments",
+  description: "Unified terminal and e-commerce payment infrastructure designed for restaurant groups and franchise multi-location venues.",
+  badge: "Enterprise",
+  iconName: "adyen",
+  rating: "4.8/5",
+  version: "v3.1.0",
+  statusText: "Not Installed",
+  statusType: "available",
+  priceText: "Enterprise Rates",
+  priceAmount: 0,
+  actionText: "Install App",
+  actionType: "install",
+  isInstalled: false,
+};
+
+const mockGenericApp: MarketplaceApp = {
+  id: "app-generic",
+  slug: "kitchen-display",
+  title: "Kitchen Display System",
+  subtitle: "Realtime KDS display.",
+  vendor: "PREST",
+  category: "Operations",
+  description: "Realtime ticket kitchen routing.",
+  badge: "Available",
+  iconName: "kitchen",
+  statusText: "Available",
+  statusType: "available",
+  priceText: "Free",
   priceAmount: 0,
   actionText: "Install App",
   actionType: "install",
@@ -136,22 +211,114 @@ describe("MarketplaceCard — Reference Parity Verification", () => {
     expect(html).toContain("tune");
   });
 
-  it("strictly preserves other provider cards without modifying their icons, tags, or buttons", () => {
+  it("renders Stripe card matching Screen 1 reference design (Stripe logo, Recommended for Restaurants, 5 capabilities, Connect + View Details buttons)", () => {
     const html = renderToStaticMarkup(
       <MarketplaceCard
-        app={mockStripeApp}
+        app={mockStripeAppNotConnected}
         onActionClick={vi.fn()}
         onCardClick={vi.fn()}
         isPurchased={false}
       />
     );
 
-    // Stripe uses material symbol
+    // 1. Official Stripe SVG brand mark
+    expect(html).toContain('aria-label="Stripe"');
+    expect(html).toContain('viewBox="0 0 24 24"');
+
+    // 2. Provider name & category
+    expect(html).toContain("Stripe");
+    expect(html).toContain("Payments");
+
+    // 3. Recommended for Restaurants label
+    expect(html).toContain("Recommended for Restaurants");
+
+    // 4. Exact description from reference
+    expect(html).toContain(
+      "Connect your Stripe account to accept payments for eligible restaurant orders and manage payment activity directly through Prest."
+    );
+
+    // 5. 5 Supported capabilities / features
+    expect(html).toContain("Dine-in &amp; POS");
+    expect(html).toContain("Online Orders");
+    expect(html).toContain("QR Payments");
+    expect(html).toContain("Apple Pay");
+    expect(html).toContain("Cards");
+
+    // 6. Not Connected status with warm rust/stone dot
+    expect(html).toContain("Not Connected");
+    expect(html).toContain("bg-[#8B3A2B]");
+
+    // 7. Dual action buttons: Primary Connect + Secondary View Details
+    expect(html).toContain("Connect");
+    expect(html).toContain("View Details");
+    expect(html).toContain("arrow_forward");
+  });
+
+  it("renders Stripe card in Connected state with Manage button and connected indicator", () => {
+    const html = renderToStaticMarkup(
+      <MarketplaceCard
+        app={mockStripeAppConnected}
+        onActionClick={vi.fn()}
+        onCardClick={vi.fn()}
+        isPurchased={true}
+      />
+    );
+
+    // Connected badge and status
+    expect(html).toContain("Connected");
+    expect(html).toContain("bg-emerald-500");
+
+    // Primary action switches to Manage while keeping View Details
+    expect(html).toContain("Manage");
+    expect(html).toContain("View Details");
+  });
+
+  it("renders PayPal Commerce and Adyen provider cards with authentic styling and tags", () => {
+    const paypalHtml = renderToStaticMarkup(
+      <MarketplaceCard
+        app={mockPayPalCommerceApp}
+        onActionClick={vi.fn()}
+        onCardClick={vi.fn()}
+        isPurchased={false}
+      />
+    );
+    expect(paypalHtml).toContain("PayPal Commerce");
+    expect(paypalHtml).toContain("Alternative");
+    expect(paypalHtml).toContain("Venmo");
+    expect(paypalHtml).toContain("Online Pickup");
+    expect(paypalHtml).toContain("Pay Later");
+    expect(paypalHtml).toContain("Install App");
+
+    const adyenHtml = renderToStaticMarkup(
+      <MarketplaceCard
+        app={mockAdyenApp}
+        onActionClick={vi.fn()}
+        onCardClick={vi.fn()}
+        isPurchased={false}
+      />
+    );
+    expect(adyenHtml).toContain("Adyen");
+    expect(adyenHtml).toContain("Enterprise");
+    expect(adyenHtml).toContain("Smart Terminals");
+    expect(adyenHtml).toContain("Franchise Groups");
+    expect(adyenHtml).toContain("Unified Flow");
+    expect(adyenHtml).toContain("Install App");
+  });
+
+  it("strictly preserves other non-payment app cards with standard styling", () => {
+    const html = renderToStaticMarkup(
+      <MarketplaceCard
+        app={mockGenericApp}
+        onActionClick={vi.fn()}
+        onCardClick={vi.fn()}
+        isPurchased={false}
+      />
+    );
+
+    expect(html).toContain("Kitchen Display System");
+    expect(html).toContain("kitchen");
+    expect(html).not.toContain('aria-label="Stripe"');
     expect(html).not.toContain('aria-label="Razorpay"');
-    expect(html).toContain("credit_card");
-    // Does NOT render Razorpay-specific tags
-    expect(html).not.toContain("Net Banking");
-    // Uses standard neutral button styling
     expect(html).toContain("bg-[#fdf8f7]");
     expect(html).toContain("text-[#0c0a09]");
     expect(html).toContain("border-[#e7e5e4]");

@@ -30,7 +30,10 @@ export type AppBadge =
   | "Available"
   | "Popular"
   | "Partner"
-  | "Recommended for India";
+  | "Recommended for India"
+  | "Recommended for Restaurants"
+  | "Alternative"
+  | "Enterprise";
 
 export type AppStatusType =
   | "available"

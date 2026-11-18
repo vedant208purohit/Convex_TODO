@@ -154,5 +154,142 @@ describe("MarketplaceDetailDrawer — Screen 2 Reference Verification", () => {
     expect(html).not.toContain("India&#x27;s Leading Payment Gateway");
     expect(html).not.toContain("Connect Razorpay");
   });
+
+  it("renders Stripe Payments Details Drawer matching Screen 2 reference specifications", () => {
+    const mockStripeApp: MarketplaceApp = {
+      id: "app-stripe",
+      slug: "stripe",
+      title: "Stripe",
+      subtitle: "Connect your Stripe account to accept payments for eligible restaurant orders.",
+      vendor: "STRIPE",
+      category: "Payments",
+      description:
+        "Connect your Stripe account to accept payments for eligible restaurant orders and manage payment activity directly through Prest.",
+      badge: "Recommended for Restaurants",
+      iconName: "stripe",
+      rating: "4.9/5",
+      version: "v4.2.0",
+      statusText: "Not Connected",
+      statusType: "available",
+      priceText: "Pay-as-you-go",
+      priceAmount: 0,
+      actionText: "Connect",
+      actionType: "install",
+      isInstalled: false,
+    };
+
+    const html = renderToStaticMarkup(
+      <MarketplaceDetailDrawer
+        isOpen={true}
+        app={mockStripeApp}
+        walletBalance={14500}
+        onClose={vi.fn()}
+        onActionClick={vi.fn()}
+      />
+    );
+
+    // 1. Drawer overlay and dialog container
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('aria-label="Stripe Payments Details"');
+    expect(html).toContain("w-full sm:w-[500px] md:w-[580px]");
+
+    // 2. Drawer Header
+    expect(html).toContain("Stripe Payments");
+    expect(html).toContain("Official");
+    expect(html).toContain("Restaurant Payment Provider");
+    expect(html).toContain('aria-label="Stripe"'); // Authentic Stripe SVG icon
+
+    // 3. Intro text & Highlight Box
+    expect(html).toContain(
+      "Connect Stripe to receive customer payments for your restaurant and manage payment activity through Prest."
+    );
+    expect(html).toContain("Accept Restaurant Payments");
+    expect(html).toContain(
+      "Stripe processes eligible customer payments made through your connected restaurant ordering and payment channels. Connect your account to manage payment activity from Prest."
+    );
+
+    // 4. Restaurant Benefits Section with 4 Bento Cards
+    expect(html).toContain("Restaurant Benefits");
+    expect(html).toContain("Prest &amp; Stripe Core");
+
+    // Benefit 1
+    expect(html).toContain("Accept Customer Payments");
+    expect(html).toContain("payments");
+    expect(html).toContain(
+      "Receive payments for eligible restaurant orders through your connected Stripe account."
+    );
+
+    // Benefit 2
+    expect(html).toContain("Track Payments");
+    expect(html).toContain("query_stats");
+    expect(html).toContain(
+      "View payment status and related transaction information from Prest."
+    );
+
+    // Benefit 3
+    expect(html).toContain("Manage Refunds");
+    expect(html).toContain("assignment_return");
+    expect(html).toContain(
+      "Manage eligible payment refunds using the connected Stripe integration."
+    );
+
+    // Benefit 4
+    expect(html).toContain("Monitor Payouts");
+    expect(html).toContain("account_balance");
+    expect(html).toContain(
+      "View payout information reported by Stripe, where available."
+    );
+
+    // 5. Before Connecting Notice
+    expect(html).toContain("Before Connecting");
+    expect(html).toContain(
+      "Make sure you can access your Stripe account and the required account credentials or authorization permissions."
+    );
+
+    // 6. Action buttons
+    expect(html).toContain("Connect Stripe");
+    expect(html).toContain("arrow_forward");
+    expect(html).toContain("Close");
+  });
+
+  it("renders Stripe Payments Details Drawer in Connected state with Manage Stripe action", () => {
+    const mockConnectedStripeApp: MarketplaceApp = {
+      id: "app-stripe",
+      slug: "stripe",
+      title: "Stripe",
+      subtitle: "Connect your Stripe account to accept payments for eligible restaurant orders.",
+      vendor: "STRIPE",
+      category: "Payments",
+      description: "Connect your Stripe account to accept payments.",
+      badge: "Connected",
+      iconName: "stripe",
+      rating: "4.9/5",
+      version: "v4.2.0",
+      statusText: "Connected",
+      statusType: "live",
+      priceText: "Pay-as-you-go",
+      priceAmount: 0,
+      actionText: "Manage",
+      actionType: "open",
+      isInstalled: true,
+      ...({ configuration: { connected: true } } as any),
+    };
+
+    const html = renderToStaticMarkup(
+      <MarketplaceDetailDrawer
+        isOpen={true}
+        app={mockConnectedStripeApp}
+        walletBalance={14500}
+        onClose={vi.fn()}
+        onActionClick={vi.fn()}
+        isPurchased={true}
+      />
+    );
+
+    expect(html).toContain("Connected");
+    expect(html).toContain("Manage Stripe");
+    expect(html).toContain("tune");
+    expect(html).toContain("Close");
+  });
 });
 

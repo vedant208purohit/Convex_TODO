@@ -31,15 +31,64 @@ export function RazorpayIcon({
   );
 }
 
+/**
+ * Official Stripe brand logo mark vector (SVG).
+ */
+export function StripeIcon({
+  className = "w-5 h-5 sm:w-[22px] sm:h-[22px] lg:w-[24px] lg:h-[24px]",
+}: {
+  className?: string;
+}) {
+  return (
+    <svg
+      role="img"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+      aria-label="Stripe"
+    >
+      <path d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697.5 12.52.5 7.02.5 3.09 3.398 3.09 8.289c0 5.438 4.675 6.772 8.683 8.238 2.378.868 3.385 1.554 3.385 2.502 0 .981-.884 1.488-2.277 1.488-2.41 0-5.184-1.077-7.05-2.078l-.947 5.568c1.986.993 4.965 1.493 7.997 1.493 5.766 0 9.774-2.83 9.774-7.85 0-5.698-4.708-6.938-8.679-8.498z" />
+    </svg>
+  );
+}
+
+export function PayPalIcon({
+  className = "w-5 h-5",
+}: {
+  className?: string;
+}) {
+  return (
+    <span className={`font-serif font-bold text-lg italic tracking-tighter text-[#0c0a09] ${className}`}>
+      PP
+    </span>
+  );
+}
+
+export function AdyenIcon({
+  className = "w-5 h-5",
+}: {
+  className?: string;
+}) {
+  return (
+    <span className={`font-serif font-bold text-base tracking-tight lowercase text-[#0c0a09] ${className}`}>
+      adyen
+    </span>
+  );
+}
+
 export function MarketplaceCard({
   app,
   onActionClick,
   onCardClick,
   isPurchased = false,
 }: MarketplaceCardProps) {
-  // Determine if this is the hero app (PREST WhatsApp Automation) or Razorpay
+  // Determine provider types
   const isHeroApp = app.slug === "prest-whatsapp-automation";
   const isRazorpay = app.slug === "razorpay" || app.iconName === "razorpay";
+  const isStripe = app.slug === "stripe" || app.iconName === "stripe";
+  const isPayPal = app.slug === "paypal-commerce" || app.iconName === "paypal";
+  const isAdyen = app.slug === "adyen" || app.iconName === "adyen";
 
   // Check if Razorpay has an authentic connected merchant setup
   const isRazorpayConnected = Boolean(
@@ -53,22 +102,47 @@ export function MarketplaceCard({
         (app as any).connected)
   );
 
+  // Check if Stripe has an authentic connected merchant setup
+  const isStripeConnected = Boolean(
+    isStripe &&
+      (isPurchased ||
+        app.isInstalled ||
+        app.statusType === "live" ||
+        app.badge === "Connected" ||
+        (app as any).configuration?.connected ||
+        (app as any).credentials ||
+        (app as any).connected)
+  );
+
   // Compute dynamic badge text and styling
-  const badgeText = isRazorpay
-    ? isRazorpayConnected
-      ? app.badge === "Connected"
-        ? "Connected"
-        : isPurchased
-          ? "Installed"
-          : "Connected"
-      : (app.badge || "Recommended for India")
-    : isPurchased
-      ? "Installed"
-      : app.badge;
+  const badgeText = isStripe
+    ? isStripeConnected
+      ? "Connected"
+      : (app.badge || "Recommended for Restaurants")
+    : isRazorpay
+      ? isRazorpayConnected
+        ? app.badge === "Connected"
+          ? "Connected"
+          : isPurchased
+            ? "Installed"
+            : "Connected"
+        : (app.badge || "Recommended for India")
+      : isPurchased
+        ? "Installed"
+        : app.badge;
   
   const getBadgeClass = () => {
+    if (badgeText === "Recommended for Restaurants" || app.badge === "Recommended for Restaurants") {
+      return "bg-[#faf8f5] text-[#494541] border border-[#e7e5e4]";
+    }
     if (badgeText === "Recommended for India" || app.badge === "Recommended for India") {
       return "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]";
+    }
+    if (badgeText === "Alternative" || app.badge === "Alternative") {
+      return "bg-[#faf8f5] text-[#5e5e5e] border border-[#e7e5e4]";
+    }
+    if (badgeText === "Enterprise" || app.badge === "Enterprise") {
+      return "bg-[#faf8f5] text-[#5e5e5e] border border-[#e7e5e4]";
     }
     if (isPurchased || app.badge === "Installed") {
       return "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]";
@@ -86,6 +160,9 @@ export function MarketplaceCard({
   };
 
   const getStatusDot = () => {
+    if (isStripe) {
+      return isStripeConnected ? "bg-emerald-500" : "bg-[#8B3A2B]";
+    }
     if (isRazorpay && !isRazorpayConnected) {
       return "bg-[#a8a29e]";
     }
@@ -108,6 +185,9 @@ export function MarketplaceCard({
   };
 
   const getStatusText = () => {
+    if (isStripe) {
+      return isStripeConnected ? "Connected" : "Not Connected";
+    }
     if (isRazorpay) {
       if (isRazorpayConnected) {
         return "Connected & Active";
@@ -120,9 +200,11 @@ export function MarketplaceCard({
     return app.statusText;
   };
 
-  const appDescription = isRazorpay
-    ? "Accept UPI, Cards, Wallets, EMI and Net Banking payments."
-    : app.description;
+  const appDescription = isStripe
+    ? "Connect your Stripe account to accept payments for eligible restaurant orders and manage payment activity directly through Prest."
+    : isRazorpay
+      ? "Accept UPI, Cards, Wallets, EMI and Net Banking payments."
+      : app.description;
 
   const getButtonContent = () => {
     if (isRazorpay) {
@@ -250,11 +332,19 @@ export function MarketplaceCard({
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
             <div
               className={`w-10 h-10 sm:w-11 sm:h-11 lg:w-12 lg:h-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs ${
-                isHeroApp ? "bg-[#0c0a09] text-white" : "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
+                isHeroApp || isStripe
+                  ? "bg-[#0c0a09] text-white"
+                  : "bg-[#fdf8f7] text-[#0c0a09] border border-[#e7e5e4]"
               }`}
             >
-              {isRazorpay ? (
+              {isStripe ? (
+                <StripeIcon className="w-5 h-5 sm:w-[22px] sm:h-[22px] lg:w-[24px] lg:h-[24px] text-white" />
+              ) : isRazorpay ? (
                 <RazorpayIcon className="w-5 h-5 sm:w-[22px] sm:h-[22px] lg:w-[24px] lg:h-[24px]" />
+              ) : isPayPal ? (
+                <PayPalIcon />
+              ) : isAdyen ? (
+                <AdyenIcon />
               ) : (
                 <span className="material-symbols-outlined text-[20px] sm:text-[23px] lg:text-[26px]">
                   {app.iconName}
@@ -275,7 +365,7 @@ export function MarketplaceCard({
             <span
               className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-0.5 sm:px-2.5 sm:py-0.5 rounded-full text-[10px] sm:text-[11px] uppercase font-semibold shrink-0 self-start mt-0.5 ${getBadgeClass()}`}
             >
-              {!(isRazorpay && !isRazorpayConnected) && (
+              {!(isRazorpay && !isRazorpayConnected) && !(isStripe && !isStripeConnected) && (
                 <span className={`w-1.5 h-1.5 rounded-full ${getStatusDot()}`} />
               )}
               <span className="whitespace-nowrap">{badgeText}</span>
@@ -288,6 +378,20 @@ export function MarketplaceCard({
           {appDescription}
         </p>
 
+        {/* Stripe Feature Labels */}
+        {isStripe && (
+          <div className="flex flex-wrap gap-1.5 -mt-1 sm:-mt-1.5">
+            {["Dine-in & POS", "Online Orders", "QR Payments", "Apple Pay", "Cards"].map((tag) => (
+              <span
+                key={tag}
+                className="bg-[#faf8f5] text-[#554F4A] font-medium text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-md border border-[#e7e5e4]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Razorpay Payment Method Tags */}
         {isRazorpay && (
           <div className="flex flex-wrap gap-1.5 -mt-1 sm:-mt-1.5">
@@ -295,6 +399,34 @@ export function MarketplaceCard({
               <span
                 key={tag}
                 className="bg-[#fdf8f7] text-[#5e5e5e] font-medium text-[10px] sm:text-[11px] px-2 py-0.5 rounded border border-[#e7e5e4]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* PayPal Feature Tags */}
+        {isPayPal && (
+          <div className="flex flex-wrap gap-1.5 -mt-1 sm:-mt-1.5">
+            {["Venmo", "Online Pickup", "Pay Later"].map((tag) => (
+              <span
+                key={tag}
+                className="bg-[#faf8f5] text-[#554F4A] font-medium text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-md border border-[#e7e5e4]"
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {/* Adyen Feature Tags */}
+        {isAdyen && (
+          <div className="flex flex-wrap gap-1.5 -mt-1 sm:-mt-1.5">
+            {["Smart Terminals", "Franchise Groups", "Unified Flow"].map((tag) => (
+              <span
+                key={tag}
+                className="bg-[#faf8f5] text-[#554F4A] font-medium text-[10px] sm:text-[11px] px-2.5 py-0.5 rounded-md border border-[#e7e5e4]"
               >
                 {tag}
               </span>
@@ -330,16 +462,44 @@ export function MarketplaceCard({
 
       {/* Action Button Footer */}
       <div className="pt-3.5 sm:pt-4 lg:pt-5 mt-auto">
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onActionClick(app);
-          }}
-          className={getButtonClass()}
-        >
-          {getButtonContent()}
-        </button>
+        {isStripe ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onActionClick(app);
+              }}
+              className="flex-1 py-2 sm:py-2.5 px-3 rounded-xl bg-[#0c0a09] hover:bg-[#262626] active:scale-[0.99] text-white font-medium text-xs sm:text-sm tracking-wide transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs border border-[#0c0a09]"
+            >
+              <span>{isStripeConnected ? "Manage" : "Connect"}</span>
+              <span className="material-symbols-outlined text-[16px]">
+                {isStripeConnected ? "open_in_new" : "arrow_forward"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCardClick(app);
+              }}
+              className="px-3.5 py-2 sm:py-2.5 border border-[#e7e5e4] text-[#494541] rounded-xl text-xs font-medium hover:bg-[#faf8f5] transition-colors cursor-pointer"
+            >
+              View Details
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onActionClick(app);
+            }}
+            className={getButtonClass()}
+          >
+            {getButtonContent()}
+          </button>
+        )}
       </div>
     </article>
   );
