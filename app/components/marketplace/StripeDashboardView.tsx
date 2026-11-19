@@ -37,6 +37,15 @@ export const STRIPE_TABS: StripeTab[] = [
   "Settings",
 ];
 
+function normalizeOrderType(raw?: string): string {
+  if (!raw) return "Dine-in";
+  const s = raw.toLowerCase().replace(/[-_\s]/g, "");
+  if (s.includes("take") || s.includes("pickup")) return "Takeaway";
+  if (s.includes("deliv")) return "Delivery";
+  if (s.includes("dine")) return "Dine-in";
+  return raw;
+}
+
 interface StripeDashboardViewProps {
   embeddedInMarketplace?: boolean;
   initialTab?: StripeTab;
@@ -359,7 +368,7 @@ export function StripeDashboardView({
         id: tx.providerPaymentId,
         orderId: tx.metadata?.orderNumber || tx.prestOrderNumber || tx.orderId || `PREST-${String(tx.providerPaymentId || "").slice(-4)}`,
         customer: tx.customerName || tx.customerEmail || "Guest Customer",
-        orderType: tx.metadata?.orderType || "Dine-in",
+        orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
         itemsSummary: tx.metadata?.itemsSummary || "Order items",
         amountFormatted: formatAmount((tx.amountMinor || 0) / 100),
         method: tx.paymentMethod?.toUpperCase() || "CARD",
@@ -372,7 +381,7 @@ export function StripeDashboardView({
         id: tx.id || tx.providerPaymentId,
         orderId: tx.metadata?.orderNumber || tx.orderNumber || tx.prestOrderNumber || tx.orderId || "PREST-1024",
         customer: tx.customerName || "Customer",
-        orderType: tx.orderType || "Dine-in",
+        orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
         itemsSummary: tx.metadata?.itemsSummary || tx.itemsSummary || "Order items",
         amountFormatted: typeof tx.amount === "number" ? formatAmount(tx.amount) : tx.amount,
         method: tx.method || "Visa •••• 4242",

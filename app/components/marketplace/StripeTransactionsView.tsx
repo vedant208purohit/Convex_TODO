@@ -31,6 +31,14 @@ export interface StripeTransactionItem {
   totalCollected?: number;
 }
 
+function normalizeOrderType(raw?: string): "Dine-in" | "Takeaway" | "Delivery" {
+  if (!raw) return "Dine-in";
+  const s = raw.toLowerCase().replace(/[-_\s]/g, "");
+  if (s.includes("take") || s.includes("pickup")) return "Takeaway";
+  if (s.includes("deliv")) return "Delivery";
+  return "Dine-in";
+}
+
 interface StripeTransactionsViewProps {
   embeddedInMarketplace?: boolean;
   onBackToDashboard?: () => void;
@@ -108,7 +116,7 @@ export function StripeTransactionsView({
             orderNumber: tx.metadata?.orderNumber || tx.prestOrderNumber || tx.orderId || `PREST-${String(tx._id || "").slice(-4)}`,
             customerName: tx.customerName || tx.metadata?.customerName || "Customer",
             customerEmail: tx.customerEmail || tx.metadata?.customerEmail || "customer@example.com",
-            orderType: (tx.metadata?.orderType as any) || "Dine-in",
+            orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
             table: tx.metadata?.table,
             itemsSummary: tx.metadata?.itemsSummary || tx.description || "Order items",
             amount: (tx.amountMinor || 0) / 100,
@@ -144,7 +152,7 @@ export function StripeTransactionsView({
         orderNumber: tx.metadata?.orderNumber || tx.prestOrderNumber || tx.orderId || `PREST-${String(tx._id || "").slice(-4)}`,
         customerName: tx.customerName || tx.metadata?.customerName || "Customer",
         customerEmail: tx.customerEmail || tx.metadata?.customerEmail || "customer@example.com",
-        orderType: (tx.metadata?.orderType as any) || "Dine-in",
+        orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
         table: tx.metadata?.table,
         itemsSummary: tx.metadata?.itemsSummary || tx.description || "Order items",
         amount: (tx.amountMinor || 0) / 100,
@@ -640,7 +648,7 @@ export function StripeTransactionsView({
                               : "moped"}
                         </span>
                         <span>{tx.orderType}</span>
-                        {tx.table && (
+                        {tx.orderType === "Dine-in" && tx.table && (
                           <span className="text-[11px] text-[#7f7570]">({tx.table})</span>
                         )}
                       </span>
@@ -848,7 +856,7 @@ export function StripeTransactionsView({
                   <div>
                     <span className="text-[#7f7570] block text-[11px]">Service Type</span>
                     <span className="font-medium">
-                      {selectedTx.orderType} {selectedTx.table ? `(Table ${selectedTx.table.replace("T", "")})` : ""}
+                      {selectedTx.orderType} {selectedTx.orderType === "Dine-in" && selectedTx.table ? `(Table ${selectedTx.table.replace("T", "")})` : ""}
                     </span>
                   </div>
                   <div>

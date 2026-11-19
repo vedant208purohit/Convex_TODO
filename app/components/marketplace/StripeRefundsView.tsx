@@ -20,6 +20,14 @@ export interface StripeRefundItem {
   createdDate: string;
 }
 
+function normalizeOrderType(raw?: string): "Dine-in" | "Takeaway" | "Delivery" {
+  if (!raw) return "Dine-in";
+  const s = raw.toLowerCase().replace(/[-_\s]/g, "");
+  if (s.includes("take") || s.includes("pickup")) return "Takeaway";
+  if (s.includes("deliv")) return "Delivery";
+  return "Dine-in";
+}
+
 interface StripeRefundsViewProps {
   embeddedInMarketplace?: boolean;
   initialTransactionId?: string;
@@ -123,7 +131,7 @@ export function StripeRefundsView({
           paymentId: r.providerPaymentId || "pi_unknown",
           orderNumber: r.orderId || `PREST-${String(r._id || "").slice(-4)}`,
           customerName: r.customerName || "Customer",
-          orderType: (r.orderType as any) || "Dine-in",
+          orderType: normalizeOrderType(r.orderType || r.metadata?.orderType),
           itemsSummary: r.itemsSummary || r.reason || "Refunded item",
           kitchenNote: r.notes?.kitchenNote || (r.reason ? `Reason: ${r.reason}` : undefined),
           refundAmount: (r.amountMinor || 0) / 100,
@@ -150,7 +158,7 @@ export function StripeRefundsView({
         paymentId: r.providerPaymentId || "pi_unknown",
         orderNumber: r.orderId || `PREST-${String(r._id || "").slice(-4)}`,
         customerName: r.customerName || "Customer",
-        orderType: (r.orderType as any) || "Dine-in",
+        orderType: normalizeOrderType(r.orderType || r.metadata?.orderType),
         itemsSummary: r.itemsSummary || r.reason || "Refunded item",
         kitchenNote: r.notes?.kitchenNote || (r.reason ? `Reason: ${r.reason}` : undefined),
         refundAmount: (r.amountMinor || 0) / 100,

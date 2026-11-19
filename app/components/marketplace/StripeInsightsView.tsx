@@ -44,9 +44,18 @@ export function StripeInsightsView({
   const totalVolume = totalVolumeMinor / 100;
   const avgTicket = txList.length > 0 ? totalVolume / txList.length : 0;
 
-  const dineInTx = txList.filter((tx: any) => (tx.metadata?.orderType || "").toLowerCase().includes("dine"));
-  const takeawayTx = txList.filter((tx: any) => (tx.metadata?.orderType || "").toLowerCase().includes("take"));
-  const deliveryTx = txList.filter((tx: any) => (tx.metadata?.orderType || "").toLowerCase().includes("deliv"));
+  const dineInTx = txList.filter((tx: any) => {
+    const ot = (tx.orderType || tx.metadata?.orderType || "Dine-in").toLowerCase();
+    return ot.includes("dine") || (!ot.includes("take") && !ot.includes("pickup") && !ot.includes("deliv"));
+  });
+  const takeawayTx = txList.filter((tx: any) => {
+    const ot = (tx.orderType || tx.metadata?.orderType || "").toLowerCase();
+    return ot.includes("take") || ot.includes("pickup");
+  });
+  const deliveryTx = txList.filter((tx: any) => {
+    const ot = (tx.orderType || tx.metadata?.orderType || "").toLowerCase();
+    return ot.includes("deliv");
+  });
 
   const dineInVolume = dineInTx.reduce((sum: number, tx: any) => sum + (tx.amountMinor || 0), 0) / 100;
   const takeawayVolume = takeawayTx.reduce((sum: number, tx: any) => sum + (tx.amountMinor || 0), 0) / 100;

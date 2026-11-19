@@ -67,18 +67,18 @@ function getOrderTableDisplay(
     orderType?: string;
   } | null,
 ): string {
-  if (order?.table && order.table.number) {
-    return formatTableDisplay(order.table.number);
-  }
   const type = order?.orderType;
-  if (type === "DineIn") {
-    return "Direct Dine-In";
-  }
   if (type === "Delivery" || type === "ScheduledDelivery") {
     return "Delivery";
   }
   if (type === "TakeAway" || type === "ScheduledPickup") {
     return "Counter / Takeaway";
+  }
+  if (order?.table && order.table.number) {
+    return formatTableDisplay(order.table.number);
+  }
+  if (type === "DineIn") {
+    return "Direct Dine-In";
   }
   return "N/A";
 }
@@ -104,10 +104,12 @@ function getOrderWaiterDisplay(
 
 function formatOrderTypeLabel(type?: string): string {
   if (!type) return "Dine-In";
-  if (type === "ScheduledPickup") return "Scheduled Pickup";
-  if (type === "ScheduledDelivery") return "Scheduled Delivery";
-  if (type === "TakeAway") return "Takeaway";
-  if (type === "DineIn") return "Dine-In";
+  const normalized = type.toLowerCase().replace(/[-_\s]/g, "");
+  if (normalized === "scheduledpickup") return "Scheduled Pickup";
+  if (normalized === "scheduleddelivery") return "Scheduled Delivery";
+  if (normalized.includes("take") || normalized.includes("pickup")) return "Takeaway";
+  if (normalized.includes("deliv")) return "Delivery";
+  if (normalized.includes("dine")) return "Dine-In";
   return type.replace(/([A-Z])/g, " $1").trim();
 }
 
