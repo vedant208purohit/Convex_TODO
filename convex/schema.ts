@@ -163,6 +163,20 @@ export default defineSchema({
     ownerClerkId: v.optional(v.string()),
     provisioningToken: v.optional(v.string()),
     timestamp: v.optional(v.number()),
+
+    // Onboarding State & Attributes
+    onboardingCompleted: v.optional(v.boolean()),
+    onboardingStep: v.optional(v.number()),
+    onboardingCompletedAt: v.optional(v.number()),
+    businessType: v.optional(v.string()), // "fsg" | "qsr" | "fc" | "cafe" | "bakery" | "bar" | "truck" | "ghost" | "other"
+    locationsCount: v.optional(v.string()), // "one" | "multiple"
+    floorModel: v.optional(v.string()), // "table" | "counter" | "hybrid"
+    deliveryFleetType: v.optional(v.string()), // "inhouse" | "thirdparty" | "blended"
+    operatingHoursTemplate: v.optional(v.string()), // "standard" | "custom" | "later"
+    suiteUnit: v.optional(v.string()),
+    language: v.optional(v.string()),
+    onboardingDismissedBanner: v.optional(v.boolean()),
+    onboardingChecklist: v.optional(v.array(v.number())),
   })
     .index("by_legacy_id", ["legacyId"])
     .index("by_slug", ["slug"]),

@@ -17,8 +17,8 @@ export default function SignUpPage() {
             routing="path"
             path="/sign-up"
             signInUrl="/sign-in"
-            fallbackRedirectUrl="/"
-            forceRedirectUrl="/"
+            fallbackRedirectUrl="/onboarding"
+            forceRedirectUrl="/onboarding"
             appearance={{
               variables: {
                 colorPrimary: "#6366f1",
@@ -33,8 +33,6 @@ export default function SignUpPage() {
                 rootBox: "w-full",
                 cardBox: "w-full shadow-2xl rounded-xl",
                 card: "auth-clerk-card",
-                footer: "hidden",
-                footerAction: "hidden",
                 headerTitle: "text-white font-bold text-xl",
                 headerSubtitle: "text-slate-300 text-sm",
                 socialButtonsBlockButton:
@@ -50,9 +48,24 @@ export default function SignUpPage() {
                 identityPreviewEditButtonIcon: "text-indigo-400",
                 dividerLine: "bg-slate-700",
                 dividerText: "text-slate-400 text-xs uppercase font-medium",
+                footerAction: "text-slate-400 text-sm",
+                footerActionText: "text-slate-400 text-sm",
+                footerActionLink: "text-indigo-400 hover:text-indigo-300 font-semibold",
               },
             }}
           />
+        </div>
+
+        <div className="mt-4 text-center">
+          <p className="text-sm text-slate-400">
+            Already have an account?{" "}
+            <a
+              href="/sign-in"
+              className="text-indigo-400 hover:text-indigo-300 font-semibold underline underline-offset-2 transition-colors"
+            >
+              Sign in
+            </a>
+          </p>
         </div>
 
         <p className="auth-footer">Secure restaurant workspace for authorized users.</p>

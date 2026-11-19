@@ -77,18 +77,16 @@ export function DashboardSubBar({
             </div>
             <ul className="space-y-1.5 text-xs text-secondary list-disc pl-4">
               <li>
-                Drag cards via the <strong>Drag handle</strong> to reorder.
+                Drag any card directly to reorder widgets across the canvas.
               </li>
               <li>
-                Click <strong>Cols pill</strong> or bottom-right handle to cycle
-                widths (4, 6, 8, 12).
+                Click <strong>Edit</strong> in the top bar to enter edit mode, customize widgets, or add new ones.
               </li>
               <li>
-                Press <strong>Apply Canvas</strong> to persist modifications to
-                your profile.
+                Resize widgets using the bottom-right corner handle or <strong>⚙ Settings</strong> (4, 6, 8, 12 cols).
               </li>
               <li>
-                Switch between shift views with the preset templates tray below.
+                Press <strong>Apply Canvas</strong> to save your customized layout.
               </li>
             </ul>
           </div>

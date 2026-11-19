@@ -23,12 +23,12 @@
   color-scheme: light !important;
   --background: #fdf8f7;
   --foreground: #1c1b1b;
-  --color-canvas: #f5f5f5;
-  --color-canvas-soft: #fafafa;
+  --color-canvas: #fdf8f7;
+  --color-canvas-soft: #fff8f5;
   --color-surface: #fdf8f7;
-  --color-surface-bright: #fdf8f7;
-  --color-surface-container: #f1edec;
-  --color-surface-container-low: #f7f3f2;
+  --color-surface-bright: #fff8f5;
+  --color-surface-container: #fcf8f5;
+  --color-surface-container-low: #faf2ee;
   --color-surface-container-lowest: #ffffff;
   --color-surface-variant: #e6e1e1;
   --color-hairline: #e7e5e4;
@@ -484,9 +484,32 @@ select:-webkit-autofill:focus {
   background-color: #334155 !important;
 }
 
-/* ---------- Footer hide ---------- */
-.cl-footer,
-.cl-internal-b382ii {
+/* ---------- Footer / Sign-up & Sign-in navigation fix ---------- */
+.cl-footer {
+  background-color: transparent !important;
+  border-top: 1px solid #334155 !important;
+}
+
+.cl-footerAction,
+.cl-footerActionText {
+  color: #94a3b8 !important;
+  font-size: 0.875rem !important;
+}
+
+.cl-footerActionLink {
+  color: #818cf8 !important;
+  font-weight: 600 !important;
+}
+
+.cl-footerActionLink:hover {
+  color: #a5b4fc !important;
+  text-decoration: underline !important;
+}
+
+/* Hide Clerk branding watermark only, keep footerAction intact */
+.cl-internal-b382ii,
+.cl-internal-157h20p,
+.cl-userButtonPopoverFooter {
   display: none !important;
 }
 

@@ -706,6 +706,8 @@ export const create = mutation({
     status: v.optional(v.string()),
     userType: v.array(v.string()),
     userPermission: v.optional(v.any()),
+    provisioningToken: v.optional(v.string()),
+    timestamp: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     if (!args.userId || !args.userId.trim()) {
@@ -720,16 +722,30 @@ export const create = mutation({
 
     const org = await resolveStoreOrganization(ctx, args.organizationId);
 
-    // Authorization: If members already exist, require admin rights.
-    // If no active members exist in the store, allow initial bootstrapping.
-    const allMembers = await ctx.db
-      .query("organizationUsers")
-      .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-      .collect();
+    // If valid server-to-server provisioning token is provided, authorize directly
+    const isProvisioning =
+      args.provisioningToken &&
+      args.timestamp &&
+      process.env.PROVISIONING_SECRET;
 
-    const activeMembers = allMembers.filter((m) => m.deletedAt === undefined);
-    if (activeMembers.length > 0) {
-      await requireAdmin(ctx, org._id);
+    if (isProvisioning) {
+      await requireProvisioningAuth(ctx, {
+        slug: org.slug,
+        provisioningToken: args.provisioningToken,
+        timestamp: args.timestamp,
+      });
+    } else {
+      // Authorization: If members already exist, require admin rights.
+      // If no active members exist in the store, allow initial bootstrapping.
+      const allMembers = await ctx.db
+        .query("organizationUsers")
+        .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+        .collect();
+
+      const activeMembers = allMembers.filter((m) => m.deletedAt === undefined);
+      if (activeMembers.length > 0) {
+        await requireAdmin(ctx, org._id);
+      }
     }
 
     const normalizedTypes = validateAndNormalizeUserTypes(args.userType);

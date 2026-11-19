@@ -145,7 +145,7 @@ export function QueueWaitingCustomersWidget({
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-xs flex flex-col gap-1.5 my-auto min-h-[110px] justify-center">
+      <div className="bg-[#fcf8f5] border border-[#f3ede6] rounded-lg p-space-xs flex flex-col gap-1.5 my-auto min-h-[110px] justify-center">
         {waitingList.length === 0 ? (
           <div className="text-center py-4 text-xs text-secondary">
             No parties currently on waitlist
@@ -322,7 +322,7 @@ export function QueueRecentCalloutsWidget({
         </span>
       </div>
 
-      <div className="bg-surface-container rounded-DEFAULT p-space-xs flex flex-col gap-1.5 my-auto min-h-[110px] justify-center">
+      <div className="bg-[#fcf8f5] border border-[#f3ede6] rounded-lg p-space-xs flex flex-col gap-1.5 my-auto min-h-[110px] justify-center">
         {calledList.length === 0 ? (
           <div className="text-center py-4 text-xs text-secondary">
             No recently paged or seated parties

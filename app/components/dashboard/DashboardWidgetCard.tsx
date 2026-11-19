@@ -37,6 +37,7 @@ interface Props {
   fromTimestamp?: number;
   toTimestamp?: number;
   dateLabel?: string;
+  isEditMode?: boolean;
 }
 
 export function DashboardWidgetCard({
@@ -61,6 +62,7 @@ export function DashboardWidgetCard({
   fromTimestamp,
   toTimestamp,
   dateLabel,
+  isEditMode = false,
 }: Props) {
   const [showConfigModal, setShowConfigModal] = useState(false);
 
@@ -155,100 +157,49 @@ export function DashboardWidgetCard({
         </>
       )}
 
-      {/* Edit State Indicator Overlay Outline (Subtle border on hover) */}
-      <div className="absolute inset-0 rounded-DEFAULT pointer-events-none transition-all shadow-none group-hover:shadow-[inset_0_0_0_2px_#7f7570]" />
+      {/* Edit State Indicator Overlay Outline (Subtle border on hover only in Edit Mode) */}
+      {isEditMode && (
+        <div className="absolute inset-0 rounded-DEFAULT pointer-events-none transition-all shadow-none group-hover:shadow-[inset_0_0_0_2px_#7f7570]" />
+      )}
 
-      {/* Floating Edit Badge Toolbar (Appears on Hover) */}
-      <div
-        className={`absolute -top-3.5 right-4 z-20 flex items-center gap-1 bg-primary text-on-primary px-2.5 py-1 rounded-full shadow-lg transition-all duration-200 ${
-          showConfigModal
-            ? "opacity-100 pointer-events-auto translate-y-0 scale-100"
-            : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto -translate-y-1 group-hover:translate-y-0 scale-95 group-hover:scale-100"
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
+      {/* Floating Edit Badge Toolbar (Only in Edit Mode) */}
+      {isEditMode && (
         <div
-          className="flex items-center gap-1 pr-1 cursor-grab active:cursor-grabbing hover:text-secondary-fixed text-label-sm font-label-sm"
-          title="Drag anywhere on card or handle to reorder"
+          className={`absolute -top-3.5 right-4 z-20 flex items-center gap-1 bg-[#141010] text-white px-2 py-1 rounded-full shadow-lg transition-all duration-200 ${
+            showConfigModal
+              ? "opacity-100 pointer-events-auto translate-y-0 scale-100"
+              : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto -translate-y-1 group-hover:translate-y-0 scale-95 group-hover:scale-100"
+          }`}
+          onClick={(e) => e.stopPropagation()}
         >
-          <span className="material-symbols-outlined text-[16px]">drag_indicator</span>
-          <span>Drag</span>
+          <button
+            type="button"
+            draggable={false}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowConfigModal(!showConfigModal);
+            }}
+            className="p-1 hover:text-stone-300 transition-colors cursor-pointer"
+            title="Widget Options"
+          >
+            <span className="material-symbols-outlined text-[15px]">settings</span>
+          </button>
+          <button
+            type="button"
+            draggable={false}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(placement.widgetId);
+            }}
+            className="p-1 hover:text-red-400 transition-colors cursor-pointer"
+            title="Remove Widget"
+          >
+            <span className="material-symbols-outlined text-[15px]">close</span>
+          </button>
         </div>
-
-        {/* Quick Shift Buttons */}
-        {canMoveEarlier && onMoveEarlier && (
-          <button
-            type="button"
-            draggable={false}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onMoveEarlier(index);
-            }}
-            className="p-0.5 hover:text-secondary-fixed transition-colors cursor-pointer"
-            title="Move Earlier"
-          >
-            <span className="material-symbols-outlined text-[14px]">chevron_left</span>
-          </button>
-        )}
-        {canMoveLater && onMoveLater && (
-          <button
-            type="button"
-            draggable={false}
-            onMouseDown={(e) => e.stopPropagation()}
-            onClick={(e) => {
-              e.stopPropagation();
-              onMoveLater(index);
-            }}
-            className="p-0.5 hover:text-secondary-fixed transition-colors cursor-pointer"
-            title="Move Later"
-          >
-            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-          </button>
-        )}
-
-        <span className="w-px h-3 bg-surface-tint" />
-        <button
-          type="button"
-          draggable={false}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            cycleWidth();
-          }}
-          className="px-1.5 py-0.5 rounded bg-surface-container-high/30 hover:bg-surface-container-high/50 text-surface text-label-sm font-label-sm transition-colors cursor-pointer"
-          title="Click to cycle column width (4, 6, 8, 12)"
-        >
-          {placement.width} Cols
-        </button>
-        <span className="w-px h-3 bg-surface-tint" />
-        <button
-          type="button"
-          draggable={false}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowConfigModal(!showConfigModal);
-          }}
-          className="p-1 hover:text-secondary-fixed transition-colors cursor-pointer"
-          title="Widget Options"
-        >
-          <span className="material-symbols-outlined text-[15px]">settings</span>
-        </button>
-        <button
-          type="button"
-          draggable={false}
-          onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(placement.widgetId);
-          }}
-          className="p-1 hover:text-error transition-colors cursor-pointer"
-          title="Remove Widget"
-        >
-          <span className="material-symbols-outlined text-[15px]">close</span>
-        </button>
-      </div>
+      )}
 
       {/* Actual Live Widget Renderer */}
       <div
@@ -267,23 +218,25 @@ export function DashboardWidgetCard({
         />
       </div>
 
-      {/* Corner Resize Handle */}
-      <button
-        type="button"
-        draggable={false}
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          cycleWidth();
-        }}
-        className="absolute bottom-1.5 right-1.5 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 text-outline hover:text-primary transition-all cursor-pointer opacity-0 group-hover:opacity-100"
-        title="Click to resize columns"
-      >
-        <svg fill="currentColor" height="10" viewBox="0 0 10 10" width="10">
-          <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z"></path>
-          <path d="M5 5 L7 5 L7 7 L5 7 Z"></path>
-        </svg>
-      </button>
+      {/* Corner Resize Handle (Only in Edit Mode) */}
+      {isEditMode && (
+        <button
+          type="button"
+          draggable={false}
+          onMouseDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            cycleWidth();
+          }}
+          className="absolute bottom-1.5 right-1.5 w-4 h-4 cursor-se-resize flex items-end justify-end p-0.5 text-stone-400 hover:text-stone-900 transition-all cursor-pointer opacity-0 group-hover:opacity-100"
+          title="Click to cycle column width (4, 6, 8, 12)"
+        >
+          <svg fill="currentColor" height="10" viewBox="0 0 10 10" width="10">
+            <path d="M8 2 L10 2 L10 10 L2 10 L2 8 L8 8 Z"></path>
+            <path d="M5 5 L7 5 L7 7 L5 7 Z"></path>
+          </svg>
+        </button>
+      )}
 
       {/* Widget Settings Tooltip/Modal */}
       {showConfigModal && (
@@ -301,7 +254,7 @@ export function DashboardWidgetCard({
               <span className="material-symbols-outlined text-[16px]">close</span>
             </button>
           </div>
-          <div className="py-2 space-y-2 text-body-sm font-body-sm">
+          <div className="py-2 text-body-sm font-body-sm">
             <div className="flex justify-between items-center">
               <span className="text-secondary">Width Span:</span>
               <div className="flex gap-1">
@@ -323,10 +276,6 @@ export function DashboardWidgetCard({
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="flex justify-between items-center pt-1">
-              <span className="text-secondary">Data Cadence:</span>
-              <span className="font-medium text-xs">Realtime WebSocket</span>
             </div>
           </div>
         </div>

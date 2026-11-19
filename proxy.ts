@@ -6,6 +6,8 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
   "/login(.*)",
   "/api/printers(.*)",
+  "/api/places(.*)",
+  "/api/store/provision(.*)",
   "/api/payments/razorpay/webhook(.*)",
   "/api/marketplace/razorpay/webhook(.*)",
 ]);

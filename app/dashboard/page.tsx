@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useMutation } from "convex/react";
 import { PosShell } from "../components/PosShell";
 import { api } from "../../convex/_generated/api";
@@ -206,6 +207,7 @@ function getWidgetTitle(widgetId: string): string {
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const organizations = useQuery(api.organizations.list);
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
 
@@ -213,6 +215,18 @@ export default function DashboardPage() {
     api.organizationUsers.getCurrentMembership,
     activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
+
+  // Onboarding guard:
+  // If no store organization exists at all, redirect to /onboarding to create one.
+  // Once an organization exists, allow access to the dashboard. The user can always
+  // use the "Back to Onboarding Checklist" button in the top bar whenever they wish to view the checklist.
+  useEffect(() => {
+    if (organizations !== undefined && currentMembership !== undefined) {
+      if (organizations.length === 0) {
+        router.replace("/onboarding");
+      }
+    }
+  }, [organizations, currentMembership, router]);
 
   const dashboardData = useQuery(
     api.dashboards.getDashboard,
@@ -306,6 +320,9 @@ export default function DashboardPage() {
 
   // Widget Removal Confirmation Modal state
   const [widgetToRemove, setWidgetToRemove] = useState<{ widgetId: string; title: string } | null>(null);
+
+  // Edit Mode state (Default: false / clean view mode)
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // Track initial sync from backend
   const hasLoadedInitialPlacements = useRef(false);
@@ -449,6 +466,7 @@ export default function DashboardPage() {
     const packed = pack12ColumnGrid(updated);
     setPlacements(packed);
     persistDraft(packed);
+    setIsEditMode(true);
   };
 
   const handleApplyCanvas = async () => {
@@ -462,6 +480,7 @@ export default function DashboardPage() {
           dashboardId: dashboardData.dashboard._id,
         });
       }
+      setIsEditMode(false);
     } catch (err) {
       console.error("Failed to apply canvas:", err);
     } finally {
@@ -488,6 +507,7 @@ export default function DashboardPage() {
         configuration: p.configuration,
       }));
       setPlacements(mapped);
+      setIsEditMode(false);
     } catch (err) {
       console.error("Failed to discard draft:", err);
     } finally {
@@ -666,9 +686,11 @@ export default function DashboardPage() {
   return (
     <PosShell title="Dashboard">
       <div className="flex flex-col w-full min-h-screen bg-surface">
-        {/* Sticky Control Bar: Unified Compact Bar with Calendar, Guides, Add Widget, Reset & Apply */}
+        {/* Sticky Control Bar: Unified Compact Bar with Calendar, Guides, Edit Toggle, Add Widget, Reset & Apply */}
         <DashboardControlBar
           modificationCount={modificationCount}
+          isEditMode={isEditMode}
+          onToggleEditMode={() => setIsEditMode((prev) => !prev)}
           onOpenAddDrawer={() => setIsAddDrawerOpen(true)}
           onResetDefaults={handleResetDefaults}
           onDiscard={handleDiscard}
@@ -687,13 +709,9 @@ export default function DashboardPage() {
         />
 
         {/* Main 12-Column Canvas Layout */}
-        <div
-          className={`p-margin mx-auto w-full transition-all duration-300 ${
-            gridResolution === "Compact 1200px" ? "max-w-[1200px]" : "max-w-[1440px]"
-          }`}
-        >
+        <div className="p-margin w-full transition-all duration-300">
           <div
-            className="grid grid-cols-12 gap-gutter relative"
+            className="grid grid-cols-12 gap-gutter relative w-full"
             id="layout-grid"
             onDragOver={(e) => {
               e.preventDefault();
@@ -735,17 +753,20 @@ export default function DashboardPage() {
                   fromTimestamp={startDate.getTime()}
                   toTimestamp={endDate.getTime()}
                   dateLabel={selectedPreset}
+                  isEditMode={isEditMode}
                 />
               );
             })}
 
-            {/* Empty Custom Slot at Canvas Bottom */}
-            <DashboardAddSlot
-              onOpenDrawer={() => setIsAddDrawerOpen(true)}
-              onQuickAdd={handleAddWidget}
-              onDropWidgetAtEnd={handleDropAtEnd}
-              isDraggingAny={draggedIndex !== null}
-            />
+            {/* Empty Custom Slot at Canvas Bottom (Visible in Edit Mode or while dragging) */}
+            {(isEditMode || draggedIndex !== null) && (
+              <DashboardAddSlot
+                onOpenDrawer={() => setIsAddDrawerOpen(true)}
+                onQuickAdd={handleAddWidget}
+                onDropWidgetAtEnd={handleDropAtEnd}
+                isDraggingAny={draggedIndex !== null}
+              />
+            )}
           </div>
         </div>
 
@@ -758,6 +779,7 @@ export default function DashboardPage() {
             placedWidgetIds={placedWidgetIds}
             placements={placements}
             onAddWidget={handleAddWidget}
+            onResetDefaults={handleResetDefaults}
             dateRangePreset={dateRangePresetArg}
             fromTimestamp={selectedPreset === "Custom Range" ? startDate.getTime() : undefined}
             toTimestamp={selectedPreset === "Custom Range" ? endDate.getTime() : undefined}
