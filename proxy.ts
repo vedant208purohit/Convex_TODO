@@ -8,6 +8,8 @@ const isPublicRoute = createRouteMatcher([
   "/api/printers(.*)",
   "/api/places(.*)",
   "/api/store/provision(.*)",
+  "/api/payments/razorpay/webhook(.*)",
+  "/api/marketplace/razorpay/webhook(.*)",
 ]);
 
 const clerkHandler = clerkMiddleware(async (auth, req) => {

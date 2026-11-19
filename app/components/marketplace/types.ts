@@ -24,11 +24,13 @@ export type MarketplaceSortOption =
 export type AppBadge =
   | "Featured"
   | "Installed"
+  | "Connected"
   | "Live"
   | "Attention"
   | "Available"
   | "Popular"
-  | "Partner";
+  | "Partner"
+  | "Recommended for India";
 
 export type AppStatusType =
   | "available"

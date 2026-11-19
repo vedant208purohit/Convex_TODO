@@ -2,6 +2,7 @@ import { mutation, query, QueryCtx, MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { requireProvisioningAuth } from "./organizations";
+import { resolveOrganizationCurrency } from "../lib/constants/countries";
 
 // ----------------------------------------------------
 // VALID USER TYPES & DEFAULT PERMISSIONS
@@ -506,10 +507,18 @@ export const getStoreAdminContext = query({
       throw new Error("Forbidden. Admin access required.");
     }
 
+    const storeCurrencyInfo = resolveOrganizationCurrency(org);
+
     return {
       organizationId: org._id,
       slug: org.slug,
       name: org.name,
+      country: org.country,
+      defaultCurrency: org.defaultCurrency,
+      defaultCurrencySymbol: org.defaultCurrencySymbol,
+      organizationTimeZone: org.organizationTimeZone,
+      storeCurrency: storeCurrencyInfo.code,
+      storeCurrencyInfo,
       callerUserId: callerMember?.userId || subject,
       callerRoles: callerMember?.userType || ["admin"],
     };
