@@ -694,7 +694,39 @@ export const recordTransaction = mutation({
       )
       .first();
 
-    const effectiveInternalOrderId = args.internalOrderId ?? existing?.internalOrderId;
+    let effectiveInternalOrderId = args.internalOrderId ?? existing?.internalOrderId;
+    const candidateOrderId =
+      effectiveInternalOrderId ||
+      args.providerOrderId ||
+      existing?.providerOrderId ||
+      args.metadata?.orderId ||
+      existing?.metadata?.orderId ||
+      args.metadata?.prestOrderId ||
+      existing?.metadata?.prestOrderId ||
+      args.metadata?.internalOrderId ||
+      existing?.metadata?.internalOrderId;
+
+    if (!effectiveInternalOrderId && candidateOrderId) {
+      try {
+        const norm = ctx.db.normalizeId("orders", String(candidateOrderId));
+        if (norm) {
+          effectiveInternalOrderId = norm;
+        }
+      } catch (_) {}
+    }
+
+    if (!effectiveInternalOrderId && args.providerPaymentId) {
+      try {
+        const payDoc = await ctx.db
+          .query("orderPayments")
+          .filter((q) => q.eq(q.field("transactionReference"), args.providerPaymentId))
+          .first();
+        if (payDoc?.orderId) {
+          effectiveInternalOrderId = payDoc.orderId;
+        }
+      } catch (_) {}
+    }
+
     let orderDoc: any = null;
     if (effectiveInternalOrderId) {
       try {
@@ -710,14 +742,15 @@ export const recordTransaction = mutation({
     };
 
     if (orderDoc) {
-      if (!mergedMetadata.orderType && orderDoc.orderType) {
-        mergedMetadata.orderType = orderDoc.orderType;
-      }
+      // Order document is the single source of truth for order type and order number
+      mergedMetadata.orderType = orderDoc.orderType;
       if (!mergedMetadata.orderNumber && orderDoc.orderNumber) {
         mergedMetadata.orderNumber = orderDoc.orderNumber;
       }
-      if (orderDoc.orderType === "DineIn" && !mergedMetadata.table) {
+      if (orderDoc.orderType === "DineIn") {
         mergedMetadata.table = orderDoc.table?.number || orderDoc.tableId;
+      } else {
+        delete mergedMetadata.table;
       }
     }
 
@@ -1525,17 +1558,77 @@ export const listTransactions = query({
         let orderNumber = r.metadata?.orderNumber;
         let table = r.metadata?.table;
 
-        if ((!orderType || !orderNumber) && r.internalOrderId) {
+        // 1. Resolve internal order ID if missing
+        let effectiveOrderId = r.internalOrderId;
+        if (!effectiveOrderId) {
+          const candidate =
+            r.providerOrderId ||
+            r.metadata?.orderId ||
+            r.metadata?.prestOrderId ||
+            r.metadata?.internalOrderId;
+          if (candidate) {
+            try {
+              const norm = ctx.db.normalizeId("orders", String(candidate));
+              if (norm) {
+                effectiveOrderId = norm;
+              }
+            } catch (_) {}
+          }
+        }
+
+        // 2. If still missing, check orderPayments
+        if (!effectiveOrderId && r.providerPaymentId) {
           try {
-            const linkedOrder: any = await ctx.db.get(r.internalOrderId);
+            const payDoc = await ctx.db
+              .query("orderPayments")
+              .filter((q) => q.eq(q.field("transactionReference"), r.providerPaymentId))
+              .first();
+            if (payDoc?.orderId) {
+              effectiveOrderId = payDoc.orderId;
+            }
+          } catch (_) {}
+        }
+
+        // 3. If still missing, check orderNumber within organization
+        if (!effectiveOrderId && (orderNumber || r.metadata?.orderNumber)) {
+          const targetNum = orderNumber || r.metadata?.orderNumber;
+          try {
+            const ordByNum = await ctx.db
+              .query("orders")
+              .withIndex("by_org", (q) => q.eq("organizationId", r.organizationId))
+              .filter((q) => q.eq(q.field("orderNumber"), targetNum))
+              .first();
+            if (ordByNum) {
+              effectiveOrderId = ordByNum._id;
+            }
+          } catch (_) {}
+        }
+
+        // 4. Fetch linked order from database (Single Source of Truth)
+        if (effectiveOrderId) {
+          try {
+            const linkedOrder: any = await ctx.db.get(effectiveOrderId);
             if (linkedOrder) {
-              orderType = orderType || linkedOrder.orderType;
-              orderNumber = orderNumber || linkedOrder.orderNumber;
-              if (linkedOrder.orderType === "DineIn" && !table) {
+              // The linked order document is authoritative
+              orderType = linkedOrder.orderType;
+              orderNumber = linkedOrder.orderNumber;
+              if (linkedOrder.orderType === "DineIn") {
                 table = linkedOrder.table?.number || linkedOrder.tableId;
+              } else {
+                table = undefined;
               }
             }
           } catch (_) {}
+        }
+
+        // 5. Fallback if linkedOrder was not found
+        if (!orderType) {
+          orderType =
+            r.metadata?.orderType ||
+            r.metadata?.order_type ||
+            r.metadata?.serviceMode ||
+            r.orderType ||
+            "DineIn";
         }
 
         // Strictly isolate table metadata to DineIn orders
@@ -1543,20 +1636,20 @@ export const listTransactions = query({
           table = undefined;
         }
 
-        const enrichedMetadata = {
+        const enrichedMetadata: Record<string, any> = {
           ...(r.metadata || {}),
-          ...(orderType ? { orderType } : {}),
+          orderType,
           ...(orderNumber ? { orderNumber } : {}),
           ...(table ? { table } : {}),
         };
-        if (orderType && orderType !== "DineIn") {
+        if (orderType !== "DineIn") {
           delete enrichedMetadata.table;
         }
 
         return {
           ...r,
           amountMinor: extractTransactionAmountMinor(r),
-          orderType: orderType || "DineIn",
+          orderType,
           metadata: enrichedMetadata,
         };
       })
@@ -3267,14 +3360,14 @@ export const processWebhookEvent = mutation({
             ...incomingMeta,
           };
           if (linkedOrderDoc) {
-            if (!mergedWebhookMeta.orderType && linkedOrderDoc.orderType) {
-              mergedWebhookMeta.orderType = linkedOrderDoc.orderType;
-            }
+            mergedWebhookMeta.orderType = linkedOrderDoc.orderType;
             if (!mergedWebhookMeta.orderNumber && linkedOrderDoc.orderNumber) {
               mergedWebhookMeta.orderNumber = linkedOrderDoc.orderNumber;
             }
-            if (linkedOrderDoc.orderType === "DineIn" && !mergedWebhookMeta.table) {
+            if (linkedOrderDoc.orderType === "DineIn") {
               mergedWebhookMeta.table = linkedOrderDoc.table?.number || linkedOrderDoc.tableId;
+            } else {
+              delete mergedWebhookMeta.table;
             }
           }
           if (mergedWebhookMeta.orderType && mergedWebhookMeta.orderType !== "DineIn") {
@@ -3340,14 +3433,14 @@ export const processWebhookEvent = mutation({
 
           const incomingInsertMeta: Record<string, any> = { ...(stripeObj.metadata || {}) };
           if (newOrderDoc) {
-            if (!incomingInsertMeta.orderType && newOrderDoc.orderType) {
-              incomingInsertMeta.orderType = newOrderDoc.orderType;
-            }
+            incomingInsertMeta.orderType = newOrderDoc.orderType;
             if (!incomingInsertMeta.orderNumber && newOrderDoc.orderNumber) {
               incomingInsertMeta.orderNumber = newOrderDoc.orderNumber;
             }
-            if (newOrderDoc.orderType === "DineIn" && !incomingInsertMeta.table) {
+            if (newOrderDoc.orderType === "DineIn") {
               incomingInsertMeta.table = newOrderDoc.table?.number || newOrderDoc.tableId;
+            } else {
+              delete incomingInsertMeta.table;
             }
           }
           if (incomingInsertMeta.orderType && incomingInsertMeta.orderType !== "DineIn") {

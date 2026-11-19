@@ -2276,6 +2276,19 @@ export const confirmOrderPayment = mutation({
         )
         .first();
 
+      const txnMetadata: Record<string, any> = {
+        ...(existingTxn?.metadata || {}),
+        orderNumber: order.orderNumber,
+        orderType: order.orderType,
+        itemsCount: orderItems.length,
+        itemsSummary,
+      };
+      if (order.orderType === "DineIn") {
+        txnMetadata.table = (order as any).table?.number || (order as any).tableId;
+      } else {
+        delete txnMetadata.table;
+      }
+
       if (existingTxn) {
         await ctx.db.patch(existingTxn._id, {
           internalOrderId: order._id,
@@ -2287,14 +2300,7 @@ export const confirmOrderPayment = mutation({
           customerName: order.customerName || existingTxn.customerName,
           customerEmail: order.customerEmail || existingTxn.customerEmail,
           customerPhone: order.customerPhone || existingTxn.customerPhone,
-          metadata: {
-            ...(existingTxn.metadata || {}),
-            orderNumber: order.orderNumber,
-            orderType: order.orderType,
-            table: order.orderType === "DineIn" ? ((order as any).table?.number || (order as any).tableId) : undefined,
-            itemsCount: orderItems.length,
-            itemsSummary,
-          },
+          metadata: txnMetadata,
           updatedAt: now,
         });
       } else {
@@ -2313,13 +2319,7 @@ export const confirmOrderPayment = mutation({
           customerName: order.customerName,
           customerEmail: order.customerEmail,
           customerPhone: order.customerPhone,
-          metadata: {
-            orderNumber: order.orderNumber,
-            orderType: order.orderType,
-            table: order.orderType === "DineIn" ? ((order as any).table?.number || (order as any).tableId) : undefined,
-            itemsCount: orderItems.length,
-            itemsSummary,
-          },
+          metadata: txnMetadata,
           createdAt: now,
           updatedAt: now,
         });
