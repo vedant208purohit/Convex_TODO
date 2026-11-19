@@ -353,10 +353,10 @@ export function AddWidgetDrawer({
     }
   }, [isOpen]);
 
-  // Query general catalog for other categories
+  // Query general catalog for other categories (only when open)
   const catalogQuery = useQuery(
     api.dashboards.listAvailableWidgets,
-    organizationId
+    organizationId && isOpen
       ? {
           organizationId,
           category: selectedCategory === "All" ? undefined : selectedCategory,
@@ -365,545 +365,85 @@ export function AddWidgetDrawer({
   );
   const otherWidgets = useMemo(() => catalogQuery || [], [catalogQuery]);
 
-  // Real widget telemetry for Orders parameterized by the active dashboard date range
-  const queryArgs = {
-    organizationId,
-    dateRangePreset: (dateRangePreset as any) || ("today" as const),
-    fromTimestamp,
-    toTimestamp,
-  };
+  // Static preview maps for drawer catalog cards (Zero Live Database Queries)
+  const emptyDataMap = useMemo(() => new Map<string, any>(), []);
+  const menuDataMap = emptyDataMap;
+  const cashierDataMap = emptyDataMap;
+  const queueDataMap = emptyDataMap;
+  const customerDataMap = emptyDataMap;
+  const surveyDataMap = emptyDataMap;
+  const overviewDataMap = emptyDataMap;
 
-  const totalOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_total_volume", ...queryArgs } : "skip",
-  );
-  const liveOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_live_feed", ...queryArgs } : "skip",
-  );
-  const statusDistributionData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_by_status", ...queryArgs } : "skip",
-  );
-  const highValueOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId ? { widgetId: "orders_high_value", ...queryArgs } : "skip",
-  );
-  const delayedOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId
-      ? { widgetId: "orders_delayed_alerts", ...queryArgs }
-      : "skip",
-  );
-  const ordersOverTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId
-      ? { widgetId: "orders_volume_over_time", ...queryArgs }
-      : "skip",
-  );
-
-  // Real widget telemetry for KDS parameterized by the active dashboard date range
-  const kdsLiveOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS"
-      ? { widgetId: "kds_live_orders", ...queryArgs }
-      : "skip",
-  );
-  const kdsPendingTicketsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS"
-      ? { widgetId: "kds_pending_tickets", ...queryArgs }
-      : "skip",
-  );
-  const kdsStationQueueData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS"
-      ? { widgetId: "kds_station_queue", ...queryArgs }
-      : "skip",
-  );
-  const kdsStatusBreakdownData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS"
-      ? { widgetId: "kds_status_breakdown", ...queryArgs }
-      : "skip",
-  );
-  const kdsAvgPrepTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS"
-      ? { widgetId: "kds_avg_prep_time", ...queryArgs }
-      : "skip",
-  );
-  const kdsDelayAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "KDS"
-      ? { widgetId: "kds_delay_alerts", ...queryArgs }
-      : "skip",
-  );
-
-  // Real widget telemetry for Workstation parameterized by active date range
-  const wsOrderSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_order_summary", ...queryArgs }
-      : "skip",
-  );
-  const wsOrdersByWsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_orders_by_workstation", ...queryArgs }
-      : "skip",
-  );
-  const wsActiveTasksData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_active_tasks", ...queryArgs }
-      : "skip",
-  );
-  const wsQueueData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_queue", ...queryArgs }
-      : "skip",
-  );
-  const wsPrepTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_prep_time", ...queryArgs }
-      : "skip",
-  );
-  const wsDelayedOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_delayed_orders", ...queryArgs }
-      : "skip",
-  );
-  const wsPerformanceData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_performance", ...queryArgs }
-      : "skip",
-  );
-  const wsAvailabilityData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Workstation"
-      ? { widgetId: "workstation_availability", ...queryArgs }
-      : "skip",
-  );
-
-  // Real widget telemetry for Captain parameterized by active date range
-  const capActiveOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_active_orders", ...queryArgs }
-      : "skip",
-  );
-  const capTableServiceStatusData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_table_service_status", ...queryArgs }
-      : "skip",
-  );
-  const capAssignedTablesData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_assigned_tables", ...queryArgs }
-      : "skip",
-  );
-  const capServiceTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_service_time", ...queryArgs }
-      : "skip",
-  );
-  const capOrdersAwaitingServiceData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_orders_awaiting_service", ...queryArgs }
-      : "skip",
-  );
-  const capPerformanceSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_performance_summary", ...queryArgs }
-      : "skip",
-  );
-  const capOrderActivityData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Captain"
-      ? { widgetId: "captain_order_activity", ...queryArgs }
-      : "skip",
-  );
-
-  // Real widget telemetry for Menu parameterized by active date range
-  const menuTopSellingData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_top_selling", ...queryArgs }
-      : "skip",
-  );
-  const menuCategoriesData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_most_ordered_categories", ...queryArgs }
-      : "skip",
-  );
-  const menuBestsellingData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_bestselling_items", ...queryArgs }
-      : "skip",
-  );
-  const menuLowPerformingData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_low_performing", ...queryArgs }
-      : "skip",
-  );
-  const menuAvailabilityData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_product_availability", ...queryArgs }
-      : "skip",
-  );
-  const menuStockoutAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_out_of_stock_alerts", ...queryArgs }
-      : "skip",
-  );
-  const menuModifierData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_modifier_popularity", ...queryArgs }
-      : "skip",
-  );
-  const menuPerformanceData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Menu"
-      ? { widgetId: "menu_performance_summary", ...queryArgs }
-      : "skip",
-  );
-
-  const menuDataMap = useMemo(() => {
-    const map = new Map<string, any>();
-    map.set("menu_top_selling", menuTopSellingData);
-    map.set("menu_most_ordered_categories", menuCategoriesData);
-    map.set("menu_bestselling_items", menuBestsellingData);
-    map.set("menu_low_performing", menuLowPerformingData);
-    map.set("menu_product_availability", menuAvailabilityData);
-    map.set("menu_out_of_stock_alerts", menuStockoutAlertsData);
-    map.set("menu_modifier_popularity", menuModifierData);
-    map.set("menu_performance_summary", menuPerformanceData);
-    return map;
-  }, [
-    menuTopSellingData,
-    menuCategoriesData,
-    menuBestsellingData,
-    menuLowPerformingData,
-    menuAvailabilityData,
-    menuStockoutAlertsData,
-    menuModifierData,
-    menuPerformanceData,
-  ]);
-
-  // Real widget telemetry for Cashier parameterized by active date range
-  const cashierShiftSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_shift_summary", ...queryArgs }
-      : "skip",
-  );
-  const cashierTotalTxnsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_total_transactions", ...queryArgs }
-      : "skip",
-  );
-  const cashierCashSalesData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_cash_sales", ...queryArgs }
-      : "skip",
-  );
-  const cashierDigitalSalesData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_digital_sales", ...queryArgs }
-      : "skip",
-  );
-  const cashierPaymentBreakdownData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_payment_breakdown", ...queryArgs }
-      : "skip",
-  );
-  const cashierRefundSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_refund_summary", ...queryArgs }
-      : "skip",
-  );
-  const cashierTxnHistoryData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_transaction_history", ...queryArgs }
-      : "skip",
-  );
-  const cashierOpenSessionsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Cashier"
-      ? { widgetId: "cashier_open_sessions", ...queryArgs }
-      : "skip",
-  );
-
-  const cashierDataMap = useMemo(() => {
-    const map = new Map<string, any>();
-    map.set("cashier_shift_summary", cashierShiftSummaryData);
-    map.set("cashier_total_transactions", cashierTotalTxnsData);
-    map.set("cashier_cash_sales", cashierCashSalesData);
-    map.set("cashier_digital_sales", cashierDigitalSalesData);
-    map.set("cashier_payment_breakdown", cashierPaymentBreakdownData);
-    map.set("cashier_refund_summary", cashierRefundSummaryData);
-    map.set("cashier_transaction_history", cashierTxnHistoryData);
-    map.set("cashier_open_sessions", cashierOpenSessionsData);
-    return map;
-  }, [
-    cashierShiftSummaryData,
-    cashierTotalTxnsData,
-    cashierCashSalesData,
-    cashierDigitalSalesData,
-    cashierPaymentBreakdownData,
-    cashierRefundSummaryData,
-    cashierTxnHistoryData,
-    cashierOpenSessionsData,
-  ]);
-
-  // Real widget telemetry for Queue parameterized by active date range
-  const queueLengthData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue"
-      ? { widgetId: "queue_length", ...queryArgs }
-      : "skip",
-  );
-  const queueWaitingCustomersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue"
-      ? { widgetId: "queue_waiting_customers", ...queryArgs }
-      : "skip",
-  );
-  const queueAvgWaitTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue"
-      ? { widgetId: "queue_avg_wait_time", ...queryArgs }
-      : "skip",
-  );
-  const queueRecentCalloutsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue"
-      ? { widgetId: "queue_recent_callouts", ...queryArgs }
-      : "skip",
-  );
-  const queueStatusBreakdownData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue"
-      ? { widgetId: "queue_status_breakdown", ...queryArgs }
-      : "skip",
-  );
-  const queueWaitTimeAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Queue"
-      ? { widgetId: "queue_wait_time_alerts", ...queryArgs }
-      : "skip",
-  );
-
-  const queueDataMap = useMemo(() => {
-    const map = new Map<string, any>();
-    map.set("queue_length", queueLengthData);
-    map.set("queue_waiting_customers", queueWaitingCustomersData);
-    map.set("queue_avg_wait_time", queueAvgWaitTimeData);
-    map.set("queue_recent_callouts", queueRecentCalloutsData);
-    map.set("queue_status_breakdown", queueStatusBreakdownData);
-    map.set("queue_wait_time_alerts", queueWaitTimeAlertsData);
-    return map;
-  }, [
-    queueLengthData,
-    queueWaitingCustomersData,
-    queueAvgWaitTimeData,
-    queueRecentCalloutsData,
-    queueStatusBreakdownData,
-    queueWaitTimeAlertsData,
-  ]);
-
-  // Real widget telemetry for Customers parameterized by active date range
-  const customersTotalData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers"
-      ? { widgetId: "customers_total", ...queryArgs }
-      : "skip",
-  );
-  const customersNewData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers"
-      ? { widgetId: "customers_new", ...queryArgs }
-      : "skip",
-  );
-  const customersReturningData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers"
-      ? { widgetId: "customers_returning", ...queryArgs }
-      : "skip",
-  );
-  const customersRecentData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers"
-      ? { widgetId: "customers_recent", ...queryArgs }
-      : "skip",
-  );
-  const customersMostFrequentData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers"
-      ? { widgetId: "customers_most_frequent", ...queryArgs }
-      : "skip",
-  );
-  const customersOrderFrequencyData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Customers"
-      ? { widgetId: "customers_order_frequency", ...queryArgs }
-      : "skip",
-  );
-
-  const customerDataMap = useMemo(() => {
-    const map = new Map<string, any>();
-    map.set("customers_total", customersTotalData);
-    map.set("customers_new", customersNewData);
-    map.set("customers_returning", customersReturningData);
-    map.set("customers_recent", customersRecentData);
-    map.set("customers_most_frequent", customersMostFrequentData);
-    map.set("customers_order_frequency", customersOrderFrequencyData);
-    return map;
-  }, [
-    customersTotalData,
-    customersNewData,
-    customersReturningData,
-    customersRecentData,
-    customersMostFrequentData,
-    customersOrderFrequencyData,
-  ]);
-
-  // Real widget telemetry for Surveys parameterized by active date range
-  const surveysResponseCountsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys"
-      ? { widgetId: "surveys_response_counts", ...queryArgs }
-      : "skip",
-  );
-  const surveysAverageRatingData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys"
-      ? { widgetId: "surveys_average_rating", ...queryArgs }
-      : "skip",
-  );
-  const surveysRecentFeedbackData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys"
-      ? { widgetId: "surveys_recent_feedback", ...queryArgs }
-      : "skip",
-  );
-  const surveysSatisfactionTrendsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys"
-      ? { widgetId: "surveys_satisfaction_trends", ...queryArgs }
-      : "skip",
-  );
-  const surveysLowRatingAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys"
-      ? { widgetId: "surveys_low_rating_alerts", ...queryArgs }
-      : "skip",
-  );
-  const surveysResponseRatesData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Surveys"
-      ? { widgetId: "surveys_response_rates", ...queryArgs }
-      : "skip",
-  );
-
-  const surveyDataMap = useMemo(() => {
-    const map = new Map<string, any>();
-    map.set("surveys_response_counts", surveysResponseCountsData);
-    map.set("surveys_response_count", surveysResponseCountsData);
-    map.set("surveys_average_rating", surveysAverageRatingData);
-    map.set("surveys_recent_feedback", surveysRecentFeedbackData);
-    map.set("surveys_satisfaction_trends", surveysSatisfactionTrendsData);
-    map.set("surveys_satisfaction_trend", surveysSatisfactionTrendsData);
-    map.set("surveys_low_rating_alerts", surveysLowRatingAlertsData);
-    map.set("surveys_response_rates", surveysResponseRatesData);
-    map.set("surveys_response_rate", surveysResponseRatesData);
-    return map;
-  }, [
-    surveysResponseCountsData,
-    surveysAverageRatingData,
-    surveysRecentFeedbackData,
-    surveysSatisfactionTrendsData,
-    surveysLowRatingAlertsData,
-    surveysResponseRatesData,
-  ]);
-
-  // Real widget telemetry for Overview parameterized by active date range
-  const ovNetRevenueData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_net_revenue", ...queryArgs } : "skip"
-  );
-  const ovTotalOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_total_orders", ...queryArgs } : "skip"
-  );
-  const ovAovData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_average_order_value", ...queryArgs } : "skip"
-  );
-  const ovActiveOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_active_orders", ...queryArgs } : "skip"
-  );
-  const ovPendingOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_pending_orders", ...queryArgs } : "skip"
-  );
-  const ovSalesTrendsData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_sales_trends", ...queryArgs } : "skip"
-  );
-  const ovOrderStatusData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_order_status_distribution", ...queryArgs } : "skip"
-  );
-  const ovBusinessSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    organizationId && selectedCategory === "Overview" ? { widgetId: "overview_business_summary", ...queryArgs } : "skip"
-  );
-
-  const overviewDataMap = useMemo(() => {
-    const map = new Map<string, any>();
-    map.set("overview_net_revenue", ovNetRevenueData);
-    map.set("overview_total_orders", ovTotalOrdersData);
-    map.set("overview_average_order_value", ovAovData);
-    map.set("overview_active_orders", ovActiveOrdersData);
-    map.set("overview_pending_orders", ovPendingOrdersData);
-    map.set("overview_sales_trends", ovSalesTrendsData);
-    map.set("overview_order_status_distribution", ovOrderStatusData);
-    map.set("overview_business_summary", ovBusinessSummaryData);
-    return map;
-  }, [
-    ovNetRevenueData,
-    ovTotalOrdersData,
-    ovAovData,
-    ovActiveOrdersData,
-    ovPendingOrdersData,
-    ovSalesTrendsData,
-    ovOrderStatusData,
-    ovBusinessSummaryData,
-  ]);
+  // Static preview definitions for drawer cards
+  const totalOrdersData = undefined;
+  const liveOrdersData = undefined;
+  const statusDistributionData = undefined;
+  const highValueOrdersData = undefined;
+  const delayedOrdersData = undefined;
+  const ordersOverTimeData = undefined;
+  const kdsLiveOrdersData = undefined;
+  const kdsPendingTicketsData = undefined;
+  const kdsStationQueueData = undefined;
+  const kdsStatusBreakdownData = undefined;
+  const kdsAvgPrepTimeData = undefined;
+  const kdsDelayAlertsData = undefined;
+  const wsOrderSummaryData = undefined;
+  const wsOrdersByWsData = undefined;
+  const wsActiveTasksData = undefined;
+  const wsQueueData = undefined;
+  const wsPrepTimeData = undefined;
+  const wsDelayedOrdersData = undefined;
+  const wsPerformanceData = undefined;
+  const wsAvailabilityData = undefined;
+  const capActiveOrdersData = undefined;
+  const capTableServiceStatusData = undefined;
+  const capAssignedTablesData = undefined;
+  const capServiceTimeData = undefined;
+  const capOrdersAwaitingServiceData = undefined;
+  const capPerformanceSummaryData = undefined;
+  const capOrderActivityData = undefined;
+  const menuTopSellingData = undefined;
+  const menuCategoriesData = undefined;
+  const menuBestsellingData = undefined;
+  const menuLowPerformingData = undefined;
+  const menuAvailabilityData = undefined;
+  const menuStockoutAlertsData = undefined;
+  const menuModifierData = undefined;
+  const menuPerformanceData = undefined;
+  const cashierShiftSummaryData = undefined;
+  const cashierTotalTxnsData = undefined;
+  const cashierCashSalesData = undefined;
+  const cashierDigitalSalesData = undefined;
+  const cashierPaymentBreakdownData = undefined;
+  const cashierRefundSummaryData = undefined;
+  const cashierTxnHistoryData = undefined;
+  const cashierOpenSessionsData = undefined;
+  const queueLengthData = undefined;
+  const queueWaitingCustomersData = undefined;
+  const queueAvgWaitTimeData = undefined;
+  const queueRecentCalloutsData = undefined;
+  const queueStatusBreakdownData = undefined;
+  const queueWaitTimeAlertsData = undefined;
+  const customersTotalData = undefined;
+  const customersNewData = undefined;
+  const customersReturningData = undefined;
+  const customersRecentData = undefined;
+  const customersMostFrequentData = undefined;
+  const customersOrderFrequencyData = undefined;
+  const surveysResponseCountsData = undefined;
+  const surveysAverageRatingData = undefined;
+  const surveysRecentFeedbackData = undefined;
+  const surveysSatisfactionTrendsData = undefined;
+  const surveysLowRatingAlertsData = undefined;
+  const surveysResponseRatesData = undefined;
+  const ovNetRevenueData = undefined;
+  const ovTotalOrdersData = undefined;
+  const ovAovData = undefined;
+  const ovActiveOrdersData = undefined;
+  const ovPendingOrdersData = undefined;
+  const ovSalesTrendsData = undefined;
+  const ovOrderStatusData = undefined;
+  const ovBusinessSummaryData = undefined;
 
   // Placements map for slot coordinate lookup
   const placedMap = useMemo(() => {

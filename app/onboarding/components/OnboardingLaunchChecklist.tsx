@@ -79,7 +79,7 @@ export function OnboardingLaunchChecklist({
     // Item 1: Add your menu -> auto-completes if menus, categories, or items exist
     if (id === 1) {
       if (menus && menus.length > 0) return true;
-      if (allItems && (allItems.items?.length > 0 || allItems.length > 0)) return true;
+      if (allItems && ((allItems as any).items?.length > 0 || allItems.length > 0)) return true;
       if (storeMenu && Array.isArray(storeMenu) && storeMenu.length > 0) return true;
     }
     // Item 2: Configure taxes -> auto-completes if tax components are configured

@@ -771,7 +771,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Slide-Over Add Widget Drawer */}
-        {activeOrg && (
+        {isAddDrawerOpen && activeOrg && (
           <AddWidgetDrawer
             isOpen={isAddDrawerOpen}
             onClose={() => setIsAddDrawerOpen(false)}

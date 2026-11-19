@@ -476,7 +476,7 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
         );
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.success && data.deploymentUrl) {
-          lastResolvedUserIdRef.current = userId;
+          lastResolvedUserIdRef.current = userId ?? null;
           setResolutionState({
             loading: false,
             error: null,
@@ -632,7 +632,7 @@ function DynamicConvexProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        lastResolvedUserIdRef.current = userId;
+        lastResolvedUserIdRef.current = userId ?? null;
         const availableStores = data.availableStores || [];
 
         // If user belongs to multiple stores, and did NOT arrive with an explicit link (?slug or ?orgId),
