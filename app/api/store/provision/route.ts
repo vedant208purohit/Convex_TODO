@@ -290,7 +290,7 @@ export async function POST(req: Request) {
       const masterConvexUrl =
         process.env.MASTER_CONVEX_URL ||
         process.env.NEXT_PUBLIC_MASTER_CONVEX_URL ||
-        "https://agreeable-turtle-697.convex.cloud";
+        "https://majestic-fox-670.convex.cloud";
 
       try {
         const masterClient = new ConvexHttpClient(masterConvexUrl);
@@ -412,7 +412,7 @@ export async function POST(req: Request) {
     const masterConvexUrl =
       process.env.MASTER_CONVEX_URL ||
       process.env.NEXT_PUBLIC_MASTER_CONVEX_URL ||
-      "https://agreeable-turtle-697.convex.cloud";
+      "https://majestic-fox-670.convex.cloud";
 
     try {
       const masterClient = new ConvexHttpClient(masterConvexUrl);

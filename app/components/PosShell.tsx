@@ -732,6 +732,10 @@ export function PosShell({
     currentMembership.userId === activeOrg.ownerClerkId
   );
 
+  const isOwnerOrAdmin = Boolean(
+    isOwner || currentMembership?.userType?.includes("admin")
+  );
+
   const areAllChecklistStepsCompleted = Boolean(
     activeOrg?.onboardingCompleted === true ||
     (Array.isArray(activeOrg?.onboardingChecklist) &&
@@ -739,7 +743,7 @@ export function PosShell({
   );
 
   const isOnboardingIncomplete = Boolean(
-    isOwner && activeOrg && !areAllChecklistStepsCompleted
+    activeOrg && !areAllChecklistStepsCompleted && isOwnerOrAdmin
   );
   const isPendingInvitation = !isOwner && Boolean(
     currentMembership && (
@@ -1422,6 +1426,16 @@ export function PosShell({
                 </div>
               )}
             </div>
+
+            {isOnboardingIncomplete && (
+              <Link
+                href="/onboarding"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#141010] hover:bg-black text-white text-xs font-medium rounded-lg shadow-xs transition-colors cursor-pointer shrink-0 ml-2"
+              >
+                <span className="material-symbols-outlined text-sm leading-none">arrow_back</span>
+                <span>Back to Onboarding Checklist</span>
+              </Link>
+            )}
           </div>
           <div className="flex flex-1 justify-end items-center gap-4">
             <button
