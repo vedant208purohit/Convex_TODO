@@ -48,13 +48,17 @@ export const createStripePaymentIntent = mutation({
       )
       .first();
 
-    if (stripeConn) {
-      const connMetadata = stripeConn.metadata as any;
-      if (connMetadata?.publishableKey) {
-        publishableKey = connMetadata.publishableKey;
-      } else if (stripeConn.providerAccountId && stripeConn.providerAccountId.startsWith("pk_")) {
-        publishableKey = stripeConn.providerAccountId;
-      }
+    if (!stripeConn || stripeConn.status !== "connected") {
+      throw new Error(
+        "Stripe payment gateway is not connected or active for this store. Please connect Stripe in Marketplace."
+      );
+    }
+
+    const connMetadata = stripeConn.metadata as any;
+    if (connMetadata?.publishableKey) {
+      publishableKey = connMetadata.publishableKey;
+    } else if (stripeConn.providerAccountId && stripeConn.providerAccountId.startsWith("pk_")) {
+      publishableKey = stripeConn.providerAccountId;
     }
 
     return {

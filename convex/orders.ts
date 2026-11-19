@@ -458,7 +458,7 @@ export const createOrder = mutation({
     }
     const orgTimeZone = org?.organizationTimeZone || "Asia/Kolkata";
 
-    // 0. Service-Mode Feature Toggle Enforcement
+    // 0.1 Online Store Master Availability Guard
     if (
       args.orderSource === "PREST-QR" ||
       args.orderSource === "PREST-DIGITAL-STORE" ||
@@ -492,6 +492,23 @@ export const createOrder = mutation({
         }
         if (org.scheduledDelivery === false) {
           throw new Error("Scheduled delivery is currently disabled for this store.");
+        }
+      }
+
+      // Payment Gateway Connection & Availability Guard
+      if (args.paymentMode && (args.paymentMode === "Stripe" || args.paymentMode === "Razorpay")) {
+        const targetProvider = args.paymentMode.toLowerCase();
+        const gatewayConn = await ctx.db
+          .query("payment_gateway_connections")
+          .withIndex("by_org_and_provider", (q) =>
+            q.eq("organizationId", org._id).eq("provider", targetProvider)
+          )
+          .first();
+
+        if (!gatewayConn || gatewayConn.status !== "connected") {
+          throw new Error(
+            `Payment gateway '${args.paymentMode}' is not connected or active for this store. Please select a connected payment gateway.`
+          );
         }
       }
     } else {

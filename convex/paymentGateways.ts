@@ -104,9 +104,12 @@ export const getActivePaymentGateway = query({
     if (!org) {
       return {
         activeGateway: null,
+        availableGateways: [] as ("razorpay" | "stripe")[],
+        hasConnectedGateway: false,
         razorpay: null,
         stripe: null,
         publishableKey: null,
+        stripePublishableKey: null,
         razorpayKeyId: null,
       };
     }
@@ -123,10 +126,14 @@ export const getActivePaymentGateway = query({
       (c) => c.provider === "stripe" && c.status === "connected"
     );
 
+    const availableGateways: ("razorpay" | "stripe")[] = [];
+    if (rzpConn) availableGateways.push("razorpay");
+    if (stripeConn) availableGateways.push("stripe");
+
     let activeGateway: "razorpay" | "stripe" | null = null;
-    if (org.activePaymentGateway === "stripe") {
+    if (org.activePaymentGateway === "stripe" && stripeConn) {
       activeGateway = "stripe";
-    } else if (org.activePaymentGateway === "razorpay") {
+    } else if (org.activePaymentGateway === "razorpay" && rzpConn) {
       activeGateway = "razorpay";
     } else if (org.activePaymentGateway === "none") {
       activeGateway = null;
@@ -134,33 +141,43 @@ export const getActivePaymentGateway = query({
       const defaultConn = connections.find(
         (c) => c.isDefault && c.status === "connected"
       );
-      if (defaultConn) {
+      if (defaultConn && (defaultConn.provider === "stripe" || defaultConn.provider === "razorpay")) {
         activeGateway = defaultConn.provider as "razorpay" | "stripe";
       } else if (stripeConn && !rzpConn) {
         activeGateway = "stripe";
       } else if (rzpConn) {
         activeGateway = "razorpay";
+      } else if (stripeConn) {
+        activeGateway = "stripe";
       }
     }
 
+    const stripePublishableKey = stripeConn
+      ? (stripeConn.metadata as any)?.publishableKey ||
+        (stripeConn.providerAccountId && stripeConn.providerAccountId.startsWith("pk_")
+          ? stripeConn.providerAccountId
+          : null) ||
+        org.stripePublishableKey ||
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+        null
+      : null;
+
+    const razorpayKeyId = rzpConn
+      ? rzpConn.providerAccountId ||
+        org.razorPayKeyId ||
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+        null
+      : null;
+
     return {
       activeGateway,
+      availableGateways,
+      hasConnectedGateway: availableGateways.length > 0,
       razorpay: rzpConn ? toPublicConnection(rzpConn) : null,
       stripe: stripeConn ? toPublicConnection(stripeConn) : null,
-      publishableKey:
-        activeGateway === "stripe"
-          ? stripeConn?.providerAccountId ||
-            org.stripePublishableKey ||
-            process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
-            null
-          : null,
-      razorpayKeyId:
-        activeGateway === "razorpay"
-          ? rzpConn?.providerAccountId ||
-            org.razorPayKeyId ||
-            process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
-            null
-          : null,
+      publishableKey: stripePublishableKey,
+      stripePublishableKey,
+      razorpayKeyId,
     };
   },
 });
@@ -3779,22 +3796,29 @@ export const disconnectGatewayConnection = mutation({
       updatedAt: now,
     });
 
-    if (provider === "razorpay") {
-      const existingInst = await ctx.db
-        .query("marketplaceInstallations")
-        .withIndex("by_org_and_app", (q) =>
-          q.eq("organizationId", org._id).eq("appSlug", "razorpay")
-        )
-        .first();
-      if (existingInst) {
-        await ctx.db.patch(existingInst._id, {
-          status: "uninstalled",
-          statusText: "Not Connected",
-          actionType: "install",
-          uninstalledAt: now,
-          updatedAt: now,
-        });
-      }
+    const targetProvider = conn.provider || provider;
+
+    if (org.activePaymentGateway === targetProvider) {
+      await ctx.db.patch(org._id, {
+        activePaymentGateway: "none",
+        updatedAt: now,
+      });
+    }
+
+    const existingInst = await ctx.db
+      .query("marketplaceInstallations")
+      .withIndex("by_org_and_app", (q) =>
+        q.eq("organizationId", org._id).eq("appSlug", targetProvider)
+      )
+      .first();
+    if (existingInst) {
+      await ctx.db.patch(existingInst._id, {
+        status: "uninstalled",
+        statusText: "Not Connected",
+        actionType: "install",
+        uninstalledAt: now,
+        updatedAt: now,
+      });
     }
 
     return {
