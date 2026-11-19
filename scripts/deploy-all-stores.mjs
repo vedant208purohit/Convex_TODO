@@ -2,6 +2,7 @@ import { execSync } from "child_process";
 import path from "path";
 
 const TARGETS = [
+  { name: "vedant-test", slug: "vedant-test", deployment: "proper-butterfly-725" },
   { name: "Gregarious Chicken (Store Template)", slug: "gregarious-chicken", deployment: "gregarious-chicken-229" },
   { name: "Mahendra Suthar", slug: "mahendra-suthar", deployment: "honorable-armadillo-176" },
   { name: "GTS", slug: "gts", deployment: "courteous-condor-216" },

@@ -2114,7 +2114,10 @@ interface PaymentGatewaySectionProps {
 
 function PaymentGatewaySection({ org, showToast }: PaymentGatewaySectionProps) {
   const router = useRouter();
-  const gatewayData = useQuery(api.paymentGateways.getActivePaymentGateway, {});
+  const gatewayData = useQuery(
+    api.paymentGateways.getActivePaymentGateway,
+    org?._id ? { organizationId: org._id } : {}
+  );
   const setActiveGatewayMutation = useMutation(api.paymentGateways.setActivePaymentGateway);
 
   const [pendingGateway, setPendingGateway] = useState<"razorpay" | "stripe" | null>(null);
