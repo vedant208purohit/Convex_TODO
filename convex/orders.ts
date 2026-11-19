@@ -913,10 +913,12 @@ export const createOrder = mutation({
       }
     }
 
-    let effectiveTableId: Id<"organizationTables"> | undefined = args.tableId;
+    // Only associate table for dine-in orders; delivery and takeaway are fulfilled independently of physical dining tables
+    let effectiveTableId: Id<"organizationTables"> | undefined =
+      args.orderType === "DineIn" ? args.tableId : undefined;
 
-    // If tableId was not passed directly or needs resolution from qrId
-    if (!effectiveTableId && autoQrId) {
+    // If tableId was not passed directly or needs resolution from qrId (strictly for DineIn orders)
+    if (!effectiveTableId && autoQrId && args.orderType === "DineIn") {
       const qrDoc = await ctx.db.get(autoQrId);
       if (qrDoc && qrDoc.tableId) {
         try {
@@ -2289,7 +2291,7 @@ export const confirmOrderPayment = mutation({
             ...(existingTxn.metadata || {}),
             orderNumber: order.orderNumber,
             orderType: order.orderType,
-            table: (order as any).table?.number || (order as any).tableId,
+            table: order.orderType === "DineIn" ? ((order as any).table?.number || (order as any).tableId) : undefined,
             itemsCount: orderItems.length,
             itemsSummary,
           },
@@ -2314,7 +2316,7 @@ export const confirmOrderPayment = mutation({
           metadata: {
             orderNumber: order.orderNumber,
             orderType: order.orderType,
-            table: (order as any).table?.number || (order as any).tableId,
+            table: order.orderType === "DineIn" ? ((order as any).table?.number || (order as any).tableId) : undefined,
             itemsCount: orderItems.length,
             itemsSummary,
           },

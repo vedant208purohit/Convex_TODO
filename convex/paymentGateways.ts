@@ -694,6 +694,38 @@ export const recordTransaction = mutation({
       )
       .first();
 
+    const effectiveInternalOrderId = args.internalOrderId ?? existing?.internalOrderId;
+    let orderDoc: any = null;
+    if (effectiveInternalOrderId) {
+      try {
+        orderDoc = await ctx.db.get(effectiveInternalOrderId as any);
+      } catch (_) {}
+    }
+
+    const existingMetadata = existing?.metadata || {};
+    const passedMetadata = args.metadata || {};
+    const mergedMetadata: Record<string, any> = {
+      ...existingMetadata,
+      ...passedMetadata,
+    };
+
+    if (orderDoc) {
+      if (!mergedMetadata.orderType && orderDoc.orderType) {
+        mergedMetadata.orderType = orderDoc.orderType;
+      }
+      if (!mergedMetadata.orderNumber && orderDoc.orderNumber) {
+        mergedMetadata.orderNumber = orderDoc.orderNumber;
+      }
+      if (orderDoc.orderType === "DineIn" && !mergedMetadata.table) {
+        mergedMetadata.table = orderDoc.table?.number || orderDoc.tableId;
+      }
+    }
+
+    // Isolate table mapping: takeaway and delivery orders never have table assignments
+    if (mergedMetadata.orderType && mergedMetadata.orderType !== "DineIn") {
+      delete mergedMetadata.table;
+    }
+
     if (existing) {
       const parsedAmountMinor =
         args.amountMinor !== undefined && args.amountMinor !== null
@@ -702,7 +734,7 @@ export const recordTransaction = mutation({
 
       await ctx.db.patch(existing._id, {
         providerOrderId: args.providerOrderId ?? existing.providerOrderId,
-        internalOrderId: args.internalOrderId ?? existing.internalOrderId,
+        internalOrderId: effectiveInternalOrderId,
         amountMinor: parsedAmountMinor,
         currency: args.currency || existing.currency,
         paymentMethod: args.paymentMethod || existing.paymentMethod,
@@ -716,7 +748,7 @@ export const recordTransaction = mutation({
         errorCode: args.errorCode,
         errorMessage: args.errorMessage,
         refundedAmountMinor: args.refundedAmountMinor ?? existing.refundedAmountMinor,
-        metadata: args.metadata ?? existing.metadata,
+        metadata: mergedMetadata,
         updatedAt: now,
       });
 
@@ -731,7 +763,7 @@ export const recordTransaction = mutation({
       provider: conn.provider,
       providerPaymentId: args.providerPaymentId,
       providerOrderId: args.providerOrderId,
-      internalOrderId: args.internalOrderId,
+      internalOrderId: effectiveInternalOrderId,
       customerId: args.customerId,
       customerName: args.customerName,
       customerEmail: args.customerEmail,
@@ -746,7 +778,7 @@ export const recordTransaction = mutation({
       errorCode: args.errorCode,
       errorMessage: args.errorMessage,
       refundedAmountMinor: args.refundedAmountMinor ?? 0,
-      metadata: args.metadata,
+      metadata: mergedMetadata,
       createdAt: args.paidAt || args.failedAt || now,
       updatedAt: now,
     });
@@ -1487,10 +1519,48 @@ export const listTransactions = query({
       return 0;
     }
 
-    const paginated = records.slice(skip, skip + limit).map((r) => ({
-      ...r,
-      amountMinor: extractTransactionAmountMinor(r),
-    }));
+    const paginated = await Promise.all(
+      records.slice(skip, skip + limit).map(async (r) => {
+        let orderType = r.metadata?.orderType;
+        let orderNumber = r.metadata?.orderNumber;
+        let table = r.metadata?.table;
+
+        if ((!orderType || !orderNumber) && r.internalOrderId) {
+          try {
+            const linkedOrder: any = await ctx.db.get(r.internalOrderId);
+            if (linkedOrder) {
+              orderType = orderType || linkedOrder.orderType;
+              orderNumber = orderNumber || linkedOrder.orderNumber;
+              if (linkedOrder.orderType === "DineIn" && !table) {
+                table = linkedOrder.table?.number || linkedOrder.tableId;
+              }
+            }
+          } catch (_) {}
+        }
+
+        // Strictly isolate table metadata to DineIn orders
+        if (orderType && orderType !== "DineIn") {
+          table = undefined;
+        }
+
+        const enrichedMetadata = {
+          ...(r.metadata || {}),
+          ...(orderType ? { orderType } : {}),
+          ...(orderNumber ? { orderNumber } : {}),
+          ...(table ? { table } : {}),
+        };
+        if (orderType && orderType !== "DineIn") {
+          delete enrichedMetadata.table;
+        }
+
+        return {
+          ...r,
+          amountMinor: extractTransactionAmountMinor(r),
+          orderType: orderType || "DineIn",
+          metadata: enrichedMetadata,
+        };
+      })
+    );
     const hasMore = skip + limit < total;
 
     // Calculate aggregated financial KPIs across all matching transactions in this filter/range
@@ -3163,14 +3233,16 @@ export const processWebhookEvent = mutation({
           }
 
           const targetOrderId = stripeObj.metadata?.orderId || stripeObj.metadata?.prestOrderId;
+          let linkedOrderDoc: any = null;
           if (targetOrderId) {
             try {
               const normOrderId = ctx.db.normalizeId("orders", targetOrderId);
               if (normOrderId) {
                 patchData.internalOrderId = normOrderId;
-                if (normalizedStatus === "captured") {
-                  const targetOrder = await ctx.db.get(normOrderId);
-                  if (targetOrder && targetOrder.paymentStatus !== "Paid") {
+                const targetOrder = await ctx.db.get(normOrderId);
+                if (targetOrder) {
+                  linkedOrderDoc = targetOrder;
+                  if (normalizedStatus === "captured" && targetOrder.paymentStatus !== "Paid") {
                     await ctx.db.patch(targetOrder._id, {
                       paymentStatus: "Paid",
                       paymentMode: "Stripe",
@@ -3181,6 +3253,34 @@ export const processWebhookEvent = mutation({
               }
             } catch {}
           }
+
+          if (!linkedOrderDoc && existingTxn.internalOrderId) {
+            try {
+              linkedOrderDoc = await ctx.db.get(existingTxn.internalOrderId);
+            } catch {}
+          }
+
+          const existingMeta = existingTxn.metadata || {};
+          const incomingMeta = stripeObj.metadata || {};
+          const mergedWebhookMeta: Record<string, any> = {
+            ...existingMeta,
+            ...incomingMeta,
+          };
+          if (linkedOrderDoc) {
+            if (!mergedWebhookMeta.orderType && linkedOrderDoc.orderType) {
+              mergedWebhookMeta.orderType = linkedOrderDoc.orderType;
+            }
+            if (!mergedWebhookMeta.orderNumber && linkedOrderDoc.orderNumber) {
+              mergedWebhookMeta.orderNumber = linkedOrderDoc.orderNumber;
+            }
+            if (linkedOrderDoc.orderType === "DineIn" && !mergedWebhookMeta.table) {
+              mergedWebhookMeta.table = linkedOrderDoc.table?.number || linkedOrderDoc.tableId;
+            }
+          }
+          if (mergedWebhookMeta.orderType && mergedWebhookMeta.orderType !== "DineIn") {
+            delete mergedWebhookMeta.table;
+          }
+          patchData.metadata = mergedWebhookMeta;
 
           if (normalizedStatus === "captured") {
             patchData.paidAt = stripeObj.created ? stripeObj.created * 1000 : now;
@@ -3217,14 +3317,16 @@ export const processWebhookEvent = mutation({
           const rawTargetOrderId =
             stripeObj.metadata?.orderId || stripeObj.metadata?.prestOrderId;
           let internalOrderId: any = undefined;
+          let newOrderDoc: any = null;
           if (rawTargetOrderId) {
             try {
               const normId = ctx.db.normalizeId("orders", rawTargetOrderId);
               if (normId) {
                 internalOrderId = normId;
-                if (normalizedStatus === "captured") {
-                  const targetOrder = await ctx.db.get(normId);
-                  if (targetOrder && targetOrder.paymentStatus !== "Paid") {
+                const targetOrder = await ctx.db.get(normId);
+                if (targetOrder) {
+                  newOrderDoc = targetOrder;
+                  if (normalizedStatus === "captured" && targetOrder.paymentStatus !== "Paid") {
                     await ctx.db.patch(targetOrder._id, {
                       paymentStatus: "Paid",
                       paymentMode: "Stripe",
@@ -3234,6 +3336,22 @@ export const processWebhookEvent = mutation({
                 }
               }
             } catch {}
+          }
+
+          const incomingInsertMeta: Record<string, any> = { ...(stripeObj.metadata || {}) };
+          if (newOrderDoc) {
+            if (!incomingInsertMeta.orderType && newOrderDoc.orderType) {
+              incomingInsertMeta.orderType = newOrderDoc.orderType;
+            }
+            if (!incomingInsertMeta.orderNumber && newOrderDoc.orderNumber) {
+              incomingInsertMeta.orderNumber = newOrderDoc.orderNumber;
+            }
+            if (newOrderDoc.orderType === "DineIn" && !incomingInsertMeta.table) {
+              incomingInsertMeta.table = newOrderDoc.table?.number || newOrderDoc.tableId;
+            }
+          }
+          if (incomingInsertMeta.orderType && incomingInsertMeta.orderType !== "DineIn") {
+            delete incomingInsertMeta.table;
           }
 
           const txnId = await ctx.db.insert("payment_transactions", {
@@ -3269,7 +3387,7 @@ export const processWebhookEvent = mutation({
             errorCode: stripeObj.last_payment_error?.code || stripeObj.failure_code,
             errorMessage: stripeObj.last_payment_error?.message || stripeObj.failure_message,
             refundedAmountMinor: stripeObj.amount_refunded || 0,
-            metadata: stripeObj.metadata,
+            metadata: incomingInsertMeta,
             createdAt: stripeObj.created ? stripeObj.created * 1000 : now,
             updatedAt: now,
           });
