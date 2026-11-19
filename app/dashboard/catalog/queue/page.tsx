@@ -92,35 +92,17 @@ export default function QueueCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Queue
-  const queueLengthData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "queue_length" } : "skip"
-  );
+  const queueLengthData: any = undefined;
 
-  const queueWaitingCustomersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "queue_waiting_customers" } : "skip"
-  );
+  const queueWaitingCustomersData: any = undefined;
 
-  const queueAvgWaitTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "queue_avg_wait_time" } : "skip"
-  );
+  const queueAvgWaitTimeData: any = undefined;
 
-  const queueRecentCalloutsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "queue_recent_callouts" } : "skip"
-  );
+  const queueRecentCalloutsData: any = undefined;
 
-  const queueStatusBreakdownData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "queue_status_breakdown" } : "skip"
-  );
+  const queueStatusBreakdownData: any = undefined;
 
-  const queueWaitTimeAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "queue_wait_time_alerts" } : "skip"
-  );
+  const queueWaitTimeAlertsData: any = undefined;
 
   // Add widget with auto-packing
   const handleAddWidget = async (widgetId: string, defaultWidth: number = 4, defaultHeight: number = 1) => {

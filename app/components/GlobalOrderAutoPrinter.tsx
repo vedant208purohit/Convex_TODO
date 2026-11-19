@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import {
@@ -13,22 +14,37 @@ import {
 } from "../utils/defxReceiptFormatter";
 
 export default function GlobalOrderAutoPrinter() {
-  const organizations = useQuery(api.organizations.list);
+  const pathname = usePathname();
+  const isExcludedRoute =
+    !pathname ||
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up");
+
+  const organizations = useQuery(
+    api.organizations.list,
+    isExcludedRoute ? "skip" : undefined
+  );
   const activeOrg = organizations && organizations.length > 0 ? organizations[0] : null;
+
+  const shouldCheckPrinters = Boolean(activeOrg && !isExcludedRoute);
 
   const printers = useQuery(
     api.organizationPrinters.list,
-    activeOrg ? {} : "skip"
+    shouldCheckPrinters ? {} : "skip"
   );
+
+  const hasPrinters = Boolean(printers && printers.length > 0);
+  const shouldListenToOrders = Boolean(shouldCheckPrinters && hasPrinters);
 
   const liveOrders = useQuery(
     api.orders.listLiveOrders,
-    activeOrg ? { organizationId: activeOrg._id } : "skip"
+    shouldListenToOrders && activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
 
   const orgFeatures = useQuery(
     api.organizationFeatures.list,
-    activeOrg ? { organizationId: activeOrg._id } : "skip"
+    shouldListenToOrders && activeOrg ? { organizationId: activeOrg._id } : "skip"
   );
 
   const isInitialLiveOrderLoadRef = useRef(true);

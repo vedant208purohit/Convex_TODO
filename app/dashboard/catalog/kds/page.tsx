@@ -102,35 +102,17 @@ export default function KdsCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Real widget telemetry queries parameterized by selected calendar range
-  const liveOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "kds_live_orders" } : "skip"
-  );
+  const liveOrdersData: any = undefined;
 
-  const pendingTicketsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "kds_pending_tickets" } : "skip"
-  );
+  const pendingTicketsData: any = undefined;
 
-  const stationQueueData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "kds_station_queue" } : "skip"
-  );
+  const stationQueueData: any = undefined;
 
-  const statusBreakdownData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "kds_status_breakdown" } : "skip"
-  );
+  const statusBreakdownData: any = undefined;
 
-  const avgPrepTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "kds_avg_prep_time" } : "skip"
-  );
+  const avgPrepTimeData: any = undefined;
 
-  const delayAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "kds_delay_alerts" } : "skip"
-  );
+  const delayAlertsData: any = undefined;
 
   // Handle Add Widget directly to current dashboard draft
   const handleAddWidget = async (widgetId: string, defaultWidth = 4, defaultHeight = 1) => {

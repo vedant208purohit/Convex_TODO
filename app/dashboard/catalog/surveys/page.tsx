@@ -92,35 +92,17 @@ export default function SurveysCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Surveys
-  const surveysResponseCountsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "surveys_response_counts" } : "skip"
-  );
+  const surveysResponseCountsData: any = undefined;
 
-  const surveysAverageRatingData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "surveys_average_rating" } : "skip"
-  );
+  const surveysAverageRatingData: any = undefined;
 
-  const surveysRecentFeedbackData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "surveys_recent_feedback" } : "skip"
-  );
+  const surveysRecentFeedbackData: any = undefined;
 
-  const surveysSatisfactionTrendsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "surveys_satisfaction_trends" } : "skip"
-  );
+  const surveysSatisfactionTrendsData: any = undefined;
 
-  const surveysLowRatingAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "surveys_low_rating_alerts" } : "skip"
-  );
+  const surveysLowRatingAlertsData: any = undefined;
 
-  const surveysResponseRatesData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "surveys_response_rates" } : "skip"
-  );
+  const surveysResponseRatesData: any = undefined;
 
   // Add widget with auto-packing
   const handleAddWidget = async (widgetId: string, defaultWidth: number = 4, defaultHeight: number = 1) => {

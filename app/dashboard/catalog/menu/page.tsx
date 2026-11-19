@@ -92,45 +92,21 @@ export default function MenuCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Menu
-  const topSellingData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_top_selling" } : "skip"
-  );
+  const topSellingData: any = undefined;
 
-  const categoriesData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_most_ordered_categories" } : "skip"
-  );
+  const categoriesData: any = undefined;
 
-  const bestsellingData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_bestselling_items" } : "skip"
-  );
+  const bestsellingData: any = undefined;
 
-  const lowPerformingData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_low_performing" } : "skip"
-  );
+  const lowPerformingData: any = undefined;
 
-  const availabilityData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_product_availability" } : "skip"
-  );
+  const availabilityData: any = undefined;
 
-  const stockoutAlertsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_out_of_stock_alerts" } : "skip"
-  );
+  const stockoutAlertsData: any = undefined;
 
-  const modifierData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_modifier_popularity" } : "skip"
-  );
+  const modifierData: any = undefined;
 
-  const performanceData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "menu_performance_summary" } : "skip"
-  );
+  const performanceData: any = undefined;
 
   // Handle Add Widget directly to current dashboard draft
   const handleAddWidget = async (widgetId: string, defaultWidth = 4, defaultHeight = 1) => {

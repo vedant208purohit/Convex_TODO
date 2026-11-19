@@ -92,45 +92,21 @@ export default function CashierCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Cashier
-  const shiftSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_shift_summary" } : "skip"
-  );
+  const shiftSummaryData: any = undefined;
 
-  const totalTransactionsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_total_transactions" } : "skip"
-  );
+  const totalTransactionsData: any = undefined;
 
-  const cashSalesData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_cash_sales" } : "skip"
-  );
+  const cashSalesData: any = undefined;
 
-  const digitalSalesData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_digital_sales" } : "skip"
-  );
+  const digitalSalesData: any = undefined;
 
-  const paymentBreakdownData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_payment_breakdown" } : "skip"
-  );
+  const paymentBreakdownData: any = undefined;
 
-  const refundSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_refund_summary" } : "skip"
-  );
+  const refundSummaryData: any = undefined;
 
-  const transactionHistoryData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_transaction_history" } : "skip"
-  );
+  const transactionHistoryData: any = undefined;
 
-  const openSessionsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "cashier_open_sessions" } : "skip"
-  );
+  const openSessionsData: any = undefined;
 
   // Handle Add Widget directly to current dashboard draft
   const handleAddWidget = async (widgetId: string, defaultWidth = 4, defaultHeight = 1) => {

@@ -1238,7 +1238,8 @@ postpaidOrderRequests: defineTable({
     .index("by_order", ["orderId"])
     .index("by_org", ["organizationId"])
     .index("by_station", ["stationId"])
-    .index("by_org_station", ["organizationId", "stationId"]),
+    .index("by_org_station", ["organizationId", "stationId"])
+    .index("by_created_at", ["organizationId", "createdAt"]),
 
   orderActivities: defineTable({
     legacyId: v.optional(v.string()),
@@ -1256,6 +1257,7 @@ postpaidOrderRequests: defineTable({
   })
     .index("by_order", ["orderId"])
     .index("by_org", ["organizationId"])
+    .index("by_created_at", ["organizationId", "createdAt"])
     .index("by_order_process", ["orderId", "processId"])
     .index("by_legacy_id", ["legacyId"]),
 
@@ -1630,6 +1632,7 @@ postpaidOrderRequests: defineTable({
     .index("by_order_id", ["orderId"])
     .index("by_order_survey", ["orderId", "surveyId"])
     .index("by_customer_id", ["customerId"])
+    .index("by_created_at", ["createdAt"])
     .index("by_legacy_id", ["legacyId"]),
 
   surveyAnswers: defineTable({

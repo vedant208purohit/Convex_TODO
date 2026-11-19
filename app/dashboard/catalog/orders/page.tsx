@@ -102,35 +102,17 @@ export default function OrdersCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Real widget telemetry queries parameterized by selected calendar range
-  const totalOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "orders_total_volume" } : "skip"
-  );
+  const totalOrdersData: any = undefined;
 
-  const liveOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "orders_live_feed" } : "skip"
-  );
+  const liveOrdersData: any = undefined;
 
-  const statusDistributionData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "orders_by_status" } : "skip"
-  );
+  const statusDistributionData: any = undefined;
 
-  const highValueOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "orders_high_value" } : "skip"
-  );
+  const highValueOrdersData: any = undefined;
 
-  const delayedOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "orders_delayed_alerts" } : "skip"
-  );
+  const delayedOrdersData: any = undefined;
 
-  const ordersOverTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "orders_volume_over_time" } : "skip"
-  );
+  const ordersOverTimeData: any = undefined;
 
   // Handle Add Widget directly to current dashboard draft
   const handleAddWidget = async (widgetId: string, defaultWidth = 4) => {

@@ -92,35 +92,17 @@ export default function CustomersCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Customers
-  const customersTotalData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "customers_total" } : "skip"
-  );
+  const customersTotalData: any = undefined;
 
-  const customersNewData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "customers_new" } : "skip"
-  );
+  const customersNewData: any = undefined;
 
-  const customersReturningData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "customers_returning" } : "skip"
-  );
+  const customersReturningData: any = undefined;
 
-  const customersRecentData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "customers_recent" } : "skip"
-  );
+  const customersRecentData: any = undefined;
 
-  const customersMostFrequentData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "customers_most_frequent" } : "skip"
-  );
+  const customersMostFrequentData: any = undefined;
 
-  const customersOrderFrequencyData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "customers_order_frequency" } : "skip"
-  );
+  const customersOrderFrequencyData: any = undefined;
 
   // Add widget with auto-packing
   const handleAddWidget = async (widgetId: string, defaultWidth: number = 4, defaultHeight: number = 1) => {

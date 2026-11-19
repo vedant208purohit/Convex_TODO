@@ -101,38 +101,14 @@ export default function OverviewCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Telemetry queries for the 8 overview widgets
-  const netRevenueData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_net_revenue" } : "skip"
-  );
-  const totalOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_total_orders" } : "skip"
-  );
-  const aovData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_average_order_value" } : "skip"
-  );
-  const activeOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_active_orders" } : "skip"
-  );
-  const pendingOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_pending_orders" } : "skip"
-  );
-  const salesTrendsData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_sales_trends" } : "skip"
-  );
-  const orderStatusData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_order_status_distribution" } : "skip"
-  );
-  const businessSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "overview_business_summary" } : "skip"
-  );
+  const netRevenueData: any = undefined;
+  const totalOrdersData: any = undefined;
+  const aovData: any = undefined;
+  const activeOrdersData: any = undefined;
+  const pendingOrdersData: any = undefined;
+  const salesTrendsData: any = undefined;
+  const orderStatusData: any = undefined;
+  const businessSummaryData: any = undefined;
 
   const handleAddWidget = async (widgetId: string, defaultWidth = 4) => {
     if (!activeOrg || !dashboardData?.dashboard || placedWidgetMap.has(widgetId)) return;
