@@ -1178,28 +1178,53 @@ export const listLiveOrders = query({
       .query("orders")
       .withIndex("by_org", (q) => q.eq("organizationId", orgId))
       .filter((q) => q.eq(q.field("isCompleted"), false))
-      .collect();
+      .order("desc")
+      .take(100);
+
+    if (activeOrders.length === 0) return [];
 
     const sortedOrders = activeOrders.sort((a, b) => b.createdAt - a.createdAt);
 
-    const result: Array<any> = [];
-    for (const order of sortedOrders) {
-      const items = await ctx.db
-        .query("orderItems")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
+    // Deduplicate table & waiter lookups across all active orders
+    const uniqueTableIds = Array.from(
+      new Set(sortedOrders.map((o) => o.tableId).filter((id): id is Id<"organizationTables"> => Boolean(id)))
+    );
+    const uniqueWaiterIds = Array.from(
+      new Set(sortedOrders.map((o) => o.waiterUserId).filter((id): id is string => Boolean(id && id.trim())))
+    );
 
-      const activities = await ctx.db
-        .query("orderActivities")
-        .withIndex("by_order", (q) => q.eq("orderId", order._id))
-        .collect();
+    // Fetch items, activities, and deduplicated tables/waiters concurrently in parallel
+    const [itemsList, activitiesList, tableDocs, waiterDocs] = await Promise.all([
+      Promise.all(
+        sortedOrders.map((order) =>
+          ctx.db
+            .query("orderItems")
+            .withIndex("by_order", (q) => q.eq("orderId", order._id))
+            .collect()
+        )
+      ),
+      Promise.all(
+        sortedOrders.map((order) =>
+          ctx.db
+            .query("orderActivities")
+            .withIndex("by_order", (q) => q.eq("orderId", order._id))
+            .collect()
+        )
+      ),
+      Promise.all(uniqueTableIds.map((id) => ctx.db.get(id))),
+      Promise.all(uniqueWaiterIds.map((id) => resolveWaiterInfo(ctx, id))),
+    ]);
 
-      let tableInfo: any = null;
-      if (order.tableId) {
-        tableInfo = await ctx.db.get(order.tableId);
-      }
+    const tableMap = new Map(uniqueTableIds.map((id, i) => [id, tableDocs[i]]));
+    const waiterMap = new Map(uniqueWaiterIds.map((id, i) => [id, waiterDocs[i]]));
 
-      result.push({
+    return sortedOrders.map((order, idx) => {
+      const items = itemsList[idx] || [];
+      const activities = activitiesList[idx] || [];
+      const tableInfo = order.tableId ? tableMap.get(order.tableId) : null;
+      const waiterInfo = order.waiterUserId ? waiterMap.get(order.waiterUserId) : null;
+
+      return {
         ...order,
         display_sub_total: (order.subTotal / 100).toFixed(2),
         display_tax_total: (order.taxTotal / 100).toFixed(2),
@@ -1212,11 +1237,10 @@ export const listLiveOrders = query({
         })),
         activities: activities.sort((a, b) => a.position - b.position),
         table: tableInfo ? { id: tableInfo._id, number: tableInfo.tableNumber } : null,
-        waiter: await resolveWaiterInfo(ctx, order.waiterUserId),
-      });
-    }
-
-    return result;
+        waiter: waiterInfo ?? null,
+        waiterName: waiterInfo?.name || null,
+      };
+    });
   },
 });
 

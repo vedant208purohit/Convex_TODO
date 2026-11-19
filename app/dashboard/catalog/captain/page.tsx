@@ -93,40 +93,19 @@ export default function CaptainCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Captain
-  const activeOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_active_orders" } : "skip"
-  );
+  const activeOrdersData: any = undefined;
 
-  const tableServiceStatusData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_table_service_status" } : "skip"
-  );
+  const tableServiceStatusData: any = undefined;
 
-  const assignedTablesData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_assigned_tables" } : "skip"
-  );
+  const assignedTablesData: any = undefined;
 
-  const serviceTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_service_time" } : "skip"
-  );
+  const serviceTimeData: any = undefined;
 
-  const ordersAwaitingServiceData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_orders_awaiting_service" } : "skip"
-  );
+  const ordersAwaitingServiceData: any = undefined;
 
-  const performanceSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_performance_summary" } : "skip"
-  );
+  const performanceSummaryData: any = undefined;
 
-  const orderActivityData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "captain_order_activity" } : "skip"
-  );
+  const orderActivityData: any = undefined;
 
   // Handle Add Widget directly to current dashboard draft
   const handleAddWidget = async (widgetId: string, defaultWidth = 4, defaultHeight = 1) => {

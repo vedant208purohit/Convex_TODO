@@ -93,45 +93,21 @@ export default function WorkstationCatalogPage() {
   }, [activeOrg, dateRangePresetArg, startDate, endDate]);
 
   // Scoped on-demand telemetry queries for Workstation
-  const orderSummaryData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_order_summary" } : "skip"
-  );
+  const orderSummaryData: any = undefined;
 
-  const ordersByWorkstationData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_orders_by_workstation" } : "skip"
-  );
+  const ordersByWorkstationData: any = undefined;
 
-  const activeTasksData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_active_tasks" } : "skip"
-  );
+  const activeTasksData: any = undefined;
 
-  const queueData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_queue" } : "skip"
-  );
+  const queueData: any = undefined;
 
-  const prepTimeData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_prep_time" } : "skip"
-  );
+  const prepTimeData: any = undefined;
 
-  const delayedOrdersData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_delayed_orders" } : "skip"
-  );
+  const delayedOrdersData: any = undefined;
 
-  const performanceData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_performance" } : "skip"
-  );
+  const performanceData: any = undefined;
 
-  const availabilityData = useQuery(
-    api.dashboards.getWidgetData,
-    queryArgs !== "skip" ? { ...queryArgs, widgetId: "workstation_availability" } : "skip"
-  );
+  const availabilityData: any = undefined;
 
   // Handle Add Widget directly to current dashboard draft
   const handleAddWidget = async (widgetId: string, defaultWidth = 4, defaultHeight = 1) => {

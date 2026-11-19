@@ -653,14 +653,17 @@ export async function provideOverviewActiveOrders(
     options.toTimestamp,
   );
 
-  const allActive = await ctx.db
+  const inRangeOrders = await ctx.db
     .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
 
-  const activeOrders = allActive.filter((o) => {
-    if (o.createdAt < timeRange.from || o.createdAt > timeRange.to)
-      return false;
+  const activeOrders = inRangeOrders.filter((o) => {
     return (
       !o.isCompleted &&
       !o.isRejected &&
@@ -1305,19 +1308,19 @@ export async function provideOrdersHighValue(
     options.toTimestamp,
   );
 
-  const orders = await ctx.db
-    .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
-
   // If today is selected, ensure boundary includes current day orders regardless of server/client clock drift
   const isToday = !options.dateRangePreset || options.dateRangePreset === "today";
   const toBoundary = isToday ? Math.max(timeRange.to, Date.now() + 300000) : timeRange.to;
 
-  // Strictly filter within selected time range
-  const inRangeOrders = orders.filter(
-    (o) => o.createdAt >= timeRange.from && o.createdAt <= toBoundary,
-  );
+  const inRangeOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", toBoundary),
+    )
+    .collect();
   const pool = inRangeOrders;
 
   const highValue = pool
@@ -1399,18 +1402,19 @@ export async function provideOrdersDelayedAlerts(
     options.toTimestamp,
   );
 
-  const allOrders = await ctx.db
-    .query("orders")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
-
   // Only consider orders placed within the selected timeframe (e.g. today's service)
   const isToday = (options.dateRangePreset || "today") === "today";
   const toBoundary = isToday ? Math.max(timeRange.to, now + 120000) : timeRange.to;
 
-  const currentShiftOrders = allOrders.filter(
-    (o) => o.createdAt >= timeRange.from && o.createdAt <= toBoundary,
-  );
+  const currentShiftOrders = await ctx.db
+    .query("orders")
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", toBoundary),
+    )
+    .collect();
 
   // Filter for ACTIVE unfulfilled tickets exceeding kitchen/service turnaround SLA
   const delayed = currentShiftOrders.filter((o) => {
@@ -1639,7 +1643,7 @@ export async function provideOrdersFloorOccupancy(
 ): Promise<WidgetDataResponse> {
   const res = createBaseResponse(widgetDef, org, options);
 
-  const tables = await ctx.db.query("organizationTables").collect();
+  const tables = await ctx.db.query("organizationTables").take(200);
 
   const storeTables = tables.filter((t) => t.deletedAt === undefined);
   const occupied = storeTables.filter((t) => t.currentOrderId !== undefined);
@@ -1851,7 +1855,7 @@ export async function provideOrdersTableTurn(
     res.timeZone,
   );
 
-  const tables = await ctx.db.query("organizationTables").collect();
+  const tables = await ctx.db.query("organizationTables").take(200);
   const storeTables = tables.filter((t) => t.deletedAt === undefined);
 
   const completedOrders = await ctx.db
@@ -1932,10 +1936,16 @@ export async function provideWorkstationOrderSummary(
     (o) => !o.isCompleted && !o.isRejected && o.orderStatusName !== "Completed",
   );
 
-  const orderItems = await ctx.db
-    .query("orderItems")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
-    .collect();
+  const orderItems = (
+    await Promise.all(
+      activeOrders.map((o) =>
+        ctx.db
+          .query("orderItems")
+          .withIndex("by_order", (q) => q.eq("orderId", o._id))
+          .collect(),
+      ),
+    )
+  ).flat();
 
   const activeOrderIds = new Set(activeOrders.map((o) => o._id));
   const activeItems = orderItems.filter(
@@ -2044,14 +2054,15 @@ export async function provideWorkstationOrdersByWorkstation(
     activeStations[0]?.name ||
     "Main";
 
-  const orderItems = await ctx.db
+  const inRangeItems = await ctx.db
     .query("orderItems")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
     .collect();
-
-  const inRangeItems = orderItems.filter(
-    (i) => i.createdAt >= timeRange.from && i.createdAt <= timeRange.to,
-  );
 
   const stationCounts: Record<string, number> = {};
   for (const s of activeStations) {
@@ -2503,17 +2514,16 @@ export async function provideWorkstationPerformance(
     activeStations[0]?.name ||
     "Station";
 
-  const orderItems = await ctx.db
+  const completedToday = await ctx.db
     .query("orderItems")
-    .withIndex("by_org", (q) => q.eq("organizationId", org._id))
+    .withIndex("by_created_at", (q) =>
+      q
+        .eq("organizationId", org._id)
+        .gte("createdAt", timeRange.from)
+        .lte("createdAt", timeRange.to),
+    )
+    .filter((q) => q.eq(q.field("isReady"), true))
     .collect();
-
-  const completedToday = orderItems.filter(
-    (i) =>
-      i.isReady &&
-      i.createdAt >= timeRange.from &&
-      i.createdAt <= timeRange.to,
-  );
 
   const stationCompleted: Record<string, number> = {};
   for (const s of activeStations) {
@@ -4404,7 +4414,7 @@ function isCaptainOrder(o: Doc<"orders">): boolean {
 }
 
 async function getStoreTableAndLayoutMaps(ctx: QueryCtx) {
-  const tables = await ctx.db.query("organizationTables").collect();
+  const tables = await ctx.db.query("organizationTables").take(200);
   const activeTables = tables.filter((t) => t.deletedAt === undefined);
   const tableMap = new Map(activeTables.map((t) => [t._id, t]));
 
@@ -5342,7 +5352,7 @@ export async function provideQueueLength(
   const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
   const { layoutMap } = await getStoreTableAndLayoutMaps(ctx);
-  const queueRecords = await ctx.db.query("organizationQueues").collect();
+  const queueRecords = await ctx.db.query("organizationQueues").order("desc").take(200);
 
   const waiting = queueRecords.filter(
     (q) => isQueueActiveWaiting(q) && isQueueInTimeWindow(q, timeRange, isCurrentDay)
@@ -5401,7 +5411,7 @@ export async function provideQueueWaitingCustomers(
   );
   const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
-  const queueRecords = await ctx.db.query("organizationQueues").collect();
+  const queueRecords = await ctx.db.query("organizationQueues").order("desc").take(200);
   const waiting = queueRecords
     .filter((q) => isQueueActiveWaiting(q) && isQueueInTimeWindow(q, timeRange, isCurrentDay))
     .sort((a, b) => (a.reservationTime || a.createdAt) - (b.reservationTime || b.createdAt))
@@ -5479,7 +5489,7 @@ export async function provideQueueAvgWaitTime(
   );
   const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
-  const queue = await ctx.db.query("organizationQueues").collect();
+  const queue = await ctx.db.query("organizationQueues").order("desc").take(200);
 
   const periodQueues = queue.filter((q) => isQueueInTimeWindow(q, timeRange, isCurrentDay));
 
@@ -5555,7 +5565,7 @@ export async function provideQueueRecentCallouts(
   const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
   const { tableMap } = await getStoreTableAndLayoutMaps(ctx);
-  const queue = await ctx.db.query("organizationQueues").collect();
+  const queue = await ctx.db.query("organizationQueues").order("desc").take(200);
 
   const calledOrSeated = queue
     .filter((q) => {
@@ -5626,7 +5636,7 @@ export async function provideQueueStatusBreakdown(
   );
   const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
-  const queue = await ctx.db.query("organizationQueues").collect();
+  const queue = await ctx.db.query("organizationQueues").order("desc").take(200);
 
   const activeWaiting = queue.filter(
     (q) => isQueueActiveWaiting(q) && isQueueInTimeWindow(q, timeRange, isCurrentDay)
@@ -5686,7 +5696,7 @@ export async function provideQueueWaitTimeAlerts(
   const isCurrentDay = now >= timeRange.from && now <= timeRange.to;
 
   const { activeTables, tableMap } = await getStoreTableAndLayoutMaps(ctx);
-  const queue = await ctx.db.query("organizationQueues").collect();
+  const queue = await ctx.db.query("organizationQueues").order("desc").take(200);
 
   const occupiedTableIds = new Set(
     queue.filter((q) => q.tableId && isQueueActiveWaiting(q)).map((q) => q.tableId!)
@@ -6733,7 +6743,7 @@ export async function provideCustomersTotal(
 
   const validAllOrders = allOrders.filter(isValidActiveOrCompletedOrder);
 
-  const customers = await ctx.db.query("customers").collect();
+  const customers = await ctx.db.query("customers").order("desc").take(500);
   const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   // Build unique customers up to timeRange.to
@@ -6868,7 +6878,7 @@ export async function provideCustomersNew(
 
   const validAllOrders = allOrders.filter(isValidActiveOrCompletedOrder);
 
-  const customers = await ctx.db.query("customers").collect();
+  const customers = await ctx.db.query("customers").order("desc").take(500);
   const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   // Find first order timestamp for each customer key across store history
@@ -6946,7 +6956,7 @@ export async function provideCustomersReturning(
 
   const validAllOrders = allOrders.filter(isValidActiveOrCompletedOrder);
 
-  const customers = await ctx.db.query("customers").collect();
+  const customers = await ctx.db.query("customers").order("desc").take(500);
   const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   // Track customer order history prior to the period
@@ -7040,7 +7050,7 @@ export async function provideCustomersRecent(
     .collect();
   const tableMap = new Map(tables.map((t) => [t._id, t.tableNumber]));
 
-  const customers = await ctx.db.query("customers").collect();
+  const customers = await ctx.db.query("customers").order("desc").take(500);
   const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   const rows = recentOrders.map((o) => {
@@ -7117,7 +7127,7 @@ export async function provideCustomersMostFrequent(
     )
     .collect();
 
-  const customers = await ctx.db.query("customers").collect();
+  const customers = await ctx.db.query("customers").order("desc").take(500);
   const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   const guestAgg: Record<
@@ -7208,7 +7218,7 @@ export async function provideCustomersOrderFrequency(
     )
     .collect();
 
-  const customers = await ctx.db.query("customers").collect();
+  const customers = await ctx.db.query("customers").order("desc").take(500);
   const customerMap = new Map(customers.map((c) => [c._id, c]));
 
   const counts: Record<string, number> = {};
@@ -7289,7 +7299,7 @@ export async function provideSurveysResponseCounts(
     .collect();
   const storeOrderIds = new Set(storeOrders.map((o) => o._id));
 
-  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const allAttempts = await ctx.db.query("surveyAttempts").order("desc").take(500);
   const storeAttempts = allAttempts.filter(
     (a) => !a.orderId || storeOrderIds.has(a.orderId),
   );
@@ -7385,14 +7395,14 @@ export async function provideSurveysAverageRating(
     .collect();
   const storeOrderIds = new Set(storeOrders.map((o) => o._id));
 
-  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const allAttempts = await ctx.db.query("surveyAttempts").order("desc").take(500);
   const storeAttemptIds = new Set(
     allAttempts
       .filter((a) => !a.orderId || storeOrderIds.has(a.orderId))
       .map((a) => a._id),
   );
 
-  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const allAnswers = await ctx.db.query("surveyAnswers").order("desc").take(1000);
   const rangeAnswers = allAnswers.filter(
     (a) =>
       storeAttemptIds.has(a.attemptId) &&
@@ -7476,14 +7486,14 @@ export async function provideSurveysRecentFeedback(
   const storeOrderIds = new Set(storeOrders.map((o) => o._id));
   const orderMap = new Map(storeOrders.map((o) => [o._id, o]));
 
-  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const allAttempts = await ctx.db.query("surveyAttempts").order("desc").take(500);
   const storeAttempts = allAttempts.filter(
     (a) => !a.orderId || storeOrderIds.has(a.orderId),
   );
   const attemptMap = new Map(storeAttempts.map((a) => [a._id, a]));
   const storeAttemptIds = new Set(storeAttempts.map((a) => a._id));
 
-  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const allAnswers = await ctx.db.query("surveyAnswers").order("desc").take(1000);
   const rangeAnswers = allAnswers
     .filter(
       (a) =>
@@ -7494,7 +7504,7 @@ export async function provideSurveysRecentFeedback(
     .sort((a, b) => b.createdAt - a.createdAt)
     .slice(0, 10);
 
-  const tables = await ctx.db.query("organizationTables").collect();
+  const tables = await ctx.db.query("organizationTables").take(200);
   const tableMap = new Map(tables.map((t) => [t._id, t]));
 
   const rows = rangeAnswers.map((a) => {
@@ -7563,14 +7573,14 @@ export async function provideSurveysSatisfactionTrends(
     .collect();
   const storeOrderIds = new Set(storeOrders.map((o) => o._id));
 
-  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const allAttempts = await ctx.db.query("surveyAttempts").order("desc").take(500);
   const storeAttemptIds = new Set(
     allAttempts
       .filter((a) => !a.orderId || storeOrderIds.has(a.orderId))
       .map((a) => a._id),
   );
 
-  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const allAnswers = await ctx.db.query("surveyAnswers").order("desc").take(1000);
   const rangeAnswers = allAnswers.filter(
     (a) =>
       storeAttemptIds.has(a.attemptId) &&
@@ -7639,14 +7649,14 @@ export async function provideSurveysLowRatingAlerts(
   const storeOrderIds = new Set(storeOrders.map((o) => o._id));
   const orderMap = new Map(storeOrders.map((o) => [o._id, o]));
 
-  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const allAttempts = await ctx.db.query("surveyAttempts").order("desc").take(500);
   const storeAttempts = allAttempts.filter(
     (a) => !a.orderId || storeOrderIds.has(a.orderId),
   );
   const attemptMap = new Map(storeAttempts.map((a) => [a._id, a]));
   const storeAttemptIds = new Set(storeAttempts.map((a) => a._id));
 
-  const allAnswers = await ctx.db.query("surveyAnswers").collect();
+  const allAnswers = await ctx.db.query("surveyAnswers").order("desc").take(1000);
   const lowRatings = allAnswers.filter(
     (a) =>
       storeAttemptIds.has(a.attemptId) &&
@@ -7670,7 +7680,7 @@ export async function provideSurveysLowRatingAlerts(
         : "Guest sentiment is currently positive.",
   };
 
-  const tables = await ctx.db.query("organizationTables").collect();
+  const tables = await ctx.db.query("organizationTables").take(200);
   const tableMap = new Map(tables.map((t) => [t._id, t]));
 
   const alerts = lowRatings.map((a) => {
@@ -7720,7 +7730,7 @@ export async function provideSurveysResponseRates(
     .collect();
   const storeOrderIds = new Set(storeOrders.map((o) => o._id));
 
-  const allAttempts = await ctx.db.query("surveyAttempts").collect();
+  const allAttempts = await ctx.db.query("surveyAttempts").order("desc").take(500);
   const storeAttempts = allAttempts.filter(
     (a) => !a.orderId || storeOrderIds.has(a.orderId),
   );

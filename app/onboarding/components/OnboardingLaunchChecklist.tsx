@@ -21,42 +21,38 @@ export function OnboardingLaunchChecklist({
   userFullName,
 }: OnboardingLaunchChecklistProps) {
   const router = useRouter();
-  const updateChecklistMutation = useMutation(api.organizations.updateOnboardingChecklist);
+  const updateChecklistMutation = useMutation(
+    api.organizations.updateOnboardingChecklist,
+  );
 
   // Read stored checklist state from organization
   const orgData = useQuery(api.organizations.list);
-  const currentOrg = orgData?.find((o) => o && o._id === organizationId) || (orgData && orgData[0]);
+  const currentOrg =
+    orgData?.find((o) => o && o._id === organizationId) ||
+    (orgData && orgData[0]);
   const effectiveOrgId = organizationId || currentOrg?._id;
 
   // Queries to auto-detect setup readiness
   const menus = useQuery(
     api.menu.listMenus,
-    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
-  );
-  const allItems = useQuery(
-    api.menu.listAllItems,
-    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
-  );
-  const storeMenu = useQuery(
-    api.menu.getOrganizationMenu,
-    effectiveOrgId ? { organizationId: effectiveOrgId, allMenus: true } : "skip"
+    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip",
   );
   const tables = useQuery(api.organizationTables.list, {});
   const stations = useQuery(
     api.stations.list,
-    effectiveOrgId ? { organizationId: effectiveOrgId, includeSummary: true } : "skip"
+    effectiveOrgId ? { organizationId: effectiveOrgId, includeSummary: false } : "skip"
   );
   const members = useQuery(
     api.organizationUsers.list,
-    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
+    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip",
   );
   const paymentModes = useQuery(
     api.paymentModes.list,
-    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
+    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip",
   );
   const taxComponents = useQuery(
     api.taxation.listTaxComponents,
-    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip"
+    effectiveOrgId ? { organizationId: effectiveOrgId } : "skip",
   );
 
   const [isBannerVisible, setIsBannerVisible] = useState(true);
@@ -76,11 +72,9 @@ export function OnboardingLaunchChecklist({
     if (manualCompletedIds.includes(id)) return true;
 
     // 2. Automated detection based on active store data:
-    // Item 1: Add your menu -> auto-completes if menus, categories, or items exist
+    // Item 1: Add your menu -> auto-completes if menus exist
     if (id === 1) {
       if (menus && menus.length > 0) return true;
-      if (allItems && ((allItems as any).items?.length > 0 || allItems.length > 0)) return true;
-      if (storeMenu && Array.isArray(storeMenu) && storeMenu.length > 0) return true;
     }
     // Item 2: Configure taxes -> auto-completes if tax components are configured
     if (id === 2 && taxComponents && taxComponents.length > 0) return true;
@@ -137,7 +131,9 @@ export function OnboardingLaunchChecklist({
     }
   };
 
-  const activeTablesCount = tables ? tables.filter((t: any) => t.isOccupied).length : 0;
+  const activeTablesCount = tables
+    ? tables.filter((t: any) => t.isOccupied).length
+    : 0;
   const totalTablesCount = tables ? tables.length : 18;
 
   const CHECKLIST_ITEMS = [
@@ -146,7 +142,8 @@ export function OnboardingLaunchChecklist({
       title: "1. Add your menu",
       badge: "Essential",
       badgeType: "essential",
-      description: "Input signature appetizers, tasting mains, cellar wines, and artisan cocktails.",
+      description:
+        "Input signature appetizers, tasting mains, cellar wines, and artisan cocktails.",
       buttonLabel: "Add Menu Items",
       targetHref: "/menu",
     },
@@ -155,7 +152,8 @@ export function OnboardingLaunchChecklist({
       title: "2. Configure taxes",
       badge: "Jurisdiction",
       badgeType: "jurisdiction",
-      description: "Set standard state/local sales tax rate and beverage surcharges.",
+      description:
+        "Set standard state/local sales tax rate and beverage surcharges.",
       buttonLabel: "Review Taxes",
       targetHref: "/settings?tab=organization&subTab=taxation",
     },
@@ -164,7 +162,8 @@ export function OnboardingLaunchChecklist({
       title: "3. Connect payment methods",
       badge: "Terminal Link",
       badgeType: "terminal",
-      description: "Pair Bluetooth contactless readers, chip terminals, and tip gratuity parameters.",
+      description:
+        "Pair Bluetooth contactless readers, chip terminals, and tip gratuity parameters.",
       buttonLabel: "Set Up Payments",
       targetHref: "/settings?tab=payment",
     },
@@ -173,7 +172,8 @@ export function OnboardingLaunchChecklist({
       title: "4. Set up tables",
       badge: "Floor Map",
       badgeType: "default",
-      description: "Map dining room booths, bar stools, patio sections, and cover numbers.",
+      description:
+        "Map dining room booths, bar stools, patio sections, and cover numbers.",
       buttonLabel: "Floorplan Editor",
       targetHref: "/settings?tab=tables",
     },
@@ -182,7 +182,8 @@ export function OnboardingLaunchChecklist({
       title: "5. Configure kitchen display",
       badge: "KDS Routing",
       badgeType: "default",
-      description: "Assign hot dishes to the grill line, cold plates to garde-manger, and cocktails to the service bar.",
+      description:
+        "Assign hot dishes to the grill line, cold plates to garde-manger, and cocktails to the service bar.",
       buttonLabel: "Route KDS",
       targetHref: "/kds",
     },
@@ -191,14 +192,17 @@ export function OnboardingLaunchChecklist({
       title: "6. Add employees",
       badge: "Permissions",
       badgeType: "default",
-      description: "Invite shift managers, head chefs, servers, and sommeliers with custom PIN passes.",
+      description:
+        "Invite shift managers, head chefs, servers, and sommeliers with custom PIN passes.",
       buttonLabel: "Invite Staff",
       targetHref: "/settings?tab=staff",
     },
   ];
 
   const totalChecklist = CHECKLIST_ITEMS.length;
-  const doneCount = CHECKLIST_ITEMS.filter((item) => isItemCompleted(item.id)).length;
+  const doneCount = CHECKLIST_ITEMS.filter((item) =>
+    isItemCompleted(item.id),
+  ).length;
   const percent = Math.round((doneCount / totalChecklist) * 100);
 
   // Formatted date
@@ -231,7 +235,9 @@ export function OnboardingLaunchChecklist({
     }
     setNavigating(true);
     try {
-      const completedIds = CHECKLIST_ITEMS.filter((item) => isItemCompleted(item.id)).map((item) => item.id);
+      const completedIds = CHECKLIST_ITEMS.filter((item) =>
+        isItemCompleted(item.id),
+      ).map((item) => item.id);
       await updateChecklistMutation({
         id: currentOrg._id,
         completedItems: completedIds,
@@ -278,8 +284,10 @@ export function OnboardingLaunchChecklist({
                 Your restaurant is ready!
               </h1>
               <p className="text-xs md:text-sm text-[#4d4541] leading-relaxed">
-                Welcome to PREST. Your bespoke dining workspace has been created for {restName || "your restaurant"}.
-                Let&apos;s configure your catalog, dining room, and staff stations to start taking live table tickets.
+                Welcome to PREST. Your bespoke dining workspace has been created
+                for {restName || "your restaurant"}. Let&apos;s configure your
+                catalog, dining room, and staff stations to start taking live
+                table tickets.
               </p>
             </div>
 
@@ -299,7 +307,9 @@ export function OnboardingLaunchChecklist({
                 className="px-4 py-2 rounded-xl bg-[#1f1f1f] hover:bg-black text-white text-xs font-medium transition shadow-xs flex items-center gap-1.5 cursor-pointer"
               >
                 <span>Complete Checklist</span>
-                <span className="material-symbols-outlined text-[15px]">arrow_downward</span>
+                <span className="material-symbols-outlined text-[15px]">
+                  arrow_downward
+                </span>
               </button>
             </div>
           </div>
@@ -326,7 +336,8 @@ export function OnboardingLaunchChecklist({
               Restaurant Launch Checklist
             </h2>
             <p className="text-xs md:text-sm text-[#7f7570] mt-0.5">
-              Complete these operational prerequisites to finalize POS sync and shift handoff.
+              Complete these operational prerequisites to finalize POS sync and
+              shift handoff.
             </p>
           </div>
 
@@ -352,12 +363,18 @@ export function OnboardingLaunchChecklist({
                   strokeWidth="3.2"
                 />
               </svg>
-              <span className="absolute text-xs font-bold text-[#1d1b1a]" id="progress-percent">
+              <span
+                className="absolute text-xs font-bold text-[#1d1b1a]"
+                id="progress-percent"
+              >
                 {percent}%
               </span>
             </div>
             <div className="flex flex-col">
-              <span className="text-base font-semibold text-[#1d1b1a] leading-none" id="checklist-counter">
+              <span
+                className="text-base font-semibold text-[#1d1b1a] leading-none"
+                id="checklist-counter"
+              >
                 {doneCount} of {totalChecklist}
               </span>
               <span className="text-xs text-[#7f7570] mt-0.5">completed</span>
@@ -389,7 +406,9 @@ export function OnboardingLaunchChecklist({
                         : "bg-[#f4ece8] text-[#7f7570] hover:text-[#1d1b1a] hover:bg-[#ede7e4]"
                     }`}
                   >
-                    <span className="material-symbols-outlined text-[16px]">check</span>
+                    <span className="material-symbols-outlined text-[16px]">
+                      check
+                    </span>
                   </button>
 
                   <div>
@@ -434,7 +453,9 @@ export function OnboardingLaunchChecklist({
                     className="px-3.5 py-1.5 rounded-xl bg-[#f4ece8] hover:bg-[#ede7e4] text-[#1d1b1a] text-xs font-medium transition inline-flex items-center gap-1 cursor-pointer border border-[#eadfd6]"
                   >
                     <span>{item.buttonLabel}</span>
-                    <span className="material-symbols-outlined text-[15px]">chevron_right</span>
+                    <span className="material-symbols-outlined text-[15px]">
+                      chevron_right
+                    </span>
                   </Link>
                 </div>
               </div>
@@ -463,12 +484,17 @@ export function OnboardingLaunchChecklist({
                 : "bg-[#e5e2e1] text-[#888686] cursor-not-allowed opacity-60"
             }`}
           >
-            <span>{navigating ? "Entering Dashboard..." : "Proceed to Dashboard Studio"}</span>
-            <span className="material-symbols-outlined text-sm">arrow_forward</span>
+            <span>
+              {navigating
+                ? "Entering Dashboard..."
+                : "Proceed to Dashboard Studio"}
+            </span>
+            <span className="material-symbols-outlined text-sm">
+              arrow_forward
+            </span>
           </button>
         </div>
       </section>
     </div>
   );
 }
-
