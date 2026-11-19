@@ -420,10 +420,14 @@ export class StripeProviderAdapter implements PaymentProviderAdapter {
           pi.shipping?.phone ||
           (pi.metadata?.customerPhone ?? undefined);
 
+        const rawOrderId =
+          pi.metadata?.orderId || pi.metadata?.prestOrderId || pi.metadata?.internalOrderId;
+
         return {
           providerPaymentId: pi.id,
           providerOrderId:
-            pi.metadata?.orderId || pi.metadata?.prestOrderId || pi.id,
+            rawOrderId || pi.id,
+          internalOrderId: rawOrderId,
           amountMinor: pi.amount,
           currency: pi.currency.toUpperCase(),
           paymentMethod,

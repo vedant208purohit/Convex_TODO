@@ -114,6 +114,9 @@ export class PaymentSyncEngine {
               connectionId,
               providerPaymentId: item.providerPaymentId,
               providerOrderId: item.providerOrderId,
+              internalOrderId:
+                (item as any).internalOrderId ||
+                (item.metadata?.orderId ? (item.metadata.orderId as any) : undefined),
               customerEmail: item.customerEmail,
               customerPhone: item.customerPhone,
               customerName: item.customerName,

@@ -39,11 +39,32 @@ export const STRIPE_TABS: StripeTab[] = [
 
 function normalizeOrderType(raw?: string): string {
   if (!raw) return "Dine-in";
-  const s = raw.toLowerCase().replace(/[-_\s]/g, "");
+  const s = String(raw).toLowerCase().replace(/[-_\s]/g, "");
   if (s.includes("take") || s.includes("pickup")) return "Takeaway";
   if (s.includes("deliv")) return "Delivery";
   if (s.includes("dine")) return "Dine-in";
   return raw;
+}
+
+function resolveTxOrderType(tx: any): string {
+  const metaType = tx.metadata?.orderType || tx.metadata?.order_type || tx.metadata?.serviceMode;
+  const directType = tx.orderType;
+
+  const isTakeaway = (val?: string) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().replace(/[-_\s]/g, "");
+    return s.includes("take") || s.includes("pickup");
+  };
+  const isDelivery = (val?: string) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().replace(/[-_\s]/g, "");
+    return s.includes("deliv");
+  };
+
+  if (isTakeaway(metaType) || isTakeaway(directType)) return "Takeaway";
+  if (isDelivery(metaType) || isDelivery(directType)) return "Delivery";
+
+  return normalizeOrderType(directType || metaType);
 }
 
 interface StripeDashboardViewProps {
@@ -368,7 +389,7 @@ export function StripeDashboardView({
         id: tx.providerPaymentId,
         orderId: tx.metadata?.orderNumber || tx.prestOrderNumber || tx.orderId || `PREST-${String(tx.providerPaymentId || "").slice(-4)}`,
         customer: tx.customerName || tx.customerEmail || "Guest Customer",
-        orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
+        orderType: resolveTxOrderType(tx),
         itemsSummary: tx.metadata?.itemsSummary || "Order items",
         amountFormatted: formatAmount((tx.amountMinor || 0) / 100),
         method: tx.paymentMethod?.toUpperCase() || "CARD",
@@ -381,7 +402,7 @@ export function StripeDashboardView({
         id: tx.id || tx.providerPaymentId,
         orderId: tx.metadata?.orderNumber || tx.orderNumber || tx.prestOrderNumber || tx.orderId || "PREST-1024",
         customer: tx.customerName || "Customer",
-        orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
+        orderType: resolveTxOrderType(tx),
         itemsSummary: tx.metadata?.itemsSummary || tx.itemsSummary || "Order items",
         amountFormatted: typeof tx.amount === "number" ? formatAmount(tx.amount) : tx.amount,
         method: tx.method || "Visa •••• 4242",

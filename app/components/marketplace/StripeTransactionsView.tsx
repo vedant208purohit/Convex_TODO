@@ -33,10 +33,31 @@ export interface StripeTransactionItem {
 
 function normalizeOrderType(raw?: string): "Dine-in" | "Takeaway" | "Delivery" {
   if (!raw) return "Dine-in";
-  const s = raw.toLowerCase().replace(/[-_\s]/g, "");
+  const s = String(raw).toLowerCase().replace(/[-_\s]/g, "");
   if (s.includes("take") || s.includes("pickup")) return "Takeaway";
   if (s.includes("deliv")) return "Delivery";
   return "Dine-in";
+}
+
+function resolveTxOrderType(tx: any): "Dine-in" | "Takeaway" | "Delivery" {
+  const metaType = tx.metadata?.orderType || tx.metadata?.order_type || tx.metadata?.serviceMode;
+  const directType = tx.orderType;
+
+  const isTakeaway = (val?: string) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().replace(/[-_\s]/g, "");
+    return s.includes("take") || s.includes("pickup");
+  };
+  const isDelivery = (val?: string) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().replace(/[-_\s]/g, "");
+    return s.includes("deliv");
+  };
+
+  if (isTakeaway(metaType) || isTakeaway(directType)) return "Takeaway";
+  if (isDelivery(metaType) || isDelivery(directType)) return "Delivery";
+
+  return normalizeOrderType(directType || metaType);
 }
 
 interface StripeTransactionsViewProps {
@@ -116,7 +137,7 @@ export function StripeTransactionsView({
             orderNumber: tx.metadata?.orderNumber || tx.prestOrderNumber || tx.orderId || `PREST-${String(tx._id || "").slice(-4)}`,
             customerName: tx.customerName || tx.metadata?.customerName || "Customer",
             customerEmail: tx.customerEmail || tx.metadata?.customerEmail || "customer@example.com",
-            orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
+            orderType: resolveTxOrderType(tx),
             table: tx.metadata?.table,
             itemsSummary: tx.metadata?.itemsSummary || tx.description || "Order items",
             amount: (tx.amountMinor || 0) / 100,
@@ -152,7 +173,7 @@ export function StripeTransactionsView({
         orderNumber: tx.metadata?.orderNumber || tx.prestOrderNumber || tx.orderId || `PREST-${String(tx._id || "").slice(-4)}`,
         customerName: tx.customerName || tx.metadata?.customerName || "Customer",
         customerEmail: tx.customerEmail || tx.metadata?.customerEmail || "customer@example.com",
-        orderType: normalizeOrderType(tx.orderType || tx.metadata?.orderType),
+        orderType: resolveTxOrderType(tx),
         table: tx.metadata?.table,
         itemsSummary: tx.metadata?.itemsSummary || tx.description || "Order items",
         amount: (tx.amountMinor || 0) / 100,

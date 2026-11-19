@@ -22,10 +22,31 @@ export interface StripeRefundItem {
 
 function normalizeOrderType(raw?: string): "Dine-in" | "Takeaway" | "Delivery" {
   if (!raw) return "Dine-in";
-  const s = raw.toLowerCase().replace(/[-_\s]/g, "");
+  const s = String(raw).toLowerCase().replace(/[-_\s]/g, "");
   if (s.includes("take") || s.includes("pickup")) return "Takeaway";
   if (s.includes("deliv")) return "Delivery";
   return "Dine-in";
+}
+
+function resolveTxOrderType(tx: any): "Dine-in" | "Takeaway" | "Delivery" {
+  const metaType = tx.metadata?.orderType || tx.metadata?.order_type || tx.metadata?.serviceMode;
+  const directType = tx.orderType;
+
+  const isTakeaway = (val?: string) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().replace(/[-_\s]/g, "");
+    return s.includes("take") || s.includes("pickup");
+  };
+  const isDelivery = (val?: string) => {
+    if (!val) return false;
+    const s = String(val).toLowerCase().replace(/[-_\s]/g, "");
+    return s.includes("deliv");
+  };
+
+  if (isTakeaway(metaType) || isTakeaway(directType)) return "Takeaway";
+  if (isDelivery(metaType) || isDelivery(directType)) return "Delivery";
+
+  return normalizeOrderType(directType || metaType);
 }
 
 interface StripeRefundsViewProps {
@@ -131,7 +152,7 @@ export function StripeRefundsView({
           paymentId: r.providerPaymentId || "pi_unknown",
           orderNumber: r.orderId || `PREST-${String(r._id || "").slice(-4)}`,
           customerName: r.customerName || "Customer",
-          orderType: normalizeOrderType(r.orderType || r.metadata?.orderType),
+          orderType: resolveTxOrderType(r),
           itemsSummary: r.itemsSummary || r.reason || "Refunded item",
           kitchenNote: r.notes?.kitchenNote || (r.reason ? `Reason: ${r.reason}` : undefined),
           refundAmount: (r.amountMinor || 0) / 100,
@@ -158,7 +179,7 @@ export function StripeRefundsView({
         paymentId: r.providerPaymentId || "pi_unknown",
         orderNumber: r.orderId || `PREST-${String(r._id || "").slice(-4)}`,
         customerName: r.customerName || "Customer",
-        orderType: normalizeOrderType(r.orderType || r.metadata?.orderType),
+        orderType: resolveTxOrderType(r),
         itemsSummary: r.itemsSummary || r.reason || "Refunded item",
         kitchenNote: r.notes?.kitchenNote || (r.reason ? `Reason: ${r.reason}` : undefined),
         refundAmount: (r.amountMinor || 0) / 100,
