@@ -90,12 +90,27 @@ export const createRazorpayOrder = mutation({
       throw new Error(`Invalid order amount: ₹${(amountPaise / 100).toFixed(2)}`);
     }
 
+    // Verify connection in payment_gateway_connections
+    const rzpConn = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org_and_provider", (q) =>
+        q.eq("organizationId", org._id).eq("provider", "razorpay")
+      )
+      .first();
+
+    if (!rzpConn || rzpConn.status !== "connected") {
+      throw new Error(
+        "Razorpay payment gateway is not connected or active for this store. Please connect Razorpay in Marketplace."
+      );
+    }
+
     // Resolve credentials (Organization-specific custom keys with environment fallback)
     const keyId =
+      rzpConn.providerAccountId ||
       org.razorPayKeyId?.trim() ||
       process.env.RAZORPAY_KEY_ID?.trim() ||
       process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID?.trim() ||
-      "rzp_test_prest_default";
+      "";
 
     const currency = org.defaultCurrency?.trim() || "INR";
 

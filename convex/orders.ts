@@ -458,7 +458,7 @@ export const createOrder = mutation({
     }
     const orgTimeZone = org?.organizationTimeZone || "Asia/Kolkata";
 
-    // 0. Service-Mode Feature Toggle Enforcement
+    // 0.1 Online Store Master Availability Guard
     if (
       args.orderSource === "PREST-QR" ||
       args.orderSource === "PREST-DIGITAL-STORE" ||
@@ -492,6 +492,23 @@ export const createOrder = mutation({
         }
         if (org.scheduledDelivery === false) {
           throw new Error("Scheduled delivery is currently disabled for this store.");
+        }
+      }
+
+      // Payment Gateway Connection & Availability Guard
+      if (args.paymentMode && (args.paymentMode === "Stripe" || args.paymentMode === "Razorpay")) {
+        const targetProvider = args.paymentMode.toLowerCase();
+        const gatewayConn = await ctx.db
+          .query("payment_gateway_connections")
+          .withIndex("by_org_and_provider", (q) =>
+            q.eq("organizationId", org._id).eq("provider", targetProvider)
+          )
+          .first();
+
+        if (!gatewayConn || gatewayConn.status !== "connected") {
+          throw new Error(
+            `Payment gateway '${args.paymentMode}' is not connected or active for this store. Please select a connected payment gateway.`
+          );
         }
       }
     } else {
@@ -913,10 +930,12 @@ export const createOrder = mutation({
       }
     }
 
-    let effectiveTableId: Id<"organizationTables"> | undefined = args.tableId;
+    // Only associate table for dine-in orders; delivery and takeaway are fulfilled independently of physical dining tables
+    let effectiveTableId: Id<"organizationTables"> | undefined =
+      args.orderType === "DineIn" ? args.tableId : undefined;
 
-    // If tableId was not passed directly or needs resolution from qrId
-    if (!effectiveTableId && autoQrId) {
+    // If tableId was not passed directly or needs resolution from qrId (strictly for DineIn orders)
+    if (!effectiveTableId && autoQrId && args.orderType === "DineIn") {
       const qrDoc = await ctx.db.get(autoQrId);
       if (qrDoc && qrDoc.tableId) {
         try {
@@ -2236,6 +2255,119 @@ export const confirmOrderPayment = mutation({
       transactionReference: args.transactionReference,
       createdAt: now,
     });
+
+    // Persist or reconcile record in shared polymorphic payment_transactions table idempotently
+    try {
+      const isStripe = payModeName.toLowerCase().includes("stripe");
+      const isRazorpay = payModeName.toLowerCase().includes("razorpay");
+      const provider = isStripe ? "stripe" : isRazorpay ? "razorpay" : payModeName.toLowerCase();
+      const providerPaymentId = args.transactionReference || `pay_${order._id}`;
+
+      // Resolve connection for this organization and provider
+      const conn = await ctx.db
+        .query("payment_gateway_connections")
+        .withIndex("by_org_and_provider", (q) =>
+          q.eq("organizationId", order.organizationId).eq("provider", provider)
+        )
+        .first();
+
+      let connectionId = conn?._id;
+      if (!connectionId) {
+        const anyConn = await ctx.db
+          .query("payment_gateway_connections")
+          .withIndex("by_org", (q) => q.eq("organizationId", order.organizationId))
+          .first();
+        if (anyConn) {
+          connectionId = anyConn._id;
+        } else {
+          connectionId = await ctx.db.insert("payment_gateway_connections", {
+            organizationId: order.organizationId,
+            provider,
+            status: "connected",
+            accountMode: "test",
+            connectionType: "api_key",
+            isDefault: true,
+            connectedAt: now,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
+      }
+
+      const org = await ctx.db.get(order.organizationId);
+      const currency = (org?.defaultCurrency || "INR").toUpperCase();
+
+      // Query order items for summary
+      const orderItems = await ctx.db
+        .query("orderItems")
+        .withIndex("by_order", (q) => q.eq("orderId", order._id))
+        .collect();
+
+      const itemsSummary =
+        orderItems.length > 0
+          ? `${orderItems
+              .map((i) => `${i.itemName || "Item"}${i.quantity > 1 ? ` x${i.quantity}` : ""}`)
+              .join(", ")} (${orderItems.length} item${orderItems.length > 1 ? "s" : ""})`
+          : undefined;
+
+      const existingTxn = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_provider_payment_id", (q) =>
+          q.eq("providerPaymentId", providerPaymentId)
+        )
+        .first();
+
+      const txnMetadata: Record<string, any> = {
+        ...(existingTxn?.metadata || {}),
+        orderNumber: order.orderNumber,
+        orderType: order.orderType,
+        itemsCount: orderItems.length,
+        itemsSummary,
+      };
+      if (order.orderType === "DineIn") {
+        txnMetadata.table = (order as any).table?.number || (order as any).tableId;
+      } else {
+        delete txnMetadata.table;
+      }
+
+      if (existingTxn) {
+        await ctx.db.patch(existingTxn._id, {
+          internalOrderId: order._id,
+          amountMinor: order.totalAmount,
+          currency,
+          status: "captured",
+          providerStatus: "succeeded",
+          paidAt: now,
+          customerName: order.customerName || existingTxn.customerName,
+          customerEmail: order.customerEmail || existingTxn.customerEmail,
+          customerPhone: order.customerPhone || existingTxn.customerPhone,
+          metadata: txnMetadata,
+          updatedAt: now,
+        });
+      } else {
+        await ctx.db.insert("payment_transactions", {
+          organizationId: order.organizationId,
+          connectionId,
+          provider,
+          providerPaymentId,
+          internalOrderId: order._id,
+          amountMinor: order.totalAmount,
+          currency,
+          paymentMethod: isStripe ? "card" : "upi",
+          status: "captured",
+          providerStatus: "succeeded",
+          paidAt: now,
+          customerName: order.customerName,
+          customerEmail: order.customerEmail,
+          customerPhone: order.customerPhone,
+          metadata: txnMetadata,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    } catch (txErr: any) {
+      console.warn("Failed recording payment_transactions in confirmOrderPayment (non-fatal):", txErr?.message);
+    }
 
     return { success: true, orderId: order._id, paymentStatus: "Paid" };
   },

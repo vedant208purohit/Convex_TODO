@@ -140,6 +140,7 @@ export default defineSchema({
     transferHoldTime: v.number(),
 
     // Payment Gateway Credentials & Secrets
+    activePaymentGateway: v.optional(v.string()), // "razorpay" | "stripe" | "none"
     razorPayKeyId: v.optional(v.string()),
     razorPayApiKey: v.optional(v.string()),
     stripePublishableKey: v.optional(v.string()),

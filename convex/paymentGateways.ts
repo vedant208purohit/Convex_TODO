@@ -80,6 +80,188 @@ export const getConnection = query({
 });
 
 /**
+ * Public query (also callable by pos-user without admin auth) to get the active payment gateway
+ * configuration for the store organization.
+ */
+export const getActivePaymentGateway = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    slug: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    let org: any = null;
+    if (args.organizationId) {
+      org = await ctx.db.get(args.organizationId);
+    } else if (args.slug) {
+      org = await ctx.db
+        .query("organizations")
+        .withIndex("by_slug", (q) => q.eq("slug", args.slug!))
+        .first();
+    }
+    if (!org) {
+      org = await ctx.db.query("organizations").first();
+    }
+    if (!org) {
+      return {
+        activeGateway: null,
+        availableGateways: [] as ("razorpay" | "stripe")[],
+        hasConnectedGateway: false,
+        razorpay: null,
+        stripe: null,
+        publishableKey: null,
+        stripePublishableKey: null,
+        razorpayKeyId: null,
+      };
+    }
+
+    const connections = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org", (idx) => idx.eq("organizationId", org._id))
+      .collect();
+
+    const rzpConn = connections.find(
+      (c) => c.provider === "razorpay" && c.status === "connected"
+    );
+    const stripeConn = connections.find(
+      (c) => c.provider === "stripe" && c.status === "connected"
+    );
+
+    const availableGateways: ("razorpay" | "stripe")[] = [];
+    if (rzpConn) availableGateways.push("razorpay");
+    if (stripeConn) availableGateways.push("stripe");
+
+    let activeGateway: "razorpay" | "stripe" | null = null;
+    if (org.activePaymentGateway === "stripe" && stripeConn) {
+      activeGateway = "stripe";
+    } else if (org.activePaymentGateway === "razorpay" && rzpConn) {
+      activeGateway = "razorpay";
+    } else if (org.activePaymentGateway === "none") {
+      activeGateway = null;
+    } else {
+      const defaultConn = connections.find(
+        (c) => c.isDefault && c.status === "connected"
+      );
+      if (defaultConn && (defaultConn.provider === "stripe" || defaultConn.provider === "razorpay")) {
+        activeGateway = defaultConn.provider as "razorpay" | "stripe";
+      } else if (stripeConn && !rzpConn) {
+        activeGateway = "stripe";
+      } else if (rzpConn) {
+        activeGateway = "razorpay";
+      } else if (stripeConn) {
+        activeGateway = "stripe";
+      }
+    }
+
+    const stripePublishableKey = stripeConn
+      ? (stripeConn.metadata as any)?.publishableKey ||
+        (stripeConn.providerAccountId && stripeConn.providerAccountId.startsWith("pk_")
+          ? stripeConn.providerAccountId
+          : null) ||
+        org.stripePublishableKey ||
+        process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY ||
+        null
+      : null;
+
+    const razorpayKeyId = rzpConn
+      ? rzpConn.providerAccountId ||
+        org.razorPayKeyId ||
+        process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ||
+        null
+      : null;
+
+    return {
+      activeGateway,
+      availableGateways,
+      hasConnectedGateway: availableGateways.length > 0,
+      razorpay: rzpConn ? toPublicConnection(rzpConn) : null,
+      stripe: stripeConn ? toPublicConnection(stripeConn) : null,
+      publishableKey: stripePublishableKey,
+      stripePublishableKey,
+      razorpayKeyId,
+    };
+  },
+});
+
+/**
+ * Mutation to select and activate the primary customer checkout payment gateway.
+ * Only verified/connected gateways may be activated.
+ */
+export const setActivePaymentGateway = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    provider: v.union(v.literal("razorpay"), v.literal("stripe"), v.literal("none")),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const now = Date.now();
+
+    const connections = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org", (idx) => idx.eq("organizationId", org._id))
+      .collect();
+
+    if (args.provider === "stripe") {
+      const stripeConn = connections.find(
+        (c) => c.provider === "stripe" && c.status === "connected"
+      );
+      const hasStripeKeys = Boolean(org.stripePublishableKey && org.stripeSecretKey);
+      if (!stripeConn && !hasStripeKeys) {
+        throw new Error(
+          "Stripe cannot be activated because it is not connected or verified. Please connect Stripe first in Payments & Marketplace."
+        );
+      }
+
+      // Mark Stripe connection as default, unmark Razorpay
+      for (const conn of connections) {
+        if (conn.provider === "stripe") {
+          await ctx.db.patch(conn._id, { isDefault: true, updatedAt: now });
+        } else if (conn.isDefault) {
+          await ctx.db.patch(conn._id, { isDefault: false, updatedAt: now });
+        }
+      }
+    } else if (args.provider === "razorpay") {
+      const rzpConn = connections.find(
+        (c) => c.provider === "razorpay" && c.status === "connected"
+      );
+      const hasRzpKeys = Boolean(org.razorPayKeyId && org.razorPayApiKey);
+      if (!rzpConn && !hasRzpKeys) {
+        throw new Error(
+          "Razorpay cannot be activated because it is not connected or verified. Please connect Razorpay first in Payments & Marketplace."
+        );
+      }
+
+      // Mark Razorpay connection as default, unmark Stripe
+      for (const conn of connections) {
+        if (conn.provider === "razorpay") {
+          await ctx.db.patch(conn._id, { isDefault: true, updatedAt: now });
+        } else if (conn.isDefault) {
+          await ctx.db.patch(conn._id, { isDefault: false, updatedAt: now });
+        }
+      }
+    } else {
+      // None
+      for (const conn of connections) {
+        if (conn.isDefault) {
+          await ctx.db.patch(conn._id, { isDefault: false, updatedAt: now });
+        }
+      }
+    }
+
+    // Persist to organization record
+    await ctx.db.patch(org._id, {
+      activePaymentGateway: args.provider,
+      updatedAt: now,
+    });
+
+    return {
+      success: true,
+      activeGateway: args.provider,
+    };
+  },
+});
+
+/**
  * Server-side authenticated query to retrieve encrypted credentials for a connection.
  * Used exclusively by server-side payment adapters. Decryption occurs only in server memory.
  */
@@ -529,6 +711,71 @@ export const recordTransaction = mutation({
       )
       .first();
 
+    let effectiveInternalOrderId = args.internalOrderId ?? existing?.internalOrderId;
+    const candidateOrderId =
+      effectiveInternalOrderId ||
+      args.providerOrderId ||
+      existing?.providerOrderId ||
+      args.metadata?.orderId ||
+      existing?.metadata?.orderId ||
+      args.metadata?.prestOrderId ||
+      existing?.metadata?.prestOrderId ||
+      args.metadata?.internalOrderId ||
+      existing?.metadata?.internalOrderId;
+
+    if (!effectiveInternalOrderId && candidateOrderId) {
+      try {
+        const norm = ctx.db.normalizeId("orders", String(candidateOrderId));
+        if (norm) {
+          effectiveInternalOrderId = norm;
+        }
+      } catch (_) {}
+    }
+
+    if (!effectiveInternalOrderId && args.providerPaymentId) {
+      try {
+        const payDoc = await ctx.db
+          .query("orderPayments")
+          .filter((q) => q.eq(q.field("transactionReference"), args.providerPaymentId))
+          .first();
+        if (payDoc?.orderId) {
+          effectiveInternalOrderId = payDoc.orderId;
+        }
+      } catch (_) {}
+    }
+
+    let orderDoc: any = null;
+    if (effectiveInternalOrderId) {
+      try {
+        orderDoc = await ctx.db.get(effectiveInternalOrderId as any);
+      } catch (_) {}
+    }
+
+    const existingMetadata = existing?.metadata || {};
+    const passedMetadata = args.metadata || {};
+    const mergedMetadata: Record<string, any> = {
+      ...existingMetadata,
+      ...passedMetadata,
+    };
+
+    if (orderDoc) {
+      // Order document is the single source of truth for order type and order number
+      mergedMetadata.orderType = orderDoc.orderType;
+      if (!mergedMetadata.orderNumber && orderDoc.orderNumber) {
+        mergedMetadata.orderNumber = orderDoc.orderNumber;
+      }
+      if (orderDoc.orderType === "DineIn") {
+        mergedMetadata.table = orderDoc.table?.number || orderDoc.tableId;
+      } else {
+        delete mergedMetadata.table;
+      }
+    }
+
+    // Isolate table mapping: takeaway and delivery orders never have table assignments
+    if (mergedMetadata.orderType && mergedMetadata.orderType !== "DineIn") {
+      delete mergedMetadata.table;
+    }
+
     if (existing) {
       const parsedAmountMinor =
         args.amountMinor !== undefined && args.amountMinor !== null
@@ -537,7 +784,7 @@ export const recordTransaction = mutation({
 
       await ctx.db.patch(existing._id, {
         providerOrderId: args.providerOrderId ?? existing.providerOrderId,
-        internalOrderId: args.internalOrderId ?? existing.internalOrderId,
+        internalOrderId: effectiveInternalOrderId,
         amountMinor: parsedAmountMinor,
         currency: args.currency || existing.currency,
         paymentMethod: args.paymentMethod || existing.paymentMethod,
@@ -551,7 +798,7 @@ export const recordTransaction = mutation({
         errorCode: args.errorCode,
         errorMessage: args.errorMessage,
         refundedAmountMinor: args.refundedAmountMinor ?? existing.refundedAmountMinor,
-        metadata: args.metadata ?? existing.metadata,
+        metadata: mergedMetadata,
         updatedAt: now,
       });
 
@@ -566,7 +813,7 @@ export const recordTransaction = mutation({
       provider: conn.provider,
       providerPaymentId: args.providerPaymentId,
       providerOrderId: args.providerOrderId,
-      internalOrderId: args.internalOrderId,
+      internalOrderId: effectiveInternalOrderId,
       customerId: args.customerId,
       customerName: args.customerName,
       customerEmail: args.customerEmail,
@@ -581,7 +828,7 @@ export const recordTransaction = mutation({
       errorCode: args.errorCode,
       errorMessage: args.errorMessage,
       refundedAmountMinor: args.refundedAmountMinor ?? 0,
-      metadata: args.metadata,
+      metadata: mergedMetadata,
       createdAt: args.paidAt || args.failedAt || now,
       updatedAt: now,
     });
@@ -773,7 +1020,7 @@ export const recordRefund = mutation({
 
 /**
  * Durable refund reservation mutation.
- * Reserves a refund before sending request to Razorpay, preventing concurrent duplicate submissions.
+ * Reserves a refund before sending request to payment gateway, preventing concurrent duplicate submissions.
  */
 export const reserveRefund = mutation({
   args: {
@@ -784,6 +1031,8 @@ export const reserveRefund = mutation({
     idempotencyKey: v.string(),
     reason: v.optional(v.string()),
     speed: v.optional(v.string()),
+    currency: v.optional(v.string()),
+    metadata: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
@@ -829,18 +1078,30 @@ export const reserveRefund = mutation({
     }
 
     // 2. Validate transaction & balance
-    const txn = await ctx.db
+    let txn: any = await ctx.db
       .query("payment_transactions")
-      .withIndex("by_provider_and_payment_id", (q) =>
-        q.eq("provider", "razorpay").eq("providerPaymentId", args.providerPaymentId)
+      .withIndex("by_provider_payment_id", (q) =>
+        q.eq("providerPaymentId", args.providerPaymentId)
       )
       .first();
+
+    if (!txn) {
+      try {
+        txn = await ctx.db.get(args.providerPaymentId as any);
+      } catch {}
+    }
 
     if (!txn || txn.organizationId !== org._id) {
       throw new Error("Payment not found for this store.");
     }
 
-    if (txn.status !== "captured" && txn.status !== "partially_refunded") {
+    const txStatus = String(txn.status);
+    if (
+      txStatus !== "captured" &&
+      txStatus !== "partially_refunded" &&
+      txStatus !== "succeeded" &&
+      txStatus !== "successful"
+    ) {
       throw new Error(`Payment is not eligible for refund (current status: "${txn.status}").`);
     }
 
@@ -863,7 +1124,7 @@ export const reserveRefund = mutation({
 
     if (args.amountMinor > remainingBalance) {
       throw new Error(
-        `REFUND_AMOUNT_EXCEEDS_BALANCE: Remaining refundable balance is ₹${(remainingBalance / 100).toFixed(2)}.`
+        `REFUND_AMOUNT_EXCEEDS_BALANCE: Remaining refundable balance is ${(remainingBalance / 100).toFixed(2)}.`
       );
     }
 
@@ -872,17 +1133,18 @@ export const reserveRefund = mutation({
       organizationId: org._id,
       connectionId: args.connectionId,
       transactionId: txn._id,
-      provider: "razorpay",
+      provider: txn.provider || "stripe",
       providerRefundId: `res_${args.idempotencyKey}`,
       providerPaymentId: args.providerPaymentId,
       amountMinor: args.amountMinor,
-      currency: txn.currency || "INR",
+      currency: args.currency || txn.currency || "INR",
       reason: args.reason,
       speed: args.speed || "normal",
       status: "pending",
       providerStatus: "reserved",
       initiatedAt: now,
       metadata: {
+        ...(args.metadata || {}),
         idempotencyKey: args.idempotencyKey,
         isReservation: true,
         reservedAt: now,
@@ -1307,10 +1569,108 @@ export const listTransactions = query({
       return 0;
     }
 
-    const paginated = records.slice(skip, skip + limit).map((r) => ({
-      ...r,
-      amountMinor: extractTransactionAmountMinor(r),
-    }));
+    const paginated = await Promise.all(
+      records.slice(skip, skip + limit).map(async (r) => {
+        let orderType = r.metadata?.orderType;
+        let orderNumber = r.metadata?.orderNumber;
+        let table = r.metadata?.table;
+
+        // 1. Resolve internal order ID if missing
+        let effectiveOrderId = r.internalOrderId;
+        if (!effectiveOrderId) {
+          const candidate =
+            r.providerOrderId ||
+            r.metadata?.orderId ||
+            r.metadata?.prestOrderId ||
+            r.metadata?.internalOrderId;
+          if (candidate) {
+            try {
+              const norm = ctx.db.normalizeId("orders", String(candidate));
+              if (norm) {
+                effectiveOrderId = norm;
+              }
+            } catch (_) {}
+          }
+        }
+
+        // 2. If still missing, check orderPayments
+        if (!effectiveOrderId && r.providerPaymentId) {
+          try {
+            const payDoc = await ctx.db
+              .query("orderPayments")
+              .filter((q) => q.eq(q.field("transactionReference"), r.providerPaymentId))
+              .first();
+            if (payDoc?.orderId) {
+              effectiveOrderId = payDoc.orderId;
+            }
+          } catch (_) {}
+        }
+
+        // 3. If still missing, check orderNumber within organization
+        if (!effectiveOrderId && (orderNumber || r.metadata?.orderNumber)) {
+          const targetNum = orderNumber || r.metadata?.orderNumber;
+          try {
+            const ordByNum = await ctx.db
+              .query("orders")
+              .withIndex("by_org", (q) => q.eq("organizationId", r.organizationId))
+              .filter((q) => q.eq(q.field("orderNumber"), targetNum))
+              .first();
+            if (ordByNum) {
+              effectiveOrderId = ordByNum._id;
+            }
+          } catch (_) {}
+        }
+
+        // 4. Fetch linked order from database (Single Source of Truth)
+        if (effectiveOrderId) {
+          try {
+            const linkedOrder: any = await ctx.db.get(effectiveOrderId);
+            if (linkedOrder) {
+              // The linked order document is authoritative
+              orderType = linkedOrder.orderType;
+              orderNumber = linkedOrder.orderNumber;
+              if (linkedOrder.orderType === "DineIn") {
+                table = linkedOrder.table?.number || linkedOrder.tableId;
+              } else {
+                table = undefined;
+              }
+            }
+          } catch (_) {}
+        }
+
+        // 5. Fallback if linkedOrder was not found
+        if (!orderType) {
+          orderType =
+            r.metadata?.orderType ||
+            r.metadata?.order_type ||
+            r.metadata?.serviceMode ||
+            r.orderType ||
+            "DineIn";
+        }
+
+        // Strictly isolate table metadata to DineIn orders
+        if (orderType && orderType !== "DineIn") {
+          table = undefined;
+        }
+
+        const enrichedMetadata: Record<string, any> = {
+          ...(r.metadata || {}),
+          orderType,
+          ...(orderNumber ? { orderNumber } : {}),
+          ...(table ? { table } : {}),
+        };
+        if (orderType !== "DineIn") {
+          delete enrichedMetadata.table;
+        }
+
+        return {
+          ...r,
+          amountMinor: extractTransactionAmountMinor(r),
+          orderType,
+          metadata: enrichedMetadata,
+        };
+      })
+    );
     const hasMore = skip + limit < total;
 
     // Calculate aggregated financial KPIs across all matching transactions in this filter/range
@@ -1711,29 +2071,67 @@ export const getSettlement = query({
 });
 
 /**
- * Validates a payment transaction for refund eligibility and computes the remaining refundable balance.
+ * Validates a payment transaction for refund eligibility and computes the remaining refundable balance,
+ * order items, and customer information. Supports lookup by transactionId or providerPaymentId.
  */
 export const getTransactionForRefund = query({
   args: {
     organizationId: v.optional(v.id("organizations")),
-    providerPaymentId: v.string(),
+    providerPaymentId: v.optional(v.string()),
+    transactionId: v.optional(v.string()),
+    provider: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     await requireAuth(ctx);
     const org = await resolveStoreOrganization(ctx, args.organizationId);
 
-    const txn = await ctx.db
-      .query("payment_transactions")
-      .withIndex("by_provider_and_payment_id", (q) =>
-        q.eq("provider", "razorpay").eq("providerPaymentId", args.providerPaymentId)
-      )
-      .first();
+    let txn: any = null;
 
-    if (!txn || txn.organizationId !== org._id) {
+    if (args.transactionId) {
+      try {
+        txn = await ctx.db.get(args.transactionId as Id<"payment_transactions">);
+        if (txn && txn.organizationId !== org._id) {
+          txn = null;
+        }
+      } catch {
+        // Not a direct doc ID
+      }
+    }
+
+    if (!txn && args.providerPaymentId) {
+      txn = await ctx.db
+        .query("payment_transactions")
+        .withIndex("by_provider_payment_id", (q) =>
+          q.eq("providerPaymentId", args.providerPaymentId!)
+        )
+        .filter((q) => q.eq(q.field("organizationId"), org._id))
+        .first();
+
+      if (!txn && args.provider) {
+        txn = await ctx.db
+          .query("payment_transactions")
+          .withIndex("by_provider_and_payment_id", (q) =>
+            q.eq("provider", args.provider!).eq("providerPaymentId", args.providerPaymentId!)
+          )
+          .filter((q) => q.eq(q.field("organizationId"), org._id))
+          .first();
+      }
+    }
+
+    if (!txn) {
       return null;
     }
 
     const conn = await ctx.db.get(txn.connectionId);
+    let order: any = null;
+    if (txn.internalOrderId) {
+      try {
+        order = await ctx.db.get(txn.internalOrderId);
+      } catch {
+        // order fetch failed
+      }
+    }
+
     const rawAmount =
       typeof txn.amountMinor === "number" && txn.amountMinor > 0
         ? Math.round(txn.amountMinor)
@@ -1753,15 +2151,275 @@ export const getTransactionForRefund = query({
       connectionId: txn.connectionId,
       provider: txn.provider,
       providerPaymentId: txn.providerPaymentId,
+      providerOrderId: txn.providerOrderId,
       amountMinor: rawAmount,
       currency: txn.currency,
       refundedAmountMinor: totalRefunded,
       refundableBalanceMinor: refundableBalance,
       status: txn.status,
       isEligibleForRefund:
-        (txn.status === "captured" || txn.status === "partially_refunded") &&
+        (txn.status === "captured" ||
+          txn.status === "partially_refunded" ||
+          txn.status === "succeeded" ||
+          txn.status === "successful") &&
         refundableBalance > 0,
-      connectionStatus: conn?.status,
+      connectionStatus: (conn as any)?.status,
+      customerName:
+        txn.customerName ||
+        (txn.metadata as any)?.customerName ||
+        order?.customerName ||
+        "Customer",
+      customerEmail:
+        txn.customerEmail ||
+        (txn.metadata as any)?.customerEmail ||
+        order?.customerEmail,
+      orderNumber:
+        order?.orderNumber ||
+        (txn.metadata as any)?.orderNumber ||
+        `ORD-${txn._id.slice(-6).toUpperCase()}`,
+      serviceType: order?.diningOption || order?.orderType || "Dine-in",
+      table: order?.tableNo ? `Table ${order.tableNo}` : "Takeout / Online",
+      waiter: order?.serverName || order?.waiterName || "Staff",
+      items: (order?.items || []).map((it: any) => ({
+        name: it.name || it.itemName || "Item",
+        quantity: it.quantity || 1,
+        price:
+          typeof it.price === "number"
+            ? it.price
+            : it.priceMinor
+              ? it.priceMinor / 100
+              : 0,
+        notes: it.notes || it.specialInstructions || undefined,
+      })),
+    };
+  },
+});
+
+/**
+ * Retrieves the regional payment gateway routing rules, available gateways, and connection statuses for a store.
+ */
+export const getRegionalGatewayRouting = query({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+  },
+  handler: async (ctx, args) => {
+    let org: any = null;
+    if (args.organizationId) {
+      org = await ctx.db.get(args.organizationId);
+    }
+    if (!org) {
+      org = await ctx.db.query("organizations").first();
+    }
+    if (!org) {
+      return {
+        rules: [],
+        availableGateways: [],
+        storeCountry: "IN",
+      };
+    }
+
+    const connections = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org", (idx) => idx.eq("organizationId", org._id))
+      .collect();
+
+    const rzpConn = connections.find(
+      (c) => c.provider === "razorpay" && c.status === "connected"
+    );
+    const stripeConn = connections.find(
+      (c) => c.provider === "stripe" && c.status === "connected"
+    );
+
+    const isRazorpayConnected = Boolean(
+      rzpConn || (org.razorPayKeyId && org.razorPayApiKey)
+    );
+    const isStripeConnected = Boolean(
+      stripeConn || (org.stripePublishableKey && org.stripeSecretKey)
+    );
+
+    const availableGateways = [
+      {
+        provider: "stripe",
+        name: "Stripe",
+        status: isStripeConnected ? "connected" : "disconnected",
+        isDefault: org.activePaymentGateway === "stripe",
+      },
+      {
+        provider: "razorpay",
+        name: "Razorpay",
+        status: isRazorpayConnected ? "connected" : "disconnected",
+        isDefault: org.activePaymentGateway === "razorpay",
+      },
+    ];
+
+    // Read stored regional routing rules if any
+    const storedRules: any[] =
+      org.paymentSplitting?.regionalRouting ||
+      stripeConn?.metadata?.regionalRouting ||
+      [];
+
+    const defaultRegionConfigs = [
+      {
+        regionId: "US",
+        regionName: "United States",
+        defaultGateway: isStripeConnected ? "stripe" : "none",
+        description: "Primary terminal routing for US dining rooms and takeout online ordering",
+        defaultEnabled: true,
+      },
+      {
+        regionId: "GB_EU",
+        regionName: "United Kingdom & Europe",
+        defaultGateway: isStripeConnected ? "stripe" : "none",
+        description: "Multi-currency settlements (GBP, EUR) routed via Stripe Europe SE",
+        defaultEnabled: true,
+      },
+      {
+        regionId: "IN",
+        regionName: "India",
+        defaultGateway: isRazorpayConnected ? "razorpay" : isStripeConnected ? "stripe" : "none",
+        description: "Domestic INR settlements with UPI, Indian Credit/Debit cards & Netbanking",
+        defaultEnabled: true,
+      },
+      {
+        regionId: "AE",
+        regionName: "United Arab Emirates",
+        defaultGateway: isStripeConnected ? "stripe" : "none",
+        description: "Middle East AED currency dining room and online order processing",
+        defaultEnabled: false,
+      },
+      {
+        regionId: "CA",
+        regionName: "Canada",
+        defaultGateway: isStripeConnected ? "stripe" : "none",
+        description: "Canadian Dollar (CAD) domestic & cross-border card transactions",
+        defaultEnabled: false,
+      },
+      {
+        regionId: "AU",
+        regionName: "Australia",
+        defaultGateway: isStripeConnected ? "stripe" : "none",
+        description: "Australian Dollar (AUD) EFTPOS, Apple Pay & credit card processing",
+        defaultEnabled: false,
+      },
+      {
+        regionId: "SG",
+        regionName: "Singapore",
+        defaultGateway: isStripeConnected ? "stripe" : "none",
+        description: "Asia-Pacific Singapore Dollar (SGD) contactless and QR payments",
+        defaultEnabled: false,
+      },
+    ];
+
+    const rules = defaultRegionConfigs.map((cfg) => {
+      const existing = storedRules.find((r: any) => r.regionId === cfg.regionId);
+      const gateway = existing ? existing.gateway : cfg.defaultGateway;
+      const enabled = existing !== undefined ? existing.enabled : cfg.defaultEnabled;
+
+      let connStatus = "disconnected";
+      if (gateway === "stripe") {
+        connStatus = isStripeConnected ? "connected" : "disconnected";
+      } else if (gateway === "razorpay") {
+        connStatus = isRazorpayConnected ? "connected" : "disconnected";
+      } else {
+        connStatus = "none";
+      }
+
+      return {
+        regionId: cfg.regionId,
+        regionName: cfg.regionName,
+        gateway,
+        enabled,
+        description: existing?.description || cfg.description,
+        connectionStatus: connStatus,
+      };
+    });
+
+    return {
+      rules,
+      availableGateways,
+      storeCountry: org.country || "IN",
+    };
+  },
+});
+
+/**
+ * Saves and persists regional payment gateway routing rules scoped to the store organization.
+ */
+export const saveRegionalGatewayRouting = mutation({
+  args: {
+    organizationId: v.optional(v.id("organizations")),
+    rules: v.array(
+      v.object({
+        regionId: v.string(),
+        regionName: v.string(),
+        gateway: v.string(),
+        enabled: v.boolean(),
+        description: v.optional(v.string()),
+        connectionStatus: v.optional(v.string()),
+      })
+    ),
+  },
+  handler: async (ctx, args) => {
+    await requireAuth(ctx);
+    const org = await resolveStoreOrganization(ctx, args.organizationId);
+    const now = Date.now();
+
+    const connections = await ctx.db
+      .query("payment_gateway_connections")
+      .withIndex("by_org", (idx) => idx.eq("organizationId", org._id))
+      .collect();
+
+    const isRazorpayConnected = Boolean(
+      connections.some((c) => c.provider === "razorpay" && c.status === "connected") ||
+      (org.razorPayKeyId && org.razorPayApiKey)
+    );
+    const isStripeConnected = Boolean(
+      connections.some((c) => c.provider === "stripe" && c.status === "connected") ||
+      (org.stripePublishableKey && org.stripeSecretKey)
+    );
+
+    // Validate gateway eligibility for all enabled rules
+    for (const rule of args.rules) {
+      if (rule.enabled && rule.gateway !== "none") {
+        if (rule.gateway === "stripe" && !isStripeConnected) {
+          throw new Error(
+            `Cannot assign Stripe for ${rule.regionName}: Stripe is not connected or active.`
+          );
+        }
+        if (rule.gateway === "razorpay" && !isRazorpayConnected) {
+          throw new Error(
+            `Cannot assign Razorpay for ${rule.regionName}: Razorpay is not connected or active.`
+          );
+        }
+      }
+    }
+
+    // Persist to organization
+    const updatedPaymentSplitting = {
+      ...(org.paymentSplitting || {}),
+      regionalRouting: args.rules,
+      updatedAt: now,
+    };
+
+    await ctx.db.patch(org._id, {
+      paymentSplitting: updatedPaymentSplitting,
+      updatedAt: now,
+    });
+
+    // Also update metadata on connections
+    for (const conn of connections) {
+      await ctx.db.patch(conn._id, {
+        metadata: {
+          ...(conn.metadata || {}),
+          regionalRouting: args.rules,
+        },
+        updatedAt: now,
+      });
+    }
+
+    return {
+      success: true,
+      rules: args.rules,
     };
   },
 });
@@ -2256,8 +2914,17 @@ export const processWebhookEvent = mutation({
 
     // 3. Upsert the payment_webhook_events record
     let eventCategory = "payment";
-    if (args.eventType.startsWith("refund.")) eventCategory = "refund";
-    else if (args.eventType.startsWith("settlement.")) eventCategory = "settlement";
+    if (
+      args.eventType.startsWith("refund.") ||
+      args.eventType.startsWith("charge.refunded")
+    ) {
+      eventCategory = "refund";
+    } else if (
+      args.eventType.startsWith("settlement.") ||
+      args.eventType.startsWith("payout.")
+    ) {
+      eventCategory = "settlement";
+    }
 
     let eventRecordId = existingEvent?._id;
     if (!existingEvent || !eventRecordId) {
@@ -2354,6 +3021,29 @@ export const processWebhookEvent = mutation({
 
           if (shouldUpdateStatus) {
             patchData.status = normalizedStatus;
+          }
+
+          const targetOrderId =
+            payment.notes?.orderId ||
+            payment.notes?.order_id ||
+            payment.notes?.prestOrderId;
+          if (targetOrderId) {
+            try {
+              const normOrderId = ctx.db.normalizeId("orders", targetOrderId);
+              if (normOrderId) {
+                patchData.internalOrderId = normOrderId;
+                if (normalizedStatus === "captured") {
+                  const targetOrder = await ctx.db.get(normOrderId);
+                  if (targetOrder && targetOrder.paymentStatus !== "Paid") {
+                    await ctx.db.patch(targetOrder._id, {
+                      paymentStatus: "Paid",
+                      paymentMode: "Razorpay",
+                      updatedAt: now,
+                    });
+                  }
+                }
+              }
+            } catch {}
           }
 
           if (normalizedStatus === "captured") {
@@ -2609,6 +3299,421 @@ export const processWebhookEvent = mutation({
             updatedAt: now,
           });
         }
+      } else if (
+        args.provider === "stripe" &&
+        (eventType === "payment_intent.succeeded" ||
+          eventType === "payment_intent.payment_failed" ||
+          eventType === "payment_intent.amount_capturable_updated" ||
+          eventType === "payment_intent.created" ||
+          eventType === "charge.succeeded" ||
+          eventType === "charge.failed")
+      ) {
+        const stripeObj = parsedPayload.data?.object;
+        if (!stripeObj || !stripeObj.id) {
+          throw new Error("Missing Stripe payment entity in payload");
+        }
+
+        const providerPaymentId = stripeObj.id;
+        const rawStatus = stripeObj.status;
+        let normalizedStatus: "authorized" | "captured" | "failed" | "pending" = "pending";
+        if (rawStatus === "succeeded" || eventType === "payment_intent.succeeded" || eventType === "charge.succeeded") {
+          normalizedStatus = "captured";
+        } else if (rawStatus === "failed" || eventType === "payment_intent.payment_failed" || eventType === "charge.failed") {
+          normalizedStatus = "failed";
+        } else if (rawStatus === "requires_capture" || eventType === "payment_intent.amount_capturable_updated") {
+          normalizedStatus = "authorized";
+        }
+
+        const existingTxn = await ctx.db
+          .query("payment_transactions")
+          .withIndex("by_provider_and_payment_id", (q) =>
+            q.eq("provider", args.provider).eq("providerPaymentId", providerPaymentId)
+          )
+          .first();
+
+        if (existingTxn) {
+          const shouldUpdateStatus = canTransitionTransaction(existingTxn.status, normalizedStatus);
+          const patchData: any = {
+            providerStatus: rawStatus || existingTxn.providerStatus,
+            updatedAt: now,
+          };
+
+          if (shouldUpdateStatus) {
+            patchData.status = normalizedStatus;
+          }
+
+          const targetOrderId = stripeObj.metadata?.orderId || stripeObj.metadata?.prestOrderId;
+          let linkedOrderDoc: any = null;
+          if (targetOrderId) {
+            try {
+              const normOrderId = ctx.db.normalizeId("orders", targetOrderId);
+              if (normOrderId) {
+                patchData.internalOrderId = normOrderId;
+                const targetOrder = await ctx.db.get(normOrderId);
+                if (targetOrder) {
+                  linkedOrderDoc = targetOrder;
+                  if (normalizedStatus === "captured" && targetOrder.paymentStatus !== "Paid") {
+                    await ctx.db.patch(targetOrder._id, {
+                      paymentStatus: "Paid",
+                      paymentMode: "Stripe",
+                      updatedAt: now,
+                    });
+                  }
+                }
+              }
+            } catch {}
+          }
+
+          if (!linkedOrderDoc && existingTxn.internalOrderId) {
+            try {
+              linkedOrderDoc = await ctx.db.get(existingTxn.internalOrderId);
+            } catch {}
+          }
+
+          const existingMeta = existingTxn.metadata || {};
+          const incomingMeta = stripeObj.metadata || {};
+          const mergedWebhookMeta: Record<string, any> = {
+            ...existingMeta,
+            ...incomingMeta,
+          };
+          if (linkedOrderDoc) {
+            mergedWebhookMeta.orderType = linkedOrderDoc.orderType;
+            if (!mergedWebhookMeta.orderNumber && linkedOrderDoc.orderNumber) {
+              mergedWebhookMeta.orderNumber = linkedOrderDoc.orderNumber;
+            }
+            if (linkedOrderDoc.orderType === "DineIn") {
+              mergedWebhookMeta.table = linkedOrderDoc.table?.number || linkedOrderDoc.tableId;
+            } else {
+              delete mergedWebhookMeta.table;
+            }
+          }
+          if (mergedWebhookMeta.orderType && mergedWebhookMeta.orderType !== "DineIn") {
+            delete mergedWebhookMeta.table;
+          }
+          patchData.metadata = mergedWebhookMeta;
+
+          if (normalizedStatus === "captured") {
+            patchData.paidAt = stripeObj.created ? stripeObj.created * 1000 : now;
+          } else if (normalizedStatus === "failed") {
+            patchData.failedAt = stripeObj.created ? stripeObj.created * 1000 : now;
+            patchData.errorCode = stripeObj.last_payment_error?.code || stripeObj.failure_code || existingTxn.errorCode;
+            patchData.errorMessage = stripeObj.last_payment_error?.message || stripeObj.failure_message || existingTxn.errorMessage;
+          }
+
+          if (stripeObj.amount_refunded !== undefined) {
+            patchData.refundedAmountMinor = stripeObj.amount_refunded;
+          }
+
+          await ctx.db.patch(existingTxn._id, patchData);
+        } else {
+          if (!connectionId) {
+            throw new Error(`Cannot create transaction: No connection found for provider ${args.provider}`);
+          }
+
+          const customerEmail = stripeObj.receipt_email || stripeObj.billing_details?.email;
+          const customerName =
+            stripeObj.billing_details?.name ||
+            stripeObj.shipping?.name ||
+            stripeObj.metadata?.customerName;
+          const customerPhone =
+            stripeObj.billing_details?.phone ||
+            stripeObj.shipping?.phone ||
+            stripeObj.metadata?.customerPhone;
+          const paymentMethod =
+            stripeObj.payment_method_details?.type ||
+            stripeObj.payment_method_types?.[0] ||
+            "card";
+
+          const rawTargetOrderId =
+            stripeObj.metadata?.orderId || stripeObj.metadata?.prestOrderId;
+          let internalOrderId: any = undefined;
+          let newOrderDoc: any = null;
+          if (rawTargetOrderId) {
+            try {
+              const normId = ctx.db.normalizeId("orders", rawTargetOrderId);
+              if (normId) {
+                internalOrderId = normId;
+                const targetOrder = await ctx.db.get(normId);
+                if (targetOrder) {
+                  newOrderDoc = targetOrder;
+                  if (normalizedStatus === "captured" && targetOrder.paymentStatus !== "Paid") {
+                    await ctx.db.patch(targetOrder._id, {
+                      paymentStatus: "Paid",
+                      paymentMode: "Stripe",
+                      updatedAt: now,
+                    });
+                  }
+                }
+              }
+            } catch {}
+          }
+
+          const incomingInsertMeta: Record<string, any> = { ...(stripeObj.metadata || {}) };
+          if (newOrderDoc) {
+            incomingInsertMeta.orderType = newOrderDoc.orderType;
+            if (!incomingInsertMeta.orderNumber && newOrderDoc.orderNumber) {
+              incomingInsertMeta.orderNumber = newOrderDoc.orderNumber;
+            }
+            if (newOrderDoc.orderType === "DineIn") {
+              incomingInsertMeta.table = newOrderDoc.table?.number || newOrderDoc.tableId;
+            } else {
+              delete incomingInsertMeta.table;
+            }
+          }
+          if (incomingInsertMeta.orderType && incomingInsertMeta.orderType !== "DineIn") {
+            delete incomingInsertMeta.table;
+          }
+
+          const txnId = await ctx.db.insert("payment_transactions", {
+            organizationId: org._id,
+            connectionId,
+            provider: args.provider,
+            providerPaymentId,
+            providerOrderId:
+              stripeObj.metadata?.orderId ||
+              stripeObj.metadata?.prestOrderId ||
+              providerPaymentId,
+            internalOrderId,
+            customerName,
+            customerEmail,
+            customerPhone,
+            amountMinor: stripeObj.amount || 0,
+            currency: (stripeObj.currency || "USD").toUpperCase(),
+            paymentMethod,
+            status: normalizedStatus,
+            providerStatus: rawStatus || normalizedStatus,
+            paidAt:
+              normalizedStatus === "captured"
+                ? stripeObj.created
+                  ? stripeObj.created * 1000
+                  : now
+                : undefined,
+            failedAt:
+              normalizedStatus === "failed"
+                ? stripeObj.created
+                  ? stripeObj.created * 1000
+                  : now
+                : undefined,
+            errorCode: stripeObj.last_payment_error?.code || stripeObj.failure_code,
+            errorMessage: stripeObj.last_payment_error?.message || stripeObj.failure_message,
+            refundedAmountMinor: stripeObj.amount_refunded || 0,
+            metadata: incomingInsertMeta,
+            createdAt: stripeObj.created ? stripeObj.created * 1000 : now,
+            updatedAt: now,
+          });
+
+          // Link any orphaned refunds
+          const orphanedRefunds = await ctx.db
+            .query("payment_refunds")
+            .withIndex("by_provider_payment_id", (q) =>
+              q.eq("providerPaymentId", providerPaymentId)
+            )
+            .collect();
+          for (const rf of orphanedRefunds) {
+            if (!rf.transactionId) {
+              await ctx.db.patch(rf._id, { transactionId: txnId, updatedAt: now });
+            }
+          }
+        }
+      } else if (
+        args.provider === "stripe" &&
+        (eventType === "charge.refunded" ||
+          eventType === "refund.created" ||
+          eventType === "refund.updated")
+      ) {
+        const stripeObj = parsedPayload.data?.object;
+        if (!stripeObj || !stripeObj.id) {
+          throw new Error("Missing Stripe refund or charge entity in payload");
+        }
+
+        if (eventType === "charge.refunded") {
+          const providerPaymentId = stripeObj.payment_intent || stripeObj.id;
+          const txn = await ctx.db
+            .query("payment_transactions")
+            .withIndex("by_provider_and_payment_id", (q) =>
+              q.eq("provider", args.provider).eq("providerPaymentId", providerPaymentId)
+            )
+            .first();
+
+          if (txn) {
+            const refundedAmount = stripeObj.amount_refunded || txn.amountMinor;
+            const isFullyRefunded = refundedAmount >= txn.amountMinor;
+            await ctx.db.patch(txn._id, {
+              refundedAmountMinor: refundedAmount,
+              status: isFullyRefunded ? "refunded" : refundedAmount > 0 ? "partially_refunded" : txn.status,
+              updatedAt: now,
+            });
+          }
+        } else {
+          // Stripe Refund object
+          const providerRefundId = stripeObj.id;
+          const providerPaymentId = stripeObj.payment_intent || stripeObj.charge;
+          const refundStatus: "processed" | "pending" | "failed" | "cancelled" =
+            stripeObj.status === "succeeded"
+              ? "processed"
+              : stripeObj.status === "failed"
+              ? "failed"
+              : stripeObj.status === "canceled"
+              ? "cancelled"
+              : "pending";
+
+          const txn = providerPaymentId
+            ? await ctx.db
+                .query("payment_transactions")
+                .withIndex("by_provider_and_payment_id", (q) =>
+                  q.eq("provider", args.provider).eq("providerPaymentId", providerPaymentId)
+                )
+                .first()
+            : null;
+
+          const resolvedConnectionId = connectionId || txn?.connectionId;
+          if (!resolvedConnectionId) {
+            throw new Error(`Cannot process refund: No connection found for provider ${args.provider}`);
+          }
+
+          let existingRefund = await ctx.db
+            .query("payment_refunds")
+            .withIndex("by_connection_and_provider_refund", (q) =>
+              q.eq("connectionId", resolvedConnectionId).eq("providerRefundId", providerRefundId)
+            )
+            .first();
+
+          let refundDocId = existingRefund?._id;
+          if (existingRefund) {
+            const shouldUpdateStatus = canTransitionRefund(existingRefund.status, refundStatus);
+            const patchData: any = {
+              providerRefundId,
+              providerStatus: stripeObj.status || refundStatus,
+              updatedAt: now,
+            };
+
+            if (shouldUpdateStatus) {
+              patchData.status = refundStatus;
+              if (refundStatus === "processed") {
+                patchData.processedAt = stripeObj.created ? stripeObj.created * 1000 : now;
+              }
+            }
+
+            if (stripeObj.failure_reason) {
+              patchData.errorCode = stripeObj.failure_reason;
+              patchData.errorMessage = stripeObj.failure_reason;
+            }
+
+            await ctx.db.patch(existingRefund._id, patchData);
+          } else {
+            refundDocId = await ctx.db.insert("payment_refunds", {
+              organizationId: org._id,
+              connectionId: resolvedConnectionId,
+              transactionId: txn?._id,
+              provider: args.provider,
+              providerRefundId,
+              providerPaymentId: providerPaymentId || "",
+              amountMinor: stripeObj.amount || 0,
+              currency: (stripeObj.currency || "USD").toUpperCase(),
+              reason: stripeObj.reason || undefined,
+              status: refundStatus,
+              providerStatus: stripeObj.status || refundStatus,
+              speed: "normal",
+              initiatedAt: stripeObj.created ? stripeObj.created * 1000 : now,
+              processedAt:
+                refundStatus === "processed"
+                  ? stripeObj.created
+                    ? stripeObj.created * 1000
+                    : now
+                  : undefined,
+              errorCode: stripeObj.failure_reason,
+              errorMessage: stripeObj.failure_reason,
+              metadata: stripeObj.metadata,
+              createdAt: now,
+              updatedAt: now,
+            });
+          }
+
+          // Reconcile parent transaction refunded amount
+          if (txn) {
+            const allRefunds = await ctx.db
+              .query("payment_refunds")
+              .withIndex("by_provider_payment_id", (q) =>
+                q.eq("providerPaymentId", providerPaymentId)
+              )
+              .collect();
+
+            const totalRefunded = allRefunds
+              .filter(
+                (r) =>
+                  r.status === "processed" ||
+                  (r._id === refundDocId && refundStatus === "processed")
+              )
+              .reduce((sum, r) => sum + r.amountMinor, 0);
+
+            const isFullyRefunded = totalRefunded >= txn.amountMinor;
+            await ctx.db.patch(txn._id, {
+              refundedAmountMinor: totalRefunded,
+              status: isFullyRefunded ? "refunded" : totalRefunded > 0 ? "partially_refunded" : txn.status,
+              updatedAt: now,
+            });
+          }
+        }
+      } else if (
+        args.provider === "stripe" &&
+        (eventType === "payout.paid" ||
+          eventType === "payout.created" ||
+          eventType === "payout.failed" ||
+          eventType === "payout.canceled" ||
+          eventType === "payout.updated")
+      ) {
+        const payout = parsedPayload.data?.object;
+        if (!payout || !payout.id) {
+          throw new Error("Missing payout entity in payload");
+        }
+
+        if (!connectionId) {
+          throw new Error(`Cannot process settlement: No connection found for provider ${args.provider}`);
+        }
+
+        const providerSettlementId = payout.id;
+        const existingSettlement = await ctx.db
+          .query("payment_settlements")
+          .withIndex("by_connection_and_provider_settlement", (q) =>
+            q.eq("connectionId", connectionId!).eq("providerSettlementId", providerSettlementId)
+          )
+          .first();
+
+        const amountMinor = payout.amount || 0;
+        const netAmountMinor = payout.amount || 0;
+        const settlementStatus: "processed" | "pending" | "failed" =
+          payout.status === "paid"
+            ? "processed"
+            : payout.status === "failed" || payout.status === "canceled"
+            ? "failed"
+            : "pending";
+
+        if (existingSettlement) {
+          await ctx.db.patch(existingSettlement._id, {
+            status: settlementStatus,
+            providerStatus: payout.status || settlementStatus,
+            utrOrReference: payout.destination || payout.balance_transaction || existingSettlement.utrOrReference,
+            updatedAt: now,
+          });
+        } else {
+          await ctx.db.insert("payment_settlements", {
+            organizationId: org._id,
+            connectionId,
+            provider: args.provider,
+            providerSettlementId,
+            amountMinor,
+            currency: (payout.currency || "USD").toUpperCase(),
+            feesMinor: 0,
+            taxMinor: 0,
+            netAmountMinor,
+            status: settlementStatus,
+            providerStatus: payout.status || settlementStatus,
+            settlementDate: payout.arrival_date ? payout.arrival_date * 1000 : (payout.created ? payout.created * 1000 : now),
+            utrOrReference: payout.destination || payout.balance_transaction || payout.id,
+            createdAt: now,
+            updatedAt: now,
+          });
+        }
       } else {
         await ctx.db.patch(eventRecordId, {
           processingStatus: "ignored",
@@ -2691,22 +3796,29 @@ export const disconnectGatewayConnection = mutation({
       updatedAt: now,
     });
 
-    if (provider === "razorpay") {
-      const existingInst = await ctx.db
-        .query("marketplaceInstallations")
-        .withIndex("by_org_and_app", (q) =>
-          q.eq("organizationId", org._id).eq("appSlug", "razorpay")
-        )
-        .first();
-      if (existingInst) {
-        await ctx.db.patch(existingInst._id, {
-          status: "uninstalled",
-          statusText: "Not Connected",
-          actionType: "install",
-          uninstalledAt: now,
-          updatedAt: now,
-        });
-      }
+    const targetProvider = conn.provider || provider;
+
+    if (org.activePaymentGateway === targetProvider) {
+      await ctx.db.patch(org._id, {
+        activePaymentGateway: "none",
+        updatedAt: now,
+      });
+    }
+
+    const existingInst = await ctx.db
+      .query("marketplaceInstallations")
+      .withIndex("by_org_and_app", (q) =>
+        q.eq("organizationId", org._id).eq("appSlug", targetProvider)
+      )
+      .first();
+    if (existingInst) {
+      await ctx.db.patch(existingInst._id, {
+        status: "uninstalled",
+        statusText: "Not Connected",
+        actionType: "install",
+        uninstalledAt: now,
+        updatedAt: now,
+      });
     }
 
     return {
